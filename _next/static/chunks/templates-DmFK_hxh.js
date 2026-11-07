@@ -1,0 +1,1 @@
+import{C as e}from"./badge-maker-Bp6O0BTB.js";export{e as templateDesign};
