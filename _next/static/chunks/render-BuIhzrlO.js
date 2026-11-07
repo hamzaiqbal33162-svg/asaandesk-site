@@ -1,1 +1,0 @@
-import{i as e,l as t,p as n}from"./badge-maker-Bu27giW3.js";export{e as buildPdf,t as linkFonts,n as thumbnail};
