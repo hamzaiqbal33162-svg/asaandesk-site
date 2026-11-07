@@ -3,7 +3,7 @@ import { removeTextRuns } from "./textremove.js";
 import { loadPdfFont, previewSvg, drawWithPdfFont } from "./fontmatch.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./lib/pdf.worker.min.mjs", import.meta.url).href;
-const { PDFDocument, StandardFonts, rgb, degrees } = window.PDFLib;
+const { PDFDocument, StandardFonts, rgb, degrees, BlendMode, LineCapStyle, PDFString } = window.PDFLib;
 
 // Pages render at this zoom; every item position is stored in these screen pixels.
 const SCALE = 1.5;
@@ -200,6 +200,7 @@ async function renderPage(page) {
 
   const content = await pdfPage.getTextContent();
   page.hits.replaceChildren();
+  page.runs = [];
   let count = 0;
   for (const t of content.items) {
     if (!t.str || !t.str.trim()) continue;
@@ -222,6 +223,7 @@ async function renderPage(page) {
     count++;
   }
   page.hasText = count > 0;
+  page.rendered = true;
   // Pictures and scans have no text layer: read the text from the pixels instead.
   if (!page.hasText && !page.ocrDone) runOcr(page);
 }
@@ -236,6 +238,7 @@ function addHit(page, run) {
     height: run.size * 1.1 + "px",
   });
   hit.title = "Click to edit";
+  (page.runs ||= []).push({ run, hit });
   hit.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
     e.preventDefault();
@@ -335,7 +338,7 @@ function splitLine(line) {
 
 /* ---------- items ---------- */
 
-function editExistingText(page, run, hit) {
+function editExistingText(page, run, hit, silent = false) {
   const top = run.baseline - run.size * BASELINE;
   const box = run.box
     ? { x: run.box.x0 - 2, y: run.box.y0 - 2, w: run.box.x1 - run.box.x0 + 4, h: run.box.y1 - run.box.y0 + 4 }
@@ -361,7 +364,8 @@ function editExistingText(page, run, hit) {
     source: run.kind === "pdf" ? run.pdf : null,
     run,
   });
-  focusText(item, true);
+  if (!silent) focusText(item, true);
+  return item;
 }
 
 function prettyFont(name) {
@@ -486,6 +490,17 @@ function drawItem(item) {
       img.alt = "";
       el.append(img);
     }
+    if (item.type === "shape" || item.type === "draw") {
+      el.innerHTML = shapeSvg(item);
+      item.svgEl = el.firstElementChild;
+    }
+    if (item.type === "link") {
+      const label = document.createElement("span");
+      label.className = "link-url";
+      label.textContent = "🔗 " + item.url;
+      el.append(label);
+      el.title = item.url;
+    }
     el.append(handle("size", item));
     el.addEventListener("pointerdown", (e) => startDrag(e, item, "move"));
   }
@@ -522,6 +537,8 @@ function layoutItem(item) {
   } else {
     Object.assign(s, { left: item.x + "px", top: item.y + "px", width: item.w + "px", height: item.h + "px" });
     if (item.type === "rect") s.background = css(item.color);
+    if (item.type === "hl") s.background = `rgba(${item.color.join(",")},.42)`;
+    if ((item.type === "shape" || item.type === "draw") && item.svgEl) item.el.innerHTML = shapeSvg(item), item.svgEl = item.el.firstElementChild, item.el.append(handle("size", item));
   }
 }
 
@@ -586,7 +603,10 @@ function select(item) {
   $("props").classList.toggle("off", !item || item.type === "image");
   if (item && item.type !== "image") {
     const isText = item.type === "text";
-    for (const id of ["propFont", "propSize", "propBold", "propItalic", "propColor"]) $(id).hidden = !isText;
+    const colored = isText || ["hl", "shape", "draw"].includes(item.type);
+    for (const id of ["propFont", "propSize", "propBold", "propItalic"]) $(id).hidden = !isText;
+    $("propColor").hidden = !colored;
+    if (colored && !isText) $("propColor").value = hex(item.color);
     $("propBg").hidden = !(item.type === "rect" || item.cover);
     if (isText) {
       $("optOrig").hidden = !item.font.orig;
@@ -675,7 +695,138 @@ function onPagePointerDown(e, page) {
     window.addEventListener("pointerup", up);
     return;
   }
+  if (state.tool === "highlight") {
+    e.preventDefault();
+    dragBox(page, p, "hl", (b) => { if (b.w >= 4 && b.h >= 3) addItem({ type: "hl", pageId: page.id, x: b.x, y: b.y, w: b.w, h: b.h, color: HL_COLOR }); });
+    return;
+  }
+  if (state.tool === "shape") {
+    e.preventDefault();
+    const kind = $("shapeKind").value;
+    dragBox(page, p, "", (b) => {
+      const line = kind === "line" || kind === "arrow";
+      if (b.w < 4 && b.h < 4) return;
+      addItem({ type: "shape", kind, pageId: page.id, x: b.x, y: b.y, w: Math.max(b.w, line ? 1 : 6), h: Math.max(b.h, line ? 1 : 6), flipX: b.flipX, flipY: b.flipY, color: lastDrawColor, width: 2 });
+    });
+    return;
+  }
+  if (state.tool === "draw") { e.preventDefault(); freehand(page, p); return; }
+  if (state.tool === "link") {
+    e.preventDefault();
+    dragBox(page, p, "", (b) => {
+      if (b.w < 6 || b.h < 6) return toast("Drag a box over the words that should open the link.");
+      const url = cleanUrl(prompt("Web link, email or phone number:", "https://"));
+      if (!url) return toast("No link added. Use a full web address like https://example.com");
+      addItem({ type: "link", pageId: page.id, x: b.x, y: b.y, w: b.w, h: b.h, url });
+    });
+    return;
+  }
   select(null);
+}
+
+/* ---------- highlight, draw, shapes, links ---------- */
+
+const SHAPE_COLOR = [220, 38, 38];
+const HL_COLOR = [255, 214, 0];
+function shapeSvg(item) {
+  const c = css(item.color), w = item.width || 2;
+  if (item.type === "draw") {
+    const pts = item.points.map(([x, y]) => `${x},${y}`).join(" ");
+    return `<svg viewBox="0 0 ${item.vw} ${item.vh}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${item.width || 3}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`;
+  }
+  // Drawn in the item's real pixel size, so nothing gets stretched.
+  const W = Math.max(item.w, 1), H = Math.max(item.h, 1), svg = (body) => `<svg viewBox="0 0 ${W} ${H}">${body}</svg>`;
+  if (item.kind === "circle") return svg(`<ellipse cx="${W / 2}" cy="${H / 2}" rx="${Math.max(W / 2 - w / 2, 1)}" ry="${Math.max(H / 2 - w / 2, 1)}" fill="none" stroke="${c}" stroke-width="${w}"/>`);
+  if (item.kind === "box") return svg(`<rect x="${w / 2}" y="${w / 2}" width="${Math.max(W - w, 1)}" height="${Math.max(H - w, 1)}" fill="none" stroke="${c}" stroke-width="${w}"/>`);
+  const x1 = item.flipX ? W : 0, x2 = W - x1, y1 = item.flipY ? H : 0, y2 = H - y1;
+  let head = "";
+  if (item.kind === "arrow") {
+    const ang = Math.atan2(y2 - y1, x2 - x1), len = Math.max(10, w * 5);
+    const pts = [0.45, -0.45].map((d) => `${x2 - len * Math.cos(ang + d)},${y2 - len * Math.sin(ang + d)}`);
+    head = `<polygon points="${x2},${y2} ${pts.join(" ")}" fill="${c}"/>`;
+  }
+  return svg(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>${head}`);
+}
+
+// Drag out a box on the page (used by highlight, shapes and links).
+function dragBox(page, p, draftClass, done) {
+  const draft = document.createElement("div");
+  draft.className = "draft " + draftClass;
+  page.el.append(draft);
+  let q = p;
+  const box = () => ({ x: Math.min(p.x, q.x), y: Math.min(p.y, q.y), w: Math.abs(q.x - p.x), h: Math.abs(q.y - p.y), flipX: q.x < p.x, flipY: q.y < p.y });
+  const move = (ev) => { q = pointIn(page, ev); const b = box(); Object.assign(draft.style, { left: b.x + "px", top: b.y + "px", width: b.w + "px", height: b.h + "px" }); };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    draft.remove();
+    done(box());
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
+function freehand(page, p) {
+  const pts = [[p.x, p.y]];
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "draft-svg");
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  Object.entries({ fill: "none", stroke: css(lastDrawColor), "stroke-width": 3, "stroke-linecap": "round", "stroke-linejoin": "round" }).forEach(([k, v]) => line.setAttribute(k, v));
+  svg.append(line);
+  page.el.append(svg);
+  const move = (ev) => {
+    const q = pointIn(page, ev), last = pts[pts.length - 1];
+    if (Math.hypot(q.x - last[0], q.y - last[1]) < 1.5) return;
+    pts.push([q.x, q.y]);
+    line.setAttribute("points", pts.map((a) => a.join(",")).join(" "));
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    svg.remove();
+    if (pts.length < 2) return;
+    const xs = pts.map((a) => a[0]), ys = pts.map((a) => a[1]), pad = 4;
+    const x = Math.min(...xs) - pad, y = Math.min(...ys) - pad, w = Math.max(...xs) - x + pad, h = Math.max(...ys) - y + pad;
+    addItem({ type: "draw", pageId: page.id, x, y, w, h, vw: w, vh: h, points: pts.map(([a, b]) => [+(a - x).toFixed(1), +(b - y).toFixed(1)]), color: lastDrawColor, width: 3 });
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+let lastDrawColor = SHAPE_COLOR;
+
+function cleanUrl(raw) {
+  let url = (raw || "").trim();
+  if (!url) return null;
+  if (/^[\w.+-]+@[\w-]+\.[\w.]+$/.test(url)) url = "mailto:" + url;
+  else if (/^\+?[\d\s-]{7,}$/.test(url)) url = "tel:" + url.replace(/[\s-]/g, "");
+  else if (!/^(https?:|mailto:|tel:)/i.test(url)) url = "https://" + url;
+  try { const u = new URL(url); return /^(https?:|mailto:|tel:)$/.test(u.protocol) ? u.href : null; } catch { return null; }
+}
+
+function findReplace(find, replace, matchCase) {
+  if (!find) return 0;
+  const esc = find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(esc, matchCase ? "g" : "gi");
+  let count = 0;
+  const apply = (item) => {
+    const next = item.text.replace(re, () => { count++; return replace; });
+    if (next === item.text) return;
+    item.text = next;
+    if (item.span) item.span.textContent = next;
+    layoutItem(item);
+  };
+  for (const page of state.pages) {
+    for (const { run, hit } of page.runs || []) {
+      re.lastIndex = 0;
+      if (!hit.isConnected || !re.test(run.str)) continue;
+      re.lastIndex = 0;
+      apply(editExistingText(page, run, hit, true));
+    }
+  }
+  for (const item of state.items) if (item.type === "text" && !item.fromFind) { re.lastIndex = 0; if (re.test(item.text)) { re.lastIndex = 0; apply(item); } }
+  select(null);
+  refreshChrome();
+  return count;
 }
 
 function visiblePage() {
@@ -775,6 +926,35 @@ async function exportBytes() {
         const img = item.imgType === "image/jpeg" ? await out.embedJpg(bytes) : await out.embedPng(bytes);
         const [x, y] = at(item.x, item.y + item.h);
         p.drawImage(img, { x, y, width: item.w * k, height: item.h * k, rotate });
+      } else if (item.type === "hl") {
+        const [x, y] = at(item.x, item.y + item.h);
+        p.drawRectangle({ x, y, width: item.w * k, height: item.h * k, color: color(item.color), opacity: 0.42, blendMode: BlendMode.Multiply, rotate });
+      } else if (item.type === "shape") {
+        const c = color(item.color), bw = (item.width || 2) * k;
+        if (item.kind === "box") {
+          const [x, y] = at(item.x, item.y + item.h);
+          p.drawRectangle({ x, y, width: item.w * k, height: item.h * k, borderColor: c, borderWidth: bw, rotate });
+        } else if (item.kind === "circle") {
+          const [cx, cy] = at(item.x + item.w / 2, item.y + item.h / 2);
+          p.drawEllipse({ x: cx, y: cy, xScale: (item.w * k) / 2, yScale: (item.h * k) / 2, borderColor: c, borderWidth: bw });
+        } else {
+          const [x1, y1] = at(item.flipX ? item.x + item.w : item.x, item.flipY ? item.y + item.h : item.y);
+          const [x2, y2] = at(item.flipX ? item.x : item.x + item.w, item.flipY ? item.y : item.y + item.h);
+          p.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: bw, color: c, lineCap: LineCapStyle.Round });
+          if (item.kind === "arrow") {
+            const ang = Math.atan2(y2 - y1, x2 - x1), len = Math.max(10 * k, bw * 5);
+            const [a1, a2] = [0.45, -0.45].map((d) => [x2 - len * Math.cos(ang + d), y2 - len * Math.sin(ang + d)]);
+            p.drawSvgPath(`M 0 0 L ${a1[0] - x2} ${-(a1[1] - y2)} L ${a2[0] - x2} ${-(a2[1] - y2)} Z`, { x: x2, y: y2, color: c, borderWidth: 0 });
+          }
+        }
+      } else if (item.type === "draw") {
+        const pts = item.points.map(([px, py]) => at(item.x + (px * item.w) / item.vw, item.y + (py * item.h) / item.vh));
+        for (let i = 1; i < pts.length; i++) p.drawLine({ start: { x: pts[i - 1][0], y: pts[i - 1][1] }, end: { x: pts[i][0], y: pts[i][1] }, thickness: (item.width || 3) * k, color: color(item.color), lineCap: LineCapStyle.Round });
+      } else if (item.type === "link") {
+        const [x1, y1] = at(item.x, item.y + item.h), [x2, y2] = at(item.x + item.w, item.y);
+        const ctx = out.context;
+        const annot = ctx.register(ctx.obj({ Type: "Annot", Subtype: "Link", Rect: [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)], Border: [0, 0, 0], A: { Type: "Action", S: "URI", URI: PDFString.of(item.url) } }));
+        p.node.addAnnot(annot);
       } else if (item.type === "text") {
         const wasRemoved = item.source && removed.has(edited.indexOf(item));
         if (item.cover && !wasRemoved) {
@@ -910,6 +1090,11 @@ function setupSignPad() {
 function setTool(tool) {
   if (tool === "image") return $("imageInput").click();
   if (tool === "sign") return $("signDialog").showModal();
+  if (tool === "find") {
+    if (!state.pages.length) return toast("Open a file first.");
+    if (state.pages.some((p) => !p.rendered)) return toast("Pages are still loading. Try Find & replace again in a moment.");
+    return $("findDialog").showModal();
+  }
   state.tool = tool;
   document.body.dataset.tool = tool;
   document.querySelectorAll(".tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === tool));
@@ -948,7 +1133,12 @@ $("propSize").addEventListener("input", (e) => updateSelected((i) => {
 }));
 $("propBold").addEventListener("click", () => updateSelected((i) => { i.font.bold = !i.font.bold; $("propBold").classList.toggle("on", i.font.bold); }));
 $("propItalic").addEventListener("click", () => updateSelected((i) => { i.font.italic = !i.font.italic; $("propItalic").classList.toggle("on", i.font.italic); }));
-$("propColor").addEventListener("input", (e) => updateSelected((i) => (i.color = unhex(e.target.value))));
+$("propColor").addEventListener("input", (e) => updateSelected((i) => { i.color = unhex(e.target.value); if (i.type === "shape" || i.type === "draw") lastDrawColor = i.color; }));
+$("findDialog").addEventListener("close", () => {
+  if ($("findDialog").returnValue !== "ok") return;
+  const n = findReplace($("findText").value, $("replaceText").value, $("findCase").checked);
+  toast(n ? `Replaced ${n} time${n > 1 ? "s" : ""}. Check the pages, then Download PDF.` : "That text was not found in the PDF's text.");
+});
 $("propBg").addEventListener("input", (e) => updateSelected((i) => {
   if (i.type === "rect") i.color = unhex(e.target.value);
   else if (i.cover) i.cover.color = unhex(e.target.value);
