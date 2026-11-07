@@ -1,1 +1,0 @@
-import{C as e}from"./badge-maker-DAPgdxzE.js";export{e as templateDesign};

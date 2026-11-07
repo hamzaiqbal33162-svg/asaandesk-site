@@ -1,0 +1,1 @@
+import{g as e}from"./badge-maker-Bu27giW3.js";export{e as buildTemplate};
