@@ -1,9 +1,9 @@
 import * as pdfjsLib from "./lib/pdf.min.mjs";
-import { removeTextRuns, scanPage, runStyle, inkFromStrokes, initMetrics } from "./textremove.js";
+import { removeTextRuns, scanPage, runStyle, inkFromStrokes, initMetrics, appendToStream, invert, applyMatrix } from "./textremove.js";
 import { loadPdfFont, previewSvg, writeLines, fontTraits, fontDescriptor, METRIC_FAMILIES, metricFile } from "./fontmatch.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./lib/pdf.worker.min.mjs", import.meta.url).href;
-const { PDFDocument, rgb, degrees, BlendMode, LineCapStyle, PDFString } = window.PDFLib;
+const { PDFDocument, rgb, degrees, BlendMode, LineCapStyle, PDFString, PDFHexString, PDFName, PDFDict } = window.PDFLib;
 await initMetrics();
 
 // Pages render at this zoom; every item position is stored in these page pixels (before view zoom).
@@ -92,11 +92,16 @@ function pageScan(page) {
 /* ---------- fonts ---------- */
 
 // The font a text run was written in, ready to write new text with.
-function pdfFont(page, baseFont) {
-  const key = `${page.id}:${baseFont}`;
+// A font is looked up in the resources it was drawn with (page, form XObject or form field): the same
+// name can mean different font objects in different places.
+const resIds = new WeakMap();
+let resCount = 0;
+const resId = (r) => { if (!r) return "page"; if (!resIds.has(r)) resIds.set(r, "r" + resCount++); return resIds.get(r); };
+function pdfFont(page, baseFont, resources = null) {
+  const key = `${page.id}:${resId(resources)}:${baseFont}`;
   if (!fonts.has(key)) {
     let entry = null;
-    try { entry = loadPdfFont(libPage(page), baseFont); } catch (e) { console.warn(e); }
+    try { entry = loadPdfFont(libPage(page), baseFont, resources); } catch (e) { console.warn(e); }
     fonts.set(key, entry);
   }
   return fonts.get(key) ? key : null;
@@ -274,7 +279,7 @@ async function renderPage(page) {
     const traits = fontTraits(baseFont);
     if (!baseFont && content.styles[t.fontName]?.fontFamily === "serif") traits.family = "serif";
     if (!baseFont && content.styles[t.fontName]?.fontFamily === "monospace") traits.family = "mono";
-    addHit(page, {
+    const run = {
       kind: "pdf",
       str: t.str,
       left: tx[4],
@@ -284,9 +289,15 @@ async function renderPage(page) {
       baseFont,
       font: traits,
       pdf: { x: t.transform[4], y: t.transform[5], width: t.width, size: Math.hypot(t.transform[2], t.transform[3]) },
-    });
+    };
     count++;
+    // Text that is not really on show (white on white, hidden behind something, clipped away) is never
+    // offered for editing, so it can't come back into view by accident.
+    if (!inkUnder(page.canvas, run)) continue;
+    addHit(page, run);
   }
+  // Filled form fields: their values live in the field's appearance, not in the page text.
+  for (const run of widgetRuns(page)) { addHit(page, run); count++; }
   page.hasText = count > 0;
   page.rendered = true;
   // Ink that is already on the page sets the pen's default colour and width.
@@ -297,6 +308,52 @@ async function renderPage(page) {
   } catch {}
   // Pictures and scans have no text layer: read the text from the pixels instead.
   if (!page.hasText && !page.ocrDone && !page.blank) runOcr(page);
+}
+
+// Is there visible ink where this text is drawn? (Paper-coloured or covered text has none.)
+function inkUnder(canvas, run) {
+  const x = Math.max(0, Math.floor(run.left)), y = Math.max(0, Math.floor(run.baseline - run.size * 0.8));
+  const w = Math.min(canvas.width - x, Math.ceil(Math.max(run.width, 2))), h = Math.min(canvas.height - y, Math.ceil(run.size));
+  if (w < 2 || h < 2) return false;
+  const d = canvas.getContext("2d", { willReadFrequently: true }).getImageData(x, y, w, h).data;
+  // Paper: the median colour of the box's edge.
+  const ring = [];
+  for (let i = 0; i < w; i++) ring.push(i * 4, ((h - 1) * w + i) * 4);
+  for (let j = 0; j < h; j++) ring.push(j * w * 4, (j * w + w - 1) * 4);
+  const paper = [0, 1, 2].map((k) => ring.map((o) => d[o + k]).sort((a, b) => a - b)[ring.length >> 1]);
+  for (let i = 0; i < d.length; i += 4) if (Math.max(Math.abs(d[i] - paper[0]), Math.abs(d[i + 1] - paper[1]), Math.abs(d[i + 2] - paper[2])) > 40) return true;
+  return false;
+}
+
+// Lines of text inside filled form fields (from their appearance streams), as editable runs.
+function widgetRuns(page) {
+  const scan = pageScan(page);
+  if (!scan?.widgets.length) return [];
+  const out = [];
+  for (const w of scan.widgets) {
+    const shows = scan.shows.filter((s) => s.widget === w.index && s.text.trim() && s.glyphs.length && s.upright);
+    const lines = [];
+    for (const s of shows) {
+      const line = lines.find((l) => Math.abs(l.y - s.y) < s.size * 0.3);
+      if (line) line.shows.push(s); else lines.push({ y: s.y, shows: [s] });
+    }
+    for (const l of lines) {
+      l.shows.sort((a, b) => a.x - b.x);
+      const first = l.shows[0], last = l.shows[l.shows.length - 1];
+      const g0 = first.glyphs[0], g1 = last.glyphs[last.glyphs.length - 1];
+      const text = l.shows.map((s) => s.text).join("");
+      const lead = text.length - text.trimStart().length;
+      const [left, baseline] = page.viewport.convertToViewportPoint(first.glyphs[Math.min(lead, first.glyphs.length - 1)].x0, g0.y0);
+      const [right] = page.viewport.convertToViewportPoint(g1.x1, g1.y1);
+      const x0 = first.glyphs[Math.min(lead, first.glyphs.length - 1)].x0;
+      out.push({
+        kind: "pdf", str: text.trim(), left, baseline, size: first.size * SCALE, width: right - left, widget: w.index,
+        baseFont: first.baseFont, font: fontTraits(first.baseFont),
+        pdf: { x: x0, y: g0.y0, width: g1.x1 - x0, size: first.size },
+      });
+    }
+  }
+  return out;
 }
 
 function addHit(page, run) {
@@ -439,7 +496,11 @@ function runFill(page, run) {
 function paragraphOf(page, run) {
   const free = (page.runs || []).filter((r) => r.hit.isConnected && r.run.kind === "pdf").map((r) => r.run);
   const S = run.size, fill = runFill(page, run);
-  const same = (o) => o.baseFont === run.baseFont && Math.abs(o.size - S) <= S * 0.03 && runFill(page, o) === fill;
+  // Same font, size and colour, and in the same place (page text vs one form field). When the colour can't
+  // be read from the PDF, the colour of the ink on screen has to match instead.
+  const ink = (r) => (r._ink ||= sampleColors(page.canvas, r.left, r.baseline - r.size * 0.8, Math.max(r.width, 2), r.size).ink);
+  const same = (o) => o.baseFont === run.baseFont && Math.abs(o.size - S) <= S * 0.03 && (o.widget ?? null) === (run.widget ?? null) &&
+    runFill(page, o) === fill && (fill || Math.max(...ink(o).map((v, i) => Math.abs(v - ink(run)[i]))) < 40);
   const lineOf = (r0) => {
     const line = [r0];
     for (let dir of [-1, 1]) {
@@ -484,10 +545,11 @@ function editExistingText(page, run, hit, silent = false) {
     : { x: run.left - 1, y: top - 1, w: run.width + 2, h: run.size * 1.1 + 2 };
   const { ink, paper } = sampleColors(page.canvas, box.x, box.y, box.w, box.h);
   let font = { ...run.font }, size = run.size, matched = false, color = ink, spacing = null, lineGap = null, needsCover = run.kind === "ocr";
+  let st = null;
   if (run.kind === "pdf") {
     // Exact style from the content stream: colour, size, spacing, horizontal scale, leading.
     const scan = pageScan(page);
-    const st = scan ? runStyle(scan, run.pdf) : null;
+    st = scan ? runStyle(scan, run.pdf) : null;
     if (st) {
       if (st.fill && !st.invisible) color = st.fill;
       if (st.size > 0) size = st.size * SCALE;
@@ -497,14 +559,14 @@ function editExistingText(page, run, hit, silent = false) {
     }
     // The content stream names the font exactly (pdf.js does not always expose it).
     if (st?.baseFont) run.baseFont = st.baseFont;
-    try { Object.assign(font, fontTraits(run.baseFont, fontDescriptor(libPage(page), run.baseFont))); } catch {}
+    try { Object.assign(font, fontTraits(run.baseFont, fontDescriptor(libPage(page), run.baseFont, st?.resources))); } catch {}
   }
   if (run.kind === "ocr" || needsCover) {
     const b = run.box || { x0: run.left, y0: top, x1: run.left + run.width, y1: run.baseline + run.size * 0.2 };
     const m = matchImageFont(page.canvas, b, run.str, run.baseline, ink, paper);
     if (m) { font = { family: m.family, bold: m.bold, italic: false }; if (run.kind === "ocr") size = m.size; matched = true; }
   }
-  const origKey = run.kind === "pdf" && run.baseFont ? pdfFont(page, run.baseFont) : null;
+  const origKey = run.kind === "pdf" && run.baseFont ? pdfFont(page, run.baseFont, st?.resources) : null;
   ensureFace(famOf(font), font.bold, font.italic);
   const fontState = { ...font, underline: false, orig: origKey ? { key: origKey, pageId: page.id } : null, useOrig: !!origKey, origName: run.baseFont ? prettyFont(run.baseFont) : null, matched };
 
@@ -519,8 +581,10 @@ function editExistingText(page, run, hit, silent = false) {
 
   // Text in the PDF: the whole paragraph becomes one editable box; only lines that change are rewritten.
   const para = paragraphOf(page, run);
+  const cell = cellOf(page, run);
   const lines0 = para.lines.map((l) => {
-    const b = { x: l.left - 1, y: l.baseline - size * BASELINE - 1, w: l.width + 2, h: size * 1.1 + 2 };
+    // Paper patch (only used if the letters can't be taken out of the PDF): never over a table border.
+    const b = clipToCell({ x: l.left - 1, y: l.baseline - size * BASELINE - 1, w: l.width + 2, h: size * 1.1 + 2 }, cell);
     return { text: l.text, left: l.left, baseline: l.baseline, box: { ...b, color: sampleColors(page.canvas, b.x, b.y, b.w, b.h).paper }, sources: l.runs.map((r) => r.pdf), runs: l.runs };
   });
   const runs = para.lines.flatMap((l) => l.runs);
@@ -529,11 +593,104 @@ function editExistingText(page, run, hit, silent = false) {
   const x = Math.min(...lines0.map((l) => l.left)), baseline = lines0[0].baseline;
   const item = addItem({
     type: "text", pageId: page.id, x, baseline, size, font: fontState, color, text: lines0.map((l) => l.text).join("\n"),
-    lines0, needsCover, spacing, lineGap, runs,
+    lines0, needsCover, spacing, lineGap, runs, widget: run.widget ?? null, fontStream: st?.stream ?? 0, cell, size0: size, lineGap0: lineGap,
     base: { x, baseline, size, lineGap, color: [...color], font: fontSig(fontState) },
   }, false);
   if (!silent) focusLine(item, para.index);
   return item;
+}
+
+// The table cell (or form field) a run sits in, in page pixels: the nearest borders around it.
+function cellOf(page, run) {
+  const scan = pageScan(page);
+  if (!scan) return null;
+  const vp = (x, y) => page.viewport.convertToViewportPoint(x, y);
+  if (run.widget != null && scan.widgets[run.widget]) {
+    const r = scan.widgets[run.widget].rect, [l, t] = vp(r[0], r[3]), [rr, b] = vp(r[2], r[1]), pad = 2 * SCALE;
+    return { left: Math.min(l, rr) + pad, right: Math.max(l, rr) - pad, top: Math.min(t, b), bottom: Math.max(t, b) };
+  }
+  const mid = run.baseline - run.size * 0.35;
+  const cell = {};
+  for (const ru of scan.rules) {
+    const [ax, ay] = vp(ru.x1, ru.y1), [bx, by] = vp(ru.x2, ru.y2);
+    const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), y0 = Math.min(ay, by), y1 = Math.max(ay, by);
+    if (x1 - x0 < 1.5 && y0 <= mid && y1 >= mid) {
+      if (x0 > run.left + 1 && (cell.right === undefined || x0 < cell.right)) cell.right = x0;
+      if (x1 < run.left - 0.5 && (cell.left === undefined || x1 > cell.left)) cell.left = x1;
+    } else if (y1 - y0 < 1.5 && x0 <= run.left + 1 && x1 >= run.left + 1) {
+      if (y0 > run.baseline && (cell.bottom === undefined || y0 < cell.bottom)) cell.bottom = y0;
+      if (y1 < run.baseline - run.size * 0.6 && (cell.top === undefined || y1 > cell.top)) cell.top = y1;
+    }
+  }
+  return Object.keys(cell).length ? cell : null;
+}
+// Shrinks a patch so it stays inside the cell (a border line is never painted over).
+function clipToCell(b, cell) {
+  if (!cell) return b;
+  let x0 = b.x, y0 = b.y, x1 = b.x + b.w, y1 = b.y + b.h;
+  if (cell.left !== undefined) x0 = Math.max(x0, cell.left + 1);
+  if (cell.right !== undefined) x1 = Math.min(x1, cell.right - 1);
+  if (cell.top !== undefined) y0 = Math.max(y0, cell.top + 1);
+  if (cell.bottom !== undefined) y1 = Math.min(y1, cell.bottom - 1);
+  return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
+}
+// Width a line will be drawn with (the document's font when it has every letter, else the open font).
+function drawnWidth(item, text) {
+  const o = item.font.orig, docFont = o && item.font.useOrig && o.pageId === item.pageId ? fonts.get(o.key) : null;
+  const sp = item.spacing || {};
+  if (docFont && docFont.canWrite(text)) {
+    // The PDF font's own advance widths (standard fonts have no glyph outlines but do have widths).
+    const w = [...text].reduce((a, ch) => a + (docFont.info.known ? (docFont.info.width(docFont.uniToCode.get(ch)) / 1000) * item.size : item.size * 0.5), 0);
+    return (w + (sp.charSpacing || 0) * SCALE * [...text].length + (sp.wordSpacing || 0) * SCALE * (text.match(/ /g) || []).length) * (sp.hScale || 1);
+  }
+  const fam = famOf(item.font), fontCss = `${item.font.italic ? "italic" : "normal"} ${item.font.bold ? "700" : "400"} ${item.size}px ${CSS_FONT[fam]}`;
+  return (textWidth(text, fontCss) + (sp.charSpacing || 0) * SCALE * [...text].length) * (sp.hScale || 1);
+}
+// Greedy word wrap of one line into pieces no wider than max (a word longer than max is cut by letters).
+function wrapLine(text, max, measure) {
+  if (!text || measure(text.replace(/\s+$/, "")) <= max) return [text];
+  const out = [];
+  let cur = "";
+  for (const word of text.split(/(?<=\s)/)) {
+    if (cur && measure((cur + word).trimEnd()) > max) { out.push(cur.trimEnd()); cur = ""; }
+    if (!cur && measure(word.trimEnd()) > max) {
+      let piece = "";
+      for (const ch of word) { if (piece && measure(piece + ch) > max) { out.push(piece); piece = ""; } piece += ch; }
+      cur = piece;
+    } else cur += word;
+  }
+  out.push(cur.trimEnd());
+  return out;
+}
+// The lines of a text box as drawn: typed lines, wrapped inside the cell when they are too long for it.
+function linesOf(item) {
+  const hard = item.text.split("\n");
+  if (!item.wrapW) return hard;
+  return hard.flatMap((h) => wrapLine(h, item.wrapW, (t) => drawnWidth(item, t)));
+}
+// Longer text stays inside its cell (table cell or form field): it wraps onto more lines when the cell has
+// room below, otherwise the box shrinks (down to 60%) so it never runs over a border.
+function fitCell(item) {
+  if (item.type !== "text" || !item.cell || !item.size0) return;
+  const cell = item.cell;
+  const avail = cell.right !== undefined ? cell.right - item.x - item.size0 * 0.12 : null;
+  const roomH = cell.bottom !== undefined ? cell.bottom - (item.baseline - item.size0 * 0.8) - item.size0 * 0.1 : Infinity;
+  const fits = (k, wrap) => {
+    item.size = item.size0 * k;
+    item.lineGap = item.lineGap0 * k;
+    item.wrapW = wrap && avail ? avail : null;
+    const lines = linesOf(item).map((l) => l.replace(/\s+$/, ""));
+    const wide = avail !== null && Math.max(0, ...lines.map((l) => drawnWidth(item, l))) > avail + 0.5;
+    const tall = (lines.length - 1) * item.lineGap + item.size > roomH;
+    return !wide && !tall;
+  };
+  if (fits(1, false)) return;
+  // Wrapping is only used for text that already spans lines or has room below (a single value in a
+  // one-line cell shrinks instead, like a form field).
+  const roomy = roomH >= item.size0 * 2.2 || item.text.includes("\n");
+  if (roomy && fits(1, true)) return;
+  for (let k = 0.95; k >= 0.6; k -= 0.05) if (fits(k, roomy) || fits(k, false)) return;
+  fits(0.6, roomy);
 }
 
 // Selects one line of a text box (typing replaces that line; Enter adds a line below it).
@@ -556,7 +713,7 @@ function focusLine(item, index) {
 const fontSig = (f) => JSON.stringify([famOf(f), !!f.bold, !!f.italic, !!f.underline, !!f.useOrig]);
 // Which original lines changed: a moved or restyled box rewrites every line.
 function linePlan(item) {
-  const lines = item.text.split("\n").map((l) => l.replace(/\s+$/, ""));
+  const lines = linesOf(item).map((l) => l.replace(/\s+$/, ""));
   const o = item.lines0 || [], b = item.base;
   const restyled = !b || item.x !== b.x || item.baseline !== b.baseline || item.size !== b.size || item.lineGap !== b.lineGap || String(item.color) !== String(b.color) || fontSig(item.font) !== b.font;
   const changed = lines.map((l, i) => restyled || i >= o.length || l !== o[i].text.replace(/\s+$/, ""));
@@ -703,7 +860,7 @@ function drawItem(item) {
     setEditable(span);
     span.spellcheck = false;
     span.textContent = item.text;
-    span.addEventListener("input", () => { item.text = span.innerText.replace(/\r/g, ""); layoutItem(item); refreshStyleBar(); });
+    span.addEventListener("input", () => { item.text = span.innerText.replace(/\r/g, ""); fitCell(item); layoutItem(item); refreshStyleBar(); });
     span.addEventListener("keydown", (e) => {
       if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) { e.preventDefault(); span.blur(); return; }
       if (e.key === "Enter" && span.contentEditable === "true") { e.preventDefault(); document.execCommand("insertText", false, "\n"); }
@@ -777,7 +934,7 @@ function layoutItem(item) {
     const fam = famOf(item.font), S = item.size, G = lineGapOf(item);
     const sp = item.spacing || {};
     Object.assign(s, { left: item.x + "px", top: item.baseline - S * BASELINE + "px" });
-    const lines = item.text.split("\n");
+    const lines = linesOf(item);
     const weight = item.font.bold ? "700" : "400", style = item.font.italic ? "italic" : "normal";
     const fontCss = `${style} ${weight} ${S}px ${CSS_FONT[fam]}`;
     const k = FONT_K[fam] ?? 0.34;
@@ -794,6 +951,8 @@ function layoutItem(item) {
       color: css(item.color),
       caretColor: css(item.color),
       transform: "",
+      whiteSpace: item.wrapW ? "pre-wrap" : "pre",
+      width: item.wrapW ? item.wrapW + "px" : "",
     });
     // The document's own font, when this box may use it; each line uses it if it has all that line's letters.
     const o = item.font.orig;
@@ -1345,6 +1504,50 @@ function refreshChrome() {
 
 /* ---------- export ---------- */
 
+// A font used inside a form XObject, registered on the exported page so page text can use it too.
+function pageFontFrom(p, streamIndex, font) {
+  const st = scanPage(p).shows.find((s) => s.stream === streamIndex && s.fontRes === font.resName);
+  const ref = st?.resources?.lookup(PDFName.of("Font"))?.get(PDFName.of(font.resName));
+  if (!ref) return null;
+  const key = p.node.newFontDictionary(font.resName, ref);
+  return { ...font, resName: key.toString().slice(1) };
+}
+
+// Writing into a form field's appearance stream: a stand-in "page" whose operators are collected and
+// appended to that stream, with positions turned into the appearance's own coordinates.
+function widgetTarget(out, p, index) {
+  const w = scanPage(p).widgets[index];
+  if (!w) return null;
+  const ctx = out.context, ref = w.annot.lookup(PDFName.of("AP")).get(PDFName.of("N"));
+  const stream = ctx.lookup(ref);
+  let res = stream.dict.lookup(PDFName.of("Resources"));
+  if (!(res instanceof PDFDict)) { res = ctx.obj({}); stream.dict.set(PDFName.of("Resources"), res); }
+  let fontsDict = res.lookup(PDFName.of("Font"));
+  if (!(fontsDict instanceof PDFDict)) { fontsDict = ctx.obj({}); res.set(PDFName.of("Font"), fontsDict); }
+  const ops = [];
+  const inv = invert(w.ctm), scale = Math.hypot(w.ctm[0], w.ctm[1]) || 1;
+  let n = 0;
+  const page = {
+    doc: out,
+    pushOperators: (...o) => ops.push(...o),
+    maybeEmbedGraphicsState: () => undefined,
+    drawLine: () => {}, // no underline inside form fields
+    node: {
+      Resources: () => res,
+      newFontDictionary: (name, fontRef) => { let key; do key = PDFName.of(`${name}-AD${n++}`); while (fontsDict.has(key)); fontsDict.set(key, fontRef); return key; },
+    },
+  };
+  return {
+    page, scale,
+    at: (x, y) => { const [fx, fy] = applyMatrix(inv, x, y); return { x: fx, y: fy }; },
+    finish: (value) => {
+      if (ops.length) appendToStream(ctx, ref, ops.map(String).join("\n"));
+      // Keep the form data in step with what is shown.
+      w.field.set(PDFName.of("V"), PDFHexString.fromText(value));
+    },
+  };
+}
+
 async function exportBytes() {
   document.activeElement?.blur?.();
   const out = await PDFDocument.create();
@@ -1426,21 +1629,26 @@ async function exportBytes() {
         // A changed line whose letters could not be taken out of the stream (or sit in a picture) gets a paper patch.
         if (plan) item.lines0.forEach((l, li) => { if (plan.gone[li] && (item.needsCover || !lineRemoved(item, li))) patch(l.box); });
         else if (item.cover) patch(item.cover);
-        const lines = item.text.split("\n").map((t, i) => {
+        const lines = linesOf(item).map((t, i) => {
           const [x, y] = at(item.x, item.baseline + i * G);
           return { text: t.replace(/\s+$/, ""), x, y, i };
         }).filter((l) => l.text && (!plan || plan.changed[l.i]));
         const o = item.font.orig;
-        const docFont = o && item.font.useOrig && o.pageId === item.pageId ? fonts.get(o.key) : null;
+        let docFont = o && item.font.useOrig && o.pageId === item.pageId ? fonts.get(o.key) : null;
+        // Text of a filled form field goes back into the field's own appearance (drawn above the page).
+        const target = item.widget != null ? widgetTarget(out, p, item.widget) : null;
+        // Text from a form XObject is written on the page: its font is added to the page's own fonts first.
+        if (docFont && !target && item.fontStream) docFont = pageFontFrom(p, item.fontStream, docFont);
         for (const l of lines) {
           // Line by line: a line keeps the document's font whenever that font has all of its letters.
-          const used = await writeLines(out, p, {
-            lines: [l], size: item.size * k, color: item.color, rotationDeg: rot, pdfFont: docFont,
+          const used = await writeLines(out, target ? target.page : p, {
+            lines: [target ? { ...l, ...target.at(l.x, l.y) } : l], size: item.size * k / (target ? target.scale : 1), color: item.color, rotationDeg: rot, pdfFont: docFont,
             family: famOf(item.font), bold: item.font.bold, italic: item.font.italic, underline: item.font.underline,
-            spacing: item.spacing, embedded,
+            spacing: target && item.spacing ? { ...item.spacing, charSpacing: (item.spacing.charSpacing || 0) / target.scale, wordSpacing: (item.spacing.wordSpacing || 0) / target.scale } : item.spacing, embedded,
           });
           if (docFont && used !== "document") notes.add("some new letters were not in the document's font, so the closest matching font was used");
         }
+        if (target) target.finish(item.text.split("\n").map((t) => t.replace(/\s+$/, "")).join("\n"));
       }
     }
   }
@@ -1663,6 +1871,7 @@ function updateSelected(fn, record = true) {
   const item = state.selected;
   if (!item) return;
   fn(item);
+  fitCell(item);
   layoutItem(item);
   refreshStyleBar();
   if (record) commitSoon();
@@ -1691,11 +1900,11 @@ $("propFont").addEventListener("change", (e) => updateSelected((i) => {
 }));
 $("propSize").addEventListener("input", (e) => updateSelected((i) => {
   const v = parseFloat(e.target.value);
-  if (v > 0) { const ratio = lineGapOf(i) / i.size; i.size = v * SCALE; i.lineGap = i.size * ratio; }
+  if (v > 0) { const ratio = lineGapOf(i) / i.size; i.size = v * SCALE; i.lineGap = i.size * ratio; if (i.size0) { i.size0 = i.size; i.lineGap0 = i.lineGap; } }
 }));
 $("propLeading").addEventListener("input", (e) => updateSelected((i) => {
   const v = parseFloat(e.target.value);
-  if (v >= 0.5) i.lineGap = i.size * v;
+  if (v >= 0.5) { i.lineGap = i.size * v; if (i.size0) i.lineGap0 = i.size0 * v; }
 }));
 const toggleFont = (key, id) => $(id).addEventListener("click", () => updateSelected((i) => {
   i.font[key] = !i.font[key];
@@ -1727,6 +1936,13 @@ $("zoomIn").addEventListener("click", () => setZoom(state.zoom * 1.2));
 $("zoomOut").addEventListener("click", () => setZoom(state.zoom / 1.2));
 $("zoomFit").addEventListener("click", fitZoom);
 $("blankBtn").addEventListener("click", startBlank);
+$("previewBtn").addEventListener("click", () => {
+  document.activeElement?.blur?.();
+  select(null);
+  const on = document.body.classList.toggle("preview");
+  $("previewBtn").classList.toggle("on", on);
+  $("previewBtn").setAttribute("aria-pressed", String(on));
+});
 
 // Pen bar
 $("penKind").addEventListener("change", (e) => { state.pen.kind = e.target.value; refreshStyleBar(); document.body.dataset.pen = state.pen.kind; });

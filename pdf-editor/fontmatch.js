@@ -45,8 +45,9 @@ function parseToUnicode(text) {
  * Finds `baseFont` on a pdf-lib page and returns what is needed to write new text with it,
  * or null when the font can't be reused.
  */
-export function loadPdfFont(libPage, baseFont) {
-  const dict = libPage.node.Resources()?.lookup(PDFName.of("Font"));
+// resources: the Resources dict the text was drawn with (page, form XObject or form-field appearance).
+export function loadPdfFont(libPage, baseFont, resources = null) {
+  const dict = (resources || libPage.node.Resources())?.lookup(PDFName.of("Font"));
   if (!(dict instanceof PDFDict)) return null;
   for (const [key, ref] of dict.entries()) {
     const f = libPage.doc.context.lookup(ref);
@@ -88,6 +89,7 @@ export function loadPdfFont(libPage, baseFont) {
 
     return {
       resName: key.toString().slice(1),
+      ref,
       bytes: type0 ? 2 : 1,
       info,
       uniToCode,
@@ -189,8 +191,8 @@ export function fontTraits(baseFont, descriptor = null) {
 }
 
 // The FontDescriptor of a font on a pdf-lib page (Type0 fonts keep it on the descendant).
-export function fontDescriptor(libPage, baseFont) {
-  const dict = libPage.node.Resources()?.lookup(PDFName.of("Font"));
+export function fontDescriptor(libPage, baseFont, resources = null) {
+  const dict = (resources || libPage.node.Resources())?.lookup(PDFName.of("Font"));
   if (!(dict instanceof PDFDict)) return null;
   for (const [, ref] of dict.entries()) {
     const f = libPage.doc.context.lookup(ref);

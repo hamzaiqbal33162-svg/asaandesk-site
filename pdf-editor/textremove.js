@@ -232,7 +232,7 @@ const apply = (m, x, y) => [x * m[0] + y * m[2] + m[4], x * m[1] + y * m[3] + m[
 function readContent(page) {
   const contents = page.node.Contents();
   const streams = contents instanceof PDFArray ? contents.asArray().map((r) => page.doc.context.lookup(r)) : [contents];
-  const parts = streams.filter(Boolean).map((s) => (s instanceof PDFRawStream ? decodePDFRawStream(s).decode() : s.getContents()));
+  const parts = streams.filter(Boolean).map(streamBytesOf);
   const total = parts.reduce((a, p) => a + p.length + 1, 0);
   const out = new Uint8Array(total);
   let o = 0;
@@ -240,36 +240,121 @@ function readContent(page) {
   return out;
 }
 
+// Bytes of a content stream. pdf-lib's own streams (text being added right now) are read without
+// getContents(): that call caches the stream, and anything pushed to it later would be lost on save.
+function streamBytesOf(st) {
+  if (st instanceof PDFRawStream) return decodePDFRawStream(st).decode();
+  if (typeof st.getUnencodedContents === "function") { try { return st.getUnencodedContents(); } catch { /* not a content stream */ } }
+  return st.getContents();
+}
+
+// code -> unicode text from a ToUnicode CMap (enough to read form-field values back).
+function toUnicodeMap(fontDict) {
+  const tu = fontDict.lookup(PDFName.of("ToUnicode"));
+  if (!tu || !(tu instanceof PDFRawStream || tu.getContents)) return null;
+  const text = new TextDecoder("latin1").decode(streamBytesOf(tu));
+  const map = new Map();
+  const hex = (h) => parseInt(h, 16);
+  const utf16 = (h) => { let out = ""; for (let i = 0; i + 4 <= h.length; i += 4) out += String.fromCharCode(hex(h.slice(i, i + 4))); return h.length === 2 ? String.fromCharCode(hex(h)) : out; };
+  for (const block of text.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) for (const m of block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]*)>/g)) map.set(hex(m[1]), utf16(m[2]));
+  for (const block of text.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
+    for (const m of block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]*)>/g)) {
+      const lo = hex(m[1]), hi = hex(m[2]);
+      if (hi - lo > 65535) continue;
+      const base = hex(m[3].slice(-4) || m[3]);
+      for (let c = lo; c <= hi; c++) map.set(c, String.fromCharCode(base + (c - lo)));
+    }
+  }
+  return map;
+}
+
 /**
- * Walks a page's content stream once and returns:
+ * Walks a page's content once and returns:
  * - shows: every text-showing operator with its exact style (font, size, fill colour, character and
- *   word spacing, horizontal scale, leading, render mode) and the position of each glyph it draws;
- * - strokes: every stroked path with its colour, width and how many segments/curves it has.
+ *   word spacing, horizontal scale, leading, render mode) and the position of each glyph it draws,
+ *   including text inside form XObjects and inside the appearance of filled form fields (widgets);
+ * - strokes: every stroked path with its colour, width and how many segments/curves it has;
+ * - rules: straight horizontal / vertical lines (stroked or thin filled boxes), e.g. table borders;
+ * - streams: the content streams read ([0] = the page itself), so edits can be written back.
  * All positions are in PDF user space (the same space pdf.js reports text positions in).
  */
 export function scanPage(page) {
-  const result = { shows: [], strokes: [], bytes: null, cmds: [] };
-  if (!page.node.Contents()) return result;
-  const bytes = readContent(page);
-  const cmds = commands(tokenize(bytes));
-  Object.assign(result, { bytes, cmds });
+  const result = { shows: [], strokes: [], rules: [], streams: [], widgets: [], bytes: null, cmds: [] };
+  const ctx = page.doc.context;
+  if (page.node.Contents()) {
+    const bytes = readContent(page);
+    const cmds = commands(tokenize(bytes));
+    Object.assign(result, { bytes, cmds });
+    result.streams.push({ bytes, cmds, ref: null, page: true });
+    interpret(result, 0, page.node.Resources(), ID, ctx, 0, null);
+  }
+  scanWidgets(page, result);
+  return result;
+}
 
-  const resources = page.node.Resources();
-  const fontsDict = resources?.lookup(PDFName.of("Font"));
+// Form fields keep their text in an appearance stream drawn over the page: read it like page text.
+function scanWidgets(page, result) {
+  const ctx = page.doc.context;
+  const annots = page.node.Annots();
+  if (!annots) return;
+  const inherited = (d, key) => { for (let n = d, i = 0; n instanceof PDFDict && i < 10; n = n.lookup(PDFName.of("Parent")), i++) { const v = n.lookup(PDFName.of(key)); if (v !== undefined) return v; } return undefined; };
+  for (let i = 0; i < annots.size(); i++) {
+    const a = annots.lookup(i);
+    if (!(a instanceof PDFDict) || a.lookup(PDFName.of("Subtype"))?.toString() !== "/Widget") continue;
+    if (inherited(a, "FT")?.toString() !== "/Tx") continue;
+    const flags = a.lookup(PDFName.of("F"));
+    if (flags instanceof PDFNumber && flags.asNumber() & 2) continue; // hidden
+    const ap = a.lookup(PDFName.of("AP"));
+    const n = ap instanceof PDFDict ? ap.get(PDFName.of("N")) : null;
+    const st = n ? ctx.lookup(n) : null;
+    if (!st || !(st instanceof PDFRawStream || st.getContents) || !st.dict) continue;
+    const num = (arr, k, d) => { const v = arr instanceof PDFArray ? arr.lookup(k) : null; return v instanceof PDFNumber ? v.asNumber() : d; };
+    const rect = a.lookup(PDFName.of("Rect")), bbox = st.dict.lookup(PDFName.of("BBox")), mat = st.dict.lookup(PDFName.of("Matrix"));
+    const R = [num(rect, 0, 0), num(rect, 1, 0), num(rect, 2, 0), num(rect, 3, 0)];
+    const B = [num(bbox, 0, 0), num(bbox, 1, 0), num(bbox, 2, 0), num(bbox, 3, 0)];
+    const M = mat instanceof PDFArray ? [0, 1, 2, 3, 4, 5].map((k) => num(mat, k, k === 0 || k === 3 ? 1 : 0)) : ID;
+    // PDF 12.5.5: the transformed BBox is fitted onto the annotation's Rect.
+    const corners = [[B[0], B[1]], [B[2], B[1]], [B[0], B[3]], [B[2], B[3]]].map(([x, y]) => apply(M, x, y));
+    const bx0 = Math.min(...corners.map((c) => c[0])), by0 = Math.min(...corners.map((c) => c[1]));
+    const bx1 = Math.max(...corners.map((c) => c[0])), by1 = Math.max(...corners.map((c) => c[1]));
+    const rx0 = Math.min(R[0], R[2]), ry0 = Math.min(R[1], R[3]), rx1 = Math.max(R[0], R[2]), ry1 = Math.max(R[1], R[3]);
+    const sx = bx1 > bx0 ? (rx1 - rx0) / (bx1 - bx0) : 1, sy = by1 > by0 ? (ry1 - ry0) / (by1 - by0) : 1;
+    const A = [sx, 0, 0, sy, rx0 - bx0 * sx, ry0 - by0 * sy];
+    const bytes = streamBytesOf(st);
+    const cmds = commands(tokenize(bytes));
+    const field = (() => { for (let d = a, k = 0; d instanceof PDFDict && k < 10; d = d.lookup(PDFName.of("Parent")), k++) if (d.has(PDFName.of("T"))) return d; return a; })();
+    const V = inherited(a, "V"), Q = inherited(a, "Q"), Ff = inherited(a, "Ff");
+    const widget = {
+      index: result.widgets.length, annot: a, field, stream: result.streams.length, ctm: mul(M, A), rect: [rx0, ry0, rx1, ry1],
+      value: V?.decodeText ? V.decodeText() : "", q: Q instanceof PDFNumber ? Q.asNumber() : 0, multiline: Ff instanceof PDFNumber && !!(Ff.asNumber() & 4096),
+    };
+    result.widgets.push(widget);
+    result.streams.push({ bytes, cmds, ref: n, widget: widget.index });
+    interpret(result, widget.stream, st.dict.lookup(PDFName.of("Resources")) || page.node.Resources(), widget.ctm, ctx, 0, widget.index);
+  }
+}
+
+// Runs one content stream (page, form XObject or widget appearance) and adds what it draws to `result`.
+function interpret(result, streamIndex, resources, ctm0, ctx, depth, widget, gs0 = null) {
+  const { cmds } = result.streams[streamIndex];
+  const fontsDict = resources instanceof PDFDict ? resources.lookup(PDFName.of("Font")) : null;
   const fontCache = new Map();
   const getFont = (name) => {
     if (!fontCache.has(name)) {
       const fd = fontsDict instanceof PDFDict ? fontsDict.lookup(PDFName.of(name)) : null;
-      fontCache.set(name, fd instanceof PDFDict ? fontInfo(fd) : { bytes: 1, known: false, baseFont: "" });
+      const info = fd instanceof PDFDict ? fontInfo(fd) : { bytes: 1, known: false, baseFont: "" };
+      if (fd instanceof PDFDict) { info.dict = fd; info.toUnicode = toUnicodeMap(fd); }
+      fontCache.set(name, info);
     }
     return fontCache.get(name);
   };
 
-  let gs = { ctm: ID, Tc: 0, Tw: 0, Th: 1, TL: 0, Tfs: 0, font: null, fontRes: "", rise: 0, Tr: 0,
+  let gs = gs0 ? { ...gs0, ctm: ctm0 } : { ctm: ctm0, Tc: 0, Tw: 0, Th: 1, TL: 0, Tfs: 0, font: null, fontRes: "", rise: 0, Tr: 0,
     fill: { space: "gray", comps: [0] }, stroke: { space: "gray", comps: [0] }, lw: 1 };
   const stack = [];
   let Tm = ID, Tlm = ID;
-  let path = { segs: 0, curves: 0, pts: [] };
+  let path = { segs: 0, curves: 0, pts: [], lines: [], rects: [] };
+  let cur = null;
   const nextLine = (tx, ty) => { Tlm = mul([1, 0, 0, 1, tx, ty], Tlm); Tm = Tlm; };
 
   const show = (cmd, cmdIndex, items) => {
@@ -277,7 +362,7 @@ export function scanPage(page) {
     const m0 = mul(Tm, gs.ctm);
     const sx = Math.hypot(m0[0], m0[1]), sy = Math.hypot(m0[2], m0[3]);
     const record = {
-      cmdIndex, op: cmd.op, fontRes: gs.fontRes, baseFont: f?.baseFont || "", font: f,
+      cmdIndex, stream: streamIndex, widget, resources, op: cmd.op, fontRes: gs.fontRes, baseFont: f?.baseFont || "", font: f,
       Tfs: gs.Tfs, Tc: gs.Tc, Tw: gs.Tw, Th: gs.Th, TL: gs.TL, rise: gs.rise, render: gs.Tr,
       size: Math.abs(gs.Tfs) * sy,
       // Spacing expressed for text written at `size` with an unscaled text matrix.
@@ -285,7 +370,7 @@ export function scanPage(page) {
       leading: gs.TL * sy,
       fill: toRgb(gs.fill.space, gs.fill.comps),
       upright: Math.abs(m0[1]) < 1e-3 * Math.max(sx, 1e-6) && m0[0] > 0 && m0[3] > 0,
-      glyphs: [], unknown: !f?.known,
+      glyphs: [], unknown: !f?.known, text: "",
     };
     const start = apply(m0, 0, gs.rise);
     record.x = start[0];
@@ -307,6 +392,7 @@ export function scanPage(page) {
         const adv = (w0 * gs.Tfs + gs.Tc + space) * gs.Th;
         Tm = mul([1, 0, 0, 1, adv, 0], Tm);
         const [x1, y1] = apply(mul(Tm, gs.ctm), 0, gs.rise);
+        record.text += f?.toUnicode?.get(code) ?? (step === 1 ? winAnsiChar(code) : "");
         record.glyphs.push({ itemIndex, at: i, bytes: it.v.slice(i, i + step), code, x0, y0, x1, y1, w0, space });
       }
     });
@@ -315,19 +401,29 @@ export function scanPage(page) {
     result.shows.push(record);
   };
 
-  const paint = (stroked) => {
+  const paint = (stroked, filled) => {
+    const scale = Math.sqrt(Math.abs(gs.ctm[0] * gs.ctm[3] - gs.ctm[1] * gs.ctm[2])) || 1;
     if (stroked && path.segs) {
-      const scale = Math.sqrt(Math.abs(gs.ctm[0] * gs.ctm[3] - gs.ctm[1] * gs.ctm[2])) || 1;
       const xs = path.pts.map((p) => p[0]), ys = path.pts.map((p) => p[1]);
       result.strokes.push({
         color: toRgb(gs.stroke.space, gs.stroke.comps), width: gs.lw * scale, segs: path.segs, curves: path.curves,
         box: xs.length ? [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] : null,
       });
+      // Straight horizontal / vertical strokes are rules (table borders, underlines).
+      for (const [x1, y1, x2, y2] of path.lines) if ((Math.abs(x1 - x2) < 0.5 || Math.abs(y1 - y2) < 0.5) && Math.hypot(x2 - x1, y2 - y1) >= 4) result.rules.push({ x1: Math.min(x1, x2), y1: Math.min(y1, y2), x2: Math.max(x1, x2), y2: Math.max(y1, y2), w: gs.lw * scale });
     }
-    path = { segs: 0, curves: 0, pts: [] };
+    // Thin filled boxes are drawn rules too.
+    if (filled) for (const [x0, y0, x1, y1] of path.rects) {
+      const w = x1 - x0, h = y1 - y0;
+      if (w <= 3 && h >= 4) result.rules.push({ x1: (x0 + x1) / 2, y1: y0, x2: (x0 + x1) / 2, y2: y1, w });
+      else if (h <= 3 && w >= 4) result.rules.push({ x1: x0, y1: (y0 + y1) / 2, x2: x1, y2: (y0 + y1) / 2, w: h });
+    }
+    path = { segs: 0, curves: 0, pts: [], lines: [], rects: [] };
+    cur = null;
   };
-  const pt = (x, y) => path.pts.length < 400 && path.pts.push(apply(gs.ctm, x, y));
+  const pt = (x, y) => { const p = apply(gs.ctm, x, y); if (path.pts.length < 400) path.pts.push(p); return p; };
 
+  const xobjects = resources instanceof PDFDict ? resources.lookup(PDFName.of("XObject")) : null;
   cmds.forEach((c, cmdIndex) => {
     const a = c.args.map((x) => x.v);
     switch (c.op) {
@@ -345,13 +441,23 @@ export function scanPage(page) {
       case "CS": gs.stroke = initialColor(spaceKind(a[0], resources)); break;
       case "sc": case "scn": gs.fill = { ...gs.fill, comps: a.filter((v) => typeof v === "number") }; break;
       case "SC": case "SCN": gs.stroke = { ...gs.stroke, comps: a.filter((v) => typeof v === "number") }; break;
-      case "m": path.segs = path.segs || 0; pt(a[0], a[1]); break;
-      case "l": path.segs++; pt(a[0], a[1]); break;
-      case "c": path.segs++; path.curves++; pt(a[4], a[5]); break;
-      case "v": case "y": path.segs++; path.curves++; pt(a[2], a[3]); break;
-      case "re": path.segs += 4; pt(a[0], a[1]); pt(a[0] + a[2], a[1] + a[3]); break;
-      case "S": case "s": case "B": case "B*": case "b": case "b*": paint(true); break;
-      case "f": case "F": case "f*": case "n": paint(false); break;
+      case "m": path.segs = path.segs || 0; cur = pt(a[0], a[1]); break;
+      case "l": { path.segs++; const p = pt(a[0], a[1]); if (cur) path.lines.push([cur[0], cur[1], p[0], p[1]]); cur = p; break; }
+      case "c": path.segs++; path.curves++; cur = pt(a[4], a[5]); break;
+      case "v": case "y": path.segs++; path.curves++; cur = pt(a[2], a[3]); break;
+      case "re": {
+        path.segs += 4;
+        const p0 = pt(a[0], a[1]), p1 = pt(a[0] + a[2], a[1] + a[3]);
+        const [x0, x1] = [Math.min(p0[0], p1[0]), Math.max(p0[0], p1[0])], [y0, y1] = [Math.min(p0[1], p1[1]), Math.max(p0[1], p1[1])];
+        path.rects.push([x0, y0, x1, y1]);
+        path.lines.push([x0, y0, x1, y0], [x1, y0, x1, y1], [x1, y1, x0, y1], [x0, y1, x0, y0]);
+        cur = null;
+        break;
+      }
+      case "S": case "s": paint(true, false); break;
+      case "B": case "B*": case "b": case "b*": paint(true, true); break;
+      case "f": case "F": case "f*": paint(false, true); break;
+      case "n": paint(false, false); break;
       case "BT": Tm = Tlm = ID; break;
       case "Tf": gs.font = getFont(a[0]); gs.fontRes = a[0]; gs.Tfs = a[1]; break;
       case "Tc": gs.Tc = a[0]; break;
@@ -368,9 +474,22 @@ export function scanPage(page) {
       case "TJ": show(c, cmdIndex, c.args[0]?.v || []); break;
       case "'": nextLine(0, -gs.TL); show(c, cmdIndex, c.args); break;
       case '"': gs.Tw = a[0]; gs.Tc = a[1]; nextLine(0, -gs.TL); show(c, cmdIndex, [c.args[2]]); break;
+      case "Do": {
+        // Form XObjects (templates, stamps, report sections): their text and drawings count too.
+        if (depth >= 4 || !(xobjects instanceof PDFDict)) break;
+        const ref = xobjects.get(PDFName.of(a[0]));
+        const xo = ref ? ctx.lookup(ref) : null;
+        if (!xo?.dict || xo.dict.lookup(PDFName.of("Subtype"))?.toString() !== "/Form") break;
+        const mat = xo.dict.lookup(PDFName.of("Matrix"));
+        const M = mat instanceof PDFArray ? [0, 1, 2, 3, 4, 5].map((k) => { const v = mat.lookup(k); return v instanceof PDFNumber ? v.asNumber() : (k === 0 || k === 3 ? 1 : 0); }) : ID;
+        const bytes = streamBytesOf(xo);
+        const index = result.streams.length;
+        result.streams.push({ bytes, cmds: commands(tokenize(bytes)), ref, parent: streamIndex, name: a[0] });
+        interpret(result, index, xo.dict.lookup(PDFName.of("Resources")) || resources, mul(M, gs.ctm), ctx, depth + 1, widget, gs);
+        break;
+      }
     }
   });
-  return result;
 }
 
 // Glyphs of a show that lie inside a text run (pdf.js item): same baseline, centre inside the run.
@@ -390,6 +509,8 @@ export function runStyle(scan, run) {
       fontRes: s.fontRes, baseFont: s.baseFont, size: s.size, fill: s.fill, render: s.render,
       charSpacing: s.charSpacing, wordSpacing: s.wordSpacing, hScale: s.hScale, leading: s.leading,
       invisible: s.render === 3 || s.render === 7,
+      // Where the text lives: the page itself, a form XObject, or a form field's appearance (widget).
+      resources: s.resources, stream: s.stream, widget: s.widget ?? null, fontDict: s.font?.dict || null,
     };
   }
   return null;
@@ -421,13 +542,14 @@ const toHex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, "0")).
  */
 export function removeTextRuns(page, runs) {
   const removed = new Set();
-  if (!runs.length || !page.node.Contents()) return removed;
+  if (!runs.length) return removed;
   const scan = scanPage(page);
   const failed = new Set(), touched = new Set();
-  const edits = []; // { s, e, text }
+  const edits = new Map(); // stream index -> [{ s, e, text }]
+  const edit = (stream, e) => { if (!edits.has(stream)) edits.set(stream, []); edits.get(stream).push(e); };
 
   for (const s of scan.shows) {
-    const cmd = scan.cmds[s.cmdIndex];
+    const cmd = scan.streams[s.stream].cmds[s.cmdIndex];
     const hitOf = s.glyphs.map((g) => runs.findIndex((r) => inRun(g, r)));
     if (!hitOf.some((h) => h >= 0)) {
       // Unknown widths: glyph positions are unknown, so fall back to the whole operator when it starts inside a run.
@@ -438,7 +560,7 @@ export function removeTextRuns(page, runs) {
       const sx = s.Tfs ? s.size / Math.abs(s.Tfs) : 1;
       if (Math.abs(s.x - run.x) >= 1 || !s.Tfs || !s.Th) { failed.add(r); continue; }
       const n = (-(run.width / (sx || 1)) * 1000) / (s.Tfs * s.Th);
-      edits.push({ s: cmd.s, e: cmd.e, text: prefixOf(cmd) + `[${n.toFixed(3)}] TJ` });
+      edit(s.stream, { s: cmd.s, e: cmd.e, text: prefixOf(cmd) + `[${n.toFixed(3)}] TJ` });
       touched.add(r);
       continue;
     }
@@ -470,28 +592,62 @@ export function removeTextRuns(page, runs) {
     flushStr();
     flushNum();
     if (!parts.length) parts.push("0");
-    edits.push({ s: cmd.s, e: cmd.e, text: prefixOf(cmd) + `[${parts.join(" ")}] TJ` });
+    edit(s.stream, { s: cmd.s, e: cmd.e, text: prefixOf(cmd) + `[${parts.join(" ")}] TJ` });
   }
 
   for (const r of touched) if (!failed.has(r)) removed.add(r);
-  if (!edits.length) return removed;
-  edits.sort((a, b) => a.s - b.s);
+  const ctx = page.doc.context;
+  for (const [index, list] of edits) {
+    const st = scan.streams[index];
+    const out = applyEdits(st.bytes, list);
+    if (st.page) page.node.set(PDFName.of("Contents"), ctx.register(ctx.flateStream(out)));
+    else replaceStreamContent(ctx, st.ref, out);
+  }
+  return removed;
+}
+
+function applyEdits(bytes, list) {
+  list.sort((a, b) => a.s - b.s);
   const enc = new TextEncoder();
   const chunks = [];
   let pos = 0;
-  for (const ed of edits) {
-    chunks.push(scan.bytes.subarray(pos, ed.s), enc.encode(ed.text));
+  for (const ed of list) {
+    chunks.push(bytes.subarray(pos, ed.s), enc.encode(ed.text));
     pos = ed.e;
   }
-  chunks.push(scan.bytes.subarray(pos));
-  const len = chunks.reduce((t, c) => t + c.length, 0);
-  const out = new Uint8Array(len);
+  chunks.push(bytes.subarray(pos));
+  const out = new Uint8Array(chunks.reduce((t, c) => t + c.length, 0));
   let o = 0;
   for (const c of chunks) { out.set(c, o); o += c.length; }
-  const ctx = page.doc.context;
-  page.node.set(PDFName.of("Contents"), ctx.register(ctx.flateStream(out)));
-  return removed;
+  return out;
 }
+
+// Gives a form XObject / appearance stream new content, keeping its dictionary (BBox, Matrix, Resources…).
+function replaceStreamContent(ctx, ref, bytes) {
+  const old = ctx.lookup(ref);
+  const dict = {};
+  for (const [k, v] of old.dict.entries()) if (!["/Length", "/Filter", "/DecodeParms"].includes(k.toString())) dict[k.toString().slice(1)] = v;
+  const next = ctx.flateStream(bytes, dict);
+  if (ref && ref.objectNumber !== undefined) ctx.assign(ref, next);
+}
+
+/** Appends content (operators as text) to a form XObject / widget appearance stream. */
+export function appendToStream(ctx, ref, text) {
+  const st = ctx.lookup(ref);
+  const bytes = streamBytesOf(st);
+  const add = new TextEncoder().encode("\n" + text + "\n");
+  const out = new Uint8Array(bytes.length + add.length);
+  out.set(bytes, 0);
+  out.set(add, bytes.length);
+  replaceStreamContent(ctx, ref, out);
+}
+
+/** Inverse of a 2D affine matrix [a b c d e f]. */
+export function invert(m) {
+  const det = m[0] * m[3] - m[1] * m[2] || 1e-12;
+  return [m[3] / det, -m[1] / det, -m[2] / det, m[0] / det, (m[2] * m[5] - m[3] * m[4]) / det, (m[1] * m[4] - m[0] * m[5]) / det];
+}
+export { apply as applyMatrix };
 
 // ' and " also move to the next line (and " sets spacing); keep that when rewriting them as TJ.
 function prefixOf(cmd) {
