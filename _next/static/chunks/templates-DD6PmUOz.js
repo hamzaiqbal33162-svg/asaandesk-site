@@ -1,0 +1,1 @@
+import{g as e}from"./badge-maker-CY2Pxrba.js";export{e as buildTemplate};

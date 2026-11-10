@@ -61,7 +61,8 @@ function tokenize(b) {
     if (c === 47) { // /Name
       i++;
       while (i < n && !WS.has(b[i]) && !DELIM.has(b[i])) i++;
-      toks.push({ t: "name", v: String.fromCharCode(...b.subarray(start + 1, i)), s: start, e: i });
+      // Names are decoded (#2B -> "+"), the way pdf-lib names them: "/ECPUAV#2BCalibri" is the font "ECPUAV+Calibri".
+      toks.push({ t: "name", v: String.fromCharCode(...b.subarray(start + 1, i)).replace(/#([0-9A-Fa-f]{2})/g, (m, h) => String.fromCharCode(parseInt(h, 16))), s: start, e: i });
       continue;
     }
     while (i < n && !WS.has(b[i]) && !DELIM.has(b[i])) i++;
@@ -353,7 +354,7 @@ function interpret(result, streamIndex, resources, ctm0, ctx, depth, widget, gs0
     fill: { space: "gray", comps: [0] }, stroke: { space: "gray", comps: [0] }, lw: 1 };
   const stack = [];
   let Tm = ID, Tlm = ID;
-  let path = { segs: 0, curves: 0, pts: [], lines: [], rects: [] };
+  let path = { segs: 0, curves: 0, pts: [], lines: [], rects: [], subs: [] };
   let cur = null;
   const nextLine = (tx, ty) => { Tlm = mul([1, 0, 0, 1, tx, ty], Tlm); Tm = Tlm; };
 
@@ -392,8 +393,9 @@ function interpret(result, streamIndex, resources, ctm0, ctx, depth, widget, gs0
         const adv = (w0 * gs.Tfs + gs.Tc + space) * gs.Th;
         Tm = mul([1, 0, 0, 1, adv, 0], Tm);
         const [x1, y1] = apply(mul(Tm, gs.ctm), 0, gs.rise);
-        record.text += f?.toUnicode?.get(code) ?? (step === 1 ? winAnsiChar(code) : "");
-        record.glyphs.push({ itemIndex, at: i, bytes: it.v.slice(i, i + step), code, x0, y0, x1, y1, w0, space });
+        const ch = f?.toUnicode?.get(code) ?? (step === 1 ? winAnsiChar(code) : "");
+        record.text += ch;
+        record.glyphs.push({ itemIndex, at: i, bytes: it.v.slice(i, i + step), code, ch, x0, y0, x1, y1, w0, space });
       }
     });
     const end = apply(mul(Tm, gs.ctm), 0, gs.rise);
@@ -412,13 +414,21 @@ function interpret(result, streamIndex, resources, ctm0, ctx, depth, widget, gs0
       // Straight horizontal / vertical strokes are rules (table borders, underlines).
       for (const [x1, y1, x2, y2] of path.lines) if ((Math.abs(x1 - x2) < 0.5 || Math.abs(y1 - y2) < 0.5) && Math.hypot(x2 - x1, y2 - y1) >= 4) result.rules.push({ x1: Math.min(x1, x2), y1: Math.min(y1, y2), x2: Math.max(x1, x2), y2: Math.max(y1, y2), w: gs.lw * scale });
     }
-    // Thin filled boxes are drawn rules too.
+    // Thin filled boxes are drawn rules too, also when drawn point by point (m/l/l/l/h) instead of with "re".
+    if (filled && !path.curves) {
+      for (const sub of path.subs) {
+        if (sub.length < 4 || sub.length > 6) continue;
+        if (sub.some((p, i) => i && Math.abs(p[0] - sub[i - 1][0]) > 0.05 && Math.abs(p[1] - sub[i - 1][1]) > 0.05)) continue;
+        const xs = sub.map((p) => p[0]), ys = sub.map((p) => p[1]);
+        path.rects.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]);
+      }
+    }
     if (filled) for (const [x0, y0, x1, y1] of path.rects) {
       const w = x1 - x0, h = y1 - y0;
       if (w <= 3 && h >= 4) result.rules.push({ x1: (x0 + x1) / 2, y1: y0, x2: (x0 + x1) / 2, y2: y1, w });
       else if (h <= 3 && w >= 4) result.rules.push({ x1: x0, y1: (y0 + y1) / 2, x2: x1, y2: (y0 + y1) / 2, w: h });
     }
-    path = { segs: 0, curves: 0, pts: [], lines: [], rects: [] };
+    path = { segs: 0, curves: 0, pts: [], lines: [], rects: [], subs: [] };
     cur = null;
   };
   const pt = (x, y) => { const p = apply(gs.ctm, x, y); if (path.pts.length < 400) path.pts.push(p); return p; };
@@ -441,8 +451,8 @@ function interpret(result, streamIndex, resources, ctm0, ctx, depth, widget, gs0
       case "CS": gs.stroke = initialColor(spaceKind(a[0], resources)); break;
       case "sc": case "scn": gs.fill = { ...gs.fill, comps: a.filter((v) => typeof v === "number") }; break;
       case "SC": case "SCN": gs.stroke = { ...gs.stroke, comps: a.filter((v) => typeof v === "number") }; break;
-      case "m": path.segs = path.segs || 0; cur = pt(a[0], a[1]); break;
-      case "l": { path.segs++; const p = pt(a[0], a[1]); if (cur) path.lines.push([cur[0], cur[1], p[0], p[1]]); cur = p; break; }
+      case "m": path.segs = path.segs || 0; cur = pt(a[0], a[1]); path.subs.push([cur]); break;
+      case "l": { path.segs++; const p = pt(a[0], a[1]); if (cur) path.lines.push([cur[0], cur[1], p[0], p[1]]); path.subs[path.subs.length - 1]?.push(p); cur = p; break; }
       case "c": path.segs++; path.curves++; cur = pt(a[4], a[5]); break;
       case "v": case "y": path.segs++; path.curves++; cur = pt(a[2], a[3]); break;
       case "re": {
