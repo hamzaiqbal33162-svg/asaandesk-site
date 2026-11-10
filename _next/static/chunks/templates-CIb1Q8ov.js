@@ -1,0 +1,1 @@
+import{g as e}from"./badge-maker-ClAG2QrA.js";export{e as buildTemplate};

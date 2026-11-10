@@ -1,1 +1,0 @@
-import{g as e}from"./badge-maker-B78493D-.js";export{e as buildTemplate};
