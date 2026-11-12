@@ -1,6 +1,6 @@
 // Board exports (pure; the PDF writer gets pdf-lib and /pdf-editor/vector.js drawPrims passed in).
 import { rectsIntersect } from "./geometry.js";
-import { objectPrims, objectBounds, primsToSvg } from "./render.js";
+import { objectPrims, objectBounds, primsToSvg, objectSvg, canRotate, centerOf } from "./render.js";
 import { byIdOf } from "./model.js";
 
 export const PDF_SCALE = 0.75; // 96 px = 72 pt
@@ -26,7 +26,7 @@ const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 /** Standalone SVG file of the board or a frame. */
 export function boardToSvg(board, opts = {}) {
   const { rect: r, objects, byId, title } = exportScope(board, opts);
-  const body = objects.map((o) => `<g data-type="${o.type}">${primsToSvg(objectPrims(o, byId))}</g>`).join("\n");
+  const body = objects.map((o) => `<g data-type="${o.type}">${objectSvg(o, byId)}</g>`).join("\n");
   const clip = opts.frameId ? ` clip-path="url(#ad-frame)"` : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${r.w}" height="${r.h}" viewBox="${r.x} ${r.y} ${r.w} ${r.h}">
@@ -63,8 +63,14 @@ export async function exportPdf(board, { PDFLib, drawPrims }, opts = {}) {
   const W = r.w * s, H = r.h * s;
   const page = out.addPage([W, H]);
   const embedded = new Map(), images = new Map(), dropped = [];
-  const origin = [-r.x * s, H + r.y * s];
-  for (const o of objects) {
+  const origin0 = [-r.x * s, H + r.y * s];
+  for (const o0 of objects) {
+    // Rotated objects: draw them around their centre with drawPrims' rotation (PDF y goes up, so the angle flips).
+    const rotated = !!(o0.rot && canRotate(o0));
+    const [ccx, ccy] = rotated ? centerOf(o0) : [0, 0];
+    const o = rotated ? { ...o0, x: o0.x - ccx, y: o0.y - ccy } : o0;
+    const origin = rotated ? [origin0[0] + ccx * s, origin0[1] - ccy * s] : origin0;
+    const rotationDeg = rotated ? -o0.rot : 0;
     const prims = objectPrims(o, byId);
     for (const p of prims) {
       if (p.img == null) continue;
@@ -75,16 +81,21 @@ export async function exportPdf(board, { PDFLib, drawPrims }, opts = {}) {
         try { if (d && /png/.test(d.mime)) img = await out.embedPng(d.bytes); else if (d && /jpe?g/.test(d.mime)) img = await out.embedJpg(d.bytes); } catch { img = null; }
         images.set(p.img, img);
       }
-      if (img) page.drawImage(img, { x: origin[0] + p.x * s, y: origin[1] - (p.y + p.h) * s, width: p.w * s, height: p.h * s, opacity: p.op ?? 1 });
+      if (img && rotated) {
+        // pdf-lib turns an image around its bottom-left corner: place that corner where the rotation puts it.
+        const t = (rotationDeg * Math.PI) / 180, cos = Math.cos(t), sin = Math.sin(t), lx = p.x, ly = p.y + p.h;
+        page.drawImage(img, { x: origin[0] + (cos * lx + sin * ly) * s, y: origin[1] + (sin * lx - cos * ly) * s, width: p.w * s, height: p.h * s, rotate: PDFLib.degrees(rotationDeg), opacity: p.op ?? 1 });
+      } else if (img) page.drawImage(img, { x: origin[0] + p.x * s, y: origin[1] - (p.y + p.h) * s, width: p.w * s, height: p.h * s, opacity: p.op ?? 1 });
     }
-    const shapes = prims.filter((p) => p.img == null && p.t == null), texts = prims.filter((p) => p.t != null);
-    if (shapes.length) await drawPrims(out, page, shapes, { origin, sx: s, embedded });
+    // Emoji reaction marks have no letters in the open PDF fonts: the badge and its count are kept, the emoji is left out quietly.
+    const shapes = prims.filter((p) => p.img == null && p.t == null), texts = prims.filter((p) => p.t != null && !p.emoji);
+    if (shapes.length) await drawPrims(out, page, shapes, { origin, sx: s, embedded, rotationDeg });
     // Text line by line: a letter the open fonts don't have (emoji, some scripts) only drops that letter.
     for (const t of texts) {
-      try { await drawPrims(out, page, [t], { origin, sx: s, embedded }); continue; } catch {}
+      try { await drawPrims(out, page, [t], { origin, sx: s, embedded, rotationDeg }); continue; } catch {}
       const safe = String(t.t).replace(UNSAFE, "").replace(/\s{2,}/g, " ");
       let done = false;
-      if (safe.trim()) try { await drawPrims(out, page, [{ ...t, t: safe }], { origin, sx: s, embedded }); done = true; } catch {}
+      if (safe.trim()) try { await drawPrims(out, page, [{ ...t, t: safe }], { origin, sx: s, embedded, rotationDeg }); done = true; } catch {}
       dropped.push(done ? t.t.replace(safe, "").trim() || t.t : t.t);
     }
   }

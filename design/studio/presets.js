@@ -32,6 +32,7 @@ const printIn = { bleed: MM3_IN }; // inch presets (3 mm)
 export const PRESETS = [
   // Social media (pixels)
   P("instagram-post", "Instagram post", "social", 1080, 1080, "px", { tags: "instagram square post" }),
+  P("instagram-portrait", "Instagram portrait post", "social", 1080, 1350, "px", { tags: "instagram portrait post 4:5 carousel" }),
   P("instagram-story", "Instagram story", "social", 1080, 1920, "px", { tags: "instagram story reel vertical" }),
   P("facebook-post", "Facebook post", "social", 1200, 630, "px", { tags: "facebook post link share" }),
   P("facebook-cover", "Facebook cover", "social", 1640, 624, "px", { tags: "facebook cover banner page" }),
@@ -40,6 +41,7 @@ export const PRESETS = [
   P("linkedin-post", "LinkedIn post", "social", 1200, 627, "px", { tags: "linkedin post business" }),
   P("x-post", "X post", "social", 1600, 900, "px", { tags: "x twitter post" }),
   P("whatsapp-status", "WhatsApp status", "social", 1080, 1920, "px", { tags: "whatsapp status story vertical" }),
+  P("tiktok-post", "TikTok photo post", "social", 1080, 1920, "px", { tags: "tiktok photo post vertical" }),
   P("pinterest-pin", "Pinterest pin", "social", 1000, 1500, "px", { tags: "pinterest pin tall" }),
   // Presentations
   P("presentation-16x9", "Presentation 16:9", "presentation", 1920, 1080, "px", { tags: "slides deck widescreen" }),
@@ -54,24 +56,41 @@ export const PRESETS = [
   // Print
   P("business-card-us", "Business card (3.5 × 2 in)", "print", 3.5, 2, "in", { ...printIn, pages: 2, tags: "business card visiting card" }),
   P("business-card-eu", "Business card (85 × 55 mm)", "print", 85, 55, "mm", { ...print, pages: 2, tags: "business card visiting card" }),
-  P("invitation-5x7", "Invitation (5 × 7 in)", "print", 5, 7, "in", { ...printIn, tags: "invitation card dawat wedding birthday" }),
+  P("business-card-jp", "Business card Japan (91 × 55 mm)", "print", 91, 55, "mm", { ...print, pages: 2, tags: "business card japan" }),
+  P("business-card-au", "Business card AU / IN (90 × 55 mm)", "print", 90, 55, "mm", { ...print, pages: 2, tags: "business card australia india" }),
+  P("business-card-cn", "Business card China (90 × 54 mm)", "print", 90, 54, "mm", { ...print, pages: 2, tags: "business card china" }),
+  P("business-card-vertical", "Business card portrait (2 × 3.5 in)", "print", 2, 3.5, "in", { ...printIn, pages: 2, tags: "business card vertical portrait" }),
+  P("business-card-square", "Business card square (2.5 × 2.5 in)", "print", 2.5, 2.5, "in", { ...printIn, pages: 2, tags: "business card square" }),
+  P("invitation-5x7", "Invitation (5 × 7 in)", "print", 5, 7, "in", { ...printIn, pages: 2, tags: "invitation card dawat wedding birthday" }),
+  P("invitation-7x5", "Invitation landscape (7 × 5 in)", "print", 7, 5, "in", { ...printIn, pages: 2, tags: "invitation card landscape" }),
   P("flyer-a5", "Flyer A5", "print", 148, 210, "mm", { ...print, tags: "flyer leaflet a5" }),
   P("flyer-a4", "Flyer A4", "print", 210, 297, "mm", { ...print, tags: "flyer leaflet a4" }),
   P("flyer-letter", "Flyer Letter", "print", 8.5, 11, "in", { ...printIn, tags: "flyer leaflet letter" }),
+  P("flyer-a4-landscape", "Flyer A4 landscape", "print", 297, 210, "mm", { ...print, tags: "flyer leaflet a4 landscape" }),
+  P("brochure-bifold-letter", "Bi-fold brochure Letter", "print", 11, 8.5, "in", { ...printIn, pages: 2, tags: "brochure bifold half fold", guides: [{ type: "fold", axis: "x", at: 1 / 2 }] }),
+  P("brochure-gatefold-letter", "Gate-fold brochure Letter", "print", 11, 8.5, "in", { ...printIn, pages: 2, tags: "brochure gate fold", guides: [{ type: "fold", axis: "x", at: 1 / 4 }, { type: "fold", axis: "x", at: 3 / 4 }] }),
+  P("brochure-trifold-legal", "Tri-fold brochure Legal", "print", 14, 8.5, "in", { ...printIn, pages: 2, tags: "brochure trifold legal", guides: [{ type: "fold", axis: "x", at: 1 / 3 }, { type: "fold", axis: "x", at: 2 / 3 }] }),
+  P("brochure-accordion-tabloid", "Accordion brochure Tabloid", "print", 17, 11, "in", { ...printIn, pages: 2, tags: "brochure accordion z fold tabloid", guides: [{ type: "fold", axis: "x", at: 1 / 4 }, { type: "fold", axis: "x", at: 1 / 2 }, { type: "fold", axis: "x", at: 3 / 4 }] }),
+  P("brochure-4panel-25x11", "4-panel brochure (25.5 × 11 in)", "print", 25.5, 11, "in", { ...printIn, pages: 2, tags: "brochure 4 panel four panel roll fold 11x25.5 25.5x11", guides: [{ type: "fold", axis: "x", at: 1 / 4 }, { type: "fold", axis: "x", at: 1 / 2 }, { type: "fold", axis: "x", at: 3 / 4 }] }),
+  P("postcard", "Postcard (6 × 4 in)", "print", 6, 4, "in", { ...printIn, pages: 2, tags: "postcard post card mail 4x6 6x4" }),
   P("brochure-trifold-a4", "Tri-fold brochure A4", "print", 297, 210, "mm", { ...print, pages: 2, tags: "brochure trifold pamphlet", guides: [{ type: "fold", axis: "x", at: 1 / 3 }, { type: "fold", axis: "x", at: 2 / 3 }] }),
   P("brochure-trifold-letter", "Tri-fold brochure Letter", "print", 11, 8.5, "in", { ...printIn, pages: 2, tags: "brochure trifold pamphlet", guides: [{ type: "fold", axis: "x", at: 1 / 3 }, { type: "fold", axis: "x", at: 2 / 3 }] }),
   P("poster-18x24", "Poster (18 × 24 in)", "print", 18, 24, "in", { ...printIn, tags: "poster wall print" }),
   P("poster-a2", "Poster A2", "print", 420, 594, "mm", { ...print, tags: "poster a2" }),
   P("poster-a3", "Poster A3", "print", 297, 420, "mm", { ...print, tags: "poster a3" }),
+  P("poster-a1", "Poster A1", "print", 594, 841, "mm", { ...print, tags: "poster a1 large" }),
+  P("poster-24x18", "Poster landscape (24 × 18 in)", "print", 24, 18, "in", { ...printIn, tags: "poster landscape wide" }),
   P("label-shipping-4x6", "Shipping label (4 × 6 in)", "print", 4, 6, "in", { ...printIn, tags: "label shipping parcel courier" }),
   P("label-product-2x1", "Product label (2 × 1 in)", "print", 2, 1, "in", { ...printIn, tags: "label product jar bottle" }),
   P("label-round-2in", "Round label (2 in)", "print", 2, 2, "in", { ...printIn, tags: "label round circle", guides: [{ type: "cut", shape: "circle", inset: 0 }] }),
   P("sticker-square-3in", "Square sticker (3 × 3 in)", "print", 3, 3, "in", { ...printIn, tags: "sticker square", guides: [{ type: "cut", shape: "rounded", inset: 0, radius: 0.25 }] }),
   P("sticker-round-3in", "Round sticker (3 in)", "print", 3, 3, "in", { ...printIn, tags: "sticker round circle", guides: [{ type: "cut", shape: "circle", inset: 0 }] }),
+  P("sticker-oval-3x2", "Oval sticker (3 × 2 in)", "print", 3, 2, "in", { ...printIn, tags: "sticker oval", guides: [{ type: "cut", shape: "circle", inset: 0 }] }),
+  P("sticker-rect-3x2", "Rectangle sticker (3 × 2 in)", "print", 3, 2, "in", { ...printIn, tags: "sticker rectangle", guides: [{ type: "cut", shape: "rounded", inset: 0, radius: 0.2 }] }),
   // Merch (print areas)
-  P("tshirt", "T-shirt print (12 × 16 in)", "merch", 12, 16, "in", { tags: "t-shirt tshirt shirt print", mockup: "tshirt" }),
-  P("hoodie", "Hoodie print (12 × 14 in)", "merch", 12, 14, "in", { tags: "hoodie sweatshirt print", mockup: "hoodie" }),
-  P("mug", "Mug wrap (8.5 × 3.5 in)", "merch", 8.5, 3.5, "in", { tags: "mug cup wrap", mockup: "mug" }),
+  P("tshirt", "T-shirt print (12 × 16 in)", "merch", 12, 16, "in", { pages: 2, tags: "t-shirt tshirt shirt print", mockup: "tshirt" }),
+  P("hoodie", "Hoodie print (12 × 14 in)", "merch", 12, 14, "in", { pages: 2, tags: "hoodie sweatshirt print", mockup: "hoodie" }),
+  P("mug", "Mug wrap (8.5 × 3.5 in)", "merch", 8.5, 3.5, "in", { tags: "mug cup wrap", mockup: "mug", guides: [{ type: "safe", inset: 0, w: 768, h: 307 }] }),
   // Collages
   P("collage-square", "Photo collage (square)", "collage", 1080, 1080, "px", { tags: "collage photos grid square" }),
   P("collage-landscape", "Photo collage (landscape)", "collage", 1200, 800, "px", { tags: "collage photos grid landscape" }),
@@ -139,8 +158,9 @@ export function customPreset(w, h, unit = "px") {
   w = +w; h = +h;
   if (!["px", "mm", "in"].includes(unit)) throw new Error("Use px, mm or in.");
   const px = { w: toPx(w, unit), h: toPx(h, unit) };
-  if (!(px.w >= 16 && px.h >= 16)) throw new Error("The size is too small (at least 16 px).");
-  if (px.w > 20000 || px.h > 20000) throw new Error("The size is too big (up to 20000 px).");
+  // Canva's limits: 40 to 8,000 px a side (0.42 to 83.3 in, 10.6 to 2,116 mm).
+  if (!(px.w >= 39.5 && px.h >= 39.5)) throw new Error(`The size is too small: each side needs at least 40 px${unit === "px" ? "" : unit === "in" ? " (0.42 in)" : " (10.6 mm)"}.`);
+  if (px.w > 8000.5 || px.h > 8000.5) throw new Error(`The size is too big: each side can be up to 8,000 px${unit === "px" ? "" : unit === "in" ? " (83.3 in)" : " (2,116 mm)"}.`);
   return { id: "custom", label: "Custom size", group: unit === "px" ? "social" : "print", w, h, unit, dpi: unit === "px" ? 96 : 300, bleed: unit === "px" ? 0 : unit === "mm" ? 3 : MM3_IN };
 }
 

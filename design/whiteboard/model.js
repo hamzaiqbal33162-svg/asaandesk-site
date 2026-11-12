@@ -2,7 +2,7 @@
 // Board = { format: 'asaandesk-board', version: 1, name, objects: [Obj] }   (array order = stacking order)
 // Obj = { id, type, x, y, w, h, locked, group, ... }   type: note | text | shape | connector | stroke | frame | image | sticker
 import { routeConnector, pointsBounds, rectContains, rectsIntersect, pointInOutline, distToPolyline } from "./geometry.js";
-import { objectBounds, textLayout } from "./render.js";
+import { objectBounds, textLayout, rotatePoint, canRotate } from "./render.js";
 
 export const FORMAT = "asaandesk-board";
 export const NOTE_COLORS = [
@@ -29,6 +29,16 @@ export function makeText({ x = 0, y = 0, w = 260, text = "", size = 24, color = 
 }
 export const makeShape = ({ x = 0, y = 0, w = 160, h = 110, kind = "rect", fill = "#e8e5fe", stroke = "#5b4cf0", sw = 2, text = "", size = 18, bold = false } = {}) =>
   base("shape", x, y, w, h, { kind, fill, stroke, sw, text, size, bold, textColor: "#1b2133" });
+/** Table: a grid of rectangle cells sharing one group (each cell's text is edited with a double-click). */
+export function makeTable({ x = 0, y = 0, cols = 3, rows = 3, cw = 150, ch = 54, head = "#e8e5fe", stroke = "#9aa1b5", cells = null } = {}) {
+  const group = newId(), out = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const o = makeShape({ x: x + c * cw, y: y + r * ch, w: cw, h: ch, kind: "rect", fill: r === 0 && head ? head : "#ffffff", stroke, sw: 1, text: cells?.[r]?.[c] ?? "", size: 16, bold: r === 0 });
+    o.group = group; o.cell = [r, c];
+    out.push(o);
+  }
+  return out;
+}
 export const makeFrame = ({ x = 0, y = 0, w = 640, h = 420, name = "Frame", fill = "#ffffff" } = {}) => base("frame", x, y, w, h, { name, fill });
 export const makeConnector = ({ from, to, kind = "straight", arrow = "end", stroke = "#334155", sw = 2, text = "" } = {}) =>
   base("connector", 0, 0, 0, 0, { from: { ...from }, to: { ...to }, kind, arrow, stroke, sw, text });
@@ -63,15 +73,19 @@ export function frameChildren(board, frame) {
   return board.objects.filter((o) => o !== frame && o.type !== "frame" && o.type !== "connector" && rectContains(frame, objectBounds(o, byId)));
 }
 /** Topmost object at a board point (frames only by their name label or border). tol in board px. */
-export function hitTest(board, x, y, tol = 4) {
+export function hitTest(board, x0, y0, tol = 4) {
   const byId = byIdOf(board);
+  let x = x0, y = y0;
   for (let i = board.objects.length - 1; i >= 0; i--) {
     const o = board.objects[i];
     if (o.type === "frame") continue;
+    x = x0; y = y0;
+    if (o.rot && canRotate(o)) [x, y] = rotatePoint(x0, y0, o.x + o.w / 2, o.y + o.h / 2, -o.rot);
     if (o.type === "connector") { if (distToPolyline(routeConnector(o, byId).points, x, y) <= Math.max(tol + 2, (o.sw || 2) / 2 + tol)) return o; continue; }
     if (o.type === "stroke") { if (distToPolyline(o.points.map(([px, py]) => [o.x + px, o.y + py]), x, y) <= (o.width || 3) / 2 + tol) return o; continue; }
     if (pointInOutline(o, x, y, tol)) return o;
   }
+  x = x0; y = y0;
   for (let i = board.objects.length - 1; i >= 0; i--) {
     const o = board.objects[i];
     if (o.type !== "frame") continue;

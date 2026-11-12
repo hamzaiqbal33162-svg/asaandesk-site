@@ -54,12 +54,12 @@ export function fitText(text, w, h, { max = 32, min = 9, bold = false } = {}) {
   return { size: min, lines: wrapText(text, w, min, bold) };
 }
 /** Text prims for lines centred vertically in a box (anchor by align). */
-export function textBlock(lines, size, box, { align = "center", valign = "middle", fill = "#1b2133", bold = false, italic = false } = {}) {
+export function textBlock(lines, size, box, { align = "center", valign = "middle", fill = "#1b2133", bold = false, italic = false, font = "sans" } = {}) {
   const lh = size * LINE, total = lines.length * lh;
   const top = valign === "top" ? box.y : valign === "bottom" ? box.y + box.h - total : box.y + (box.h - total) / 2;
   const x = align === "left" ? box.x : align === "right" ? box.x + box.w : box.x + box.w / 2;
   const anchor = align === "left" ? "start" : align === "right" ? "end" : "middle";
-  return lines.map((t, i) => ({ t, x, y: top + lh * i + lh / 2 + size * 0.35, size, fill, bold, italic, font: "sans", anchor })).filter((p) => p.t.trim());
+  return lines.map((t, i) => ({ t, x, y: top + lh * i + lh / 2 + size * 0.35, size, fill, bold, italic, font: font || "sans", anchor })).filter((p) => p.t.trim());
 }
 
 /* ---------------------------------------------------------------- per-object layout */
@@ -73,8 +73,17 @@ export function shapeTextBox(o) {
   return { x: o.x + (o.w - w) / 2, y: o.y + o.h * k[2] - h / 2, w, h };
 }
 export function noteLayout(o) {
-  const box = { x: o.x + NOTE_PAD, y: o.y + NOTE_PAD, w: Math.max(4, o.w - NOTE_PAD * 2), h: Math.max(4, o.h - NOTE_PAD * 2) };
-  return { box, ...fitText(o.text || "", box.w, box.h, { max: o.size || 28, min: 8 }) };
+  const ah = o.author ? 14 : 0; // room for the author's name at the bottom
+  const box = { x: o.x + NOTE_PAD, y: o.y + NOTE_PAD, w: Math.max(4, o.w - NOTE_PAD * 2), h: Math.max(4, o.h - NOTE_PAD * 2 - ah) };
+  return { box, ...fitText(o.text || "", box.w, box.h, { max: o.size || 28, min: 8, bold: !!o.bold }) };
+}
+/** Emoji reaction badges on a sticky note (emoji + count), from the bottom-right corner leftwards. */
+export function reactionBadges(o) {
+  const list = Array.isArray(o.reactions) ? o.reactions : [];
+  const out = [];
+  let x = o.x + o.w - 6;
+  for (const e of list.slice(0, 8)) { const w = 46; x -= w; out.push({ e, x, y: o.y + o.h - 13, w, h: 26 }); x -= 5; }
+  return out;
 }
 export function shapeLayout(o) {
   const box = shapeTextBox(o);
@@ -102,22 +111,28 @@ export function objectPrims(o, byId, opts = {}) {
       prims.push({ d: roundRectPath(o.x + 1.5, o.y + 4, o.w, o.h, 6), fill: "#1b2133", op: 0.08 });
       prims.push({ d: roundRectPath(o.x, o.y, o.w, o.h, 6), fill: o.color || "#ffe27a" });
       const L = noteLayout(o);
-      text(textBlock(L.lines, L.size, L.box, { fill: o.textColor || "#1b2133", align: o.align || "center" }));
+      text(textBlock(L.lines, L.size, L.box, { fill: o.textColor || "#1b2133", align: o.align || "center", bold: !!o.bold, italic: !!o.italic, font: o.font }));
+      if (o.author) prims.push({ t: String(o.author).slice(0, 40), x: o.x + 10, y: o.y + o.h - 9, size: 11, fill: "#5d6478", bold: true, font: "sans", anchor: "start", op: 0.85 });
+      for (const b of reactionBadges(o)) {
+        prims.push({ d: roundRectPath(b.x, b.y, b.w, b.h, 13), fill: "#ffffff", stroke: "#d5d9e6", sw: 1 });
+        prims.push({ t: b.e, x: b.x + 7, y: b.y + 18, size: 14, fill: "#1b2133", font: "sans", anchor: "start", emoji: true });
+        prims.push({ t: "1", x: b.x + 34, y: b.y + 17.5, size: 12, fill: "#5d6478", bold: true, font: "sans", anchor: "middle" });
+      }
       break;
     }
     case "shape": {
-      prims.push({ d: shapePath(o.kind, o.x, o.y, o.w, o.h), fill: o.fill || "none", stroke: o.stroke || "none", sw: o.sw ?? 2 });
+      prims.push({ d: shapePath(o.kind, o.x, o.y, o.w, o.h), fill: o.fill || "none", stroke: o.stroke || "none", sw: o.sw ?? 2, ...(o.opacity != null && o.opacity < 1 ? { op: o.opacity } : {}), ...(o.dash ? { dash: [8, 6] } : {}) });
       const L = shapeLayout(o);
-      text(textBlock(L.lines, L.size, L.box, { fill: o.textColor || "#1b2133", bold: !!o.bold }));
+      text(textBlock(L.lines, L.size, L.box, { fill: o.textColor || "#1b2133", bold: !!o.bold, italic: !!o.italic, font: o.font, align: o.align || "center" }));
       break;
     }
     case "text": {
       const L = textLayout(o);
-      text(textBlock(L.lines, L.size, { x: o.x, y: o.y, w: o.w, h: L.h }, { align: o.align || "left", valign: "top", fill: o.color || "#1b2133", bold: !!o.bold }));
+      text(textBlock(L.lines, L.size, { x: o.x, y: o.y, w: o.w, h: L.h }, { align: o.align || "left", valign: "top", fill: o.color || "#1b2133", bold: !!o.bold, italic: !!o.italic, font: o.font }));
       break;
     }
     case "frame": {
-      prims.push({ d: roundRectPath(o.x, o.y, o.w, o.h, 4), fill: o.fill || "#ffffff", stroke: "#cfd4e4", sw: 1.5 });
+      prims.push({ d: roundRectPath(o.x, o.y, o.w, o.h, 4), fill: o.fill || "#ffffff", stroke: o.stroke || "#cfd4e4", sw: 1.5 });
       text([{ t: o.name || "Frame", x: o.x + 2, y: o.y - 9, size: 14, fill: "#6a7389", bold: true, font: "sans", anchor: "start" }]);
       break;
     }
@@ -173,13 +188,45 @@ export function objectBounds(o, byId) {
   }
   if (o.type === "frame") return { x: o.x, y: o.y - 26, w: o.w, h: o.h + 26 };
   if (o.type === "stroke") { const m = (o.width || 3) / 2; return { x: o.x - m, y: o.y - m, w: o.w + m * 2, h: o.h + m * 2 }; }
-  if (o.type === "note") return { x: o.x, y: o.y, w: o.w + 2, h: o.h + 4 };
+  if (o.rot) return rotatedBox(o);
+  if (o.type === "note") return { x: o.x, y: o.y, w: o.w + 2, h: o.h + (Array.isArray(o.reactions) && o.reactions.length ? 16 : 4) };
   return { x: o.x, y: o.y, w: o.w, h: o.h };
+}
+/** Rotation (degrees, clockwise) around the object's centre: only boxes (not frames, connectors). */
+export const canRotate = (o) => !!o && !["frame", "connector"].includes(o.type);
+export const centerOf = (o) => [o.x + o.w / 2, o.y + o.h / 2];
+export function rotatePoint(x, y, cx, cy, deg) {
+  const r = (deg * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r), dx = x - cx, dy = y - cy;
+  return [cx + dx * c - dy * s, cy + dx * s + dy * c];
+}
+/** Axis-aligned box around a rotated object. */
+export function rotatedBox(o) {
+  const [cx, cy] = centerOf(o);
+  const pts = [[o.x, o.y], [o.x + o.w, o.y], [o.x + o.w, o.y + o.h], [o.x, o.y + o.h]].map(([x, y]) => rotatePoint(x, y, cx, cy, o.rot || 0));
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+}
+/** SVG transform attribute value for a rotated object ("" when not rotated). */
+export function rotTransform(o) {
+  if (!o.rot || !canRotate(o)) return "";
+  const [cx, cy] = centerOf(o);
+  return `rotate(${Math.round(o.rot * 100) / 100} ${Math.round(cx * 100) / 100} ${Math.round(cy * 100) / 100})`;
+}
+/** SVG of one object (rotation included). */
+export function objectSvg(o, byId, opts) {
+  const body = primsToSvg(objectPrims(o, byId, opts)), t = rotTransform(o);
+  return t ? `<g transform="${t}">${body}</g>` : body;
 }
 export function boardBounds(objects, byId) { return unionRect(objects.map((o) => objectBounds(o, byId))); }
 
 /* ---------------------------------------------------------------- SVG */
 export const SANS_CSS = "'AD Sans', Arial, Helvetica, sans-serif";
+export const FONT_CSS = {
+  sans: SANS_CSS, serif: "'AD Serif', 'Times New Roman', serif", mono: "'AD Mono', 'Courier New', monospace",
+  calibri: "'AD Calibri', Calibri, Carlito, sans-serif", cambria: "'AD Cambria', Cambria, Caladea, serif",
+};
+export const fontCss = (f) => FONT_CSS[f] || SANS_CSS;
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const num = (v) => Math.round(v * 100) / 100;
 /** SVG elements (no wrapper) for a primitive list. */
@@ -188,7 +235,7 @@ export function primsToSvg(prims) {
     if (p.img != null) return `<image href="${esc(p.img)}" x="${num(p.x)}" y="${num(p.y)}" width="${num(p.w)}" height="${num(p.h)}" preserveAspectRatio="none"${p.op != null && p.op < 1 ? ` opacity="${p.op}"` : ""}/>`;
     if (p.t != null) {
       const anchor = p.anchor === "middle" ? "middle" : p.anchor === "end" ? "end" : "start";
-      return `<text x="${num(p.x)}" y="${num(p.y)}" font-size="${num(p.size)}" font-family="${SANS_CSS}" font-weight="${p.bold ? 700 : 400}"${p.italic ? ' font-style="italic"' : ""} text-anchor="${anchor}" fill="${p.fill || "#000000"}"${p.op != null && p.op < 1 ? ` opacity="${p.op}"` : ""} style="white-space:pre">${esc(p.t)}</text>`;
+      return `<text x="${num(p.x)}" y="${num(p.y)}" font-size="${num(p.size)}" font-family="${fontCss(p.font)}" font-weight="${p.bold ? 700 : 400}"${p.italic ? ' font-style="italic"' : ""} text-anchor="${anchor}" fill="${p.fill || "#000000"}"${p.op != null && p.op < 1 ? ` opacity="${p.op}"` : ""} style="white-space:pre">${esc(p.t)}</text>`;
     }
     const a = [`d="${p.d}"`, `fill="${p.fill && p.fill !== "none" ? p.fill : "none"}"`];
     if (p.stroke && p.stroke !== "none") a.push(`stroke="${p.stroke}"`, `stroke-width="${num(p.sw ?? 1)}"`, `stroke-linecap="${p.cap || "round"}"`, `stroke-linejoin="${p.join || "round"}"`);
@@ -209,7 +256,7 @@ export function drawPrimsCanvas(ctx, prims, { images = new Map(), Path2D: P2 = g
       const im = images.get(p.img);
       if (im) ctx.drawImage(im, p.x, p.y, p.w, p.h);
     } else if (p.t != null) {
-      ctx.font = `${p.italic ? "italic " : ""}${p.bold ? 700 : 400} ${p.size}px ${SANS_CSS.replace(/'/g, '"')}`;
+      ctx.font = `${p.italic ? "italic " : ""}${p.bold ? 700 : 400} ${p.size}px ${fontCss(p.font).replace(/'/g, '"')}`;
       ctx.textAlign = p.anchor === "middle" ? "center" : p.anchor === "end" ? "right" : "left";
       ctx.textBaseline = "alphabetic";
       ctx.fillStyle = p.fill || "#000000";

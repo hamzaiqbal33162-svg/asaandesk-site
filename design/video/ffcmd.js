@@ -43,9 +43,48 @@ export function convertArgs({ input, output = "output.mp4", quality = "balanced"
   return ["-i", input, "-vf", scaleFilter({ height, srcW, srcH }), ...h264Args({ crf: crfOf(quality) }), output];
 }
 
+/** Stream copy into MP4 (no re-encode): fast and lossless when the video is already H.264 (checked after, see isPlainMp4). */
+export function remuxArgs({ input, output = "output.mp4" }) {
+  if (!input) throw new Error("No input file.");
+  return ["-i", input, "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", "-movflags", "+faststart", output];
+}
+/** True when MP4 bytes hold H.264 video and AAC/MP3 sound (or none): the kind that plays everywhere. */
+export function isPlainMp4(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  const head = b.subarray(0, Math.min(b.length, 2 << 20)), tail = b.subarray(Math.max(0, b.length - (1 << 20)));
+  const s = (x) => { let t = ""; for (let i = 0; i < x.length; i += 0x8000) t += String.fromCharCode(...x.subarray(i, i + 0x8000)); return t; };
+  const txt = s(head) + s(tail);
+  if (!txt.includes("ftyp") || !txt.includes("moov") || !txt.includes("avc1")) return false;
+  const audio = txt.includes("soun");
+  return !audio || txt.includes("mp4a");
+}
+/** Trim without re-encoding, in the original format: cuts at the nearest keyframe before start (fast, no quality loss). */
+export function trimCopyArgs({ input, output, start = 0, end, mute = false }) {
+  if (!(end > start)) throw new Error("The end must be after the start.");
+  return ["-ss", secs(start), "-i", input, "-t", secs(end - start), "-map", "0:v:0", ...(mute ? ["-an"] : ["-map", "0:a:0?"]), "-c", "copy", "-avoid_negative_ts", "make_zero", output];
+}
+
+/** MP4 -> MOV (QuickTime) without re-encoding: same H.264/AAC streams, QuickTime container. */
+export function movArgs({ input = "input.mp4", output = "output.mov" } = {}) {
+  return ["-i", input, "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", "-movflags", "+faststart", "-f", "mov", output];
+}
+/** Video -> its sound only, as WAV (16-bit PCM 48 kHz stereo) or M4A (AAC). */
+export function audioOnlyArgs({ input, output = "output.wav" }) {
+  if (!input) throw new Error("No input file.");
+  const m4a = /\.m4a$/i.test(output);
+  return ["-i", input, "-vn", "-map", "0:a:0", ...(m4a ? ["-c:a", "aac", "-b:a", "160k"] : ["-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"]), output];
+}
+/** Trim with the sound kept or taken out (muteAudio): exact cut, re-encoded. */
+export function trimMuteArgs({ input, output = "output.mp4", start = 0, end, quality = "balanced", srcW = 0, srcH = 0 }) {
+  if (!(end > start)) throw new Error("The end must be after the start.");
+  return ["-ss", secs(start), "-i", input, "-t", secs(end - start), "-vf", scaleFilter({ srcW, srcH }), ...h264Args({ crf: crfOf(quality), audio: false }), output];
+}
+
 /** Editor export: the WebM the browser recorded -> MP4 at a constant frame rate. */
-export function webmToMp4Args({ input = "input.webm", output = "output.mp4", fps = 30, quality = "high" } = {}) {
-  return ["-i", input, "-r", String(fps), "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", ...h264Args({ crf: crfOf(quality), audioKbps: 160 }), output];
+export function webmToMp4Args({ input = "input.webm", output = "output.mp4", fps = 30, quality = "high", duration = 0 } = {}) {
+  // duration: the picture's length (the sound track of a recording can run a moment longer); the MP4 ends with the picture
+  return ["-i", input, "-r", String(fps), "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", ...h264Args({ crf: crfOf(quality), audioKbps: 160 }),
+    ...(duration > 0 ? ["-t", secs(duration)] : []), output];
 }
 
 /** Keep only start..end (exact cut: re-encodes). Fast input seek is frame-accurate when transcoding. */
@@ -60,8 +99,9 @@ export function cutMiddleArgs({ input, output = "output.mp4", start, end, durati
   if (!(end > start)) throw new Error("The end must be after the start.");
   if (!(duration > 0)) throw new Error("Unknown video length.");
   if (start <= 0.01 && end >= duration - 0.01) throw new Error("That would cut out the whole video.");
-  if (start <= 0.01) return trimArgs({ input, output, start: end, end: duration, quality });
-  if (end >= duration - 0.01) return trimArgs({ input, output, start: 0, end: start, quality });
+  const edge = hasAudio ? trimArgs : trimMuteArgs;
+  if (start <= 0.01) return edge({ input, output, start: end, end: duration, quality });
+  if (end >= duration - 0.01) return edge({ input, output, start: 0, end: start, quality });
   const S = secs(start), E = secs(end), ev = "scale=trunc(iw/2)*2:trunc(ih/2)*2";
   const parts = [`[0:v]trim=end=${S},setpts=PTS-STARTPTS,${ev}[v0]`, `[0:v]trim=start=${E},setpts=PTS-STARTPTS,${ev}[v1]`];
   if (hasAudio) parts.push(`[0:a]atrim=end=${S},asetpts=PTS-STARTPTS[a0]`, `[0:a]atrim=start=${E},asetpts=PTS-STARTPTS[a1]`,

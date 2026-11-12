@@ -11,11 +11,14 @@ export const ADJUSTMENTS = [
   { id: "contrast", label: "Contrast", min: -100, max: 100, group: "light" },
   { id: "highlights", label: "Highlights", min: -100, max: 100, group: "light" },
   { id: "shadows", label: "Shadows", min: -100, max: 100, group: "light" },
+  { id: "whites", label: "Whites", min: -100, max: 100, group: "light" },
+  { id: "blacks", label: "Blacks", min: -100, max: 100, group: "light" },
   { id: "fade", label: "Fade", min: 0, max: 100, group: "light" },
   { id: "saturation", label: "Saturation", min: -100, max: 100, group: "colour" },
   { id: "vibrance", label: "Vibrance", min: -100, max: 100, group: "colour" },
   { id: "warmth", label: "Warmth", min: -100, max: 100, group: "colour" },
   { id: "tint", label: "Tint", min: -100, max: 100, group: "colour" },
+  { id: "hue", label: "Hue", min: -180, max: 180, group: "colour" },
   { id: "sharpen", label: "Sharpen", min: 0, max: 100, group: "detail" },
   { id: "clarity", label: "Clarity", min: -100, max: 100, group: "detail" },
   { id: "blur", label: "Blur", min: 0, max: 100, group: "detail" },
@@ -88,6 +91,7 @@ function toneLut(adj) {
   const ev = 2 ** ((adj.exposure || 0) / 50);
   const gamma = 2 ** (-(adj.brightness || 0) / 100);
   const c = adj.contrast || 0, k = 1 + c / 125, sa = (c / 100) * 5;
+  const wh = (adj.whites || 0) / 100, bk = (adj.blacks || 0) / 100;
   for (let v = 0; v < 256; v++) {
     let x = v / 255;
     if (ev !== 1) x = l2s(Math.min(1, s2l(x) * ev));
@@ -97,6 +101,9 @@ function toneLut(adj) {
       const d = x - 0.5;
       x = c > 0 ? 0.5 + Math.tanh(d * sa) / (2 * Math.tanh(sa / 2)) : 0.5 + d * k;
     }
+    // whites / blacks move the white and black points (mostly the brightest / darkest tones; the curve never turns back)
+    if (wh) x += wh * 0.22 * x * x * x;
+    if (bk) x += bk * 0.22 * (1 - x) ** 3;
     lut[v] = clamp01(x);
   }
   return lut;
@@ -119,6 +126,8 @@ export function applyAdjustments(img, adj = NEUTRAL, { seed = 7 } = {}) {
   const fade = a.fade / 100, lo = 0.2 * fade, hi = 1 - 0.08 * fade;
   const rW = 1 + 0.16 * warm + 0.05 * tint, gW = 1 - 0.13 * tint, bW = 1 - 0.16 * warm + 0.05 * tint;
   const doHS = sh !== 0 || hl !== 0, doSat = sat !== 1 || vib !== 0, doWB = warm !== 0 || tint !== 0;
+  // hue: turn the colours round the grey axis (YIQ), brightness stays
+  const hr = ((a.hue || 0) * Math.PI) / 180, hc = Math.cos(hr), hs = -Math.sin(hr), doHue = !!a.hue; // + = red → yellow → green, like CSS hue-rotate
   for (let i = 0; i < n; i++) {
     const o = i * 4;
     let r = lut[src[o]], g = lut[src[o + 1]], b = lut[src[o + 2]];
@@ -130,6 +139,11 @@ export function applyAdjustments(img, adj = NEUTRAL, { seed = 7 } = {}) {
       if (L > 0.02) { const k = Math.min(4, L2 / L); r *= k; g *= k; b *= k; } else { const d = L2 - L; r += d; g += d; b += d; }
     }
     if (doWB) { r *= rW; g *= gW; b *= bW; }
+    if (doHue) {
+      const Y = 0.299 * r + 0.587 * g + 0.114 * b, I = 0.596 * r - 0.274 * g - 0.322 * b, Q = 0.211 * r - 0.523 * g + 0.312 * b;
+      const I2 = I * hc - Q * hs, Q2 = I * hs + Q * hc;
+      r = Y + 0.956 * I2 + 0.621 * Q2; g = Y - 0.272 * I2 - 0.647 * Q2; b = Y - 1.106 * I2 + 1.703 * Q2;
+    }
     if (doSat) {
       const L = luma(r, g, b);
       const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
@@ -282,13 +296,392 @@ export function applyFilter(img, id, intensity = 1, { seed = 7 } = {}) {
   return looked;
 }
 
-/** Filter look first, then the person's own adjustments on top. */
-export function renderPixels(img, { adjust = NEUTRAL, filter = null } = {}, opts = {}) {
+/**
+ * Face retouch (skin smoothing) and changed photo colours first (they look at the photo's own colours), then the
+ * filter look, then the person's own adjustments, then the colour effects (duotone, invert).
+ */
+export function renderPixels(img, { adjust = NEUTRAL, filter = null, fx = null } = {}, opts = {}) {
   let out = img;
+  if (fx && fx.retouch > 0) out = retouchSkin(out, fx.retouch);
+  if (fx && hasPhotoColors(fx)) out = applyPhotoColors(out === img ? cloneImage(img) : out, fx.colors);
   if (filter && filter.id && filter.id !== "none" && filter.intensity > 0) out = applyFilter(out, filter.id, filter.intensity / 100, opts);
   if (!isNeutral(adjust)) out = applyAdjustments(out, adjust, opts);
+  if (hasColorFx(fx)) out = applyColorFx(out === img ? cloneImage(img) : out, fx);
   return out === img ? cloneImage(img) : out;
 }
+
+/* ---------- colour effects: duotone and invert ---------- */
+
+export const DUOTONES = [
+  { id: "berry", name: "Berry", a: "#2b1055", b: "#ff7eb3" },
+  { id: "ocean", name: "Ocean", a: "#0b2545", b: "#7ee8fa" },
+  { id: "sunset", name: "Sunset", a: "#3a0ca3", b: "#ffb703" },
+  { id: "forest", name: "Forest", a: "#1b4332", b: "#d8f3dc" },
+  { id: "lemon", name: "Lemon", a: "#283618", b: "#fefae0" },
+  { id: "coral", name: "Coral", a: "#22223b", b: "#ff8c69" },
+  { id: "violet", name: "Violet", a: "#240046", b: "#c77dff" },
+  { id: "teal", name: "Teal", a: "#03045e", b: "#48cae4" },
+];
+export const duotoneById = (id) => DUOTONES.find((d) => d.id === id) || null;
+export const hasColorFx = (fx) => !!(fx && (fx.invert || (fx.duotone && fx.duotone.id && (fx.duotone.amount ?? 100) > 0)));
+/** Any per-pixel effect in fx: duotone, invert, changed photo colours or face retouch. */
+export const hasPixelFx = (fx) => !!(fx && (hasColorFx(fx) || fx.retouch > 0 || hasPhotoColors(fx)));
+/** Duotone maps brightness to a colour between a (shadows) and b (highlights); invert flips every colour. Alpha kept. */
+export function applyColorFx(img, fx) {
+  const d = img.data, n = img.width * img.height;
+  const duo = fx.duotone && duotoneById(fx.duotone.id), amt = duo ? clamp01((fx.duotone.amount ?? 100) / 100) : 0;
+  const A = duo ? hexRgb(duo.a) : null, B = duo ? hexRgb(duo.b) : null;
+  for (let i = 0; i < n; i++) {
+    const o = i * 4;
+    let r = d[o], g = d[o + 1], b = d[o + 2];
+    if (duo) {
+      const t = luma(r, g, b) / 255;
+      r += (A[0] + (B[0] - A[0]) * t - r) * amt; g += (A[1] + (B[1] - A[1]) * t - g) * amt; b += (A[2] + (B[2] - A[2]) * t - b) * amt;
+    }
+    if (fx.invert) { r = 255 - r; g = 255 - g; b = 255 - b; }
+    d[o] = r; d[o + 1] = g; d[o + 2] = b;
+  }
+  return img;
+}
+
+/* ---------- edit only part of the photo (foreground / background / brushed or clicked area) ---------- */
+
+/** out = original + (edited - original) × weight, weight from the mask's alpha (inverted for "background"). */
+export function blendByMask(orig, edited, mask, invert = false) {
+  const out = new Uint8ClampedArray(edited.data.length), o = orig.data, e = edited.data, m = mask.data;
+  for (let i = 0; i < out.length; i += 4) {
+    let w = m[i + 3] / 255;
+    if (invert) w = 1 - w;
+    out[i] = o[i] + (e[i] - o[i]) * w; out[i + 1] = o[i + 1] + (e[i + 1] - o[i + 1]) * w; out[i + 2] = o[i + 2] + (e[i + 2] - o[i + 2]) * w;
+    out[i + 3] = o[i + 3] + (e[i + 3] - o[i + 3]) * w;
+  }
+  return { data: out, width: edited.width, height: edited.height };
+}
+
+/** Pixels similar in colour to the one at (x, y) and joined to it (flood select). tol 0..100. Returns an alpha mask image. */
+export function regionGrow(img, x, y, tol = 30) {
+  const { width: w, height: h, data: d } = img, mask = blankImage(w, h);
+  x = Math.max(0, Math.min(w - 1, Math.round(x))); y = Math.max(0, Math.min(h - 1, Math.round(y)));
+  const o0 = (y * w + x) * 4, r0 = d[o0], g0 = d[o0 + 1], b0 = d[o0 + 2];
+  const lim = (tol / 100) * 441.7 * 0.6, lim2 = lim * lim;
+  const seen = new Uint8Array(w * h), stack = [y * w + x];
+  seen[y * w + x] = 1;
+  while (stack.length) {
+    const p = stack.pop(), o = p * 4;
+    const dr = d[o] - r0, dg = d[o + 1] - g0, db = d[o + 2] - b0;
+    if (dr * dr + dg * dg + db * db > lim2) continue;
+    mask.data[o] = mask.data[o + 1] = mask.data[o + 2] = 255; mask.data[o + 3] = 255;
+    const px = p % w, py = (p / w) | 0;
+    if (px > 0 && !seen[p - 1]) { seen[p - 1] = 1; stack.push(p - 1); }
+    if (px < w - 1 && !seen[p + 1]) { seen[p + 1] = 1; stack.push(p + 1); }
+    if (py > 0 && !seen[p - w]) { seen[p - w] = 1; stack.push(p - w); }
+    if (py < h - 1 && !seen[p + w]) { seen[p + w] = 1; stack.push(p + w); }
+  }
+  return mask;
+}
+
+/* ---------- one-tap fixes ---------- */
+
+/**
+ * Auto-adjust: settings that bring the (masked) pixels to a balanced exposure, contrast and white balance.
+ * mask: optional alpha image of the same size (only pixels with alpha > 127 count; invertMask counts the others).
+ */
+export function autoAdjust(img, mask = null, invertMask = false) {
+  const d = img.data, n = img.width * img.height, hist = new Uint32Array(256);
+  let sr = 0, sg = 0, sb = 0, ss = 0, cnt = 0;
+  const step = Math.max(1, Math.floor(n / 200000));
+  for (let i = 0; i < n; i += step) {
+    const o = i * 4;
+    if (d[o + 3] < 128) continue;
+    if (mask) { const inside = mask.data[o + 3] > 127; if (inside === invertMask) continue; }
+    const r = d[o], g = d[o + 1], b = d[o + 2], L = luma(r, g, b);
+    hist[Math.min(255, Math.round(L))]++; sr += r; sg += g; sb += b; cnt++;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b); ss += mx > 0 ? (mx - mn) / mx : 0;
+  }
+  const out = { ...NEUTRAL };
+  if (!cnt) return out;
+  const pct = (q) => { let acc = 0; const t = q * cnt; for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= t) return v / 255; } return 1; };
+  const p5 = pct(0.05), p50 = pct(0.5), p95 = pct(0.95);
+  const mid = Math.min(0.97, Math.max(0.03, p50));
+  const gamma = Math.log(0.46) / Math.log(mid);
+  out.brightness = Math.round(clamp(-100 * Math.log2(gamma), -60, 60));
+  const spread = p95 - p5;
+  out.contrast = Math.round(clamp(spread < 0.7 ? (0.8 - spread) * 90 : spread > 0.95 ? -10 : 0, -20, 40));
+  if (p95 > 0.97) out.highlights = -20;
+  if (p5 < 0.03) out.shadows = 20;
+  const mr = sr / cnt, mg = sg / cnt, mb = sb / cnt, m = (mr + mg + mb) / 3 || 1;
+  out.warmth = Math.round(clamp(((mb - mr) / m) * 120, -40, 40));
+  out.tint = Math.round(clamp(((mg - (mr + mb) / 2) / m) * 150, -30, 30));
+  const sat = ss / cnt;
+  out.vibrance = sat < 0.25 ? 20 : sat < 0.4 ? 10 : 0;
+  return out;
+}
+
+/**
+ * Smart crop: the crop box of the given aspect (w/h of the frame) that keeps the most detail, or centred on the
+ * subject box (normalised {x, y, w, h}) when one is known. Returns a normalised crop {x, y, w, h}.
+ */
+export function smartCrop(img, aspect, subject = null, fill = 1) {
+  const W = img.width, H = img.height;
+  const a = aspect || W / H;
+  let cw = W, ch = W / a;
+  if (ch > H) { ch = H; cw = H * a; }
+  cw *= fill; ch *= fill;
+  const fw = cw / W, fh = ch / H;
+  let cx, cy;
+  if (subject && subject.w > 0 && subject.h > 0) { cx = subject.x + subject.w / 2; cy = subject.y + subject.h / 2; }
+  else {
+    // detail (edge energy) per column and row, then the window with the most of it
+    const d = img.data, col = new Float64Array(W), row = new Float64Array(H);
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const o = (y * W + x) * 4;
+      const e = Math.abs(luma(d[o + 4], d[o + 5], d[o + 6]) - luma(d[o - 4], d[o - 3], d[o - 2])) + Math.abs(luma(d[o + W * 4], d[o + W * 4 + 1], d[o + W * 4 + 2]) - luma(d[o - W * 4], d[o - W * 4 + 1], d[o - W * 4 + 2]));
+      col[x] += e; row[y] += e;
+    }
+    const best = (arr, size) => {
+      const n = arr.length, win = Math.max(1, Math.round(size));
+      if (win >= n) return n / 2;
+      let s = 0; for (let i = 0; i < win; i++) s += arr[i];
+      let bs = s, bi = 0;
+      for (let i = win; i < n; i++) { s += arr[i] - arr[i - win]; if (s > bs) { bs = s; bi = i - win + 1; } }
+      return bi + win / 2;
+    };
+    cx = best(col, cw) / W; cy = best(row, ch) / H;
+  }
+  const x = Math.max(0, Math.min(1 - fw, cx - fw / 2)), y = Math.max(0, Math.min(1 - fh, cy - fh / 2));
+  return { x, y, w: fw, h: fh };
+}
+/** Bounding box (normalised) of the pixels whose alpha is over 127, or null. */
+export function alphaBox(img) {
+  const { width: w, height: h, data: d } = img;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 127) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return x1 < 0 ? null : { x: x0 / w, y: y0 / h, w: (x1 - x0 + 1) / w, h: (y1 - y0 + 1) / h };
+}
+
+/* ---------- photo colours: change one of the photo's own colours (Edit > Adjust > Photo colours) ---------- */
+
+// OKLab (Björn Ottosson's published maths): distances that follow how different two colours look.
+const LIN = new Float32Array(256);
+for (let v = 0; v < 256; v++) LIN[v] = s2l(v / 255);
+function oklab(r, g, b, out) {
+  const R = LIN[r | 0], G = LIN[g | 0], B = LIN[b | 0];
+  const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
+  const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B);
+  const s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
+  out[0] = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+  out[1] = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+  out[2] = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+  return out;
+}
+export const hexToOklab = (hex) => { const [r, g, b] = hexRgb(hex); return oklab(r, g, b, [0, 0, 0]); };
+export const rgbHex = (r, g, b) => "#" + [r, g, b].map((v) => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, "0")).join("");
+export function rgbToHsl(r, g, b, out = [0, 0, 0]) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let h = 0, s = 0;
+  if (d > 1e-6) {
+    s = d / (1 - Math.abs(2 * l - 1));
+    h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h /= 6; if (h < 0) h += 1;
+  }
+  out[0] = h; out[1] = clamp01(s); out[2] = l;
+  return out;
+}
+export function hslToRgb(h, s, l, out = [0, 0, 0]) {
+  const c = (1 - Math.abs(2 * l - 1)) * s, hp = (((h % 1) + 1) % 1) * 6, x = c * (1 - Math.abs((hp % 2) - 1)), m = l - c / 2;
+  const [r, g, b] = hp < 1 ? [c, x, 0] : hp < 2 ? [x, c, 0] : hp < 3 ? [0, c, x] : hp < 4 ? [0, x, c] : hp < 5 ? [x, 0, c] : [c, 0, x];
+  out[0] = (r + m) * 255; out[1] = (g + m) * 255; out[2] = (b + m) * 255;
+  return out;
+}
+
+/**
+ * The photo's main colours (the colour boxes to pick from): k-means in OKLab on a sample of the opaque pixels,
+ * look-alike colours merged, very small ones left out. Returns [{ hex, share }], the biggest first.
+ */
+export function photoPalette(img, n = 6) {
+  const { data: d, width: w, height: h } = img, total = w * h;
+  const step = Math.max(1, Math.floor(total / 6000));
+  const pts = [], rgb = [], t = [0, 0, 0];
+  for (let i = 0; i < total; i += step) {
+    const o = i * 4;
+    if (d[o + 3] < 128) continue;
+    oklab(d[o], d[o + 1], d[o + 2], t);
+    pts.push(t[0], t[1], t[2]); rgb.push(d[o], d[o + 1], d[o + 2]);
+  }
+  const m = pts.length / 3;
+  if (!m) return [];
+  const dist2 = (i, c) => { const a = pts[i * 3] - c[0], b = pts[i * 3 + 1] - c[1], e = pts[i * 3 + 2] - c[2]; return a * a + b * b + e * e; };
+  // deterministic start: the sample nearest the mean, then each next centre is the sample farthest from all centres
+  const mean = [0, 0, 0];
+  for (let i = 0; i < m; i++) { mean[0] += pts[i * 3] / m; mean[1] += pts[i * 3 + 1] / m; mean[2] += pts[i * 3 + 2] / m; }
+  let first = 0, fd0 = Infinity;
+  for (let i = 0; i < m; i++) { const dd = dist2(i, mean); if (dd < fd0) { fd0 = dd; first = i; } }
+  const C = [[pts[first * 3], pts[first * 3 + 1], pts[first * 3 + 2]]];
+  const near = new Float64Array(m).fill(Infinity), k = Math.min(m, n + 3);
+  while (C.length < k) {
+    const c = C[C.length - 1];
+    let fi = -1, fd = -1;
+    for (let i = 0; i < m; i++) { const dd = dist2(i, c); if (dd < near[i]) near[i] = dd; if (near[i] > fd) { fd = near[i]; fi = i; } }
+    if (fd < 1e-6) break;
+    C.push([pts[fi * 3], pts[fi * 3 + 1], pts[fi * 3 + 2]]);
+  }
+  const lab = new Int32Array(m);
+  for (let it = 0; it < 10; it++) {
+    const S = C.map(() => [0, 0, 0, 0]);
+    for (let i = 0; i < m; i++) {
+      let bi = 0, bd = Infinity;
+      for (let j = 0; j < C.length; j++) { const dd = dist2(i, C[j]); if (dd < bd) { bd = dd; bi = j; } }
+      lab[i] = bi;
+      const s = S[bi]; s[0] += pts[i * 3]; s[1] += pts[i * 3 + 1]; s[2] += pts[i * 3 + 2]; s[3]++;
+    }
+    for (let j = 0; j < C.length; j++) if (S[j][3]) C[j] = [S[j][0] / S[j][3], S[j][1] / S[j][3], S[j][2] / S[j][3]];
+  }
+  const groups = C.map((c) => ({ c, n: 0, r: 0, g: 0, b: 0 }));
+  for (let i = 0; i < m; i++) { const G = groups[lab[i]]; G.n++; G.r += rgb[i * 3]; G.g += rgb[i * 3 + 1]; G.b += rgb[i * 3 + 2]; }
+  const out = [];
+  for (const g of groups.filter((x) => x.n).sort((a, b) => b.n - a.n)) {
+    const into = out.find((o) => Math.hypot(o.c[0] - g.c[0], o.c[1] - g.c[1], o.c[2] - g.c[2]) < 0.07);
+    if (into) { into.n += g.n; into.r += g.r; into.g += g.g; into.b += g.b; } else out.push({ ...g });
+  }
+  return out.filter((g) => g.n / m >= 0.015).slice(0, n).map((g) => ({ hex: rgbHex(g.r / g.n, g.g / g.n, g.b / g.n), share: g.n / m }));
+}
+/** fx.colors: [{ hex, hue (-180..180 degrees), sat (-100..100), light (-100..100) }]; is any of them a change? */
+export const hasPhotoColors = (fx) => !!(fx && Array.isArray(fx.colors) && fx.colors.some((c) => c && c.hex && (c.hue || c.sat || c.light)));
+/**
+ * Changes the pixels that look like each picked colour: turn its hue, make it more or less colourful, lighter or
+ * darker. Pixels are matched in OKLab, so light and shaded parts of the same colour change together, with a soft
+ * edge (no hard borders). Each change is measured against the photo's own colour, so picked colours don't chain.
+ */
+export function applyPhotoColors(img, colors) {
+  const list = (colors || []).filter((c) => c && c.hex && (c.hue || c.sat || c.light)).map((c) => {
+    const t = hexToOklab(c.hex), grey = Math.hypot(t[1], t[2]) < 0.04;
+    return { t, wl: grey ? 1 : 0.3, r0: grey ? 0.045 : 0.06, r1: grey ? 0.11 : 0.15,
+      hue: (c.hue || 0) / 360, sat: clamp((c.sat || 0) / 100, -1, 1), light: clamp((c.light || 0) / 100, -1, 1) };
+  });
+  if (!list.length) return img;
+  const d = img.data, n = img.width * img.height, q = [0, 0, 0], hsl = [0, 0, 0], rgb = [0, 0, 0];
+  for (let i = 0; i < n; i++) {
+    const o = i * 4, r = d[o], g = d[o + 1], b = d[o + 2];
+    oklab(r, g, b, q);
+    let R = r, G = g, B = b, got = false;
+    for (const c of list) {
+      const dl = c.wl * (q[0] - c.t[0]), da = q[1] - c.t[1], db = q[2] - c.t[2];
+      const dist = Math.sqrt(dl * dl + da * da + db * db);
+      if (dist >= c.r1) continue;
+      const wgt = 1 - smooth(c.r0, c.r1, dist);
+      if (!got) { rgbToHsl(r, g, b, hsl); got = true; }
+      const S = c.sat > 0 ? hsl[1] + (1 - hsl[1]) * c.sat : hsl[1] * (1 + c.sat);
+      const L = c.light > 0 ? hsl[2] + (1 - hsl[2]) * c.light * 0.85 : hsl[2] * (1 + c.light * 0.85);
+      hslToRgb(hsl[0] + c.hue, S, L, rgb);
+      R += (rgb[0] - r) * wgt; G += (rgb[1] - g) * wgt; B += (rgb[2] - b) * wgt;
+    }
+    d[o] = R; d[o + 1] = G; d[o + 2] = B;
+  }
+  return img;
+}
+
+/* ---------- face retouch: smoother skin ---------- */
+
+/** Soft skin likelihood 0..1 (YCbCr skin range, fading out over a few units outside it; very dark pixels are not skin). */
+export function skinWeight(r, g, b) {
+  if (0.299 * r + 0.587 * g + 0.114 * b < 35) return 0;
+  const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b, cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+  const out = Math.max(77 - cb, cb - 127, 133 - cr, cr - 173, 0);
+  return clamp01(1 - out / 8);
+}
+/**
+ * Face retouch, amount 0..100: on skin, the fine detail (texture, pores, small spots) is lowered while strong edges
+ * (eyes, lips, hair, glasses) stay. The skin area is softened as one region, so spots inside it are smoothed too.
+ * The smoothing size follows the picture size, so the preview and the full-size download match.
+ */
+export function retouchSkin(img, amount = 50) {
+  const k = clamp01(amount / 100), { width: w, height: h, data: src } = img, n = w * h;
+  const out = cloneImage(img);
+  if (!(k > 0) || !n) return out;
+  const W = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const o = i * 4; W[i] = src[o + 3] > 0 ? skinWeight(src[o], src[o + 1], src[o + 2]) : 0; }
+  const Wb = gaussPlane(W, w, h, Math.max(1, Math.min(w, h) / 200));
+  const sigma = Math.max(1.2, (Math.min(w, h) / 220) * (0.6 + k));
+  const plane = new Float32Array(n), low = [];
+  for (let c = 0; c < 3; c++) { for (let i = 0; i < n; i++) plane[i] = src[i * 4 + c]; low.push(gaussPlane(plane, w, h, sigma)); }
+  for (let i = 0; i < n; i++) {
+    const wt = Math.min(1, Math.max(W[i], Wb[i] * 1.25)) * k;
+    if (wt < 0.01) continue;
+    const o = i * 4, hr = src[o] - low[0][i], hg = src[o + 1] - low[1][i], hb = src[o + 2] - low[2][i];
+    const f = wt * (1 - smooth(14, 34, (Math.abs(hr) + Math.abs(hg) + Math.abs(hb)) / 3)) * 0.92;
+    out.data[o] = src[o] - hr * f; out.data[o + 1] = src[o + 1] - hg * f; out.data[o + 2] = src[o + 2] - hb * f;
+  }
+  return out;
+}
+
+/* ---------- blur and auto focus ---------- */
+
+/**
+ * Estimated depth 0 (near) .. 1 (far) for auto focus, from the subject's alpha (one byte per pixel or RGBA data,
+ * w×h, or null): the subject is nearest; the background counts as further away the further it is from the subject
+ * and the higher up it is in the picture. (No depth camera data is used: it is an estimate.)
+ */
+export function focusDepth(alpha, w, h) {
+  const n = w * h, A = new Float32Array(n);
+  if (alpha) { const rgba = alpha.length >= n * 4; for (let i = 0; i < n; i++) A[i] = (rgba ? alpha[i * 4 + 3] : alpha[i]) / 255; }
+  const near = gaussPlane(A, w, h, Math.max(2, Math.max(w, h) * 0.12));
+  let mx = 0;
+  for (let i = 0; i < n; i++) if (near[i] > mx) mx = near[i];
+  const out = new Float32Array(n);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x, up = 1 - y / Math.max(1, h - 1);
+    const away = mx > 0 ? 1 - near[i] / mx : up;
+    out[i] = (1 - A[i]) * (0.25 + 0.75 * clamp01(0.7 * away + 0.3 * up));
+  }
+  return out;
+}
+/** Blur weight per pixel (0 sharp .. 1 blurred) for a focus position 0..100 (0 = the subject stays sharp, 100 = the far background). */
+export function focusWeights(depth, pos = 0) {
+  const p = clamp01(pos / 100), out = new Float32Array(depth.length);
+  for (let i = 0; i < depth.length; i++) out[i] = smooth(0.06, 0.42, Math.abs(depth[i] - p));
+  return out;
+}
+/** sharp × (1 − w) + blurred × w per pixel (w: Float32Array 0..1, or an RGBA mask image whose alpha is the weight). */
+export function mixByWeights(sharp, blurred, w) {
+  const out = new Uint8ClampedArray(sharp.data.length), a = sharp.data, b = blurred.data, rgba = !(w instanceof Float32Array);
+  for (let i = 0, p = 0; i < out.length; i += 4, p++) {
+    const t = rgba ? w.data[i + 3] / 255 : w[p];
+    out[i] = a[i] + (b[i] - a[i]) * t; out[i + 1] = a[i + 1] + (b[i + 1] - a[i + 1]) * t; out[i + 2] = a[i + 2] + (b[i + 2] - a[i + 2]) * t; out[i + 3] = a[i + 3];
+  }
+  return { data: out, width: sharp.width, height: sharp.height };
+}
+
+/* ---------- magic expand and pixel eraser ---------- */
+
+/**
+ * Space to add round a w×h photo so it becomes the target shape: a number (width / height) or { all: percent }
+ * (that much bigger on every side). The photo stays in the middle. Returns { left, right, top, bottom, width, height }
+ * or null when nothing needs adding or the result would be over maxPixels.
+ */
+export function expandPad(w, h, target, maxPixels = 36e6) {
+  let W = w, H = h;
+  if (typeof target === "number" && target > 0) { if (w / h < target - 1e-3) W = Math.round(h * target); else if (w / h > target + 1e-3) H = Math.round(w / target); }
+  else if (target && target.all > 0) { const p = Math.min(200, target.all) / 100; W = Math.round(w * (1 + p)); H = Math.round(h * (1 + p)); }
+  if (W === w && H === h) return null;
+  if (W * H > maxPixels) return null;
+  const left = Math.floor((W - w) / 2), top = Math.floor((H - h) / 2);
+  return { left, right: W - w - left, top, bottom: H - h - top, width: W, height: H };
+}
+/** Pixel eraser: alpha × (1 − mask alpha); mask is an RGBA image of the same size (painted = erased). Changes img. */
+export function applyEraseMask(img, mask) {
+  const d = img.data, m = mask.data;
+  for (let i = 3; i < d.length; i += 4) if (m[i]) d[i] = (d[i] * (255 - m[i])) / 255;
+  return img;
+}
+
+/* ---------- perspective (keystone) ---------- */
+
+/**
+ * Width factor of row (or column) position t in 0..1 for a keystone amount k in -100..100: positive widens the top
+ * (left), negative the bottom (right); the narrowest line stays 1, so the picture always fills its frame.
+ */
+export const keystoneFactor = (k, t) => 1 + (Math.abs(k) / 100) * 0.35 * (k > 0 ? 1 - t : t);
 
 /* ---------- geometry: rotate, flip, straighten, crop ---------- */
 

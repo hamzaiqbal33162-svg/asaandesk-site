@@ -1,6 +1,6 @@
 import * as pdfjsLib from "./lib/pdf.min.mjs";
 import { removeTextRuns, scanPage, runStyle, inkFromStrokes, initMetrics, appendToStream, invert, applyMatrix } from "./textremove.js";
-import { loadPdfFont, previewSvg, openPreviewSvg, pickWriter, layoutLine, spacedWidth, fontTraits, fontDescriptor, METRIC_FAMILIES, metricFile, heightMatchByClass, loadFontFile } from "./fontmatch.js";
+import { loadPdfFont, previewSvg, openPreviewSvg, pickWriter, layoutLine, spacedWidth, fontTraits, fontDescriptor, METRIC_FAMILIES, metricFile, heightMatchByClass, weightMatch, loadFontFile } from "./fontmatch.js";
 import { primsToSvg, drawPrims, rectPath } from "./vector.js";
 import { chartPrims, parseChartData, PALETTE } from "./charts.js";
 import { newTable, tablePrims, wrapText } from "./tables.js";
@@ -115,11 +115,11 @@ function pdfFont(page, baseFont, resources = null) {
 
 // Loads the open screen font for a family/weight/slant once, then re-lays out text that uses it.
 const faces = new Map();
-function ensureFace(family, bold, italic) {
+function ensureFace(family, bold, italic, weight = null) {
   const fam = METRIC_FAMILIES[family] ? family : "sans";
-  const key = metricFile(fam, bold, italic);
+  const key = metricFile(fam, bold, italic, weight);
   if (!faces.has(key) && typeof FontFace === "function") {
-    const face = new FontFace(METRIC_FAMILIES[fam].css.replace(/"/g, ""), `url(${new URL("fonts/" + key, import.meta.url).href})`, { weight: bold ? "700" : "400", style: italic ? "italic" : "normal" });
+    const face = new FontFace(METRIC_FAMILIES[fam].css.replace(/"/g, ""), `url(${new URL("fonts/" + key, import.meta.url).href})`, { weight: String(weight ?? (bold ? 700 : 400)), style: italic ? "italic" : "normal" });
     document.fonts.add(face);
     faces.set(key, face.load().then(() => state.items.forEach((i) => i.type === "text" && i.el && layoutItem(i))).catch(() => {}));
   }
@@ -128,8 +128,8 @@ function ensureFace(family, bold, italic) {
 
 // The open look-alike fonts as font programs, to measure their letter heights against the document's font.
 const openFonts = new Map();
-function openFontOf(fam, bold, italic) {
-  const file = metricFile(fam, bold, italic);
+function openFontOf(fam, bold, italic, weight = null) {
+  const file = metricFile(fam, bold, italic, weight);
   if (!openFonts.has(file) && window.fontkit) {
     openFonts.set(file, null);
     loadFontFile(file)
@@ -146,11 +146,23 @@ const NO_SCALE = { all: 1, cap: 1, asc: 1, x: 1 };
 function heightKs(item) {
   const o = item.font.orig;
   const docFont = o && item.font.useOrig && o.pageId === item.pageId ? fonts.get(o.key) : null;
-  const fam = famOf(item.font), open = openFontOf(fam, item.font.bold, item.font.italic);
+  const fam = famOf(item.font), open = openFontOf(fam, item.font.bold, item.font.italic, item.font.weight);
   if (!docFont?.fk || !open) return NO_SCALE;
-  const key = `${o.key}|${metricFile(fam, item.font.bold, item.font.italic)}`;
+  const key = `${o.key}|${metricFile(fam, item.font.bold, item.font.italic, item.font.weight)}`;
   if (!heightCache.has(key)) heightCache.set(key, heightMatchByClass(docFont, open));
   return heightCache.get(key);
+}
+// How much heavier (em) the document's letters are than the open look-alike as drawn (see weightMatch): that much
+// stroke is added to the look-alike, on screen and in the saved PDF alike.
+const weightCache = new Map();
+function weightEm(item) {
+  const o = item.font.orig;
+  const docFont = o && item.font.useOrig && o.pageId === item.pageId ? fonts.get(o.key) : null;
+  const fam = famOf(item.font), open = openFontOf(fam, item.font.bold, item.font.italic, item.font.weight);
+  if (!docFont?.fk || !open) return 0;
+  const key = `${o.key}|${metricFile(fam, item.font.bold, item.font.italic, item.font.weight)}`;
+  if (!weightCache.has(key)) weightCache.set(key, weightMatch(docFont, open, 1 / heightKs(item).all));
+  return weightCache.get(key);
 }
 
 function fillFontSelect() {
@@ -693,7 +705,7 @@ function editExistingText(page, run, hit, silent = false) {
     ? { x: run.box.x0 - 2, y: run.box.y0 - 2, w: run.box.x1 - run.box.x0 + 4, h: run.box.y1 - run.box.y0 + 4 }
     : { x: run.left - 1, y: top - 1, w: run.width + 2, h: run.size * 1.1 + 2 };
   const { ink, paper } = sampleColors(page.canvas, box.x, box.y, box.w, box.h);
-  let font = { ...run.font }, size = run.size, matched = false, color = ink, spacing = null, lineGap = null, needsCover = run.kind === "ocr";
+  let font = { ...run.font }, size = run.size, matched = false, color = ink, spacing = null, lineGap = null, needsCover = run.kind === "ocr", paint = null;
   let st = null;
   if (run.kind === "pdf") {
     // Exact style from the content stream: colour, size, spacing, horizontal scale, leading.
@@ -701,6 +713,8 @@ function editExistingText(page, run, hit, silent = false) {
     st = scan ? runStyle(scan, run.pdf) : null;
     if (st) {
       if (st.fill && !st.invisible) color = st.fill;
+      // How the original letters are painted besides their fill (outline modes, stroke, see-through), copied to new text.
+      paint = { render: st.render === 1 || st.render === 2 ? st.render : 0, stroke: st.stroke, lineWidth: st.lineWidth, fillAlpha: st.fillAlpha ?? 1, strokeAlpha: st.strokeAlpha ?? 1 };
       if (st.size > 0) size = st.size * SCALE;
       spacing = { charSpacing: st.charSpacing, wordSpacing: st.wordSpacing, hScale: st.hScale };
       if (st.leading > 0.5) lineGap = st.leading * SCALE;
@@ -716,7 +730,7 @@ function editExistingText(page, run, hit, silent = false) {
     if (m) { font = { family: m.family, bold: m.bold, italic: false }; if (run.kind === "ocr") size = m.size; matched = true; }
   }
   const origKey = run.kind === "pdf" && run.baseFont ? pdfFont(page, run.baseFont, st?.resources) : null;
-  ensureFace(famOf(font), font.bold, font.italic);
+  ensureFace(famOf(font), font.bold, font.italic, font.weight);
   const fontState = { ...font, underline: false, orig: origKey ? { key: origKey, pageId: page.id } : null, useOrig: !!origKey, origName: run.baseFont ? prettyFont(run.baseFont) : null, matched };
 
   // Picture (OCR) text: one line with a cover, as before.
@@ -749,7 +763,7 @@ function editExistingText(page, run, hit, silent = false) {
   const baseline = lines0[0].baseline;
   const data = {
     type: "text", pageId: page.id, x, baseline, size, font: fontState, color, text: lines0.map((l) => l.text).join("\n"),
-    lines0, needsCover, spacing, lineGap, runs, align, boxW, wrap: multi, justifyHard: align === "justify",
+    lines0, needsCover, spacing, lineGap, runs, align, boxW, wrap: multi, justifyHard: align === "justify", ink: paint,
     widget: run.widget ?? null, fontStream: st?.stream ?? 0, cell, size0: size, lineGap0: lineGap,
   };
   data.base = { x, baseline, size, lineGap, color: [...color], font: fontSig(fontState), style: styleSig(data) };
@@ -1126,14 +1140,24 @@ function layoutItem(item) {
     if (plan) item.coverEls?.forEach((c, i) => { c.style.display = plan.gone[i] ? "block" : "none"; c.style.background = css(item.lines0[i].box.color); });
     const boxW = item.boxW ?? null, alignK = { center: 0.5, right: 1 }[item.align] ?? 0;
     const offsetOf = (l) => (boxW == null || l.justify ? 0 : (boxW - l.width) * alignK);
-    const outline = fx.outline ? { color: unhex(fx.outline.color), width: Math.max(0.4, fx.outline.width * S), hollow: !!fx.outline.hollow } : null;
+    const fxOutline = fx.outline ? { color: unhex(fx.outline.color), width: Math.max(0.4, fx.outline.width * S), hollow: !!fx.outline.hollow } : null;
+    // The original letters' own outline (render mode 1/2 with a stroke, often used to make text heavier) and
+    // see-through fill: new letters are painted exactly the same way.
+    const ink = item.ink || {};
+    const own = !fxOutline && ink.lineWidth > 0 && (ink.render === 1 || ink.render === 2) ? { color: ink.stroke || item.color, width: ink.lineWidth * SCALE, hollow: ink.render === 1 } : null;
+    const outline = fxOutline || own;
+    const alpha = ink.fillAlpha < 1 ? `;opacity:${ink.fillAlpha}` : "";
     const piece = (t, x, top) => {
       const pv = docFont && docFont.canWrite(t) ? previewSvg(docFont, t, S, item.color, spPx, outline) : null;
-      if (pv) return `<div style="position:absolute;left:${x}px;top:${top}px">${pv.svg}</div>`;
-      // The open look-alike drawn from its own outlines exactly as it is saved: same glyphs, widths and
-      // per-letter heights (screen text would add kerning and the browser's own rendering).
-      const open = plan || docFont ? openFontOf(fam, item.font.bold, item.font.italic) : null;
-      if (open) return `<div style="position:absolute;left:${x}px;top:${top}px">${openPreviewSvg(open, t, S, item.color, spPx, heightKs(item), outline).svg}</div>`;
+      if (pv) return `<div style="position:absolute;left:${x}px;top:${top}px${alpha}">${pv.svg}</div>`;
+      // The open look-alike drawn from its own outlines exactly as it is saved: same glyphs, widths, per-letter
+      // heights and weight (screen text would add kerning and the browser's own rendering).
+      const open = plan || docFont ? openFontOf(fam, item.font.bold, item.font.italic, item.font.weight) : null;
+      if (open) {
+        const emb = fxOutline ? 0 : weightEm(item) * S;
+        const st = emb > 0 ? (own ? { ...own, width: own.width + emb } : { color: item.color, width: emb }) : outline;
+        return `<div style="position:absolute;left:${x}px;top:${top}px${alpha}">${openPreviewSvg(open, t, S, item.color, spPx, heightKs(item), st).svg}</div>`;
+      }
       const stroke = outline ? `;-webkit-text-stroke:${outline.width}px ${css(outline.color)};paint-order:normal${outline.hollow ? ";-webkit-text-fill-color:transparent" : ""}` : "";
       return `<div style="position:absolute;left:${x}px;top:${top + S * BASELINE - (S / 2 + k * S)}px;white-space:pre;font:${fontCss.replace(/"/g, "'")};font-kerning:none;line-height:${S}px;letter-spacing:${spPx.charSpacing}px;word-spacing:${spPx.wordSpacing}px;color:${css(item.color)};transform:scaleX(${spPx.hScale});transform-origin:0 0${stroke}">${escHtml(t)}</div>`;
     };
@@ -1477,7 +1501,7 @@ function onPagePointerDown(e, page) {
   if (state.tool === "text") {
     e.preventDefault();
     const st = lastTextStyle();
-    ensureFace(famOf(st.font), st.font.bold, st.font.italic);
+    ensureFace(famOf(st.font), st.font.bold, st.font.italic, st.font.weight);
     const item = addItem({ type: "text", pageId: page.id, x: p.x, baseline: p.y + st.size * BASELINE, ...st, text: "" }, false);
     // Focus right inside the tap/click (phones only open the keyboard for a focus made during the gesture);
     // preventDefault above keeps the browser from moving focus back on mouseup.
@@ -1968,8 +1992,12 @@ async function exportText(out, p, page, item, { at, k, rot, embedded, notes, lin
   const S = item.size / sc, size = S * k, spacing = item.spacing ? { ...item.spacing, charSpacing: (item.spacing.charSpacing || 0) / sc, wordSpacing: (item.spacing.wordSpacing || 0) / sc } : null;
   const r = (rot * Math.PI) / 180, dir = [Math.cos(r), Math.sin(r)], up = [-Math.sin(r), Math.cos(r)];
   const boxW = item.boxW != null ? (item.boxW * k) / sc : null;
-  const outline = fx.outline ? { color: unhex(fx.outline.color), width: Math.max(0.3, fx.outline.width * size) } : null;
-  const render = outline ? (fx.outline.hollow ? 1 : 2) : 0;
+  // A text effect outline, else the original letters' own outline (render mode 1/2 + stroke) and see-through fill.
+  const ink = item.ink || {};
+  const own = !fx.outline && ink.lineWidth > 0 && (ink.render === 1 || ink.render === 2);
+  const outline = fx.outline ? { color: unhex(fx.outline.color), width: Math.max(0.3, fx.outline.width * size) } : own ? { color: ink.stroke || item.color, width: ink.lineWidth / sc } : null;
+  const render = fx.outline ? (fx.outline.hollow ? 1 : 2) : own ? ink.render : 0;
+  const inkAlpha = ink.fillAlpha < 1 ? ink.fillAlpha : 1;
   let shadow = null;
   if (fx.shadow) {
     const ang = ((fx.shadow.angle ?? 45) * Math.PI) / 180, d = (fx.shadow.dist ?? 0.08) * size, dx = Math.cos(ang) * d, dy = Math.sin(ang) * d;
@@ -1980,7 +2008,7 @@ async function exportText(out, p, page, item, { at, k, rot, embedded, notes, lin
     const text = l.text.replace(/\s+$/, "");
     if (!text || (plan && !plan.changed[i])) continue;
     // Line by line: a line keeps the document's font whenever that font has all of its letters.
-    const w = await pickWriter(out, tp, { size, pdfFont: docFont, heightFrom, family: famOf(item.font), bold: item.font.bold, italic: item.font.italic, embedded }, text);
+    const w = await pickWriter(out, tp, { size, pdfFont: docFont, heightFrom, family: famOf(item.font), bold: item.font.bold, italic: item.font.italic, weight: item.font.weight ?? null, embedded }, text);
     if (docFont && w.used !== "document") notes.add("some new letters were not in the document's font, so the closest matching font was used");
     const [x, y] = toT(...at(item.x, item.baseline + i * G));
     const lay = layoutLine(text, w.widthOf, { x, y, dir, boxW, align: item.align || "left", justify: l.justify, spacing });
@@ -2021,7 +2049,7 @@ async function exportText(out, p, page, item, { at, k, rot, embedded, notes, lin
     }
   };
   if (shadow) pass(shadow.color, shadow.off, shadow.op, outline ? { ...outline, color: shadow.color } : null);
-  pass(item.color, [0, 0], 1, outline);
+  pass(item.color, [0, 0], inkAlpha, outline);
   if (target) target.finish(item.text.split("\n").map((t) => t.replace(/\s+$/, "")).join("\n"));
   if (item.font.underline && !fx.curve && !target) {
     for (const L of lines) {
@@ -2717,7 +2745,7 @@ function deserializeItem(o, page) {
   if (o.lines0) i.lines0 = o.lines0.map((l) => ({ ...l, runs: (l.runs || []).map(run).filter(Boolean) }));
   if (i.type === "text") {
     if (i.font?.orig) pdfFont(page, i.font.orig.key.split(":").slice(1).join(":"));
-    ensureFace(famOf(i.font), i.font.bold, i.font.italic);
+    ensureFace(famOf(i.font), i.font.bold, i.font.italic, i.font.weight);
   }
   return i;
 }
@@ -3030,7 +3058,8 @@ $("propLeading").addEventListener("input", (e) => updateSelected((i) => {
 const toggleFont = (key, id) => $(id).addEventListener("click", () => updateSelected((i) => {
   i.font[key] = !i.font[key];
   $(id).classList.toggle("on", i.font[key]);
-  if (key !== "underline") { i.font.useOrig = false; ensureFace(famOf(i.font), i.font.bold, i.font.italic); }
+  if (key === "bold") i.font.weight = i.font.bold ? 700 : 400;
+  if (key !== "underline") { i.font.useOrig = false; ensureFace(famOf(i.font), i.font.bold, i.font.italic, i.font.weight); }
 }));
 toggleFont("bold", "propBold");
 toggleFont("italic", "propItalic");

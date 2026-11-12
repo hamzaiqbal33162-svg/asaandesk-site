@@ -172,3 +172,22 @@ export function level(samples) {
   for (let i = 0; i < samples.length; i++) s += samples[i] * samples[i];
   return clamp(Math.sqrt(s / samples.length) * 3, 0, 1);
 }
+
+/**
+ * Camera and microphone test (like a device check before recording): what the user is told.
+ * r = { camera: null | { ok, w, h, label, error }, mic: null | { ok, peak (0..1 loudest level heard), label, error } }.
+ * Returns [{ what: "camera" | "microphone", ok, text }].
+ */
+export function deviceVerdict(r) {
+  const out = [];
+  const c = r?.camera, m = r?.mic;
+  if (c) out.push(c.ok && c.w > 0
+    ? { what: "camera", ok: true, text: `Camera works${c.label ? ` (${c.label})` : ""}: ${c.w}×${c.h}.` }
+    : { what: "camera", ok: false, text: c.error || "The camera gave no picture. Close other apps that use it (video calls), check it is plugged in, then test again." });
+  if (m) out.push(!m.ok
+    ? { what: "microphone", ok: false, text: m.error || "The microphone could not be opened." }
+    : m.peak >= 0.04
+      ? { what: "microphone", ok: true, text: `Microphone works${m.label ? ` (${m.label})` : ""}: we heard you (loudest ${Math.round(Math.min(1, m.peak) * 100)}%).` }
+      : { what: "microphone", ok: false, text: "The microphone is on but we heard nothing. Speak while testing, check its mute switch and input volume, or choose another microphone." });
+  return out;
+}

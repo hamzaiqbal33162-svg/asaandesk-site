@@ -1,8 +1,8 @@
 // Canvas helpers for the photo editor (browser only): decoding files (HEIC too), scaling, overlays
 // (text, stickers, shapes), frames and cut-out backgrounds.
 import { FONT_FAMILIES, ensureFont } from "../shared/brand.js";
-import { framePad, overlayBox } from "./doc.js";
-import { gaussPlane } from "./adjust.js";
+import { borderPad, overlayBox, shadowPad, shadowMetrics, SHAPE_FRAMES } from "./doc.js";
+import { gaussPlane, keystoneFactor } from "./adjust.js";
 
 // iPhones and iPads cannot draw canvases over about 16.7 megapixels.
 const IOS = typeof navigator !== "undefined" && (/iP(hone|ad|od)/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
@@ -129,9 +129,22 @@ export function blurredCopy(src, strength) {
   x.drawImage(bs, 0, 0, out.width, out.height);
   return out;
 }
-/** The subject (cut-out) over the chosen background, at the cut-out's size. */
+/** The cut-out's silhouette in one colour (for shadows and sticker outlines). */
+function silhouette(cutout, color) {
+  const c = makeCanvas(cutout.width, cutout.height), x = c.getContext("2d");
+  x.drawImage(cutout, 0, 0);
+  x.globalCompositeOperation = "source-in";
+  x.fillStyle = color;
+  x.fillRect(0, 0, c.width, c.height);
+  return c;
+}
+/**
+ * The subject (cut-out) over the chosen background, at the cut-out's size. bg.shadow = { on, blur, dist, angle, color,
+ * alpha } adds a drop shadow under the subject; bg.outline = { on, width, color } a sticker outline round it.
+ * Sizes are % of the picture's long side / 10, so the preview and the full-size export look the same.
+ */
 export function composeBackground(original, cutout, bg, bgImage) {
-  const W = cutout.width, H = cutout.height;
+  const W = cutout.width, H = cutout.height, unit = Math.max(W, H) / 1000;
   const out = makeCanvas(W, H), x = out.getContext("2d");
   if (bg.mode === "color") { x.fillStyle = bg.color || "#ffffff"; x.fillRect(0, 0, W, H); }
   else if (bg.mode === "blur") x.drawImage(blurredCopy(original, bg.blur ?? 40), 0, 0, W, H);
@@ -140,8 +153,44 @@ export function composeBackground(original, cutout, bg, bgImage) {
     x.imageSmoothingQuality = "high";
     x.drawImage(bgImage, (bgImage.width - w) / 2, (bgImage.height - h) / 2, w, h, 0, 0, W, H);
   }
-  x.drawImage(cutout, 0, 0, W, H);
+  let subject = cutout;
+  if (bg.outline?.on && bg.outline.width > 0) {
+    const r = bg.outline.width * unit * 2, sil = silhouette(cutout, bg.outline.color || "#ffffff");
+    const c = makeCanvas(W, H), cx = c.getContext("2d"), steps = Math.max(12, Math.min(48, Math.round(r * 1.5)));
+    for (let i = 0; i < steps; i++) { const a = (i / steps) * Math.PI * 2; cx.drawImage(sil, Math.cos(a) * r, Math.sin(a) * r); }
+    cx.drawImage(cutout, 0, 0);
+    subject = c;
+  }
+  if (bg.shadow?.on) {
+    const s = bg.shadow, a = ((s.angle ?? 45) * Math.PI) / 180, dist = (s.dist ?? 12) * unit * 2;
+    const sil = silhouette(subject, s.color || "#000000");
+    x.save();
+    x.globalAlpha = Math.max(0, Math.min(1, (s.alpha ?? 45) / 100));
+    if ("filter" in x) x.filter = `blur(${Math.max(0, (s.blur ?? 20) * unit * 0.8)}px)`;
+    x.drawImage(sil, Math.cos(a) * dist, Math.sin(a) * dist);
+    x.restore();
+  }
+  x.drawImage(subject, 0, 0, W, H);
   return out;
+}
+
+/* ---------- perspective (keystone): rows / columns drawn wider towards one side ---------- */
+export function keystone(src, persp) {
+  const kv = persp?.v || 0, kh = persp?.h || 0;
+  if (!kv && !kh) return src;
+  let cur = src;
+  const W = src.width, H = src.height;
+  if (kv) {
+    const c = makeCanvas(W, H), x = c.getContext("2d");
+    for (let y = 0; y < H; y++) { const f = keystoneFactor(kv, (y + 0.5) / H), w = W * f; x.drawImage(cur, 0, y, W, 1, (W - w) / 2, y, w, 1); }
+    cur = c;
+  }
+  if (kh) {
+    const c = makeCanvas(W, H), x = c.getContext("2d");
+    for (let xx = 0; xx < W; xx++) { const f = keystoneFactor(kh, (xx + 0.5) / W), h = H * f; x.drawImage(cur, xx, 0, 1, H, xx, (H - h) / 2, 1, h); }
+    cur = c;
+  }
+  return cur;
 }
 
 /* ---------- overlays ---------- */
@@ -261,9 +310,20 @@ export function drawOverlay(x, o, W, H) {
     const ready = stickerReady(o);
     const img = ready && ready.done;
     if (img) x.drawImage(img, -b.w / 2, -b.h / 2, b.w, b.h);
+  } else if (o.type === "image") {
+    const img = overlayImage(o.pixId, Math.max(b.w, b.h));
+    if (img) {
+      if (o.flipX) x.scale(-1, 1);
+      x.imageSmoothingQuality = "high";
+      x.drawImage(img, -b.w / 2, -b.h / 2, b.w, b.h);
+    }
   }
   x.restore();
 }
+// Pictures of "image" overlays (Magic Grab) live in the app's pixel store; the app tells us how to find them.
+let overlayImage = () => null;
+/** fn(pixId, longSidePx) → canvas or null. */
+export function setOverlayImages(fn) { overlayImage = typeof fn === "function" ? fn : () => null; }
 /** Waits for fonts and sticker pictures used by the overlays. */
 export async function prepareOverlays(list) {
   await Promise.all(list.map(async (o) => {
@@ -278,10 +338,49 @@ export async function prepareOverlays(list) {
 
 /* ---------- frames ---------- */
 
-/** Puts the frame around (or on) a picture; returns a new canvas (or the same one for "none"). */
+/** Puts the frame around (or on) a picture, then its photo shadow (frame.shadow); returns a new canvas (or the same one). */
 export function applyFrame(src, frame) {
+  const framed = drawFrame(src, frame);
+  return frame?.shadow?.id ? applyShadow(framed, frame.shadow) : framed;
+}
+/** Outline of a shape frame in a W×H box (path only; the caller clips, fills or strokes). */
+function shapeFramePath(x, id, W, H, inset = 0) {
+  const w = W - inset * 2, h = H - inset * 2, X = inset, Y = inset, cx = W / 2, cy = H / 2;
+  x.beginPath();
+  switch (id) {
+    case "circle": x.ellipse(cx, cy, Math.max(0.5, w / 2), Math.max(0.5, h / 2), 0, 0, Math.PI * 2); break;
+    case "rounded": roundRect(x, X, Y, w, h, Math.min(W, H) * 0.08); return;
+    case "heart":
+      x.moveTo(cx, Y + h);
+      x.bezierCurveTo(X - w * 0.05, Y + h * 0.55, X + w * 0.02, Y - h * 0.02, cx, Y + h * 0.26);
+      x.bezierCurveTo(X + w * 0.98, Y - h * 0.02, X + w * 1.05, Y + h * 0.55, cx, Y + h);
+      break;
+    case "star":
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 0.46 : 1;
+        const px = cx + Math.cos(a) * (w / 2) * r, py = Y + h * 0.53 + Math.sin(a) * (h * 0.53) * r;
+        if (i) x.lineTo(px, py); else x.moveTo(px, py);
+      }
+      break;
+    case "hexagon": for (let i = 0; i < 6; i++) { const a = (i * Math.PI) / 3, px = cx + Math.cos(a) * (w / 2), py = cy + Math.sin(a) * (h / 2); if (i) x.lineTo(px, py); else x.moveTo(px, py); } break;
+    case "arch": { const r = w / 2; x.moveTo(X, Y + h); x.lineTo(X, Y + Math.min(h, r)); x.ellipse(cx, Y + Math.min(h, r), r, Math.min(h, r), 0, Math.PI, 0); x.lineTo(X + w, Y + h); break; }
+    case "diamond": x.moveTo(cx, Y); x.lineTo(X + w, cy); x.lineTo(cx, Y + h); x.lineTo(X, cy); break;
+    case "blob": {
+      const k = [1, 0.9, 1.04, 0.92, 1.02, 0.88, 1.05, 0.95];
+      const pts = k.map((r, i) => { const a = (i / k.length) * Math.PI * 2; return [cx + Math.cos(a) * (w / 2) * r * 0.97, cy + Math.sin(a) * (h / 2) * r * 0.97]; });
+      const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+      const m0 = mid(pts[pts.length - 1], pts[0]);
+      x.moveTo(m0[0], m0[1]);
+      for (let i = 0; i < pts.length; i++) { const m = mid(pts[i], pts[(i + 1) % pts.length]); x.quadraticCurveTo(pts[i][0], pts[i][1], m[0], m[1]); }
+      break;
+    }
+    default: x.rect(X, Y, w, h);
+  }
+  x.closePath();
+}
+function drawFrame(src, frame) {
   if (!frame || frame.id === "none") return src;
-  const W = src.width, H = src.height, p = framePad(frame, W, H);
+  const W = src.width, H = src.height, p = borderPad(frame, W, H);
   const out = makeCanvas(W + p.left + p.right, H + p.top + p.bottom), x = out.getContext("2d");
   const color = frame.color || "#ffffff";
   const u = Math.max(1, Math.round(((frame.width ?? 4) / 100) * Math.max(W, H)));
@@ -309,18 +408,16 @@ export function applyFrame(src, frame) {
       }
       break;
     }
-    case "rounded": case "circle": {
+    case "rounded": case "circle": case "heart": case "star": case "hexagon": case "arch": case "diamond": case "blob": {
       x.save();
-      if (frame.id === "circle") { x.beginPath(); x.ellipse(W / 2, H / 2, W / 2, H / 2, 0, 0, Math.PI * 2); }
-      else roundRect(x, 0, 0, W, H, Math.min(W, H) * 0.08);
+      shapeFramePath(x, frame.id, W, H);
       x.clip();
       x.drawImage(src, 0, 0);
       x.restore();
       if (frame.width > 0) {
         const lw = u * 0.5;
-        x.lineWidth = lw; x.strokeStyle = color;
-        if (frame.id === "circle") { x.beginPath(); x.ellipse(W / 2, H / 2, W / 2 - lw / 2, H / 2 - lw / 2, 0, 0, Math.PI * 2); }
-        else roundRect(x, lw / 2, lw / 2, W - lw, H - lw, Math.min(W, H) * 0.08);
+        x.lineWidth = lw; x.strokeStyle = color; x.lineJoin = "round";
+        shapeFramePath(x, frame.id, W, H, lw / 2);
         x.stroke();
       }
       break;
@@ -336,6 +433,51 @@ export function applyFrame(src, frame) {
     }
     default: x.drawImage(src, p.left, p.top);
   }
+  return out;
+}
+/**
+ * Photo shadow (Edit > Shadows) round a finished picture: drop, glow, lifted corners, curved, angled (on the floor) or a
+ * solid offset copy. It follows the picture's outline (shape frames, see-through parts). Returns a bigger canvas.
+ */
+export function applyShadow(src, s) {
+  const W = src.width, H = src.height, p = shadowPad(s, W, H), m = shadowMetrics(s, W, H);
+  const out = makeCanvas(W + p.left + p.right, H + p.top + p.bottom), x = out.getContext("2d");
+  const color = s.color || "#000000";
+  x.save();
+  x.translate(p.left, p.top);
+  x.globalAlpha = Math.max(0, Math.min(1, (s.amount ?? 50) / 100));
+  if (m.blur > 0 && "filter" in x) x.filter = `blur(${m.blur.toFixed(1)}px)`;
+  x.fillStyle = color;
+  switch (s.id) {
+    case "drop": case "block": case "glow": x.drawImage(silhouette(src, color), m.dx, m.dy); break;
+    case "lift": {
+      // two dark wedges under the lower corners, as if the corners curl up off the page
+      for (const side of [-1, 1]) {
+        x.save();
+        x.translate(side < 0 ? W * 0.22 : W * 0.78, H - H * 0.02 + m.dist * 0.6);
+        x.rotate(side * -0.06);
+        x.beginPath(); x.ellipse(0, 0, W * 0.2, Math.max(2, H * 0.04 + m.dist * 0.25), 0, 0, Math.PI * 2); x.fill();
+        x.restore();
+      }
+      break;
+    }
+    case "curved": {
+      // the bottom edge bends: darker under the corners, lighter in the middle
+      x.beginPath();
+      x.moveTo(W * 0.02, H * 0.85); x.lineTo(W * 0.98, H * 0.85); x.lineTo(W * 0.98, H + m.dist);
+      x.quadraticCurveTo(W / 2, H + m.dist * 0.15 - H * 0.04, W * 0.02, H + m.dist);
+      x.closePath(); x.fill();
+      break;
+    }
+    case "angled": {
+      // the picture's outline laid on the floor behind it, slanting away from the light
+      x.transform(1, 0, m.skew, m.squash, -m.skew * H, H * (1 - m.squash) + m.dist * 0.3);
+      x.drawImage(silhouette(src, color), 0, 0);
+      break;
+    }
+  }
+  x.restore();
+  x.drawImage(src, p.left, p.top);
   return out;
 }
 function contrastInk(hex) {

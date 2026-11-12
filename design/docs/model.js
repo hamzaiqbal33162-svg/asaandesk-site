@@ -4,19 +4,24 @@
 //         blocks: [Block] }
 // Block = { type: 'p'|'h1'|'h2'|'h3'|'quote'|'code'|'hr'|'pagebreak'|'li'|'table'|'image',
 //           align?, lineHeight?, dir?: 'rtl', indent?,                  // text blocks
+//           bg?, deco?, dc?, dc2?, pad?, minh?,                         // coloured block: background, own decoration (decos.js), padding, min height (px)
 //           runs?: [Run],                                               // p, h1-h3, quote, li
 //           list?: 'bullet'|'number'|'check', level?, checked?,         // li
 //           text?,                                                      // code
-//           rows?: [[{ runs }]], header?,                               // table (header = first row is a heading row)
+//           rows?: [[{ runs }]], header?, accent?, tstyle?,             // table (header = first row is a heading row; accent colour; 'grid'|'lines')
 //           src?, w?, h?, alt? }                                        // image (w, h in CSS px)
 // Run = { text, b?, i?, u?, s?, code?, sup?, sub?, color?, bg?, font?, size? (pt), link? }
 import { FONT_FAMILIES } from "../shared/brand.js";
+import { DECOS, decoCss } from "./decos.js";
 
-export const PAGE_SIZES = { A4: { label: "A4", w: 210, h: 297 }, Letter: { label: "Letter", w: 215.9, h: 279.4 } };
+export const PAGE_SIZES = { A4: { label: "A4", w: 210, h: 297 }, Letter: { label: "Letter", w: 215.9, h: 279.4 }, Legal: { label: "Legal", w: 215.9, h: 355.6 }, A3: { label: "A3", w: 297, h: 420 }, Digital: { label: "Digital doc", w: 240, h: 320, digital: true }, Pageless: { label: "Pageless", w: 210, h: 297, pageless: true }, Slides: { label: "Presentation 16:9", w: 297, h: 167.06 } };
 export const MARGINS = { narrow: 12.7, normal: 25.4, wide: 38.1 };
 export const HEADING_PT = { h1: 22, h2: 17, h3: 14 };
 export const RTL_LANGS = ["ur", "ar", "fa", "ps", "sd", "he", "yi"];
-export const STYLE_KEYS = ["b", "i", "u", "s", "code", "sup", "sub", "color", "bg", "font", "size", "link"];
+export const STYLE_KEYS = ["b", "i", "u", "s", "code", "sup", "sub", "color", "bg", "font", "size", "link", "sg"];
+/** Suggestion mark on a run: "ins:<id>:<time>:<author>" (suggested text) or "del:<id>:<time>:<author>" (suggested deletion). */
+export const SG_RE = /^(ins|del):[a-z0-9]{3,24}:\d{1,15}:[^:<>"&]{0,40}$/i;
+const CMT_ID = /^c[a-z0-9]{6,24}$/;
 const TEXT_BLOCKS = new Set(["p", "h1", "h2", "h3", "quote", "li"]);
 
 export function newDoc(title = "Untitled document") {
@@ -42,7 +47,64 @@ export function normalizeDoc(d) {
   doc.page.pageNumbers = doc.page.pageNumbers !== false;
   for (const b of Array.isArray(d.blocks) ? d.blocks : []) { const n = normalizeBlock(b); if (n) doc.blocks.push(n); }
   if (!doc.blocks.length) doc.blocks.push({ type: "p", runs: [] });
+  // Comment threads (kept only when there are any). Older documents kept the comment text on the block: make it a thread.
+  const threads = (Array.isArray(d.comments) ? d.comments : []).map(normalizeThread).filter(Boolean).slice(0, 500);
+  for (const b of doc.blocks) {
+    if (b.cmt && !CMT_ID.test(b.cmt)) { const t = normalizeThread({ id: "c" + legacyId(b.cmt), text: b.cmt, by: "You", at: 0 }); threads.push(t); b.cmt = t.id; }
+    else if (b.cmt && !threads.some((t) => t.id === b.cmt)) delete b.cmt;
+  }
+  if (threads.length) doc.comments = threads;
+  // Custom dropdowns made in this document (Canva: "+ Create dropdown"); the presets live in the app.
+  const dds = (Array.isArray(d.dropdowns) ? d.dropdowns : []).map(normalizeDropdown).filter(Boolean).slice(0, 40);
+  if (dds.length) doc.dropdowns = dds;
   return doc;
+}
+
+/** A dropdown: { id, name, options: [{ label, fg, bg }] } (1–20 options, labels unique, no "▾"). */
+export function normalizeDropdown(g) {
+  if (!g || typeof g !== "object" || !/^[a-z0-9-]{1,40}$/.test(String(g.id || ""))) return null;
+  const seen = new Set();
+  const options = (Array.isArray(g.options) ? g.options : []).map((o) => {
+    const label = String(o?.label || "").replace(/▾/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (!label || seen.has(label)) return null;
+    seen.add(label);
+    return { label, fg: normColor(o.fg) || "#334155", bg: normColor(o.bg) || "#e2e8f0" };
+  }).filter(Boolean).slice(0, 20);
+  if (!options.length) return null;
+  return { id: String(g.id), name: String(g.name || "Dropdown").replace(/\s+/g, " ").trim().slice(0, 40) || "Dropdown", options };
+}
+
+const legacyId = (s) => { let h = 7; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ("000000" + h.toString(36)).slice(-7); };
+const str = (v, n) => String(v ?? "").slice(0, n);
+function normalizeThread(t) {
+  if (!t || typeof t !== "object" || !CMT_ID.test(String(t.id || ""))) return null;
+  const text = str(t.text, 2000).trim();
+  if (!text) return null;
+  const out = { id: t.id, text, by: str(t.by || "You", 60), at: Math.max(0, +t.at || 0) };
+  if (t.resolved) out.resolved = true;
+  const m = (Array.isArray(t.mentions) ? t.mentions : []).map((x) => str(x, 60).trim()).filter(Boolean).slice(0, 20);
+  if (m.length) out.mentions = [...new Set(m)];
+  const r = (Array.isArray(t.replies) ? t.replies : []).map((x) => (x && str(x.text, 2000).trim() ? { text: str(x.text, 2000).trim(), by: str(x.by || "You", 60), at: Math.max(0, +x.at || 0) } : null)).filter(Boolean).slice(0, 100);
+  if (r.length) out.replies = r;
+  return out;
+}
+
+/** The document without pending suggestions (suggested text left out, suggested deletions kept): what downloads contain. */
+export function withoutSuggestions(doc) {
+  const fix = (runs) => cleanRuns((runs || []).filter((r) => !String(r.sg || "").startsWith("ins:")).map(({ sg, ...r }) => r));
+  const d = JSON.parse(JSON.stringify(doc));
+  for (const b of d.blocks || []) {
+    if (b.runs) b.runs = fix(b.runs);
+    if (b.type === "table") for (const row of b.rows) for (const c of row) c.runs = fix(c.runs);
+  }
+  return d;
+}
+/** Every pending suggestion in the document: [{ id, kind: "ins"|"del", by, at, text }]. */
+export function listSuggestions(doc) {
+  const map = new Map();
+  const visit = (runs) => { for (const r of runs || []) if (r.sg) { const [kind, id, at, by] = r.sg.split(":"); const k = kind + ":" + id; const e = map.get(k) || { id, kind, by, at: +at, text: "" }; e.text += r.text; map.set(k, e); } };
+  for (const b of doc.blocks || []) { visit(b.runs); if (b.type === "table") for (const row of b.rows) for (const c of row) visit(c.runs); }
+  return [...map.values()];
 }
 
 function clampNum(v, lo, hi) { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : null; }
@@ -62,13 +124,26 @@ function normalizeBlock(b) {
     return out;
   }
   if (t === "code") return { type: "code", text: String(b.text ?? runsText(b.runs || [])) };
-  if (t === "hr" || t === "pagebreak") return { type: t };
+  if (t === "pagebreak") return { type: t };
+  if (t === "hr") {
+    // Divider style (like Canva's divider toolbar): solid (default), dashed, dotted, double or thick; any colour.
+    const out = { type: "hr" };
+    if (HR_STYLES.includes(b.hs)) out.hs = b.hs;
+    const hc = normColor(b.hc); if (hc) out.hc = hc;
+    if (props.ps) out.ps = props.ps;
+    return out;
+  }
   if (t === "table") {
     const rows = (Array.isArray(b.rows) ? b.rows : []).map((r) => (Array.isArray(r) ? r : []).map((c) => ({ runs: cleanRuns(c?.runs || (typeof c === "string" ? [{ text: c }] : [])) })));
     const width = Math.max(1, ...rows.map((r) => r.length));
     rows.forEach((r) => { while (r.length < width) r.push({ runs: [] }); });
     if (!rows.length) return null;
-    return { type: "table", header: b.header !== false, rows };
+    const tb = { type: "table", header: b.header !== false, rows };
+    const ac = normColor(b.accent); if (ac) tb.accent = ac;
+    if (b.tstyle === "lines" || b.tstyle === "cols") tb.tstyle = b.tstyle;
+    const cw = colWidths(b.cw, width); if (cw) tb.cw = cw;
+    if (props.ps) tb.ps = props.ps;
+    return tb;
   }
   if (t === "image") {
     const src = safeSrc(b.src);
@@ -77,9 +152,22 @@ function normalizeBlock(b) {
     if (+b.w > 0) out.w = Math.round(+b.w);
     if (+b.h > 0) out.h = Math.round(+b.h);
     if (props.align) out.align = props.align;
+    if (props.ps) out.ps = props.ps;
+    if (b.full) out.full = true;
     return out;
   }
   return null;
+}
+
+/** Divider styles. */
+export const HR_STYLES = ["dashed", "dotted", "double", "thick"];
+/** Column widths in % (one per column, 5–95 each, summing to 100), or null. */
+export function colWidths(v, n) {
+  const a = (Array.isArray(v) ? v : String(v ?? "").split(",")).map((x) => Math.round(+x));
+  if (a.length !== n || n < 2 || a.some((x) => !Number.isFinite(x) || x < 5 || x > 95)) return null;
+  const sum = a.reduce((s, x) => s + x, 0);
+  if (Math.abs(sum - 100) > 2) return null;
+  return a;
 }
 
 function blockProps(b) {
@@ -90,6 +178,17 @@ function blockProps(b) {
   if (b.dir === "rtl") p.dir = "rtl";
   const ind = Math.round(+b.indent || 0);
   if (ind > 0) p.indent = Math.min(8, ind);
+  const bg = normColor(b.bg); if (bg) p.bg = bg;
+  if (b.deco && DECOS[b.deco]) { p.deco = b.deco; const c = normColor(b.dc), c2 = normColor(b.dc2); if (c) p.dc = c; if (c2) p.dc2 = c2; }
+  const pad = clampNum(b.pad, 0, 80); if (pad && b.pad != null) p.pad = Math.round(pad);
+  const mh = clampNum(b.minh, 0, 480); if (mh && b.minh != null) p.minh = Math.round(mh);
+  const rad = clampNum(b.rad, 0, 40); if (rad && b.rad != null) p.rad = Math.round(rad);
+  const bd = clampNum(b.bd, 0, 8); if (bd && b.bd != null) { p.bd = Math.round(bd); const bc = normColor(b.bc); if (bc) p.bc = bc; }
+  if (b.cmt != null && String(b.cmt).trim()) p.cmt = String(b.cmt).slice(0, 1000);
+  // Paragraph / block spacing (pt before and after) and letter spacing (thousandths of an em), like Canva's
+  // "Advanced settings" and "Spacing" sliders.
+  const ps = clampNum(b.ps, 0, 72); if (ps && b.ps != null) p.ps = Math.round(ps);
+  const lsp = clampNum(b.lsp, -200, 800); if (lsp && b.lsp != null) p.lsp = Math.round(lsp);
   return p;
 }
 
@@ -111,6 +210,7 @@ export function cleanRuns(runs) {
       if (k === "color" || k === "bg") { const c = normColor(v); if (c) n[k] = c; continue; }
       if (k === "font") { if (FONT_FAMILIES[v]) n.font = v; continue; }
       if (k === "link") { const l = safeLink(v); if (l) n.link = l; continue; }
+      if (k === "sg") { if (SG_RE.test(String(v))) n.sg = String(v); continue; }
       n[k] = true;
     }
     const last = out[out.length - 1];
@@ -240,6 +340,8 @@ function hasBlockChild(n) {
   return kidsOf(n).some((k) => k.nodeType === 1 && !SKIP_TAGS.has(tagOf(k)) && (isBlockEl(k) || hasBlockChild(k)));
 }
 
+const BAND_KEYS = ["bg", "deco", "dc", "dc2", "pad", "minh", "rad", "bd", "bc", "cmt"];
+const SPACE_KEYS = ["ps", "lsp"];
 function blockPropsOf(n, st) {
   const p = {};
   const al = String(st["text-align"] || attrOf(n, "align") || "").toLowerCase();
@@ -254,6 +356,7 @@ function blockPropsOf(n, st) {
   if (/^[\d.]+$/.test(lh)) p.lineHeight = +lh;
   else if (/^[\d.]+%$/.test(lh)) p.lineHeight = parseFloat(lh) / 100;
   const ind = attrOf(n, "data-indent");
+  for (const k of [...BAND_KEYS, ...SPACE_KEYS]) { const v = attrOf(n, "data-" + k); if (v != null && v !== "") p[k] = v; }
   if (ind != null) p.indent = +ind || 0;
   else if (marginLeft(st) && tagOf(n) !== "LI" && tagOf(n) !== "BLOCKQUOTE") { const px = lengthToPx(marginLeft(st)); if (px >= 24) p.indent = Math.min(8, Math.round(px / 48)); }
   return p;
@@ -262,7 +365,8 @@ function blockPropsOf(n, st) {
 function inlineStyleOf(n, ist) {
   const s = { ...ist };
   const t = tagOf(n);
-  if (t === "B" || t === "STRONG") s.b = true;
+  if ((t === "INS" || t === "DEL") && SG_RE.test(attrOf(n, "data-sg") || "")) s.sg = attrOf(n, "data-sg");
+  else if (t === "B" || t === "STRONG") s.b = true;
   else if (t === "I" || t === "EM" || t === "CITE" || t === "DFN" || t === "VAR") s.i = true;
   else if (t === "U" || t === "INS") s.u = true;
   else if (t === "S" || t === "STRIKE" || t === "DEL") s.s = true;
@@ -319,8 +423,9 @@ function inlineWalk(n, blk, ist) {
     const src = safeSrc(attrOf(n, "src"));
     if (src) {
       const st = styleOfEl(n);
-      const w = Math.round(lengthToPx(st.width) || +attrOf(n, "width") || 0), h = Math.round(lengthToPx(st.height) || +attrOf(n, "height") || 0);
-      blk.pieces.push({ image: { src, alt: attrOf(n, "alt") || "", ...(w > 0 ? { w } : {}), ...(h > 0 && st.height !== "auto" ? { h } : {}) } });
+      const w = Math.round(lengthToPx(st.width) || +attrOf(n, "width") || +attrOf(n, "data-w") || 0), h = Math.round(lengthToPx(st.height) || +attrOf(n, "height") || 0);
+      const ps = +attrOf(n, "data-ps") || 0, full = attrOf(n, "data-full") === "1";
+      blk.pieces.push({ image: { src, alt: attrOf(n, "alt") || "", ...(w > 0 ? { w } : {}), ...(h > 0 && st.height !== "auto" ? { h } : {}), ...(ps > 0 ? { ps } : {}), ...(full ? { full } : {}) } });
     }
     return;
   }
@@ -374,7 +479,7 @@ function pushBlock(blk, out, keepEmpty) {
 
 function makeBlock(props, runs) {
   const b = { type: props.type || "p" };
-  for (const k of ["align", "lineHeight", "dir", "indent"]) if (props[k] != null && props[k] !== "") b[k] = props[k];
+  for (const k of ["align", "lineHeight", "dir", "indent", ...BAND_KEYS, ...SPACE_KEYS]) if (props[k] != null && props[k] !== "") b[k] = props[k];
   if (b.type === "li") { b.list = props.list || "bullet"; b.level = props.level || 0; if (b.list === "check") b.checked = !!props.checked; delete b.indent; }
   b.runs = runs;
   return b;
@@ -438,7 +543,7 @@ function handleBlock(n, bp, ist, out) {
   if (t === "UL" || t === "OL") { listWalk(n, (bp.type === "li" ? bp.level + 1 : 0), out, nbp, ist); return; }
   if (t === "LI") { listItem(n, 0, /\bcheck\b/.test(cls) ? "check" : "bullet", out, nbp, ist); return; }
   if (t === "TABLE") { tableWalk(n, out, ist); return; }
-  if (t === "HR") { out.push({ type: "hr" }); return; }
+  if (t === "HR") { const hr = { type: "hr" }; const hs = attrOf(n, "data-hs"), hc = attrOf(n, "data-hc"), ps = attrOf(n, "data-ps"); if (hs) hr.hs = hs; if (hc) hr.hc = hc; if (ps) hr.ps = ps; out.push(hr); return; }
   walkBlocks(kidsOf(n), nbp, nist, out);
 }
 
@@ -522,7 +627,13 @@ function tableWalk(table, out, ist) {
   if (!rows.length) return;
   const width = Math.max(...rows.map((r) => r.length));
   rows.forEach((r) => { while (r.length < width) r.push({ runs: [] }); });
-  out.push({ type: "table", header, rows });
+  const tb = { type: "table", header, rows };
+  if (attrOf(table, "data-accent")) tb.accent = attrOf(table, "data-accent");
+  const ts = attrOf(table, "data-tstyle");
+  if (ts === "lines" || ts === "cols") tb.tstyle = ts;
+  if (attrOf(table, "data-cw")) tb.cw = attrOf(table, "data-cw");
+  if (attrOf(table, "data-ps")) tb.ps = attrOf(table, "data-ps");
+  out.push(tb);
 }
 
 /**
@@ -559,18 +670,41 @@ export function runsToHtml(runs) {
     if (r.i) h = `<i>${h}</i>`;
     if (r.b) h = `<b>${h}</b>`;
     if (r.link) h = `<a href="${escAttr(r.link)}">${h}</a>`;
+    if (r.sg) { const tg = r.sg.startsWith("ins:") ? "ins" : "del"; h = `<${tg} class="sg" data-sg="${escAttr(r.sg)}" title="${escAttr("Suggested by " + r.sg.split(":")[3])}">${h}</${tg}>`; }
     return h;
   }).join("");
 }
 
-function blockAttrs(b) {
+export function blockAttrs(b) {
   const css = [];
   if (b.align) css.push(`text-align:${b.align}`);
   if (b.lineHeight) css.push(`line-height:${b.lineHeight}`);
   if (b.indent) css.push(`margin-left:${b.indent * 36}pt`);
-  return (css.length ? ` style="${css.join(";")}"` : "") + (b.indent ? ` data-indent="${b.indent}"` : "") + (b.dir === "rtl" ? ' dir="rtl"' : "");
+  let data = b.cmt ? ` data-cmt="${escAttr(b.cmt)}"` : "";
+  if (b.ps) { css.push(`margin-top:${b.ps}pt;margin-bottom:${b.ps}pt`); data += ` data-ps="${b.ps}"`; }
+  if (b.lsp) { css.push(`letter-spacing:${b.lsp / 1000}em`); data += ` data-lsp="${b.lsp}"`; }
+  if (b.bg || b.deco || b.bd) {
+    const pad = b.pad ?? 14;
+    if (b.bg) css.push(`background-color:${b.bg}`);
+    css.push(`padding:${pad}px ${Math.max(pad, 18)}px`);
+    if (b.minh) css.push(`min-height:${b.minh}px`);
+    if (b.rad) css.push(`border-radius:${b.rad}px`);
+    if (b.bd) css.push(`border:${b.bd}px solid ${b.bc || "#1b2133"}`);
+    if (b.deco) { css.push(decoCss(b.deco, b.dc, b.dc2)); if (DECOS[b.deco].pos === "left") css.push(`padding-left:${Math.round(Math.max(110, (b.minh || 80) * 0.95))}px`); else css.push(`padding-right:${Math.round(Math.max(120, (b.minh || 60) * 1.3))}px`); }
+    for (const k of BAND_KEYS) if (b[k] != null && k !== "cmt") data += ` data-${k}="${escAttr(b[k])}"`;
+    data += ' class="band"';
+  }
+  return (css.length ? ` style="${escAttr(css.join(";"))}"` : "") + (b.indent ? ` data-indent="${b.indent}"` : "") + (b.dir === "rtl" ? ' dir="rtl"' : "") + data;
 }
 const inner = (b) => runsToHtml(b.runs) || "<br>";
+/** A divider with its style and colour. */
+export function hrHtml(b) {
+  if (!b.hs && !b.hc && !b.ps) return "<hr>";
+  const c = b.hc || "#c7cbe0";
+  const line = { dashed: `2px dashed ${c}`, dotted: `3px dotted ${c}`, double: `4px double ${c}`, thick: `4px solid ${c}` }[b.hs] || `1px solid ${c}`;
+  const css = `border:0;border-top:${line}` + (b.ps ? `;margin-top:${b.ps}pt;margin-bottom:${b.ps}pt` : "");
+  return `<hr style="${css}"${b.hs ? ` data-hs="${b.hs}"` : ""}${b.hc ? ` data-hc="${b.hc}"` : ""}${b.ps ? ` data-ps="${b.ps}"` : ""}>`;
+}
 
 function listsHtml(items, exportMode) {
   let html = "";
@@ -599,22 +733,29 @@ export function modelToHtml(blocks, { editor = false } = {}) {
     if (b.type === "quote") { let q = ""; while (i < blocks.length && blocks[i].type === "quote") { q += `<p${blockAttrs(blocks[i])}>${inner(blocks[i])}</p>`; i++; } i--; html += `<blockquote>${q}</blockquote>`; continue; }
     if (b.type === "p" || /^h[1-3]$/.test(b.type)) { html += `<${b.type}${blockAttrs(b)}>${inner(b)}</${b.type}>`; continue; }
     if (b.type === "code") { html += `<pre><code>${escHtml(b.text) || "<br>"}</code></pre>`; continue; }
-    if (b.type === "hr") { html += "<hr>"; continue; }
+    if (b.type === "hr") { html += hrHtml(b); continue; }
     if (b.type === "pagebreak") { html += editor ? '<div class="pb" contenteditable="false" data-pb="1"></div>' : '<div class="page-break" style="break-after:page;page-break-after:always"></div>'; continue; }
     if (b.type === "table") {
-      html += `<table${editor ? ' class="ad-table"' : ""}><tbody>` + b.rows.map((r, ri) => "<tr>" + r.map((c) => { const tg = b.header && ri === 0 ? "th" : "td"; return `<${tg}>${runsToHtml(c.runs) || "<br>"}</${tg}>`; }).join("") + "</tr>").join("") + "</tbody></table>";
+      const cls = [editor ? "ad-table" : "", b.tstyle === "lines" ? "t-lines" : b.tstyle === "cols" ? "t-cols" : ""].filter(Boolean).join(" ");
+      const hcss = b.accent ? ` style="background-color:${b.accent}"` : "";
+      const cg = b.cw ? "<colgroup>" + b.cw.map((w) => `<col style="width:${w}%">`).join("") + "</colgroup>" : "";
+      const tcss = b.ps ? ` style="margin-top:${b.ps}pt;margin-bottom:${b.ps}pt" data-ps="${b.ps}"` : "";
+      html += `<table${cls ? ` class="${cls}"` : ""}${b.accent ? ` data-accent="${b.accent}"` : ""}${b.tstyle ? ` data-tstyle="${b.tstyle}"` : ""}${b.cw ? ` data-cw="${b.cw.join(",")}"` : ""}${tcss}>${cg}<tbody>` + b.rows.map((r, ri) => "<tr>" + r.map((c) => { const tg = b.header && ri === 0 ? "th" : "td"; return `<${tg}${tg === "th" ? hcss : ""}>${runsToHtml(c.runs) || "<br>"}</${tg}>`; }).join("") + "</tr>").join("") + "</tbody></table>";
       continue;
     }
     if (b.type === "image") {
-      const st = b.w ? ` style="width:${b.w}px"` : "";
-      html += `<p class="imgp"${b.align ? ` style="text-align:${b.align}"` : ""}><img src="${escAttr(b.src)}" alt="${escAttr(b.alt || "")}"${st}></p>`;
+      const st = b.w && !b.full ? ` style="width:${b.w}px"` : "";
+      const pcss = [b.align ? `text-align:${b.align}` : "", b.ps ? `margin-top:${b.ps}pt;margin-bottom:${b.ps}pt` : ""].filter(Boolean).join(";");
+      const ex = (b.ps ? ` data-ps="${b.ps}"` : "") + (b.full ? ' data-full="1"' : "");
+      html += `<p class="imgp${b.full ? " img-full" : ""}"${pcss ? ` style="${pcss}"` : ""}><img src="${escAttr(b.src)}" alt="${escAttr(b.alt || "")}"${st}${ex}${b.full && b.w ? ` data-w="${b.w}"` : ""}></p>`;
     }
   }
   return html;
 }
 
 /** A standalone web page for the document. */
-export function exportHtmlPage(doc) {
+export function exportHtmlPage(doc, site = null) {
+  if (site) return exportWebsite(doc, site);
   const fam = (FONT_FAMILIES[doc.font] || FONT_FAMILIES.sans).css.replace(/"AD [^"]+",\s*/g, "");
   const css = `body{font-family:${fam};font-size:${doc.size || 11}pt;line-height:1.5;color:#1b2133;max-width:800px;margin:40px auto;padding:0 20px}
 h1{font-size:${HEADING_PT.h1}pt}h2{font-size:${HEADING_PT.h2}pt}h3{font-size:${HEADING_PT.h3}pt}
@@ -622,8 +763,26 @@ blockquote{margin:12px 0;padding:4px 16px;border-left:4px solid #b4b0f5;color:#4
 pre{background:#f1f5f9;padding:10px 12px;border-radius:6px;white-space:pre-wrap}code{font-family:"Courier New",monospace}
 table{border-collapse:collapse;width:100%;margin:10px 0}td,th{border:1px solid #94a3b8;padding:5px 8px;text-align:left;vertical-align:top}th{background:#efedff}
 ul.check{list-style:none;padding-left:1.2em}img{max-width:100%}.page-break{height:0}
+.band{border-radius:6px;margin:10px 0}table.t-lines td,table.t-lines th{border:0;border-bottom:1px dotted #94a3b8}
+table.t-cols{table-layout:fixed}table.t-cols td,table.t-cols th{border:0;background:none;padding:4px 10px}.img-full img{width:100%}
+@media (max-width:600px){table.t-cols,table.t-cols tbody,table.t-cols tr,table.t-cols td{display:block;width:auto!important}}
 @media print{.page-break{break-after:page}}`;
   return `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${escHtml(doc.title)}</title>\n<style>\n${css}\n</style>\n</head>\n<body>\n${modelToHtml(doc.blocks)}\n</body>\n</html>\n`;
+}
+
+/**
+ * "Publish as a website" (Canva Docs: Share → Website): the doc as a ready-to-host index.html with a page title,
+ * description and social preview tags. site: { title, description, scrollFade }.
+ */
+export function exportWebsite(doc, site = {}) {
+  const page = exportHtmlPage(doc);
+  const title = String(site.title || doc.title || "Document").slice(0, 120);
+  const desc = String(site.description || "").replace(/\s+/g, " ").trim().slice(0, 300);
+  const meta = [`<meta name="description" content="${escAttr(desc)}">`, `<meta property="og:type" content="website">`, `<meta property="og:title" content="${escAttr(title)}">`,
+    desc ? `<meta property="og:description" content="${escAttr(desc)}">` : "", `<meta name="twitter:card" content="summary">`, `<meta name="generator" content="AsaanDesk Docs">`].filter(Boolean).join("\n");
+  // Scroll fade: coloured banners and pictures fade and rise in as they scroll into view (CSS only, where supported).
+  const fade = site.scrollFade ? `\n<style>\n@supports (animation-timeline: view()) { @keyframes adrise { from { opacity: 0; transform: translateY(28px) } to { opacity: 1; transform: none } } .band, .imgp { animation: adrise linear both; animation-timeline: view(); animation-range: entry 0% cover 30%; } }\n@media (prefers-reduced-motion: reduce) { .band, .imgp { animation: none !important } }\n</style>` : "";
+  return page.replace(/<title>[^<]*<\/title>/, `<title>${escHtml(title)}</title>\n${meta}`).replace("</head>", `${fade}\n</head>`).replace("<body>", '<body>\n<main>').replace("\n</body>", "\n</main>\n</body>");
 }
 
 /* ---------------- Markdown ---------------- */

@@ -5,6 +5,7 @@
 //   lack, e.g. Urdu), loadImage? (browser: converts non PNG/JPEG images).
 import { PAGE_SIZES, HEADING_PT, runsText } from "./model.js";
 import { dataUrlBytes, imageSize } from "./docx-export.js";
+import { DECOS, decoSvg, svgDataUrl } from "./decos.js";
 
 const PT_PER_MM = 72 / 25.4;
 const rgbOf = (hex) => { const h = String(hex || "#000000").replace("#", ""); const v = h.length === 3 ? h.split("").map((c) => c + c).join("") : h.padEnd(6, "0"); return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16) || 0); };
@@ -21,7 +22,9 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
   out.setProducer("AsaanDesk Docs (pdf-lib)");
   const embedded = new Map();
   const ps = PAGE_SIZES[doc.page?.size] || PAGE_SIZES.A4;
-  const W = ps.w * PT_PER_MM, H = ps.h * PT_PER_MM, M = (doc.page?.margin || 25.4) * PT_PER_MM;
+  // Pageless: one long page (PDF's largest page height), cut to the text at the end; page breaks become a little space.
+  const pageless = !!ps.pageless;
+  const W = ps.w * PT_PER_MM, H = pageless ? 14400 : ps.h * PT_PER_MM, M = (doc.page?.margin || 25.4) * PT_PER_MM;
   const CW = W - 2 * M;
   const baseSize = doc.size || 11, docFont = doc.font || "calibri";
   // A scratch page for measuring (fonts are embedded per document); removed at the end.
@@ -65,8 +68,9 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
   const tokStyle = (r, blk) => {
     const size0 = r.size || blk.size;
     const size = r.sup || r.sub ? Math.round(size0 * 0.7 * 10) / 10 : size0;
-    return { family: r.code ? "mono" : (r.font || blk.family), bold: !!(r.b || blk.bold), italic: !!(r.i || blk.italic), size, color: r.link && !r.color ? "#0563c1" : (r.color || blk.color || INK), bg: r.bg || (r.code ? "#f1f5f9" : null), u: !!(r.u || r.link), s: !!r.s, link: r.link || null, sup: !!r.sup, sub: !!r.sub, base: size0 };
+    return { family: r.code ? "mono" : (r.font || blk.family), bold: !!(r.b || blk.bold), italic: !!(r.i || blk.italic), size, color: r.link && !r.color ? "#0563c1" : (r.color || blk.color || INK), bg: r.bg || (r.code ? "#f1f5f9" : null), u: !!(r.u || r.link), s: !!r.s, link: r.link || null, sup: !!r.sup, sub: !!r.sub, base: size0, ls: blk.lsp ? (blk.lsp * size) / 1000 : 0 };
   };
+  const chars = (t) => [...t].length;
 
   /** Splits runs into measured tokens; unsupported characters → "?" (or flags the block for rasterising). */
   async function tokens(runs, blk) {
@@ -81,7 +85,7 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
           if (await supports(s, ch)) text += ch;
           else { if (/\p{L}/u.test(ch)) foreign = true; text += "?"; }
         }
-        toks.push({ text, s, space: /^ +$/.test(text), w: await width(s, text) });
+        toks.push({ text, s, space: /^ +$/.test(text), w: (await width(s, text)) + s.ls * chars(text) });
       }
     }
     return { toks, foreign };
@@ -144,7 +148,13 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
       const py = H - yb + (s.sup ? s.base * 0.35 : s.sub ? -s.base * 0.12 : 0);
       if (s.bg) { const c = rgbOf(s.bg); page.drawRectangle({ x: sg.x, y: py - s.size * 0.25, width: sg.w, height: s.size * 1.15, color: rgb(c[0] / 255, c[1] / 255, c[2] / 255) }); }
       if (!sg.text.trim()) continue;
-      await writeLines(out, page, { lines: [{ text: sg.text.replace(/ +$/, ""), x: sg.x, y: py }], size: s.size, color: rgbOf(s.color), family: s.family, bold: s.bold, italic: s.italic, underline: s.u, embedded });
+      let lines = [{ text: sg.text.replace(/ +$/, ""), x: sg.x, y: py }];
+      if (s.ls) { // letter spacing: one piece per character
+        lines = [];
+        let cx = sg.x;
+        for (const ch of sg.text.replace(/ +$/, "")) { if (ch !== " ") lines.push({ text: ch, x: cx, y: py }); cx += (await width(s, ch)) + s.ls; }
+      }
+      await writeLines(out, page, { lines, size: s.size, color: rgbOf(s.color), family: s.family, bold: s.bold, italic: s.italic, underline: s.u, embedded });
       if (s.s) { const c = rgbOf(s.color); page.drawLine({ start: { x: sg.x, y: py + s.size * 0.3 }, end: { x: sg.x + sg.w, y: py + s.size * 0.3 }, thickness: Math.max(0.5, s.size * 0.06), color: rgb(c[0] / 255, c[1] / 255, c[2] / 255) }); }
       if (s.link) addLink(s.link, sg.x, py - s.size * 0.25, sg.x + sg.w, py + s.size * 0.9);
     }
@@ -158,6 +168,7 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
       const img = await rasterize(runsText(runs), { size: blk.size, bold: blk.bold, italic: blk.italic, family: blk.family, color: blk.color || INK, align: blk.align, dir: blk.dir, widthPt: blk.width, lineHeight: lh });
       if (img) { await placeImageBytes(img.bytes, "png", img.widthPt, img.heightPt, blk.x, blk.width, blk.align || (blk.dir === "rtl" ? "right" : "left")); return; }
     }
+    if (blk.band) { await bandParagraph(toks, blk, lh); return; }
     const lines = await wrap(toks, blk.width, blk.size);
     const align = blk.align === "justify" ? "left" : blk.align || (blk.dir === "rtl" ? "right" : "left");
     let first = true;
@@ -172,6 +183,39 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
     }
   }
 
+  /** A coloured block: background rectangle (+ our decoration picture), text inside with padding. */
+  async function bandParagraph(toks, blk, lh) {
+    const b = blk.band, pad = (b.pad ?? 14) * 0.75, deco = b.deco && DECOS[b.deco];
+    const decoLeft = deco && deco.pos === "left";
+    const minH = (b.minh || 0) * 0.75;
+    const padL = decoLeft ? Math.max(82, minH * 0.95) : Math.max(pad, 13.5), padR = deco && !decoLeft ? Math.max(90, minH * 1.3) : Math.max(pad, 13.5);
+    const innerW = Math.max(40, blk.width - padL - padR);
+    const lines = await wrap(toks, innerW, blk.size);
+    const textH = lines.reduce((a, l) => a + l.size * lh, 0);
+    const h = Math.min(H - 2 * M, Math.max(minH, textH + 2 * pad));
+    y += 4;
+    ensure(h);
+    const top = y;
+    if (b.bg) { const c = rgbOf(b.bg); page.drawRectangle({ x: blk.x, y: H - top - h, width: blk.width, height: h, color: rgb(c[0] / 255, c[1] / 255, c[2] / 255) }); }
+    if (deco && loadImage) {
+      try {
+        const got = await loadImage(svgDataUrl(decoSvg(b.deco, b.dc, b.dc2)));
+        const img = await out.embedPng(got.bytes);
+        const ih = h * 0.86, iw = Math.min(decoLeft ? padL - 8 : padR - 8, ih * (img.width / img.height));
+        const ihh = iw / (img.width / img.height);
+        page.drawImage(img, { x: decoLeft ? blk.x + 10 : blk.x + blk.width - iw - 8, y: H - top - h / 2 - ihh / 2, width: iw, height: ihh });
+      } catch { /* decoration is optional */ }
+    }
+    let yy = top + Math.max(pad, (h - textH) / 2);
+    const align = blk.align === "justify" ? "left" : blk.align || (blk.dir === "rtl" ? "right" : "left");
+    for (const line of lines) {
+      const lineH = line.size * lh;
+      await drawLine(line, blk.x + padL, yy + (lineH - line.size) / 2 + line.size * 0.8, innerW, align, blk.align === "justify");
+      yy += lineH;
+    }
+    y = top + h + 4;
+  }
+
   async function placeImageBytes(bytes, type, wPt, hPt, x, boxW, align) {
     const img = type === "png" ? await out.embedPng(bytes) : await out.embedJpg(bytes);
     let w = wPt, h = hPt;
@@ -184,13 +228,39 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
     y += h;
   }
 
-  const textBlk = (b, extra = {}) => ({ size: baseSize, family: docFont, bold: false, italic: false, color: INK, align: b.align, dir: b.dir, lineHeight: b.lineHeight, x: M + (b.indent || 0) * 36, width: CW - (b.indent || 0) * 36, ...extra });
+  /** Canva's "Set as full page": the picture alone on its page, edge to edge (cropped to fill); pageless: full width. */
+  let coverNext = null;
+  async function fullPageImage(bytes, size) {
+    const img = size.type === "png" ? await out.embedPng(bytes) : await out.embedJpg(bytes);
+    if (pageless) {
+      const h = W * (size.h / size.w);
+      if (y > M + 1) y += 6;
+      page.drawImage(img, { x: 0, y: H - y - h, width: W, height: h });
+      y += h + 6;
+      return;
+    }
+    if (y > M + 1) newPage();
+    const pageH = H;
+    const k = Math.max(W / size.w, pageH / size.h), w = size.w * k, h = size.h * k;
+    const { pushGraphicsState, popGraphicsState, rectangle, clip, endPath } = PDFLib;
+    if (pushGraphicsState && rectangle && clip) page.pushOperators(pushGraphicsState(), rectangle(0, 0, W, pageH), clip(), endPath());
+    page.drawImage(img, { x: (W - w) / 2, y: (pageH - h) / 2, width: w, height: h });
+    if (popGraphicsState && rectangle && clip) page.pushOperators(popGraphicsState());
+    page.fullCover = true;
+    newPage();
+    coverNext = page;
+  }
+
+  const textBlk = (b, extra = {}) => ({ band: b.bg || b.deco ? b : null, size: baseSize, family: docFont, bold: false, italic: false, color: INK, align: b.align, dir: b.dir, lineHeight: b.lineHeight, lsp: b.lsp || 0, x: M + (b.indent || 0) * 36, width: CW - (b.indent || 0) * 36, ...extra });
 
   const blocks = doc.blocks || [];
   const counters = [], kinds = [];
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];
     if (b.type !== "li") { counters.length = 0; kinds.length = 0; }
+    // Paragraph / block spacing: space before (not at the top of a page) and after.
+    const ps = +b.ps || 0;
+    if (ps && y > M + 1) y += ps;
     switch (b.type) {
       case "h1": case "h2": case "h3": {
         const size = HEADING_PT[b.type];
@@ -266,39 +336,52 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
         y += baseSize * 0.6;
         break;
       }
-      case "hr":
+      case "hr": {
         ensure(14);
-        page.drawLine({ start: { x: M, y: H - y - 7 }, end: { x: M + CW, y: H - y - 7 }, thickness: 1, color: rgb(0xc7 / 255, 0xcb / 255, 0xe0 / 255) });
+        const c = rgbOf(b.hc || "#c7cbe0"), col = rgb(c[0] / 255, c[1] / 255, c[2] / 255), yy = H - y - 7;
+        const line = (dy, thickness, dashArray) => page.drawLine({ start: { x: M, y: yy + dy }, end: { x: M + CW, y: yy + dy }, thickness, color: col, ...(dashArray ? { dashArray } : {}) });
+        if (b.hs === "dashed") line(0, 1.5, [6, 4]);
+        else if (b.hs === "dotted") line(0, 2.2, [0.1, 4.2]);
+        else if (b.hs === "double") { line(1.6, 0.9); line(-1.6, 0.9); }
+        else if (b.hs === "thick") line(0, 3);
+        else line(0, 1);
         y += 14;
         break;
+      }
       case "pagebreak":
-        newPage();
+        if (pageless) y += baseSize * 2; else if (!(coverNext === page && y <= M + 0.5)) newPage();
         break;
       case "table": {
         const cols = Math.max(1, ...b.rows.map((r) => r.length));
-        const colW = CW / cols, pad = 4.5;
+        // Column widths (Canva-style columns and sidebars keep their %), else equal columns.
+        const widths = b.cw && b.cw.length === cols ? b.cw.map((p) => (CW * p) / 100) : Array(cols).fill(CW / cols);
+        const colX = widths.map((_, i) => M + widths.slice(0, i).reduce((s, w) => s + w, 0));
+        const noLines = b.tstyle === "cols", pad = noLines ? 7 : 4.5;
         const border = rgb(0x94 / 255, 0xa3 / 255, 0xb8 / 255);
         const lh = 1.3;
         y += 2;
         for (let ri = 0; ri < b.rows.length; ri++) {
           const head = b.header && ri === 0;
           const cells = [];
-          for (const c of b.rows[ri]) {
+          for (let ci = 0; ci < b.rows[ri].length; ci++) {
+            const c = b.rows[ri][ci];
             const { toks } = await tokens(c.runs.length ? c.runs : [{ text: " " }], { size: baseSize, family: docFont, bold: head, italic: false, color: INK });
-            cells.push(await wrap(toks, colW - 2 * pad, baseSize));
+            cells.push(await wrap(toks, widths[ci] - 2 * pad, baseSize));
           }
           const rowH = Math.max(...cells.map((ls) => ls.reduce((a, l) => a + l.size * lh, 0))) + 2 * pad;
           ensure(rowH);
           const top = y;
-          if (head) page.drawRectangle({ x: M, y: H - top - rowH, width: CW, height: rowH, color: rgb(0xef / 255, 0xed / 255, 0xff / 255) });
+          if (head) { const ac = b.accent ? rgbOf(b.accent).map((v) => v / 255) : [0xef / 255, 0xed / 255, 0xff / 255]; page.drawRectangle({ x: M, y: H - top - rowH, width: CW, height: rowH, color: rgb(ac[0], ac[1], ac[2]) }); }
           for (let ci = 0; ci < cells.length; ci++) {
             let yy = top + pad;
-            for (const l of cells[ci]) { const lineH = l.size * lh; await drawLine(l, M + ci * colW + pad, yy + (lineH - l.size) / 2 + l.size * 0.8, colW - 2 * pad, "left", false); yy += lineH; }
+            for (const l of cells[ci]) { const lineH = l.size * lh; await drawLine(l, colX[ci] + pad, yy + (lineH - l.size) / 2 + l.size * 0.8, widths[ci] - 2 * pad, "left", false); yy += lineH; }
           }
-          // Grid lines: top, bottom, and every column edge.
-          page.drawLine({ start: { x: M, y: H - top }, end: { x: M + CW, y: H - top }, thickness: 0.75, color: border });
-          page.drawLine({ start: { x: M, y: H - top - rowH }, end: { x: M + CW, y: H - top - rowH }, thickness: 0.75, color: border });
-          for (let ci = 0; ci <= cols; ci++) page.drawLine({ start: { x: M + ci * colW, y: H - top }, end: { x: M + ci * colW, y: H - top - rowH }, thickness: 0.75, color: border });
+          // Grid lines: top, bottom, and every column edge (none for plain columns).
+          if (!noLines) {
+            page.drawLine({ start: { x: M, y: H - top }, end: { x: M + CW, y: H - top }, thickness: 0.75, color: border });
+            page.drawLine({ start: { x: M, y: H - top - rowH }, end: { x: M + CW, y: H - top - rowH }, thickness: 0.75, color: border });
+            for (let ci = 0; ci <= cols; ci++) { const x = ci < cols ? colX[ci] : M + CW; page.drawLine({ start: { x, y: H - top }, end: { x, y: H - top - rowH }, thickness: 0.75, color: border }); }
+          }
           y = top + rowH;
         }
         y += baseSize * 0.8;
@@ -311,6 +394,7 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
           if (got) { data = { bytes: got.bytes }; size = imageSize(got.bytes); }
         }
         if (!size || (size.type !== "png" && size.type !== "jpg")) { await paragraph([{ text: b.alt ? `[Image: ${b.alt}]` : "[Image]", i: true, color: "#6a7389" }], textBlk(b)); break; }
+        if (b.full) { await fullPageImage(data.bytes, size); break; }
         const wPx = b.w || size.w, hPx = b.h && b.w ? b.h : wPx * (size.h / size.w);
         await placeImageBytes(data.bytes, size.type, wPx * 0.75, hPx * 0.75, M, CW, b.align || "left");
         y += baseSize * 0.6;
@@ -318,8 +402,21 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
       }
       default: break;
     }
+    if (ps) y += ps;
+  }
+  // A full-page cover as the last block leaves a fresh empty page behind it: drop that page.
+  if (!pageless && coverNext && page === coverNext && y <= M + 0.5 && pages.length > 1) {
+    out.removePage(out.getPageCount() - 1);
+    pages.pop();
+    page = pages[pages.length - 1];
   }
 
+  if (pageless) {
+    // Cut every (normally the only) page to its text, with the bottom margin; no header, footer or page numbers.
+    for (const pg of pages) { const used = Math.min(H, (pg === page ? y : H - M) + M); pg.setMediaBox(0, H - used, W, used); pg.setCropBox?.(0, H - used, W, used); }
+    out.removePage(0);
+    return out.save();
+  }
   // Header, footer and page numbers on every page.
   const p0 = doc.page || {};
   const total = pages.length;
@@ -328,6 +425,7 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
   const safe = async (text) => { let t = ""; for (const ch of text) t += (await supports({ family: docFont }, ch)) ? ch : "?"; return t; };
   for (let k = 0; k < total; k++) {
     page = pages[k];
+    if (page.fullCover) continue;
     if (p0.header) {
       const text = await safe(p0.header);
       await writeLines(out, page, { lines: [{ text, x: M, y: H - M / 2 + 2, boxW: CW, align: "center" }], size: small, color: grey, family: docFont, embedded });

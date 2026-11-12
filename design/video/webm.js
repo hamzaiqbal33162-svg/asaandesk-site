@@ -5,7 +5,7 @@ const ID = {
   EBML: 0x1a45dfa3, DocType: 0x4282, Segment: 0x18538067, SeekHead: 0x114d9b74, Seek: 0x4dbb, SeekPosition: 0x53ac,
   Info: 0x1549a966, TimecodeScale: 0x2ad7b1, Duration: 0x4489, Tracks: 0x1654ae6b, TrackEntry: 0xae, TrackType: 0x83,
   CodecID: 0x86, Video: 0xe0, PixelWidth: 0xb0, PixelHeight: 0xba, Audio: 0xe1, SamplingFrequency: 0xb5, Channels: 0x9f,
-  Cluster: 0x1f43b675, Cues: 0x1c53bb6b,
+  Cluster: 0x1f43b675, Cues: 0x1c53bb6b, TrackNumber: 0xd7, Timecode: 0xe7, SimpleBlock: 0xa3, BlockGroup: 0xa0, Block: 0xa1,
 };
 
 function vlen(first, max) { let len = 1, mask = 0x80; while (len <= max && !(first & mask)) { mask >>= 1; len++; } return len > max ? 0 : len; }
@@ -125,6 +125,49 @@ export function readWebmInfo(input) {
     out.tracks.push(tr);
   }
   return out;
+}
+
+/**
+ * Where the recorded media really ends: { video, audio } = time in seconds of the last video / audio block, from the
+ * Cluster Timecode + the block's signed 16-bit offset, in TimecodeScale units. Works on a live recording that is still
+ * growing (Segment and Clusters of unknown size; an element cut off at the end of the data is ignored), so it can read
+ * the chunks a MediaRecorder has handed over so far. null when the data is not WebM. Not wired into stopping yet.
+ */
+export function webmEnd(input) {
+  const b = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const el = (p) => {
+    if (p >= b.length) return null;
+    const il = vlen(b[p], 4); if (!il || p + il >= b.length) return null;
+    let id = 0; for (let i = 0; i < il; i++) id = id * 256 + b[p + i];
+    const q = p + il, sl = vlen(b[q], 8); if (!sl || q + sl > b.length) return null;
+    const mask = 0xff >> sl; let size = b[q] & mask, ones = size === mask;
+    for (let i = 1; i < sl; i++) { size = size * 256 + b[q + i]; if (b[q + i] !== 0xff) ones = false; }
+    return { id, data: q + sl, size: ones ? -1 : size, end: ones ? b.length : q + sl + size };
+  };
+  const kids = (e, fn) => { for (let p = e.data; p < Math.min(e.end, b.length);) { const c = el(p); if (!c || c.size < 0) break; fn(c); p = c.end; } };
+  const head = el(0); if (!head || head.id !== ID.EBML) return null;
+  const seg = el(head.end); if (!seg || seg.id !== ID.Segment) return null;
+  const type = {}, last = { video: null, audio: null };
+  let scale = 1e6, tc = 0;
+  const block = (p, end) => {
+    const tl = vlen(b[p], 8); if (!tl || p + tl + 2 > end) return;
+    const track = uint(b, p, tl) - (0x80 >> (tl - 1)) * 256 ** (tl - 1); // track number vint without its length marker
+    const rel = ((b[p + tl] << 8) | b[p + tl + 1]) << 16 >> 16; // signed 16-bit offset from the Cluster Timecode
+    const t = ((tc + rel) * scale) / 1e9, k = type[track] === 1 ? "video" : type[track] === 2 ? "audio" : null;
+    if (k && (last[k] == null || t > last[k])) last[k] = t;
+  };
+  for (let p = seg.data; p < b.length;) {
+    const e = el(p); if (!e) break;
+    if (e.id === ID.Cluster) { p = e.data; continue; } // walk into Clusters (their size may be unknown)
+    if (e.size < 0 || e.end > b.length) break; // this element is still being written
+    if (e.id === ID.Info) kids(e, (c) => { if (c.id === ID.TimecodeScale) scale = uint(b, c.data, c.size); });
+    else if (e.id === ID.Tracks) kids(e, (t) => { if (t.id !== ID.TrackEntry) return; let n = 0, ty = 0; kids(t, (c) => { if (c.id === ID.TrackNumber) n = uint(b, c.data, c.size); if (c.id === ID.TrackType) ty = uint(b, c.data, c.size); }); type[n] = ty; });
+    else if (e.id === ID.Timecode) tc = uint(b, e.data, e.size);
+    else if (e.id === ID.SimpleBlock) block(e.data, e.end);
+    else if (e.id === ID.BlockGroup) kids(e, (c) => { if (c.id === ID.Block) block(c.data, c.end); });
+    p = e.end;
+  }
+  return last;
 }
 
 /** Test helper: builds a tiny WebM-like EBML file (header, Segment of unknown size, Info, Tracks, one Cluster). */

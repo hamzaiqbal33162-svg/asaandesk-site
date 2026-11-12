@@ -25,8 +25,16 @@ export const TOOLS = {
       style: { label: "Style", choices: [opt("cinematic", "Cinematic"), opt("realistic", "Realistic"), opt("animation", "3D animation"), opt("illustration", "Illustrated"), opt("product", "Product shot")] },
       aspect: { label: "Shape", choices: [opt("16:9", "16:9 YouTube"), opt("9:16", "9:16 Shorts / Reels"), opt("1:1", "1:1 Square")] },
       duration: { label: "Length", choices: [opt(4, "4 s"), opt(6, "6 s"), opt(8, "8 s"), opt(10, "10 s")], min: 4, max: 10 },
+      sound: { label: "Sound", choices: [opt("on", "With sound"), opt("off", "No sound")] },
     },
-    defaults: { style: "cinematic", aspect: "16:9", duration: 6 },
+    defaults: { style: "cinematic", aspect: "16:9", duration: 6, sound: "on" },
+    helpers: ["slow motion", "drone shot", "close-up", "time-lapse", "golden hour light", "pastel tones", "soft morning mist", "handheld camera"],
+    extras: [{ key: "reference", type: "image", label: "Reference picture (optional)", hint: "A photo or drawing that shows the look you want. It stays on your device; it would only be sent with your prompt once AsaanDesk AI is switched on." }],
+    rules: [
+      { title: "Prompt tips", text: "Say what is in the shot, how the camera moves and what the light is like. One scene per prompt works best. English prompts work best." },
+      { title: "Safety", text: "Don't ask for real people's faces or voices without their permission, for violence, adult content or hate, or for logos and characters you don't own. Such prompts will be refused." },
+      { title: "Today", text: "AsaanDesk AI is not switched on yet, so nothing is generated and nothing you type is sent anywhere." },
+    ],
     soon: {
       title: "AI video generator is coming soon",
       what: "Type a short description and AsaanDesk AI will make an original 4 to 10 second video clip in the style and shape you pick (16:9, 9:16 or 1:1), ready to preview and download as MP4.",
@@ -52,8 +60,16 @@ export const TOOLS = {
       tempo: { label: "Tempo", choices: [opt("slow", "Slow", { bpm: 75 }), opt("medium", "Medium", { bpm: 100 }), opt("fast", "Fast", { bpm: 128 })] },
       duration: { label: "Length", choices: [opt(15, "15 s"), opt(30, "30 s"), opt(60, "1 min"), opt(90, "1.5 min"), opt(120, "2 min")], min: 10, max: 120 },
       vocals: { label: "Vocals", choices: [opt("instrumental", "Instrumental"), opt("vocals", "With vocals")] },
+      use: { label: "Used as", choices: [opt("full", "Full track"), opt("background", "Background loop"), opt("intro", "Intro"), opt("outro", "Outro")] },
     },
-    defaults: { genre: "lofi", mood: "calm", tempo: "medium", duration: 30, vocals: "instrumental" },
+    defaults: { genre: "lofi", mood: "calm", tempo: "medium", duration: 30, vocals: "instrumental", use: "full" },
+    helpers: ["soft piano", "warm strings", "tabla", "acoustic guitar", "gentle drums", "synth pads", "loopable", "builds slowly"],
+    extras: [{ key: "instruments", type: "text", label: "Instruments (optional)", placeholder: "e.g. piano, tabla, soft strings", max: 120 }],
+    rules: [
+      { title: "Prompt rules", text: "Describe the mood, the genre, the instruments and the tempo. Don't name songs, artists or bands: prompts that copy someone else's music will be refused." },
+      { title: "Licence", text: "The licence for AI music will be shown here before AsaanDesk AI is switched on. Today nothing is generated, so there is nothing to license yet." },
+      { title: "Today", text: "AsaanDesk AI is not switched on yet, so nothing is generated and nothing you type is sent anywhere." },
+    ],
     soon: {
       title: "AI music generator is coming soon",
       what: "Describe a mood and AsaanDesk AI will compose an original, royalty-free track of 15 seconds to 2 minutes in the genre, mood and tempo you choose, with or without vocals, ready to download as MP3.",
@@ -77,8 +93,15 @@ export const TOOLS = {
       voice: { label: "Voice", choices: VOICE_STYLES },
       language: { label: "Language", choices: VOICE_LANGS },
       speed: { label: "Speed", choices: VOICE_SPEEDS },
+      tone: { label: "Tone", choices: [opt("neutral", "Neutral"), opt("friendly", "Friendly"), opt("calm", "Calm"), opt("serious", "Serious"), opt("excited", "Excited")] },
     },
-    defaults: { voice: "warm-female", language: "en", speed: 1 },
+    defaults: { voice: "warm-female", language: "en", speed: 1, tone: "neutral" },
+    rules: [
+      { title: "Your words", text: "Use your own script. Don't copy a real person's voice, and don't make a voice say things a real person didn't say." },
+      { title: "Best results", text: "Use short sentences, add commas and full stops where the voice should pause, and spell out short forms that are hard to read." },
+      { title: "Length", text: "Up to 3,000 characters per script. Split a longer text into parts." },
+      { title: "Today", text: "AsaanDesk AI is not switched on yet, so nothing is generated and nothing you type is sent anywhere." },
+    ],
     soon: {
       title: "AI voice generator is coming soon",
       what: "Paste your script and AsaanDesk AI will read it in a natural, studio-quality voice in English, Urdu, Hindi and more, at the speed you pick, ready to download as MP3.",
@@ -86,19 +109,82 @@ export const TOOLS = {
     },
     examples: [
       { title: "Shop welcome", prompt: "Welcome to our store! Today every order over two thousand rupees ships free, all across the country.", voice: "warm-female", language: "en", speed: 1 },
-      { title: "Urdu welcome", prompt: "خوش آمدید! ہماری نئی ویب سائٹ پر آپ کا استقبال ہے۔", voice: "calm-male", language: "ur", speed: 1 },
+      { title: "Shop announcement", prompt: "Good news! Our new summer collection is in the shop now, with free delivery on orders over three thousand rupees.", voice: "calm-male", language: "en", speed: 1 },
       { title: "Podcast intro", prompt: "You're listening to Small Steps, the show about building a business one honest day at a time.", voice: "storyteller", language: "en", speed: 1 },
       { title: "Tutorial narration", prompt: "In this video, I'll show you how to turn a phone photo into a clean product image in three easy steps.", voice: "bright-female", language: "en", speed: 1.15 },
       { title: "News style update", prompt: "Here is today's update: our office will stay open until eight in the evening, Monday to Saturday.", voice: "news", language: "en", speed: 1 },
     ],
   },
 };
+// Sound effects (Canva: generate sound effects for transitions, ambience, clicks): source, strength, length, place.
+TOOLS.sfx = {
+  id: "sfx", tab: "Sound effect", title: "AI sound effect generator", path: "/ai/sfx", feature: "AI sound effects", kind: "audio",
+  lead: "Describe a sound and AsaanDesk AI makes a short sound effect for your video or slides.",
+  field: "prompt", fieldLabel: "Describe the sound", placeholder: "e.g. Soft whoosh for a slide transition",
+  min: 4, max: 300,
+  options: {
+    duration: { label: "Length", choices: [opt(1, "1 s"), opt(2, "2 s"), opt(5, "5 s"), opt(10, "10 s")], min: 1, max: 10 },
+    intensity: { label: "Strength", choices: [opt("subtle", "Subtle"), opt("medium", "Medium"), opt("loud", "Loud")] },
+    place: { label: "Where", choices: [opt("any", "Anywhere"), opt("indoors", "Indoors"), opt("street", "Street"), opt("nature", "Nature"), opt("stadium", "Stadium")] },
+  },
+  defaults: { duration: 2, intensity: "medium", place: "any" },
+  helpers: ["short", "echo", "far away", "close to the microphone", "fades out", "loopable"],
+  rules: [
+    { title: "Prompt tips", text: "Say what makes the sound (a whoosh, a bell, footsteps, rain), how strong and how long it is, and where it happens." },
+    { title: "Not allowed", text: "Don't ask for copies of famous sounds from films, games or brands. Such prompts will be refused." },
+    { title: "Today", text: "AsaanDesk AI is not switched on yet, so nothing is generated and nothing you type is sent anywhere." },
+  ],
+  soon: {
+    title: "AI sound effect generator is coming soon",
+    what: "Describe a sound and AsaanDesk AI will make an original sound effect of 1 to 10 seconds, subtle or loud, ready to preview, download as MP3 or add to a video.",
+    offline: "Working today: add your own sounds and music to videos in the video editor, or record real sounds with the screen and camera recorder.",
+  },
+  examples: [
+    { title: "Slide whoosh", prompt: "Soft whoosh for a slide transition, quick and clean.", duration: 1, intensity: "subtle", place: "any" },
+    { title: "Crowd cheer", prompt: "A crowd cheering and clapping after a goal, short burst.", duration: 5, intensity: "loud", place: "stadium" },
+    { title: "Shop bell", prompt: "A small bell ringing as a shop door opens.", duration: 2, intensity: "medium", place: "indoors" },
+    { title: "Rain on a window", prompt: "Steady rain tapping on a window with distant thunder.", duration: 10, intensity: "subtle", place: "indoors" },
+    { title: "Footsteps", prompt: "Footsteps on a wooden floor, walking slowly.", duration: 5, intensity: "medium", place: "indoors" },
+    { title: "Button click", prompt: "A soft click for an app button press.", duration: 1, intensity: "subtle", place: "any" },
+  ],
+};
 export const TOOL_IDS = Object.keys(TOOLS);
 export const toolFromQuery = (search) => {
-  const t = new URLSearchParams(String(search || "")).get("tool");
+  let t = new URLSearchParams(String(search || "")).get("tool");
+  t = { "ai-video-generator": "video", "ai-music-generator": "music", "ai-voice-generator": "voice", "ai-sound-effects": "sfx", "sound-effects": "sfx" }[t] || t; // tool slugs work too
   return TOOL_IDS.includes(t) ? t : "video";
 };
 const choiceOf = (tool, key, value) => tool.options[key].choices.find((c) => String(c.value) === String(value));
+
+// Prompts that copy someone else's work (Canva blocks named songs, artists, "in the style of", famous soundtracks).
+const COPY_RE = [/\bin the style of\b/i, /\b(?:sounds?|sounding) (?:just |exactly )?like\b/i, /\bcover (?:of|version)\b/i, /\bremix of\b/i, /\b(?:song|track|album|soundtrack|theme(?: song)?) (?:by|from)\b/i, /\bby the band\b/i, /\b(?:famous|popular|hit) (?:song|tune|jingle|theme)\b/i];
+/** Words in a prompt that would copy someone else's music or sounds: [] = fine. Music and sound effects refuse them. */
+export function promptWarnings(toolId, text) {
+  const s = String(text || "");
+  if (!COPY_RE.some((re) => re.test(s))) return [];
+  if (toolId === "music") return ["Don't name songs, artists or soundtracks. Describe the mood, the genre, the instruments and the tempo instead."];
+  if (toolId === "sfx") return ["Don't ask for famous sounds from films, games or brands. Describe what makes the sound instead."];
+  if (toolId === "video") return ["Describe the look you want in your own words instead of naming another artist or brand."];
+  return [];
+}
+/** Voice script check (Canva's voiceover tips): long sentences, no closing punctuation, short forms in capitals. */
+export function scriptTips(text) {
+  const s = String(text || "").trim();
+  if (!s) return [];
+  const tips = [];
+  const long = s.split(/(?<=[.!?؟۔])\s+/).filter((x) => x.split(/\s+/).filter(Boolean).length > 25).length;
+  if (long) tips.push(`${long} sentence${long > 1 ? "s are" : " is"} longer than 25 words. Shorter sentences sound more natural.`);
+  if (!/[.!?؟۔]["')\]]?$/.test(s)) tips.push("End with a full stop, so the voice knows where to finish.");
+  const abbr = [...new Set((s.match(/\b[A-Z]{2,6}\b/g) || []).filter((w) => !["I", "OK", "TV"].includes(w)))];
+  if (abbr.length) tips.push(`Spell out ${abbr.slice(0, 3).join(", ")} if the voice should say the full words.`);
+  return tips;
+}
+/** Adds a helper phrase to the prompt once (", phrase"), kept within the tool's length limit. */
+export function addPhrase(toolId, text, phrase) {
+  const t = TOOLS[toolId], p = String(text || "").replace(/\s+$/g, ""), add = String(phrase || "").trim();
+  if (!t || !add || p.toLowerCase().includes(add.toLowerCase())) return p;
+  return (p ? `${p.replace(/[,.;\s]+$/, "")}, ${add}` : add[0].toUpperCase() + add.slice(1)).slice(0, t.max);
+}
 
 /** Problems with a form (empty list = OK). form: { prompt|text, ...options } */
 export function validate(toolId, form = {}) {
@@ -107,6 +193,7 @@ export function validate(toolId, form = {}) {
   const errs = [], text = String(form[tool.field] ?? "").trim();
   if (text.length < tool.min) errs.push(tool.field === "text" ? "Type the words the voice should say first." : "Describe what you want in a few more words.");
   if (text.length > tool.max) errs.push(`Please keep it under ${tool.max} characters (now ${text.length}).`);
+  if (toolId === "music" || toolId === "sfx") errs.push(...promptWarnings(toolId, text));
   for (const key of Object.keys(tool.options)) {
     const v = form[key] ?? tool.defaults[key];
     if (!choiceOf(tool, key, v)) errs.push(`Pick a ${tool.options[key].label.toLowerCase()}.`);
@@ -123,9 +210,21 @@ export function buildRequest(toolId, form = {}) {
   const tool = TOOLS[toolId], val = (k) => choiceOf(tool, k, form[k] ?? tool.defaults[k]).value;
   const text = String(form[tool.field]).trim();
   let body;
-  if (toolId === "video") body = { prompt: text, style: val("style"), aspect: val("aspect"), duration: val("duration") };
-  else if (toolId === "music") body = { prompt: text, genre: val("genre"), mood: val("mood"), tempo: val("tempo"), bpm: choiceOf(tool, "tempo", val("tempo")).bpm, duration: val("duration"), instrumental: val("vocals") === "instrumental" };
-  else body = { text, voice: val("voice"), language: val("language"), speed: val("speed"), format: "mp3" };
+  if (toolId === "video") {
+    body = { prompt: text, style: val("style"), aspect: val("aspect"), duration: val("duration") };
+    if (val("sound") === "off") body.sound = false; // clips have sound unless asked not to
+    if (form.reference?.dataUrl) body.reference = form.reference.dataUrl; // optional picture, only when chosen
+  } else if (toolId === "music") {
+    body = { prompt: text, genre: val("genre"), mood: val("mood"), tempo: val("tempo"), bpm: choiceOf(tool, "tempo", val("tempo")).bpm, duration: val("duration"), instrumental: val("vocals") === "instrumental" };
+    if (val("use") !== "full") body.use = val("use"); // intro / outro / background loop
+    const inst = String(form.instruments || "").trim().slice(0, 120);
+    if (inst) body.instruments = inst; // optional field, only sent when filled in
+  } else if (toolId === "sfx") {
+    body = { prompt: text, duration: val("duration"), intensity: val("intensity"), place: val("place"), format: "mp3" };
+  } else {
+    body = { text, voice: val("voice"), language: val("language"), speed: val("speed"), format: "mp3" };
+    if (val("tone") !== "neutral") body.tone = val("tone");
+  }
   return { path: tool.path, feature: tool.feature, body };
 }
 

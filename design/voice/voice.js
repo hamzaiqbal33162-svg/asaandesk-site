@@ -73,10 +73,17 @@ function showSettings() {
 for (const k of ["rate", "pitch", "volume"]) $("#" + k).addEventListener("input", (e) => { state[k] = Number(e.target.value); showSettings(); saveSettings(); });
 $("#resetBtn").addEventListener("click", () => { state.rate = 1; state.pitch = 1; state.volume = 1; showSettings(); saveSettings(); toast("Settings reset."); });
 
+const MAX_CHARS = 20000; // longest script in one voiceover (the textarea stops there); longer texts go in parts
 function updateStats() {
-  const t = scriptEl.value, w = VT.wordCount(t);
-  $("#stats").textContent = w ? `${w} word${w === 1 ? "" : "s"} · about ${fmtTime(VT.estimateSeconds(t, { rate: state.rate }))}` : "Empty";
+  const t = scriptEl.value, w = VT.wordCount(t), n = t.length;
+  $("#stats").textContent = w ? `${w} word${w === 1 ? "" : "s"} · about ${fmtTime(VT.estimateSeconds(t, { rate: state.rate }))} · ${n.toLocaleString("en-US")} / ${MAX_CHARS.toLocaleString("en-US")} characters` : "Empty";
+  const note = $("#lenNote"); if (!note) return;
+  const parts = w ? VT.splitScript(t).filter((c) => !c.pause && String(c.text || "").trim()).length : 0;
+  note.hidden = n < 1500 && n < MAX_CHARS * 0.9;
+  note.textContent = n >= MAX_CHARS ? `This is the longest script one voiceover can hold (${MAX_CHARS.toLocaleString("en-US")} characters). Put the rest in a second voiceover.`
+    : `Long script: your browser reads it in ${parts} short parts, one after another, with no limit on how long it plays. One voiceover holds up to ${MAX_CHARS.toLocaleString("en-US")} characters.`;
 }
+scriptEl.maxLength = MAX_CHARS;
 scriptEl.addEventListener("input", () => { updateStats(); store.set(DRAFT, scriptEl.value); });
 
 // ---------- reading ----------
@@ -405,3 +412,220 @@ window.adApp = {
   groups: () => state.groups.map((g) => ({ lang: g.lang, label: g.label, voices: g.voices.map((v) => v.name) })),
   voiceText: VT,
 };
+
+// ---------- editor frame (shared full-screen shell): templates, text snippets, voices, record, projects ----------
+const params = new URLSearchParams(location.search);
+const TITLE_KEY = "asaandesk-voice-title";
+let shell = null, zoom = 100;
+const mainEl = document.querySelector("main.vo");
+const titleNow = () => store.get(TITLE_KEY) || "Untitled voiceover";
+function setTitleText(t) {
+  const v = String(t || "").trim().slice(0, 120) || "Untitled voiceover";
+  store.set(TITLE_KEY, v); shell?.setTitle(v);
+  document.title = `${v} | Text to speech | AsaanDesk`;
+}
+/** Replaces the whole script (stops reading first) and keeps it as the draft. */
+function setScript(text, { title } = {}) {
+  if (state.status !== "idle") stop();
+  scriptEl.value = String(text ?? "");
+  store.set(DRAFT, scriptEl.value);
+  updateStats();
+  if (title) setTitleText(title);
+  shell?.setSaved("saved");
+}
+/** Inserts text at the cursor (or replaces the selection) in the script. */
+function insertAtCursor(str) {
+  if (state.status !== "idle") stop();
+  const s = scriptEl.selectionStart ?? scriptEl.value.length, e = scriptEl.selectionEnd ?? s;
+  scriptEl.setRangeText(str, s, e, "end");
+  scriptEl.dispatchEvent(new Event("input", { bubbles: true }));
+  scriptEl.focus();
+}
+async function applyTemplate(id) {
+  const g = await import("./gallery.js");
+  const t = g.byId(id);
+  if (!t) { toast("That template was not found."); return null; }
+  setScript(t.script, { title: t.name });
+  state.rate = t.rate; state.pitch = t.pitch; showSettings(); saveSettings();
+  shell?.toast(`"${t.name}" is in your script. Press Play to listen.`);
+  return t;
+}
+function srtOf(lines) {
+  const ts = (s) => { const ms = Math.round(s * 1000), hh = Math.floor(ms / 3600000), mm = Math.floor(ms / 60000) % 60, ss = Math.floor(ms / 1000) % 60; return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")},${String(ms % 1000).padStart(3, "0")}`; };
+  return lines.map((l, i) => `${i + 1}\n${ts(l.start)} --> ${ts(l.start + l.dur)}\n${l.text}\n`).join("\n");
+}
+function downloadScript() { $("#dlScript").click(); }
+function downloadCaptions() {
+  const lines = captionLines();
+  if (!lines.length) { toast("Type a script first."); return; }
+  downloadBlob(new Blob([srtOf(lines)], { type: "application/x-subrip;charset=utf-8" }), VT.scriptFileName(scriptEl.value).replace(/\.txt$/, ".srt"));
+  toast("Captions downloaded (.srt).");
+}
+function openRecord() { $("#recOpen").click(); }
+function downloadRecording() {
+  if (rec.blob) { $("#dlWav").click(); return; }
+  toast("Record your voice first, then download it as WAV.");
+  openRecord();
+}
+function downloadBest() {
+  if (rec.blob) { $("#dlWav").click(); return; }
+  if (!scriptEl.value.trim()) { toast("Type a script first."); return; }
+  downloadScript();
+  toast("Browser voices can't be saved as a sound file, so your script was downloaded. Record your voice to get a WAV.", 5000);
+}
+const fileIn = Object.assign(document.createElement("input"), { type: "file", accept: ".txt,.md,.srt,text/plain", hidden: true, id: "openTextIn" });
+document.body.append(fileIn);
+fileIn.addEventListener("change", async () => {
+  const f = fileIn.files?.[0]; fileIn.value = "";
+  if (!f) return;
+  if (f.size > 2_000_000) { toast("That file is too big for a script (2 MB max)."); return; }
+  const text = (await f.text()).replace(/\r\n?/g, "\n");
+  setScript(f.name.endsWith(".srt") ? text.split("\n").filter((l) => l.trim() && !/^\d+$/.test(l.trim()) && !/-->/.test(l)).join("\n") : text, { title: f.name.replace(/\.[^.]+$/, "") });
+  toast(`Opened ${f.name}`);
+});
+
+function buildPill() {
+  const pill = document.createElement("div");
+  pill.className = "vo-pill"; pill.id = "voPill";
+  for (const sel of ["#voiceSel", "#rate", "#pitch"]) { const f = $(sel).closest("label"); f.classList.add("vo-pf"); pill.append(f); }
+  pill.append($(".vo-controls"));
+  const dl = document.createElement("button");
+  dl.type = "button"; dl.className = "btn vo-pdl"; dl.id = "pillDl"; dl.textContent = "Download";
+  dl.title = "Download your recording (WAV) or the script";
+  dl.addEventListener("click", downloadBest);
+  pill.append(dl);
+  return pill;
+}
+const SNIPPETS = [
+  ["Pauses", [["Short pause", "\n\n", "A blank line: about 0.7 s of silence"], ["Long pause", "\n\n\n", "Two blank lines: about 1.4 s"], ["Breath", " … ", "A small breath inside a sentence"]]],
+  ["Headings", [["Title line", "Your title here.\n\n", "A short line, then a pause"], ["Section start", "\n\nNext, let's talk about the main idea.\n\n", "Moves the listener to a new part"], ["Numbered step", "\n\nStep one: ", "For tutorials and how-tos"]]],
+  ["Lines", [["Opening line", "Hello, and welcome! ", "Starts warmly"], ["Question", "Have you ever wondered why? ", "Wakes the listener up"], ["Call to action", "Visit our website today and see for yourself. ", "Ends an ad"], ["Closing line", "\n\nThank you for listening. ", "Polite ending"]]],
+];
+function renderTextPanel(el) {
+  el.innerHTML = `<p class="vo-pnote">Click to add at the cursor in your script. Browser voices read words as written, so pauses come from blank lines and punctuation.</p>`;
+  for (const [group, items] of SNIPPETS) {
+    const h3 = document.createElement("h3"); h3.className = "vo-ph3"; h3.textContent = group; el.append(h3);
+    const box = document.createElement("div"); box.className = "vo-snips";
+    for (const [label, text, hint] of items) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "vo-snip"; b.dataset.snip = label;
+      b.innerHTML = `<b></b><small></small>`; b.querySelector("b").textContent = label; b.querySelector("small").textContent = hint;
+      b.addEventListener("click", () => { insertAtCursor(text); shell?.toast(`${label} added`); });
+      box.append(b);
+    }
+    el.append(box);
+  }
+  const h3 = document.createElement("h3"); h3.className = "vo-ph3"; h3.textContent = "Tidy up"; el.append(h3);
+  const box = document.createElement("div"); box.className = "vo-snips";
+  const tools = [
+    ["Emphasize selection", "Puts a short pause around the selected words", () => { const s = scriptEl.selectionStart, e = scriptEl.selectionEnd; if (s === e) { toast("Select some words in the script first."); return; } insertAtCursor(" … " + scriptEl.value.slice(s, e).trim() + " … "); }],
+    ["Clean up spaces", "Removes double spaces and extra blank lines", () => setScript(scriptEl.value.replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{4,}/g, "\n\n\n").trim())],
+    ["Sentence case", "Capital letter at the start of each sentence", () => setScript(scriptEl.value.replace(/(^|[.!?]\s+|\n\s*)([a-z])/g, (m, a, b) => a + b.toUpperCase()))],
+  ];
+  for (const [label, hint, fn] of tools) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "vo-snip"; b.dataset.snip = label;
+    b.innerHTML = `<b></b><small></small>`; b.querySelector("b").textContent = label; b.querySelector("small").textContent = hint;
+    b.addEventListener("click", fn); box.append(b);
+  }
+  el.append(box);
+}
+function renderVoicesPanel(el) {
+  el.innerHTML = "";
+  const note = document.createElement("p"); note.className = "vo-pnote"; el.append(note);
+  if (!synth || !Utter) { note.textContent = "This browser can't read text aloud. Try Chrome, Edge or Safari. You can still record your own voice."; return; }
+  if (!state.voices.length) note.textContent = "No voices were found on this device yet. Play uses the browser's default voice if it has one. Voices come from your browser and device.";
+  else note.textContent = `${state.voices.length} voice${state.voices.length === 1 ? "" : "s"} on this device. Click one to use it, or preview it first.`;
+  const again = document.createElement("button"); again.type = "button"; again.className = "btn vo-pblock"; again.textContent = "Look for voices again";
+  again.addEventListener("click", () => { loadVoices(); renderVoicesPanel(el); }); el.append(again);
+  for (const g of state.groups) {
+    const h3 = document.createElement("h3"); h3.className = "vo-ph3"; h3.textContent = g.label; el.append(h3);
+    const list = document.createElement("div"); list.className = "vo-vlist";
+    for (const v of g.voices) {
+      const key = VT.voiceKey(v), row = document.createElement("div"); row.className = "vo-vrow";
+      const pick = document.createElement("button"); pick.type = "button"; pick.className = "vo-voice" + (key === state.voiceKey ? " on" : ""); pick.dataset.voice = key;
+      pick.setAttribute("aria-pressed", String(key === state.voiceKey));
+      pick.innerHTML = "<b></b><small></small>"; pick.querySelector("b").textContent = v.name; pick.querySelector("small").textContent = VT.normLang(v.lang) + (v.localService === false ? " · online" : " · on device");
+      pick.addEventListener("click", () => { voiceSel.value = key; voiceSel.dispatchEvent(new Event("change")); renderVoicesPanel(el); shell?.toast(`Voice: ${v.name}`); });
+      const pre = document.createElement("button"); pre.type = "button"; pre.className = "btn sm vo-prev"; pre.textContent = "Preview"; pre.setAttribute("aria-label", `Preview ${v.name}`);
+      pre.addEventListener("click", () => { if (state.status !== "idle") stop(); try { synth.cancel(); const u = new Utter(`Hello, this is ${v.name}.`); u.voice = v; u.lang = v.lang; u.rate = state.rate; u.pitch = state.pitch; synth.speak(u); } catch { toast("This voice could not play."); } });
+      row.append(pick, pre); list.append(row);
+    }
+    el.append(list);
+  }
+  const ai = document.createElement("p"); ai.className = "vo-pnote"; ai.textContent = aiReady() ? "AI voices: scroll down in the editor to make a studio-quality MP3." : "AI voices (download as MP3) are coming soon.";
+  el.append(ai);
+}
+function renderRecordPanel(el) {
+  el.innerHTML = `<p class="vo-pnote">Browser voices can be heard but not saved. To get a real sound file, read your script into the microphone: the script scrolls like a teleprompter.</p>`;
+  const go = document.createElement("button"); go.type = "button"; go.className = "btn primary vo-pblock"; go.textContent = "Record with microphone"; go.dataset.act = "record";
+  go.addEventListener("click", openRecord);
+  const wav = document.createElement("button"); wav.type = "button"; wav.className = "btn vo-pblock"; wav.textContent = rec.blob ? "Download recording (WAV)" : "Download recording (record first)";
+  wav.addEventListener("click", downloadRecording);
+  const cap = document.createElement("button"); cap.type = "button"; cap.className = "btn vo-pblock"; cap.textContent = "Add as captions to the video editor";
+  cap.addEventListener("click", () => $("#toCaptions").click());
+  el.append(go, wav, cap);
+}
+function thumbSvg() {
+  const words = esc(scriptEl.value.trim().split(/\s+/).slice(0, 6).join(" ") || "Empty script");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"><rect width="320" height="200" rx="14" fill="#5b4cf0"/><text x="20" y="60" font-family="system-ui,Arial" font-size="20" font-weight="700" fill="#fff">${esc(titleNow())}</text><text x="20" y="92" font-family="system-ui,Arial" font-size="13" fill="#fff" opacity=".85">${words}</text>${Array.from({ length: 24 }, (_, i) => `<rect x="${20 + i * 11}" y="${150 - (8 + (i * 7) % 26) / 2}" width="6" height="${8 + (i * 7) % 26}" rx="3" fill="#fff" opacity=".8"/>`).join("")}</svg>`;
+}
+async function mountVoiceShell() {
+  let mod;
+  try { mod = await import("../shared/editor-shell.js"); } catch (e) { console.warn("Editor frame not available", e); return null; }
+  let gallery = null;
+  try { gallery = await import("./gallery.js"); } catch (e) { console.warn(e); }
+  const pill = buildPill();
+  shell = mod.mountShell({
+    app: "voice", kind: "Voiceover", title: titleNow(), home: "/tools/text-to-speech",
+    onTitle: (t) => setTitleText(t),
+    stage: mainEl, toolbar: pill, formulaBar: null, resize: null,
+    file: [
+      { label: "New voiceover", act: () => { setScript("", { title: "Untitled voiceover" }); shell?.setProjectId(null); scriptEl.focus(); } },
+      { label: "Open text file…", hint: ".txt or .srt", act: () => fileIn.click() },
+      { label: "Record with microphone", act: openRecord },
+      { label: "Add as captions to the video editor", act: () => $("#toCaptions").click() },
+      { label: "Reset voice settings", act: () => $("#resetBtn").click() },
+      { label: "Script (.txt)", group: "Download", act: downloadScript },
+      { label: "Captions (.srt)", group: "Download", act: downloadCaptions },
+      { label: "Your recording (WAV)", group: "Download", act: downloadRecording },
+    ],
+    share: { download: [{ label: "Script (.txt)", act: downloadScript }, { label: "Captions (.srt)", act: downloadCaptions }, { label: "Your recording (WAV)", act: downloadRecording }], link: () => location.origin + "/design/voice/" },
+    templates: gallery ? { gallery, tool: "text-to-speech", apply: (id) => applyTemplate(id), placeholder: "Search voice script templates" } : null,
+    panels: {
+      text: (el) => renderTextPanel(el),
+      voices: { label: "Voices", icon: "speak", render: (el) => renderVoicesPanel(el), refresh: true },
+      record: { label: "Record", icon: "record", render: (el) => renderRecordPanel(el), refresh: true },
+    },
+    rail: ["templates", "text", "voices", "record", "projects", "apps", "translate"],
+    getText: () => scriptEl.value,
+    setText: (str) => setScript(str),
+    projects: {
+      save: async () => ({ name: titleNow(), data: { script: scriptEl.value, rate: state.rate, pitch: state.pitch, volume: state.volume, voice: state.voiceKey }, thumb: thumbSvg() }),
+      open: async (r) => {
+        const d = r?.data || {};
+        setScript(d.script || "", { title: r?.name || "Untitled voiceover" });
+        state.rate = clamp(d.rate, 0.5, 2, 1); state.pitch = clamp(d.pitch, 0, 2, 1); state.volume = clamp(d.volume, 0, 1, 1);
+        if (d.voice && state.voices.some((v) => VT.voiceKey(v) === d.voice)) { state.voiceKey = d.voice; voiceSel.value = d.voice; }
+        showSettings(); saveSettings();
+      },
+    },
+    bottom: {
+      notes: true, outline: null, timer: true, fullscreen: true, help: true, pages: null,
+      zoom: { get: () => zoom, set: (v) => { zoom = Math.max(50, Math.min(200, Math.round(v))); mainEl.style.setProperty("--vo-zoom", String(zoom / 100)); }, min: 50, max: 200 },
+    },
+    shortcuts: [["Ctrl + Enter", "Play, pause or resume reading"], ["Escape", "Stop reading"]],
+    setMode: (m) => { const ro = m !== "edit"; scriptEl.readOnly = ro; if (ro && state.status !== "idle") stop(); },
+  });
+  document.body.classList.add("has-shell");
+  scriptEl.addEventListener("input", () => shell?.setSaved("saved"));
+  return shell;
+}
+if (params.get("new") === "1") { scriptEl.value = ""; store.set(DRAFT, ""); store.set(TITLE_KEY, "Untitled voiceover"); updateStats(); }
+scriptEl.placeholder = "Type your script here. Leave a blank line for a pause.";
+document.title = `${titleNow()} | Text to speech | AsaanDesk`;
+const shellReady = mountVoiceShell().then(async (s) => {
+  const tid = params.get("template");
+  if (tid) { const t = await applyTemplate(tid).catch(() => null); if (t) s?.pushRecent(tid); }
+  return s;
+});
+Object.assign(window.adApp, { applyTemplate, setScript, insertAtCursor, shellReady });
+Object.defineProperty(window.adApp, "shell", { get: () => shell, configurable: true });

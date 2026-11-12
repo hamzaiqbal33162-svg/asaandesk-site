@@ -22,8 +22,8 @@ export function colorSlots(design) {
     if (pg.background?.gradient) pg.background.gradient.stops.forEach((_, i) => add(pg.background.gradient.stops, i, 3));
     for (const [l] of walk(pg.layers)) {
       const area = Math.max(1, Math.sqrt(l.w * l.h) / 100);
-      if (l.type === "text") { add(l.text, "color", 1 + l.text.size / 60); if (l.text.bg) add(l.text.bg, "color", 1); if (l.text.outline) add(l.text.outline, "color", 0.5); }
-      if (l.type === "shape") { add(l.shape, "fill", area); add(l.shape, "stroke", area / 2); }
+      if (l.type === "text") { add(l.text, "color", 1 + l.text.size / 60); if (l.text.bg) add(l.text.bg, "color", 1); if (l.text.outline) add(l.text.outline, "color", 0.5); if (l.text.effect) add(l.text.effect, "color", 0.5); }
+      if (l.type === "shape") { add(l.shape, "fill", area); add(l.shape, "stroke", area / 2); if (Array.isArray(l.shape.gradient?.stops)) l.shape.gradient.stops.forEach((_, i) => add(l.shape.gradient.stops, i, area / 2)); }
       if (l.type === "element") for (const k of ["c1", "c2"]) add(l.element.colors, k, area);
       if (l.type === "frame" && l.frame.border) add(l.frame.border, "color", 0.5);
     }
@@ -67,7 +67,7 @@ export function applyBrand(design, brand) {
 /** Applies one colour to a layer the natural way (text colour, shape fill, sticker main colour …). */
 export function applyColorToLayer(l, color) {
   if (l.type === "text") l.text.color = color;
-  else if (l.type === "shape") { if (l.shape.fill === "none" || l.shape.kind === "line" || l.shape.kind === "arrow") l.shape.stroke = color; else l.shape.fill = color; }
+  else if (l.type === "shape") { if (l.shape.fill === "none" || l.shape.kind === "line" || l.shape.kind === "arrow") l.shape.stroke = color; else { l.shape.fill = color; delete l.shape.gradient; } }
   else if (l.type === "element") l.element.colors = { ...l.element.colors, c1: color };
   else if (l.type === "frame") l.frame.border = { color, width: l.frame.border?.width || 6 };
   else if (l.type === "chart") l.chart.spec.colors = [color, ...(l.chart.spec.colors || []).slice(1)];

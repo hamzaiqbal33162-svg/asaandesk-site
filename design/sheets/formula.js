@@ -362,7 +362,7 @@ export function tokenize(src) {
     if (ch === '"') {
       let j = i + 1, v = "";
       for (;;) {
-        if (j >= n) syntax("A text in quotes is not closed.");
+        if (j >= n) syntax("A quote mark is not closed.");
         if (src[j] === '"') { if (src[j + 1] === '"') { v += '"'; j += 2; continue; } break; }
         v += src[j++];
       }
@@ -1064,6 +1064,106 @@ def("ISERROR", 1, 1, "s", ([v]) => v instanceof FormulaError, { noErr: true });
 def("ISNA", 1, 1, "s", ([v]) => v instanceof FormulaError && v.code === ERR.NA, { noErr: true });
 def("ISEVEN", 1, 1, "s", ([v]) => Math.trunc(N(v)) % 2 === 0);
 def("ISODD", 1, 1, "s", ([v]) => Math.abs(Math.trunc(N(v)) % 2) === 1);
+
+/* financial (Excel sign rules: money paid out is negative) */
+const fin = (r, n, pv, fv, type) => ({ r, n, pv, fv, t: type ? 1 : 0 });
+function pmtOf({ r, n, pv, fv, t }) { if (n === 0) thr(ERR.NUM); if (r === 0) return -(pv + fv) / n; const f = (1 + r) ** n; return -(r * (pv * f + fv)) / ((1 + r * t) * (f - 1)); }
+function fvOf({ r, n, pv, t }, pmt) { if (r === 0) return -(pv + pmt * n); const f = (1 + r) ** n; return -(pv * f + pmt * (1 + r * t) * (f - 1) / r); }
+function pvOf({ r, n, fv, t }, pmt) { if (r === 0) return -(fv + pmt * n); const f = (1 + r) ** n; return -(fv + pmt * (1 + r * t) * (f - 1) / r) / f; }
+const finite = (x) => (Number.isFinite(x) ? x : thr(ERR.NUM));
+def("PMT", 3, 5, "s", ([r, n, pv, fv, t]) => finite(pmtOf(fin(N(r), N(n), N(pv), N(fv, 0), N(t, 0)))));
+def("FV", 3, 5, "s", ([r, n, pmt, pv, t]) => finite(fvOf(fin(N(r), N(n), N(pv, 0), 0, N(t, 0)), N(pmt))));
+def("PV", 3, 5, "s", ([r, n, pmt, fv, t]) => finite(pvOf(fin(N(r), N(n), 0, N(fv, 0), N(t, 0)), N(pmt))));
+def("NPER", 3, 5, "s", ([r, pmt, pv, fv, t]) => {
+  const R = N(r), P = N(pmt), V = N(pv), F = N(fv, 0), T = N(t, 0) ? 1 : 0;
+  if (R === 0) { if (P === 0) thr(ERR.NUM); return finite(-(V + F) / P); }
+  const a = P * (1 + R * T) - F * R, b = V * R + P * (1 + R * T);
+  if (a / b <= 0) thr(ERR.NUM);
+  return finite(Math.log(a / b) / Math.log(1 + R));
+});
+def("RATE", 3, 6, "s", ([n, pmt, pv, fv, t, guess]) => {
+  const Nn = N(n), P = N(pmt), V = N(pv), F = N(fv, 0), T = N(t, 0) ? 1 : 0;
+  let r = N(guess, 0.1);
+  for (let i = 0; i < 100; i++) {
+    const g = (x) => (x === 0 ? V + P * Nn + F : V * (1 + x) ** Nn + P * (1 + x * T) * ((1 + x) ** Nn - 1) / x + F);
+    const y = g(r), d = (g(r + 1e-7) - y) / 1e-7;
+    if (!Number.isFinite(d) || d === 0) break;
+    const next = r - y / d;
+    if (Math.abs(next - r) < 1e-10) return next;
+    r = next;
+  }
+  return thr(ERR.NUM);
+});
+def("IPMT", 4, 6, "s", ([r, per, n, pv, fv, t]) => {
+  const R = N(r), k = N(per), Nn = N(n), V = N(pv), F = N(fv, 0), T = N(t, 0) ? 1 : 0;
+  if (k < 1 || k > Nn) thr(ERR.NUM);
+  const p = pmtOf(fin(R, Nn, V, F, T));
+  if (T && k === 1) return 0;
+  const bal = fvOf(fin(R, k - 1, V, 0, T), p);
+  return finite((T ? bal / (1 + R) : bal) * R);
+});
+def("PPMT", 4, 6, "s", ([r, per, n, pv, fv, t]) => {
+  const R = N(r), k = N(per), Nn = N(n), V = N(pv), F = N(fv, 0), T = N(t, 0) ? 1 : 0;
+  if (k < 1 || k > Nn) thr(ERR.NUM);
+  const p = pmtOf(fin(R, Nn, V, F, T));
+  const bal = fvOf(fin(R, k - 1, V, 0, T), p);
+  const ip = T && k === 1 ? 0 : (T ? bal / (1 + R) : bal) * R;
+  return finite(p - ip);
+});
+def("NPV", 2, 255, "s" + "a".repeat(254), ([r, ...vals]) => { const R = N(r); if (R === -1) thr(ERR.DIV0); return nums(vals).reduce((s, v, i) => s + v / (1 + R) ** (i + 1), 0); });
+def("IRR", 1, 2, "as", ([vals, guess]) => {
+  const xs = nums([vals]);
+  if (!xs.some((x) => x > 0) || !xs.some((x) => x < 0)) thr(ERR.NUM);
+  let r = N(guess, 0.1);
+  for (let i = 0; i < 100; i++) {
+    let f = 0, d = 0;
+    xs.forEach((x, k) => { f += x / (1 + r) ** k; d -= (k * x) / (1 + r) ** (k + 1); });
+    if (d === 0) break;
+    const next = r - f / d;
+    if (Math.abs(next - r) < 1e-10) return next;
+    r = next;
+  }
+  return thr(ERR.NUM);
+});
+def("SLN", 3, 3, "s", ([cost, salvage, life]) => { const L = N(life); if (L === 0) thr(ERR.DIV0); return (N(cost) - N(salvage)) / L; });
+def("EFFECT", 2, 2, "s", ([nom, n]) => { const R = N(nom), K = Math.trunc(N(n)); if (R <= 0 || K < 1) thr(ERR.NUM); return (1 + R / K) ** K - 1; });
+
+/* engineering */
+const baseTo = (n, base, places) => {
+  let x = Math.trunc(N(n));
+  const lim = { 2: 512, 8: 536870912, 16: 549755813888 }[base];
+  if (x < -lim || x >= lim) thr(ERR.NUM);
+  let s = x < 0 ? (lim * 2 + x).toString(base) : x.toString(base);
+  if (places !== undefined) { const p = Math.trunc(N(places)); if (s.length > p || p < 0) thr(ERR.NUM); s = s.padStart(p, "0"); }
+  return s.toUpperCase();
+};
+const baseFrom = (t, base) => {
+  const s = S(t).trim(), re = { 2: /^[01]{1,10}$/, 8: /^[0-7]{1,10}$/, 16: /^[0-9a-f]{1,10}$/i }[base];
+  if (!re.test(s)) thr(ERR.NUM);
+  const v = parseInt(s, base), lim = { 2: 512, 8: 536870912, 16: 549755813888 }[base];
+  return s.length === 10 && v >= lim ? v - lim * 2 : v;
+};
+def("DEC2BIN", 1, 2, "s", ([n, p]) => baseTo(n, 2, p));
+def("DEC2OCT", 1, 2, "s", ([n, p]) => baseTo(n, 8, p));
+def("DEC2HEX", 1, 2, "s", ([n, p]) => baseTo(n, 16, p));
+def("BIN2DEC", 1, 1, "s", ([t]) => baseFrom(t, 2));
+def("OCT2DEC", 1, 1, "s", ([t]) => baseFrom(t, 8));
+def("HEX2DEC", 1, 1, "s", ([t]) => baseFrom(t, 16));
+const UNITS = {
+  m: ["len", 1], km: ["len", 1000], cm: ["len", 0.01], mm: ["len", 0.001], mi: ["len", 1609.344], yd: ["len", 0.9144], ft: ["len", 0.3048], in: ["len", 0.0254],
+  kg: ["mass", 1], g: ["mass", 0.001], mg: ["mass", 1e-6], lbm: ["mass", 0.45359237], ozm: ["mass", 0.028349523125], t: ["mass", 1000],
+  l: ["vol", 1], L: ["vol", 1], ml: ["vol", 0.001], mL: ["vol", 0.001], gal: ["vol", 3.785411784], cup: ["vol", 0.2365882365],
+  sec: ["time", 1], s: ["time", 1], mn: ["time", 60], min: ["time", 60], hr: ["time", 3600], day: ["time", 86400], d: ["time", 86400], wk: ["time", 604800],
+  m2: ["area", 1], km2: ["area", 1e6], ha: ["area", 1e4], ft2: ["area", 0.09290304], acre: ["area", 4046.8564224],
+  "km/h": ["speed", 1 / 3.6], "m/s": ["speed", 1], mph: ["speed", 0.44704],
+};
+def("CONVERT", 3, 3, "s", ([n, from, to]) => {
+  const x = N(n), f = S(from), t = S(to), T = ["C", "F", "K"];
+  if (T.includes(f) && T.includes(t)) { const c = f === "C" ? x : f === "F" ? (x - 32) * 5 / 9 : x - 273.15; return t === "C" ? c : t === "F" ? c * 9 / 5 + 32 : c + 273.15; }
+  const a = UNITS[f], b = UNITS[t];
+  if (!a || !b || a[0] !== b[0]) thr(ERR.NA);
+  return r15((x * a[1]) / b[1]);
+});
 
 /** Final value for a cell: a single value, plus the array to spill when the result is bigger than one cell. */
 export function finalize(v) {

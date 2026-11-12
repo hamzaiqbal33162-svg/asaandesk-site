@@ -101,6 +101,24 @@ export const FUNCTION_INFO = {
   FILTER: I("Arrays", "Only the rows that pass a test (fills the cells below).", "FILTER(range, test, [if_empty])", '=FILTER(A2:C20, B2:B20="Sales", "None")', "keep where rows"),
   SEQUENCE: I("Arrays", "A list of numbers counting up (fills the cells below).", "SEQUENCE(rows, [columns], [start], [step])", "=SEQUENCE(10)", "numbers series count"),
   TRANSPOSE: I("Arrays", "Turns rows into columns and columns into rows.", "TRANSPOSE(range)", "=TRANSPOSE(A1:D1)", "flip rotate"),
+  PMT: I("Financial", "The payment each period for a loan (money paid out shows as a minus).", "PMT(rate, periods, loan, [future_value], [type])", "=PMT(16%/12, 36, 500000)", "loan instalment emi monthly payment"),
+  IPMT: I("Financial", "The interest part of one loan payment.", "IPMT(rate, period, periods, loan, [future_value], [type])", "=IPMT(16%/12, 1, 36, 500000)", "interest loan"),
+  PPMT: I("Financial", "The repayment (principal) part of one loan payment.", "PPMT(rate, period, periods, loan, [future_value], [type])", "=PPMT(16%/12, 1, 36, 500000)", "principal loan"),
+  FV: I("Financial", "What savings grow to after regular payments.", "FV(rate, periods, payment, [present_value], [type])", "=FV(10%/12, 60, -5000)", "future savings grow"),
+  PV: I("Financial", "What a stream of future payments is worth today.", "PV(rate, periods, payment, [future_value], [type])", "=PV(12%/12, 24, -10000)", "present value today"),
+  NPER: I("Financial", "How many payments it takes to pay off a loan or reach a goal.", "NPER(rate, payment, present_value, [future_value], [type])", "=NPER(16%/12, -20000, 500000)", "months periods how long"),
+  RATE: I("Financial", "The interest rate per period of a loan or investment.", "RATE(periods, payment, present_value, [future_value], [type], [guess])", "=RATE(36, -17579, 500000)*12", "interest rate"),
+  NPV: I("Financial", "Net present value of future cash flows at a discount rate.", "NPV(rate, value1, [value2], …)", "=NPV(10%, B2:B6)", "investment cash flow"),
+  IRR: I("Financial", "The rate of return of cash flows (first one is usually negative).", "IRR(values, [guess])", "=IRR(B2:B7)", "return investment"),
+  SLN: I("Financial", "Straight-line depreciation for one period.", "SLN(cost, salvage, life)", "=SLN(120000, 20000, 5)", "depreciation asset"),
+  EFFECT: I("Financial", "The real yearly rate when interest is added several times a year.", "EFFECT(nominal_rate, periods_per_year)", "=EFFECT(12%, 12)", "annual rate"),
+  CONVERT: I("Engineering", "Converts between units (length, weight, volume, time, area, speed, temperature).", "CONVERT(number, from_unit, to_unit)", '=CONVERT(10, "km", "mi")', "units km miles kg pounds celsius fahrenheit litres"),
+  DEC2BIN: I("Engineering", "A whole number written in binary.", "DEC2BIN(number, [places])", "=DEC2BIN(10)", "binary"),
+  BIN2DEC: I("Engineering", "A binary number as a normal number.", "BIN2DEC(binary)", '=BIN2DEC("1010")', "binary"),
+  DEC2HEX: I("Engineering", "A whole number written in hexadecimal.", "DEC2HEX(number, [places])", "=DEC2HEX(255)", "hex"),
+  HEX2DEC: I("Engineering", "A hexadecimal number as a normal number.", "HEX2DEC(hex)", '=HEX2DEC("FF")', "hex"),
+  DEC2OCT: I("Engineering", "A whole number written in octal.", "DEC2OCT(number, [places])", "=DEC2OCT(64)", "octal"),
+  OCT2DEC: I("Engineering", "An octal number as a normal number.", "OCT2DEC(octal)", '=OCT2DEC("100")', "octal"),
   MEDIAN: I("Statistics", "The middle number.", "MEDIAN(number1, …)", "=MEDIAN(B2:B20)", "middle"),
   MODE: I("Statistics", "The number that appears most often.", "MODE(number1, …)", "=MODE(B2:B20)", "most common frequent"),
   STDEV: I("Statistics", "Standard deviation of a sample.", "STDEV(number1, …)", "=STDEV(B2:B20)", "spread deviation"),
@@ -315,4 +333,131 @@ export function explainFormula(text) {
   let s = words(tree);
   s = s.charAt(0).toUpperCase() + s.slice(1);
   return { ok: true, summary: (/^(If|Look)/.test(s) ? "" : "This works out ") + (/^(If|Look)/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1)) + ".", functions: names.map((nm) => ({ name: nm, desc: FUNCTION_INFO[nm]?.desc || "Not a function Sheets knows.", syntax: FUNCTION_INFO[nm]?.syntax || "" })) };
+}
+
+/* ---------- formulas from plain words (rules on this device, not AI) ---------- */
+
+const AGG = [
+  ["SUM", /\b(sum|total|add up|add|altogether)\b/],
+  ["AVERAGE", /\b(average|mean|avg)\b/],
+  ["SHARE", /\b(share|percent(age)?|proportion|%)\b/],
+  ["COUNT", /\b(count|how many|number of)\b/],
+  ["MAX", /\b(max(imum)?|highest|largest|biggest|most|top)\b/],
+  ["MIN", /\b(min(imum)?|lowest|smallest|least|cheapest)\b/],
+  ["LOOKUP", /\b(look ?up|find|what is the|what's the|get the)\b/],
+];
+const CMP = [
+  ["ne", /\b(is not|isn't|is other than|not equal to|other than)\b|<>|!=/],
+  ["ge", /\b(at least|or more|no less than)\b|>=/],
+  ["le", /\b(at most|or less|no more than)\b|<=/],
+  ["gt", /\b(greater than|more than|over|above|bigger than|higher than)\b|>/],
+  ["lt", /\b(less than|under|below|smaller than|lower than)\b|</],
+  ["contains", /\b(contains|containing|includes|including|has)\b/],
+  ["eq", /\b(is|are|equals|equal to|=|for|in|of)\b/],
+];
+/**
+ * Turns a plain request like "sum of Sales where City is Lahore" into a formula, using the table's column names.
+ * ctx = { columns: [{ name, letter }], r1, r2 } (data rows, without the heading row).
+ * Returns { formula, how, fmt? } or { problem }.
+ */
+export function wordsToFormula(text, ctx) {
+  const t = String(text || "").trim().replace(/[?.!]+$/, "");
+  if (!t) return { problem: 'Type what you want, like "sum of Sales where City is Lahore".' };
+  const cols = (ctx?.columns || []).filter((c) => c.name);
+  const range = (c) => `${c.letter}${ctx.r1}:${c.letter}${ctx.r2}`;
+  // Longest column name found in a piece of text (or "column C" / a range like B2:B20).
+  const findCol = (s) => {
+    const low = " " + s.toLowerCase() + " ";
+    let best = null;
+    for (const c of cols) { const n = c.name.toLowerCase().trim(); if (n && low.includes(n) && (!best || n.length > best.name.length)) best = c; }
+    if (best) return best;
+    const m = /\bcolumn ([a-z]{1,3})\b/i.exec(s);
+    if (m) return cols.find((c) => c.letter === m[1].toUpperCase()) || { name: "column " + m[1].toUpperCase(), letter: m[1].toUpperCase() };
+    return null;
+  };
+  const lower = t.toLowerCase();
+  const agg = (AGG.find(([, re]) => re.test(lower)) || [null])[0];
+  if (!agg) return { problem: 'Start with what to work out: sum, average, count, highest, lowest, share or look up.' };
+  const split = /\b(where|when|if|with|whose|that have|which have|have|for which)\b/i.exec(t);
+  let main = split ? t.slice(0, split.index) : t, cond = split ? t.slice(split.index + split[0].length) : "";
+  if (agg === "LOOKUP" && !cond) { const m = /\b(for|of)\s+(.+)$/i.exec(main); if (m) { cond = m[2]; main = main.slice(0, m.index); } }
+  // "total Sales in Lahore": a value that appears in one of the columns becomes the condition.
+  const colOfValue = (v) => cols.find((c) => ctx.values?.[c.letter]?.has(String(v).toLowerCase())) || null;
+  if (!cond && agg !== "LOOKUP") { const m = /\b(in|for|from|at|by)\s+(.+)$/i.exec(main); if (m && colOfValue(m[2].trim())) { cond = m[2].trim(); main = main.slice(0, m.index); } }
+  const target = findCol(main.replace(AGG.find(([n]) => n === agg)[1], " "));
+  let crit = null;
+  if (cond) {
+    let ccol = findCol(cond);
+    let rest = cond;
+    if (ccol) rest = rest.replace(new RegExp(ccol.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), " ");
+    const [op, ore] = CMP.find(([, re]) => re.test(rest)) || ["eq", null];
+    let value = (ore ? rest.replace(ore, " ") : rest).replace(/^[\s,:]+|[\s,]+$/g, "").replace(/^(the|a|an)\s+/i, "").replace(/^["']|["']$/g, "").trim();
+    value = value.replace(/^(is|are|was|were|be)\s+/i, "").replace(/^rs\.?\s*/i, "").replace(/,(?=\d{3}\b)/g, "").trim();
+    if (!value) return { problem: "Say what to compare with, like “where City is Lahore” or “where Sales is more than 1000”." };
+    if (!ccol && agg !== "LOOKUP") ccol = colOfValue(value);
+    if (agg === "LOOKUP") {
+      const key = ccol || cols[0];
+      if (!target || !key) return { problem: "Name the column to give back and the value to look for, like “look up Price for Rice”." };
+      return { formula: `=XLOOKUP(${literal(value)},${range(key)},${range(target)},"Not found")`, how: `Looks for ${value} in ${key.name} and gives the ${target.name} next to it.` };
+    }
+    if (!ccol) return { problem: `Which column should match “${value}”? Use one of: ${cols.map((c) => c.name).join(", ")}.` };
+    crit = { col: ccol, op, value, arg: criteriaArg(op, value), words: `${ccol.name} ${{ eq: "is", ne: "is not", gt: "is more than", lt: "is less than", ge: "is at least", le: "is at most", contains: "contains" }[op]} ${value}` };
+  }
+  if (agg === "COUNT") {
+    if (crit) return { formula: `=COUNTIF(${range(crit.col)},${crit.arg})`, how: `Counts the rows where ${crit.words}.` };
+    if (!target) return { problem: `Count which column? Use one of: ${cols.map((c) => c.name).join(", ")}.` };
+    return { formula: `=COUNTA(${range(target)})`, how: `Counts the filled cells in ${target.name}.` };
+  }
+  if (!target) return { problem: `Which column? Use one of: ${cols.map((c) => c.name).join(", ")}.` };
+  const R = range(target);
+  if (agg === "SUM") return crit ? { formula: `=SUMIF(${range(crit.col)},${crit.arg},${R})`, how: `Adds up ${target.name} where ${crit.words}.` } : { formula: `=SUM(${R})`, how: `Adds up ${target.name}.` };
+  if (agg === "AVERAGE") return crit ? { formula: `=AVERAGEIF(${range(crit.col)},${crit.arg},${R})`, how: `The average of ${target.name} where ${crit.words}.` } : { formula: `=AVERAGE(${R})`, how: `The average of ${target.name}.` };
+  if (agg === "MAX") return crit ? { formula: `=MAXIFS(${R},${range(crit.col)},${crit.arg})`, how: `The highest ${target.name} where ${crit.words}.` } : { formula: `=MAX(${R})`, how: `The highest ${target.name}.` };
+  if (agg === "MIN") return crit ? { formula: `=MINIFS(${R},${range(crit.col)},${crit.arg})`, how: `The lowest ${target.name} where ${crit.words}.` } : { formula: `=MIN(${R})`, how: `The lowest ${target.name}.` };
+  if (agg === "SHARE") {
+    if (!crit) return { problem: "Share of what? For example “share of Sales where City is Lahore”." };
+    return { formula: `=SUMIF(${range(crit.col)},${crit.arg},${R})/SUM(${R})`, how: `The part of all ${target.name} where ${crit.words}.`, fmt: "percent" };
+  }
+  return { problem: "Try: sum of …, average of …, count where …, highest …, lowest …, share of … where …, look up … for …" };
+}
+
+/* ---------- why a formula gives an error, and a fix where there is a safe one ---------- */
+
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+/** { why, fix?, fixLabel? } for an error code shown by a formula (input = the cell's formula). */
+export function errorHint(code, input = "") {
+  const f = String(input || ""), body = f.startsWith("=") ? f.slice(1) : f;
+  switch (code) {
+    case "#DIV/0!": return { why: "The formula divides by zero or by an empty cell.", fix: `=IFERROR(${body},0)`, fixLabel: "Show 0 instead" };
+    case "#N/A": return { why: "A lookup did not find what it was looking for (check the spelling, or the value is missing).", fix: `=IFNA(${body},"Not found")`, fixLabel: "Show “Not found” instead" };
+    case "#NAME?": {
+      const names = [...body.matchAll(/([A-Za-z][A-Za-z0-9.]*)\s*\(/g)].map((m) => m[1].toUpperCase()).filter((n) => !FUNCTION_INFO[n]);
+      if (names.length) {
+        const bad = names[0], best = Object.keys(FUNCTION_INFO).map((n) => [n, editDistance(bad, n)]).sort((a, b) => a[1] - b[1])[0];
+        if (best && best[1] <= Math.max(2, Math.floor(bad.length / 3))) return { why: `${bad} is not a function Sheets knows. Did you mean ${best[0]}?`, fix: "=" + body.replace(new RegExp(`\\b${bad}\\s*\\(`, "i"), best[0] + "("), fixLabel: `Use ${best[0]}` };
+        return { why: `${bad} is not a function Sheets knows. Search the Formulas panel for the right one.` };
+      }
+      return { why: "There is a word the formula does not know. Text needs quotes, like \"Lahore\", and cell names look like B7." };
+    }
+    case "#REF!": return { why: "The formula points to a cell or sheet that was deleted. Undo the delete, or type the cell again." };
+    case "#VALUE!": return { why: "Text was used where a number is needed (for example \"abc\"*2), or two ranges have different sizes.", fix: `=IFERROR(${body},"")`, fixLabel: "Hide the error" };
+    case "#NUM!": return { why: "These numbers cannot work, for example the square root of a negative number or a result that is too big." };
+    case "#SPILL!": return { why: "The answer needs more cells, but cells below or to the right are not empty. Clear them and it fills in." };
+    case "#CIRC!": return { why: "The formula uses its own cell, directly or through other cells. Point it at other cells." };
+    case "#CALC!": return { why: "FILTER found no rows to show.", fix: /^FILTER\(/i.test(body) && (body.match(/,/g) || []).length === 1 ? `=${body.replace(/\)\s*$/, ',"None")')}` : undefined, fixLabel: "Show “None” instead" };
+    case "#ERROR!": {
+      const open = (body.match(/\(/g) || []).length - (body.match(/\)/g) || []).length;
+      const quotes = (body.match(/"/g) || []).length % 2;
+      if (quotes) return { why: "A quote mark is not closed.", fix: f + '"' + (open > 0 ? ")".repeat(open) : ""), fixLabel: "Close the quotes" };
+      if (open > 0) return { why: `The formula is missing ${open} closing bracket${open > 1 ? "s" : ""}.`, fix: f + ")".repeat(open), fixLabel: "Close the brackets" };
+      if (/[-+*/^&,(]\s*$/.test(body)) return { why: "The formula ends with a sign or a comma; something is missing after it.", fix: "=" + body.replace(/[-+*/^&,(]+\s*$/, ""), fixLabel: "Remove the last sign" };
+      return { why: "The formula cannot be read. Check the commas, brackets and quotes." };
+    }
+    default: return { why: "This formula gives an error." };
+  }
 }

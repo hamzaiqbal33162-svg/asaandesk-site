@@ -2,8 +2,9 @@
 // MP4 uses the same lazy ffmpeg engine as the site's converter tools (downloaded only when asked for).
 import { $, $$, esc, toast, downloadBlob, fmtTime, fmtBytes, progressBox, isAbort, mediaErrorText } from "../video/ui.js";
 import { pickType, WEBM_VIDEO_TYPES, WEBM_AUDIO_TYPES, bitrateFor, once, probeVideo, seekTo, keptSegments, exportTrimmedWebM, mediaHolder, finishRecording } from "../video/mediakit.js";
-import { fixWebmDuration } from "../video/webm.js";
+import { fixWebmDuration, webmEnd } from "../video/webm.js";
 import * as L from "./rec-logic.js";
+import { createPrompter, renderPrompterPanel } from "./prompter.js";
 
 const md = navigator.mediaDevices;
 const caps = {
@@ -17,7 +18,7 @@ const asked = params.get("mode");
 
 const state = {
   mode: L.MODES[asked] && !(L.MODES[asked].display && sup.screen) ? asked : sup.screen ? "camera" : "screen",
-  mic: true, tabAudio: true, audioTab: false, countdown: true, bubbleSize: "M", camId: "", micId: "",
+  mic: true, tabAudio: true, audioTab: false, countdown: true, bubbleSize: "M", bubblePos: "bl", bubbleShape: "circle", template: "", ring: "", camId: "", micId: "",
   compositor: params.get("compositor") === "canvas" ? "canvas" : "auto", compositorUsed: "",
   phase: "setup", clock: L.clockNew(), bubble: null, W: 0, H: 0, mimeType: "",
   result: null, trim: { start: 0, end: 0 }, lastExport: null, lastMp4: null, lastWav: null, error: "",
@@ -81,6 +82,7 @@ function render() {
   if (!rec) document.title = TITLE;
   renderSetup();
   if (ph === "done") renderResult();
+  syncFrame();
 }
 
 /* ---------------- Recording ---------------- */
@@ -96,6 +98,7 @@ function errorText(e) {
 
 async function start(opts = {}) {
   if (state.phase !== "setup") return false;
+  if (testSes) { testSes.finish(); await testSes.done; }
   Object.assign(state, opts);
   setMsg(""); state.error = "";
   const tab = wantTab();
@@ -206,13 +209,25 @@ function drawFrame(ctx, screen, cam, W, H) {
   if (sw && sh) { const r = L.containRect(W, H, sw, sh); ctx.drawImage(screen, r.x, r.y, r.w, r.h); }
   const b = state.bubble, [cw, ch] = dims(cam);
   if (b && cw && ch) {
-    const c = L.coverCrop(cw, ch), r = b.d / 2, lw = Math.max(3, Math.round(b.d * 0.022));
-    ctx.save(); ctx.beginPath(); ctx.arc(b.x + r, b.y + r, r, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+    const c = L.coverCrop(cw, ch), lw = Math.max(3, Math.round(b.d * 0.022));
+    ctx.save(); bubblePath(ctx, b, 0); ctx.clip();
     ctx.drawImage(cam, c.sx, c.sy, c.s, c.s, b.x, b.y, b.d, b.d);
     ctx.restore();
-    ctx.beginPath(); ctx.arc(b.x + r, b.y + r, r - lw / 2, 0, Math.PI * 2);
-    ctx.lineWidth = lw; ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.stroke();
+    bubblePath(ctx, b, lw / 2);
+    ctx.lineWidth = lw; ctx.strokeStyle = state.ring || "rgba(255,255,255,.95)"; ctx.stroke();
   }
+}
+/** The camera bubble's outline in its shape (circle, rounded square or square), `inset` px inside the box. */
+function bubblePath(ctx, b, inset) {
+  const x = b.x + inset, y = b.y + inset, d = b.d - inset * 2, shape = state.bubbleShape;
+  ctx.beginPath();
+  if (shape === "square") ctx.rect(x, y, d, d);
+  else if (shape === "rounded") {
+    const r = d * 0.22;
+    ctx.moveTo(x + r, y); ctx.lineTo(x + d - r, y); ctx.quadraticCurveTo(x + d, y, x + d, y + r); ctx.lineTo(x + d, y + d - r);
+    ctx.quadraticCurveTo(x + d, y + d, x + d - r, y + d); ctx.lineTo(x + r, y + d); ctx.quadraticCurveTo(x, y + d, x, y + d - r); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+  } else ctx.arc(x + d / 2, y + d / 2, d / 2, 0, Math.PI * 2);
+  ctx.closePath();
 }
 async function trackVideo(track) {
   const v = document.createElement("video");
@@ -222,6 +237,12 @@ async function trackVideo(track) {
   if (!v.videoWidth) await once(v, "loadedmetadata", null, 4000).catch(() => {});
   return v;
 }
+/** The camera bubble in one corner (bl, br, tl, tr) with the same margin as the default one. */
+function cornerBubble(W, H, size, pos = "bl") {
+  const b = L.defaultBubble(W, H, size), m = Math.round(Math.min(W, H) * 0.04);
+  const x = pos === "br" || pos === "tr" ? W - b.d - m : b.x, y = pos === "tl" || pos === "tr" ? m : b.y;
+  return L.clampBubble({ x, y, d: b.d }, W, H);
+}
 const dropVideo = (v) => { if (!v) return; try { v.pause(); } catch {} v.srcObject = null; v.remove(); };
 
 async function startCompositor(s, dv, cv) {
@@ -230,7 +251,7 @@ async function startCompositor(s, dv, cv) {
   let sw = st.width, sh = st.height, sv = null;
   if (!frames || !(sw && sh)) { sv = await trackVideo(dv); sw ||= sv.videoWidth; sh ||= sv.videoHeight; }
   const { w: W, h: H } = L.compositeSize(sw, sh);
-  state.W = W; state.H = H; state.bubble = L.defaultBubble(W, H, state.bubbleSize);
+  state.W = W; state.H = H; state.bubble = cornerBubble(W, H, state.bubbleSize, state.bubblePos);
   if (frames) {
     try { const t = startFrameCompositor(s, dv, cv, W, H); dropVideo(sv); return t; } catch { /* fall back to the canvas */ }
   }
@@ -336,7 +357,7 @@ async function beginRecording(s) {
 }
 function updateTimer() {
   const txt = fmtTime(L.clockElapsed(state.clock, performance.now()) / 1000);
-  $("#timer").textContent = txt; $("#badgeTime").textContent = txt;
+  $("#timer").textContent = txt; $("#badgeTime").textContent = txt; const pt = $("#pillTime"); if (pt) pt.textContent = txt;
   document.title = (state.phase === "paused" ? "Paused " : "● ") + txt + " · Recording | AsaanDesk";
 }
 function pause() {
@@ -355,7 +376,7 @@ async function stop() {
   const s = ses;
   if (!s || !(state.phase === "recording" || state.phase === "paused")) return null;
   state.clock = L.clockStop(state.clock, performance.now());
-  const ms = L.clockElapsed(state.clock, performance.now());
+  let ms = L.clockElapsed(state.clock, performance.now());
   state.phase = "processing"; render();
   clearInterval(s.timer);
   // Video: stop drawing (s.hold) so a busy page catches up, and let the encoder finish before stopping; Chrome's
@@ -367,7 +388,15 @@ async function stop() {
   const type = L.baseType(s.rec.mimeType || state.mimeType || (s.isAudio ? "audio/webm" : "video/webm"));
   if (!s.chunks.length) { state.phase = "setup"; render(); setMsg("Nothing was recorded. Please try again."); return null; }
   let blob = new Blob(s.chunks, { type });
-  if (/webm/.test(type)) blob = new Blob([fixWebmDuration(new Uint8Array(await blob.arrayBuffer()), ms)], { type });
+  if (/webm/.test(type)) {
+    const raw = new Uint8Array(await blob.arrayBuffer());
+    // The header gets the clock time, or the picture's real end when the encoder wrote frames past it (busy computer,
+    // camera frames arriving late): read from the file's own blocks, plus one frame.
+    let end = null; try { end = webmEnd(raw); } catch { end = null; }
+    if (end && end.video != null) ms = Math.max(ms, Math.round(end.video * 1000 + 1000 / 30));
+    blob = new Blob([fixWebmDuration(raw, ms)], { type });
+  }
+  shell?.setProjectId?.(null);
   await showResult({ blob, type, isAudio: s.isAudio, ms, mode: state.mode });
   return blob;
 }
@@ -377,6 +406,73 @@ function teardown(s) {
   for (const f of s.stops.splice(0).reverse()) { try { f(); } catch {} }
   for (const st of s.streams) for (const t of st.getTracks()) { try { t.stop(); } catch {} }
   const live = $("#live"); live.srcObject = null;
+}
+
+/** Delete while recording (Canva's Delete during a take): stops and throws the recording away, back to the settings. */
+function discard({ ask = true } = {}) {
+  const s = ses;
+  if (!s || !(state.phase === "recording" || state.phase === "paused")) return false;
+  if (ask && !confirm("Delete this recording? It is thrown away and you can start again.")) return false;
+  clearInterval(s.timer);
+  s.hold = true;
+  try { s.rec.ondataavailable = null; if (s.rec.state !== "inactive") s.rec.stop(); } catch {}
+  teardown(s); ses = null;
+  state.clock = L.clockNew(); state.phase = "setup"; render();
+  toast("Recording deleted.");
+  return true;
+}
+
+/* Camera and microphone test: runs only on this device, nothing is recorded or kept. */
+let testSes = null;
+async function testDevices({ seconds = 6 } = {}) {
+  if (testSes) { testSes.finish(); return testSes.done; }
+  if (isLive() || state.phase !== "setup") { toast("Stop the recording first."); return null; }
+  if (!md?.getUserMedia) { toast("This browser can't use a camera or microphone on this page."); return null; }
+  const box = $("#testBox"), btn = $("#testBtn"), live = $("#live");
+  box.hidden = false; box.textContent = "Asking for your camera and microphone…";
+  const streams = [], res = { camera: null, mic: null };
+  const get = async (c) => { try { const s = await md.getUserMedia(c); streams.push(s); return s; } catch (e) { return e; } };
+  const cam = await get({ video: state.camId ? { deviceId: { exact: state.camId } } : true });
+  const mic = await get({ audio: state.micId ? { deviceId: { exact: state.micId } } : true });
+  let finish, stopMeter = null, src = null, poll = 0, peak = 0;
+  const done = new Promise((r) => { finish = r; });
+  testSes = { finish: () => finish(), done: null };
+  btn.textContent = "Stop the test";
+  if (cam instanceof MediaStream) {
+    const tr = cam.getVideoTracks()[0];
+    live.srcObject = cam; live.hidden = false; $("#placeholder").hidden = true; live.play().catch(() => {});
+    if (!live.videoWidth) await once(live, "loadedmetadata", null, 4000).catch(() => {});
+    const st = tr?.getSettings?.() || {};
+    res.camera = { ok: true, w: live.videoWidth || st.width || 0, h: live.videoHeight || st.height || 0, label: tr?.label || "" };
+  } else res.camera = { ok: false, error: mediaErrorText(cam, "camera") };
+  if (mic instanceof MediaStream) {
+    try {
+      ac ||= new AudioContext(); await ac.resume().catch(() => {});
+      src = ac.createMediaStreamSource(mic);
+      const an = ac.createAnalyser(); an.fftSize = 1024; src.connect(an);
+      const buf = new Float32Array(an.fftSize);
+      stopMeter = startMeter([src]);
+      poll = setInterval(() => { an.getFloatTimeDomainData(buf); peak = Math.max(peak, L.level(buf)); }, 50);
+      res.mic = { ok: true, peak: 0, label: mic.getAudioTracks()[0]?.label || "" };
+    } catch (e) { res.mic = { ok: false, error: "The microphone opened, but its sound can't be read here: " + (e?.message || e) }; }
+  } else res.mic = { ok: false, error: mediaErrorText(mic, "microphone") };
+  box.textContent = res.mic?.ok ? `Testing… say something (${seconds} seconds).` : "Testing…";
+  const timer = setTimeout(() => finish(), seconds * 1000);
+  testSes.done = done.then(() => {
+    clearTimeout(timer); clearInterval(poll);
+    if (res.mic?.ok) res.mic.peak = Math.round(peak * 1000) / 1000;
+    stopMeter?.(); try { src?.disconnect(); } catch {}
+    for (const s of streams) for (const t of s.getTracks()) { try { t.stop(); } catch {} }
+    if (!isLive()) { live.srcObject = null; }
+    testSes = null; btn.textContent = "Test camera and microphone";
+    const verdict = L.deviceVerdict(res);
+    box.innerHTML = `<ul>${verdict.map((v) => `<li class="${v.ok ? "ok" : "bad"}"><b>${v.ok ? "OK" : "Check"}:</b> ${esc(v.text)}</li>`).join("")}</ul><p class="mx-hint">The test runs only on this device. Nothing is recorded or kept.</p>`;
+    state.lastTest = { ...res, verdict };
+    render();
+    if (state.mode !== "screen" && res.camera?.ok === false && res.mic?.ok) toast("The microphone works but the camera doesn't: you can still record Audio only or Screen.", 6000);
+    return state.lastTest;
+  });
+  return testSes.done;
 }
 
 /* Camera bubble: drag on the preview or arrow keys. */
@@ -672,6 +768,21 @@ function reset() {
   state.result = null; state.phase = "setup"; note(""); setMsg(""); render();
   $("#startBtn").focus();
 }
+/** Delete this take and record again at once with the same settings. */
+async function retake({ ask = true } = {}) {
+  if (!state.result || isLive()) return false;
+  if (ask && !confirm("Delete this recording and record again with the same settings?")) return false;
+  reset(); toast("Recording deleted. Recording again…");
+  await start();
+  return true;
+}
+/** Delete the recording and go back to the settings. */
+function deleteRecording({ ask = true } = {}) {
+  if (!state.result || isLive()) return false;
+  if (ask && !confirm("Delete this recording? It can't be brought back unless you saved it to Projects.")) return false;
+  reset(); toast("Recording deleted.");
+  return true;
+}
 
 /* ---------------- Wiring ---------------- */
 function selectMode(m, focus = false) {
@@ -698,25 +809,303 @@ function init() {
   for (const b of $$("#bubbleRow [data-size]")) b.addEventListener("click", () => {
     state.bubbleSize = b.dataset.size;
     if (state.bubble) state.bubble = L.resizeBubble(state.bubble, state.bubbleSize, state.W, state.H);
-    renderSetup();
+    renderSetup(); syncFrame();
   });
   $("#startBtn").addEventListener("click", () => start());
   $("#pauseBtn").addEventListener("click", () => (state.phase === "paused" ? resume() : pause()));
   $("#stopBtn").addEventListener("click", () => stop());
+  $("#discardBtn").addEventListener("click", () => discard());
+  $("#testBtn").addEventListener("click", () => testDevices());
   $("#countCancel").addEventListener("click", () => cancelCountdown?.());
   $("#dlWebm").addEventListener("click", () => exportWebM());
   $("#dlMp4").addEventListener("click", () => exportMp4());
   $("#dlWav").addEventListener("click", () => exportWav());
   $("#toEditor").addEventListener("click", () => openInEditor());
   $("#again").addEventListener("click", reset);
+  $("#retake").addEventListener("click", () => retake());
+  $("#deleteRec").addEventListener("click", () => deleteRecording());
   window.addEventListener("beforeunload", (e) => { if (state.phase === "recording" || state.phase === "paused") { e.preventDefault(); e.returnValue = ""; } });
   initBubble(); initTrim();
   if (caps.mediaDevices) fillDevices();
   render();
 }
 
+/* ---------------- Editor frame (shared full-screen shell) ---------------- */
+let shell = null, gallery = null, pill = null, toolsEl = null, uploadsEl = null, prompter = null;
+const PI = {
+  screen: '<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/>',
+  camera: '<rect x="3" y="6.5" width="12.5" height="11" rx="2.2"/><path d="m15.5 11 5.5-3v8l-5.5-3"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
+  rec: '<circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/>',
+  stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/>',
+  pause: '<path d="M9 6v12M15 6v12"/>',
+  again: '<path d="M4.6 12a7.4 7.4 0 1 0 2.2-5.3M4.6 4.3v3.9h3.9"/>',
+};
+const pi = (n) => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${PI[n]}</svg>`;
+const hasScreen = (m = state.mode) => !!L.MODES[m]?.display;
+const hasCamera = (m = state.mode) => !!L.MODES[m]?.camera;
+const modeFor = (screenOn, cameraOn) => (screenOn && cameraOn ? "both" : screenOn ? "screen" : cameraOn ? "camera" : "audio");
+
+function buildPill() {
+  const el = document.createElement("div");
+  el.className = "rec-pill"; el.id = "recPill";
+  el.innerHTML = `<button type="button" class="rec-pbtn" id="pillScreen" aria-pressed="false" title="Record the screen">${pi("screen")}<span>Screen</span></button>
+    <button type="button" class="rec-pbtn" id="pillCamera" aria-pressed="false" title="Record the camera">${pi("camera")}<span>Camera</span></button>
+    <button type="button" class="rec-pbtn" id="pillMic" aria-pressed="false" title="Record the microphone">${pi("mic")}<span>Mic</span></button>
+    <span class="rec-psep" aria-hidden="true"></span>
+    <span class="rec-ptime mx-time" id="pillTime" hidden>0:00</span>
+    <button type="button" class="rec-pbtn" id="pillPause" hidden>${pi("pause")}<span>Pause</span></button>
+    <button type="button" class="rec-pbtn rec-precord" id="pillRecord">${pi("rec")}<span>Record</span></button>`;
+  el.querySelector("#pillScreen").addEventListener("click", () => toggleSource("screen"));
+  el.querySelector("#pillCamera").addEventListener("click", () => toggleSource("camera"));
+  el.querySelector("#pillMic").addEventListener("click", () => { if (isLive()) return; state.mic = !state.mic; render(); toast(state.mic ? "Microphone on" : "Microphone off"); });
+  el.querySelector("#pillPause").addEventListener("click", () => (state.phase === "paused" ? resume() : pause()));
+  el.querySelector("#pillRecord").addEventListener("click", () => {
+    if (state.phase === "recording" || state.phase === "paused") stop();
+    else if (state.phase === "done") reset();
+    else if (state.phase === "setup") start();
+    else if (state.phase === "countdown") cancelCountdown?.();
+  });
+  return el;
+}
+function toggleSource(which) {
+  if (isLive()) return;
+  const s = hasScreen(), c = hasCamera();
+  const next = modeFor(which === "screen" ? !s : s, which === "camera" ? !c : c);
+  if (L.MODES[next].display && sup.screen) { toast(sup.screen, 5000); setMsg(sup.screen); return; }
+  if (next === "audio" && !state.mic) state.mic = true;
+  if (state.phase === "done") reset();
+  selectMode(next);
+  toast(`Recording: ${L.MODES[next].label}`);
+}
+function syncFrame() {
+  if (!pill) return;
+  const live = isLive(), ph = state.phase, rec = ph === "recording" || ph === "paused";
+  const set = (id, on, dis) => { const b = pill.querySelector(id); b.setAttribute("aria-pressed", String(on)); b.disabled = dis; };
+  set("#pillScreen", hasScreen(), live); set("#pillCamera", hasCamera(), live); set("#pillMic", state.mic, live);
+  const rb = pill.querySelector("#pillRecord");
+  const [ic, label, aria] = rec ? ["stop", "Stop", "Stop recording"] : ph === "done" ? ["again", "New recording", "Start a new recording"]
+    : ph === "countdown" ? ["stop", "Cancel", "Cancel the countdown"] : ph === "starting" ? ["rec", "Waiting…", "Waiting for permission"]
+      : ph === "processing" ? ["rec", "Saving…", "Saving your recording"] : ["rec", "Record", "Start recording"];
+  rb.innerHTML = pi(ic) + `<span>${label}</span>`; rb.setAttribute("aria-label", aria); rb.title = aria;
+  rb.disabled = ph === "starting" || ph === "processing" || (ph === "setup" && !!sup.fatal);
+  rb.classList.toggle("on", rec);
+  const pb = pill.querySelector("#pillPause");
+  pb.hidden = !rec; pb.innerHTML = pi(ph === "paused" ? "rec" : "pause") + `<span>${ph === "paused" ? "Resume" : "Pause"}</span>`;
+  pb.setAttribute("aria-label", ph === "paused" ? "Resume recording" : "Pause recording");
+  const tm = pill.querySelector("#pillTime"); tm.hidden = !rec; tm.textContent = $("#timer").textContent;
+  if (shell) shell.setSaved(rec || ph === "processing" ? "saving" : "saved");
+  if (toolsEl?.isConnected && !toolsEl.closest("[hidden]")) {
+    const f = document.activeElement?.id;
+    drawTools(toolsEl);
+    if (f && toolsEl.querySelector("#" + f)) toolsEl.querySelector("#" + f).focus({ preventScroll: true });
+  }
+}
+
+/** Applies a recording layout template (sources, camera bubble, sound, countdown). */
+function applyTemplate(id) {
+  const setup = gallery?.setupOf?.(id);
+  if (!setup) { toast("That template isn't available."); return false; }
+  if (isLive()) { toast("Stop the recording first, then pick a layout."); return false; }
+  if (state.phase === "done") reset();
+  let mode = setup.mode;
+  if (L.MODES[mode].display && sup.screen) { mode = "camera"; toast(sup.screen, 5000); }
+  Object.assign(state, { mode, bubbleSize: setup.bubbleSize, bubblePos: setup.bubblePos, mic: setup.mic, countdown: setup.countdown, template: id, ring: setup.ring || "" });
+  if (mode === "audio") state.audioTab = !!setup.tabAudio; else state.tabAudio = !!setup.tabAudio;
+  setMsg(""); render();
+  const hint = $("#tplNote");
+  if (hint) {
+    hint.hidden = false; hint.style.setProperty("--ring", setup.ring || "#fff");
+    hint.querySelector("b").textContent = setup.name;
+    hint.querySelector("span").textContent = setup.hint || "";
+    const ol = hint.querySelector("ol"); ol.replaceChildren(...(setup.points || []).map((x) => { const li = document.createElement("li"); li.textContent = x; return li; }));
+    hint.querySelector("small").textContent = setup.ring && L.MODES[mode].display && L.MODES[mode].camera ? `Camera bubble ring: ${setup.palette}` : "";
+  }
+  if (setup.title) shell?.setTitle?.(setup.title);
+  toast(`Template: ${setup.name}`);
+  return true;
+}
+
+function seg(label, items, cur, onPick, attr) {
+  const wrap = document.createElement("div");
+  wrap.className = "mx-seg rec-tseg"; wrap.setAttribute("role", "group"); wrap.setAttribute("aria-label", label);
+  for (const [v, t] of items) {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = t; b.setAttribute("aria-pressed", String(v === cur)); b.dataset[attr] = v; b.disabled = isLive() && attr !== "tsize" && attr !== "tpos" && attr !== "tshape";
+    b.addEventListener("click", () => onPick(v));
+    wrap.append(b);
+  }
+  return wrap;
+}
+function drawTools(el) {
+  const live = isLive(), m = L.MODES[state.mode];
+  el.replaceChildren();
+  const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  el.append(h("p", "rec-tmuted", live ? "Recording now: the settings below are locked until you stop." : "Choose what to record and how. Your choices are used when you press Record."));
+  el.append(h("h3", "rec-th", "What to record"));
+  el.append(seg("What to record", Object.entries(L.MODES).map(([k, v]) => [k, v.label]), state.mode, (v) => selectMode(v), "tmode"));
+  // Microphone
+  el.append(h("h3", "rec-th", "Microphone"));
+  const mic = h("label", "rec-check"); const mi = document.createElement("input"); mi.type = "checkbox"; mi.id = "tMic"; mi.checked = state.mic; mi.disabled = live;
+  mi.addEventListener("change", () => { state.mic = mi.checked; render(); }); mic.append(mi, " Record my microphone"); el.append(mic);
+  const ms = $("#micSelect").cloneNode(true); ms.id = "tMicSel"; ms.value = state.micId; ms.disabled = live || !state.mic; ms.setAttribute("aria-label", "Microphone to use");
+  ms.addEventListener("change", () => { state.micId = ms.value; $("#micSelect").value = ms.value; }); el.append(ms);
+  // Camera
+  if (m.camera) {
+    el.append(h("h3", "rec-th", "Camera"));
+    const cs = $("#camSelect").cloneNode(true); cs.id = "tCamSel"; cs.value = state.camId; cs.disabled = live; cs.setAttribute("aria-label", "Camera to use");
+    cs.addEventListener("change", () => { state.camId = cs.value; $("#camSelect").value = cs.value; }); el.append(cs);
+  }
+  if (m.display && m.camera) {
+    el.append(h("h3", "rec-th", "Camera bubble"));
+    el.append(seg("Bubble size", [["S", "Small"], ["M", "Medium"], ["L", "Large"]], state.bubbleSize, (v) => { state.bubbleSize = v; if (state.bubble) state.bubble = L.resizeBubble(state.bubble, v, state.W, state.H); render(); }, "tsize"));
+    el.append(seg("Bubble corner", [["tl", "Top left"], ["tr", "Top right"], ["bl", "Bottom left"], ["br", "Bottom right"]], state.bubblePos, (v) => { state.bubblePos = v; if (state.bubble) state.bubble = cornerBubble(state.W, state.H, state.bubbleSize, v); render(); }, "tpos"));
+    el.append(seg("Bubble shape", [["circle", "Circle"], ["rounded", "Rounded"], ["square", "Square"]], state.bubbleShape, (v) => { state.bubbleShape = v; render(); }, "tshape"));
+  }
+  // Screen and tab sound
+  if (caps.getDisplayMedia && state.mode !== "camera") {
+    el.append(h("h3", "rec-th", m.display ? "Screen" : "Tab sound"));
+    const tl = h("label", "rec-check"); const ti = document.createElement("input"); ti.type = "checkbox"; ti.id = "tTab"; ti.checked = wantTab(); ti.disabled = live;
+    ti.addEventListener("change", () => { if (state.mode === "audio") state.audioTab = ti.checked; else state.tabAudio = ti.checked; render(); });
+    tl.append(ti, state.mode === "audio" ? " Also record a tab's sound" : " Record tab or system sound"); el.append(tl);
+    if (m.display) el.append(h("p", "rec-tmuted", "When you press Record, the browser asks which screen, window or tab to share."));
+  }
+  if (sup.screen) el.append(h("p", "rec-tmuted", sup.screen));
+  el.append(h("h3", "rec-th", "Before recording"));
+  const cl = h("label", "rec-check"); const ci = document.createElement("input"); ci.type = "checkbox"; ci.id = "tCountdown"; ci.checked = state.countdown; ci.disabled = live;
+  ci.addEventListener("change", () => { state.countdown = ci.checked; render(); }); cl.append(ci, " 3-second countdown"); el.append(cl);
+  const find = h("button", "btn block rec-tfind", "Find my camera and microphone"); find.type = "button"; find.id = "tFind"; find.disabled = live || !md?.getUserMedia;
+  find.addEventListener("click", findDevices); el.append(find);
+  const test = h("button", "btn block rec-tfind", "Test camera and microphone"); test.type = "button"; test.id = "tTest"; test.disabled = live || !md?.getUserMedia;
+  test.addEventListener("click", () => { testDevices(); if (matchMedia("(max-width: 759.98px)").matches) shell?.closePanel(); }); el.append(test);
+  el.append(h("p", "rec-tmuted", "This asks for permission once, so the lists above show the names of your devices. Nothing is recorded."));
+}
+async function findDevices() {
+  try {
+    const st = await md.getUserMedia({ audio: true, video: true }).catch(() => md.getUserMedia({ audio: true }));
+    st.getTracks().forEach((t) => t.stop());
+    await fillDevices();
+    const list = await md.enumerateDevices();
+    const cams = list.filter((d) => d.kind === "videoinput").length, mics = list.filter((d) => d.kind === "audioinput").length;
+    toast(`Found ${cams} camera${cams === 1 ? "" : "s"} and ${mics} microphone${mics === 1 ? "" : "s"}.`);
+    if (toolsEl) drawTools(toolsEl);
+  } catch (e) { toast(mediaErrorText(e, "camera and microphone"), 6000); }
+}
+
+/** Opens a video or sound file from this device in the result screen (trim, save, convert, send to the editor). */
+async function openFile(file) {
+  if (!file) return false;
+  if (isLive()) { toast("Stop the recording first."); return false; }
+  const isAudio = /^audio\//.test(file.type) || /\.(mp3|wav|m4a|ogg|flac|opus)$/i.test(file.name);
+  if (!isAudio && !/^video\//.test(file.type) && !/\.(webm|mp4|mov|mkv|m4v)$/i.test(file.name)) { toast(`${file.name}: please choose a video or sound file.`); return false; }
+  const type = file.type || (isAudio ? "audio/webm" : "video/webm");
+  shell?.setProjectId?.(null);
+  await showResult({ blob: file, type, isAudio, ms: 0, mode: isAudio ? "audio" : "camera" });
+  state.result.name = file.name;
+  uploads.unshift({ name: file.name, blob: file, type, isAudio }); uploads.splice(6);
+  if (uploadsEl) drawUploads(uploadsEl);
+  render();
+  toast(`Opened ${file.name}`);
+  return true;
+}
+const uploads = [];
+function drawUploads(el) {
+  el.replaceChildren();
+  const lab = document.createElement("label"); lab.className = "rec-drop";
+  lab.innerHTML = `<input type="file" id="recUpload" accept="video/*,audio/*,.webm,.mp4,.mov,.mkv,.mp3,.wav,.m4a,.ogg" hidden><b>Upload a video or sound</b><small>Trim it, save it as WebM, MP4 or WAV, or send it to the video editor. It stays on this device.</small>`;
+  const inp = lab.querySelector("input");
+  inp.addEventListener("change", async () => { const f = inp.files[0]; inp.value = ""; if (await openFile(f) && matchMedia("(max-width: 759.98px)").matches) shell?.closePanel(); });
+  lab.addEventListener("dragover", (e) => { e.preventDefault(); lab.classList.add("on"); });
+  lab.addEventListener("dragleave", () => lab.classList.remove("on"));
+  lab.addEventListener("drop", (e) => { e.preventDefault(); lab.classList.remove("on"); openFile(e.dataTransfer?.files?.[0]); });
+  el.append(lab);
+  const hd = document.createElement("h3"); hd.className = "rec-th"; hd.textContent = "Opened in this session"; el.append(hd);
+  if (!uploads.length) { const p = document.createElement("p"); p.className = "rec-tmuted"; p.textContent = "Nothing opened yet. Your recordings can be kept under Projects."; el.append(p); }
+  for (const u of uploads) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "btn block rec-uprow";
+    b.textContent = `${u.isAudio ? "Sound" : "Video"}: ${u.name}`;
+    b.addEventListener("click", () => openFile(new File([u.blob], u.name, { type: u.type })));
+    el.append(b);
+  }
+}
+
+function frameThumb() {
+  const v = $("#out"), r = state.result;
+  if (!r || r.isAudio || !v.videoWidth) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><rect width="160" height="90" fill="#f3f1ff"/><rect x="70" y="18" width="20" height="34" rx="10" fill="#5b4cf0"/><path d="M62 44a18 18 0 0 0 36 0M80 62v8" fill="none" stroke="#5b4cf0" stroke-width="4" stroke-linecap="round"/></svg>`;
+  try { const c = document.createElement("canvas"); c.width = 240; c.height = Math.round(240 * v.videoHeight / v.videoWidth); c.getContext("2d").drawImage(v, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.7); } catch { return ""; }
+}
+const needResult = () => { if (!state.result) { toast("Record something first (or upload a file)."); return false; } return true; };
+
+async function mountFrame() {
+  let mod;
+  try { [mod, gallery] = await Promise.all([import("../shared/editor-shell.js"), import("./gallery.js")]); } catch (e) { console.warn("The editor frame could not load", e); return null; }
+  pill = buildPill();
+  if (!prompter && $("#stage")) prompter = createPrompter($("#stage"), () => state.phase);
+  const note = document.createElement("p");
+  note.className = "mx-msg rec-tplnote"; note.id = "tplNote"; note.hidden = true; note.innerHTML = '<b></b> <span></span><em class="rec-tplpts">Talking points</em><ol></ol><small></small>';
+  $("#setup .rec-options")?.prepend(note);
+  try {
+    shell = mod.mountShell({
+      app: "recorder", kind: "Recording", title: "Untitled recording", home: "/tools/online-video-recorder",
+      stage: $("main.mx-main"), toolbar: pill, formulaBar: null, resize: null,
+      file: [
+        { label: "New recording", act: () => { if (isLive()) toast("Stop the recording first."); else { reset(); toast("Ready for a new recording"); } } },
+        { label: "Upload a video or sound…", act: () => shell.openPanel("uploads") },
+        { label: "Recording settings", act: () => shell.openPanel("tools") },
+        { label: "Download WebM", group: "Download", act: () => needResult() && exportWebM() },
+        { label: "Download MP4", group: "Download", act: () => needResult() && (state.result.isAudio ? toast("This is a sound recording. Download WebM or WAV.") : exportMp4()) },
+        { label: "Download WAV (sound only)", group: "Download", act: () => needResult() && (state.result.isAudio ? exportWav() : toast("WAV is for sound recordings. Download WebM or MP4.")) },
+        { label: "Open in video editor", group: "Edit", act: () => needResult() && openInEditor() },
+        { label: "Reset the trim", group: "Edit", act: () => { if (needResult()) $("#trimReset").click(); } },
+        { label: "Retake (record again)", group: "Edit", act: () => { if (needResult()) retake(); } },
+        { label: "Delete this recording", group: "Edit", act: () => { if (needResult()) deleteRecording(); } },
+      ],
+      share: {
+        download: [
+          { label: "WebM video or sound", act: () => needResult() && exportWebM() },
+          { label: "MP4 video", act: () => needResult() && (state.result.isAudio ? toast("This is a sound recording. Download WebM or WAV.") : exportMp4()) },
+          { label: "WAV sound", act: () => needResult() && (state.result.isAudio ? exportWav() : toast("WAV is for sound recordings.")) },
+        ],
+        link: () => location.origin + location.pathname,
+      },
+      templates: { gallery, tool: "online-video-recorder", apply: async (id) => { applyTemplate(id); if (matchMedia("(max-width: 759.98px)").matches) shell?.closePanel(); }, placeholder: "Search recording layouts" },
+      panels: {
+        tools: { label: "Tools", icon: "tools", render: (el) => { toolsEl = el; drawTools(el); }, refresh: true },
+        uploads: { label: "Uploads", icon: "uploads", render: (el) => { uploadsEl = el; drawUploads(el); }, refresh: true },
+        prompter: { label: "Teleprompter", icon: "notes", render: (el) => renderPrompterPanel(el, prompter) },
+      },
+      rail: ["templates", "tools", "prompter", "uploads", "projects", "apps"],
+      projects: {
+        save: async () => {
+          const r = state.result;
+          if (!r) throw new Error("Record something first, then save it to Projects.");
+          return { name: r.name, data: { blob: r.blob, type: r.type, isAudio: r.isAudio, ext: r.ext, mode: r.mode, duration: r.duration, width: r.width, height: r.height, name: r.name, trim: { ...state.trim } }, thumb: frameThumb() };
+        },
+        open: async (rec) => {
+          const d = rec?.data;
+          if (!d?.blob) throw new Error("This project has no recording in it.");
+          if (isLive()) throw new Error("Stop the recording first.");
+          await showResult({ blob: d.blob, type: d.type, isAudio: d.isAudio, ms: (d.duration || 0) * 1000, mode: d.mode });
+          state.result.name = d.name || state.result.name;
+          if (d.trim) { state.trim = L.clampTrim(d.trim, state.result.duration); renderTrim(); }
+        },
+      },
+      bottom: { notes: true, outline: null, timer: true, zoom: null, pages: null, fullscreen: true, help: true },
+      shortcuts: [["Space (on the player)", "Play or pause the recording"], ["Arrow keys (camera bubble)", "Move the bubble while recording"], ["Escape", "Cancel the countdown"]],
+      setMode: (m) => { if (m !== "edit" && (state.phase === "recording" || state.phase === "paused")) toast("Still recording. Switch back to Editing to stop."); },
+    });
+  } catch (e) { console.error("The editor frame could not start", e); shell = null; return null; }
+  document.body.classList.add("has-shell");
+  const tpl = params.get("template");
+  if (tpl) applyTemplate(tpl);
+  else if (params.get("new") === "1") { state.template = ""; }
+  syncFrame();
+  return shell;
+}
+
 window.adApp = {
   state, sup, caps, start, stop, pause, resume, exportWebM, exportMp4, exportWav, openInEditor, reset,
+  applyTemplate, openFile, get shell() { return shell; }, get prompter() { return prompter; }, retake, deleteRecording, discard, testDevices,
   get lastRecording() { return state.result?.blob || null; },
   get lastExport() { return state.lastExport; },
   get lastMp4() { return state.lastMp4; },
@@ -725,3 +1114,4 @@ window.adApp = {
   setBubble(x, y) { if (!state.bubble) return null; state.bubble = L.clampBubble({ ...state.bubble, x, y }, state.W, state.H); return state.bubble; },
 };
 init();
+mountFrame();

@@ -13,6 +13,17 @@ const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t
 export const LIMITS = Object.freeze({ maxSide: 8192, maxPixels: 36e6 });
 export const DEFAULTS = Object.freeze({ scale: 2, denoise: 25, sharpen: 35, autoColor: true, autoContrast: true, faceSafe: true });
 
+/**
+ * "Auto" upscale (like Canva picking the level for you): small pictures get 4×, medium ones 2×, big ones are only
+ * cleaned up (1×), so the result is detailed but not needlessly huge. The safe-size limit still applies after this.
+ */
+export function autoScale(w, h) {
+  const long = Math.max(w, h);
+  return long <= 900 ? 4 : long <= 2400 ? 2 : 1;
+}
+/** The factor to use for a scale setting: a number, or "auto". */
+export const pickScale = (w, h, want) => (want === "auto" ? autoScale(w, h) : +want || 1);
+
 /** Largest upscale factor ≤ want that keeps the result within LIMITS. */
 export function safeScale(w, h, want, { maxSide = LIMITS.maxSide, maxPixels = LIMITS.maxPixels } = {}) {
   const s = Math.min(want, maxSide / Math.max(w, h), Math.sqrt(maxPixels / (w * h)));

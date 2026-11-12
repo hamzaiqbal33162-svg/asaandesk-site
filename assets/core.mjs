@@ -1,11 +1,11 @@
 export function convertSubtitle(text,format){
  let t=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').trim();
- if(!/\d{2}:\d{2}[.,]\d{3}\s+-->/.test(t)) throw Error('Sahi SRT ya VTT timestamps nahi mile.');
+ if(!/\d{2}:\d{2}[.,]\d{3}\s+-->/.test(t)) throw Error('No valid SRT or VTT timestamps found.');
  if(format==='vtt'){t=t.replace(/^WEBVTT[^\n]*\n*/,'');return 'WEBVTT\n\n'+t.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g,'$1.$2')+'\n';}
  t=t.replace(/^WEBVTT[^\n]*\n*/,'');
  const cues=t.split(/\n\s*\n/).filter(b=>b.includes('-->')).map((b,i)=>{
  const lines=b.split('\n'),idx=lines.findIndex(l=>l.includes('-->'));
- const time=lines[idx].split(/\s+-->\s+/).map(s=>{const m=s.match(/^(?:(\d{2,}):)?(\d{2}):(\d{2})[.,](\d{3})/);if(!m)throw Error('Timestamp samajh nahi aaya.');return `${m[1]||'00'}:${m[2]}:${m[3]},${m[4]}`;}).join(' --> ');
+ const time=lines[idx].split(/\s+-->\s+/).map(s=>{const m=s.match(/^(?:(\d{2,}):)?(\d{2}):(\d{2})[.,](\d{3})/);if(!m)throw Error('Could not read a timestamp.');return `${m[1]||'00'}:${m[2]}:${m[3]},${m[4]}`;}).join(' --> ');
  return `${i+1}\n${time}\n${lines.slice(idx+1).join('\n')}`;
  });return cues.join('\n\n')+'\n';
 }

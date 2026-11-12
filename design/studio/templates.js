@@ -1,7 +1,34 @@
 // AsaanDesk Studio templates: our own original designs, built from our stickers (/pdf-editor/elements.js),
 // shapes and text with placeholder colours. Pure module (no DOM access at import time), so the site's
 // Templates Marketplace can import it:   import { listTemplates, templateSvg } from "/design/studio/templates.js";
-import { ELEMENTS } from "/pdf-editor/elements.js";
+import { ELEMENTS } from "../../pdf-editor/elements.js";
+import addPrint from "./templates-print.js";
+import addMerch from "./templates-merch.js";
+import addDecks from "./templates-decks.js";
+import addXtraPrint from "./templates-xtra-print.js";
+import addXtraMerch from "./templates-xtra-merch.js";
+import addXtraCards from "./templates-xtra-cards.js";
+import addXtraSocial from "./templates-xtra-social.js";
+import addXtra4Print from "./templates-xtra4-print.js";
+import addXtra4Merch from "./templates-xtra4-merch.js";
+import addXtra6A from "./templates-xtra6-a.js";
+import addXtra6B from "./templates-xtra6-b.js";
+import addR2DeckA from "./templates-r2-deck-a.js";
+import addR2DeckB from "./templates-r2-deck-b.js";
+import addR2IgA from "./templates-r2-ig-a.js";
+import addR2IgB from "./templates-r2-ig-b.js";
+import addR2CardA from "./templates-r2-card-a.js";
+import addR2CardB from "./templates-r2-card-b.js";
+import addR2Print from "./templates-r2-print.js";
+import addR2Small from "./templates-r2-small.js";
+import addR2Merch from "./templates-r2-merch.js";
+import addR2Logo from "./templates-r2-logo.js";
+import addWb1 from "./templates-xtra-wb-1.js";
+import addWb2 from "./templates-xtra-wb-2.js";
+import addWb3 from "./templates-xtra-wb-3.js";
+import addWb4 from "./templates-xtra-wb-4.js";
+import addR4Depth from "./templates-r4-depth.js";
+import addR4Motion from "./templates-r4-motion.js";
 import { getPreset, presetPx, designPreset, PRESET_GROUPS } from "./presets.js";
 import { textHeight } from "./textlayout.js";
 import { pageSvg } from "./svg.js";
@@ -196,7 +223,7 @@ tpl("recipe-pin", "Recipe pin", "pinterest-pin", "recipe pinterest food cooking 
 ])]);
 
 /* ================= Presentations ================= */
-tpl("pitch-deck", "Startup pitch deck (5 slides)", "presentation-16x9", "presentation slides pitch deck startup business investors pesh kash slides", (W, H) => {
+tpl("pitch-deck", "Startup pitch deck", "presentation-16x9", "presentation slides pitch deck startup business investors pesh kash slides", (W, H) => {
   const head = (t, c = INK) => T(t, 140, 120, 1400, { size: 92, bold: true, color: c });
   return [
     page([ "#2f80ff", "#a64bf4", 135], [
@@ -228,6 +255,40 @@ tpl("pitch-deck", "Startup pitch deck (5 slides)", "presentation-16x9", "present
       ]),
       E("icon-star", 1505, 700, 90, { c1: AMB }),
     ]),
+    page("#fff7ed", [
+      head("The market"),
+      ...[["$4.2B", "Small-business software in the region", 760], ["1.8M", "Shops that still use paper", 560], ["12%", "Growth each year", 380]].flatMap(([big, small, d], i) => [
+        C(140 + i * 560 + (500 - d * 0.6) / 2, 300 + (460 - d * 0.6) / 2, d * 0.6, d * 0.6, ["#fed7aa", "#fdba74", "#fb923c"][i], { name: "Market circle" }),
+        T(big, 140 + i * 560, 470, 500, { size: 96, bold: true, color: "#7c2d12", align: "center", lh: 1 }),
+        T(small, 160 + i * 560, 800, 460, { size: 34, color: MUTED, align: "center" }),
+      ]),
+    ]),
+    page(WHITE, [
+      head("Business model"),
+      ...[["Free", "Rs 0", "Invoices and stock for one shop"], ["Pro", "Rs 999 / month", "Up to 5 users, reports, backups"], ["Business", "Rs 2,999 / month", "Many branches, staff roles, support"]].flatMap(([n, p, d], i) => [
+        R(140 + i * 560, 320, 500, 600, i === 1 ? IND : "#f3f4fb", { radius: 32, name: "Plan card" }),
+        T(n, 180 + i * 560, 380, 420, { size: 56, bold: true, color: i === 1 ? WHITE : INK }),
+        T(p, 180 + i * 560, 470, 420, { size: 44, color: i === 1 ? GOLD : IND, bold: true }),
+        T(d, 180 + i * 560, 580, 420, { size: 34, color: i === 1 ? "#e0e7ff" : MUTED, lh: 1.4 }),
+      ]),
+    ]),
+    page("#efedff", [
+      head("Roadmap"),
+      R(140, 560, 1640, 10, IND, { radius: 5, name: "Timeline" }),
+      ...[["Q1", "Launch in Lahore"], ["Q2", "1,000 paying shops"], ["Q3", "Karachi and Islamabad"], ["Q4", "Payments built in"]].flatMap(([q, t], i) => [
+        C(200 + i * 500, 520, 90, 90, [IND, COR, TEA, AMB][i], { name: "Milestone" }),
+        T(q, 140 + i * 500, 400, 210, { size: 52, bold: true, color: INK, align: "center" }),
+        T(t, 100 + i * 500, 650, 290, { size: 36, color: MUTED, align: "center", lh: 1.3 }),
+      ]),
+    ]),
+    page(WHITE, [
+      head("The team"),
+      ...[["Ayesha Malik", "CEO"], ["Bilal Ahmed", "CTO"], ["Sana Raza", "Sales"]].flatMap(([n, r], i) => [
+        F(300 + i * 480, 330, 320, 320, { shape: "circle", name: "Team photo" }),
+        T(n, 230 + i * 480, 690, 460, { size: 48, bold: true, color: INK, align: "center" }),
+        T(r, 230 + i * 480, 760, 460, { size: 36, color: MUTED, align: "center" }),
+      ]),
+    ]),
     page(INK, [
       E("deco-confetti", 1400, 120, 320, { c1: GOLD, c2: COR }),
       flow(380, T("Thank you", 140, 0, 1400, { size: 170, bold: true, color: WHITE }), 30, T("hello@brightideas.pk · 0300 1234567", 140, 0, 1400, { size: 48, color: "#cbd5e1" })),
@@ -240,6 +301,13 @@ tpl("lesson-slides", "Science lesson slides", "presentation-4x3", "presentation 
     flow(300, T("Science class", 80, 0, 860, { size: 44, color: "#0369a1", bold: true }), 10, T("The Water Cycle", 80, 0, 860, { size: 104, family: "serif", bold: true, color: "#0c4a6e", lh: 1 })),
     T("Class 5 · Lesson 3", 80, 640, 860, { size: 32, color: "#0369a1" }),
   ]),
+  page("#f0f9ff", [
+    T("Today we will…", 80, 60, 860, { size: 64, bold: true, color: "#0c4a6e" }),
+    ...["Name the three steps of the water cycle", "Explain where rain comes from", "Draw the cycle with arrows"].flatMap((s, i) => [
+      E("icon-check-circle", 80, 210 + i * 150, 70, { c1: TEA }),
+      T(s, 180, 222 + i * 150, 760, { size: 38, color: INK }),
+    ]),
+  ]),
   page(WHITE, [
     T("Three big steps", 80, 60, 860, { size: 64, bold: true, color: "#0c4a6e" }),
     ...[["Evaporation", "Sun heats water and it rises"], ["Condensation", "Vapour cools into clouds"], ["Precipitation", "Water falls as rain"]].flatMap(([a, b], i) => [
@@ -249,6 +317,27 @@ tpl("lesson-slides", "Science lesson slides", "presentation-4x3", "presentation 
       T(b, 230, 262 + i * 170, 700, { size: 30, color: MUTED }),
     ]),
     E("arrow-circular", 800, 560, 150, { c1: TEA }),
+  ]),
+  page("#ecfeff", [
+    T("The cycle", 80, 50, 860, { size: 64, bold: true, color: "#0c4a6e" }),
+    C(362, 210, 300, 300, "none", { stroke: "#0ea5e9", sw: 10, name: "Cycle ring" }),
+    ...[["Sun heats the sea", 112, 180], ["Clouds form", 612, 180], ["Rain falls", 612, 520], ["Rivers return water", 112, 520]].flatMap(([t, x, y], i) => [
+      R(x, y, 300, 110, ["#fef3c7", "#e0f2fe", "#dbeafe", "#ccfbf1"][i], { radius: 20, name: "Step card" }),
+      T(t, x + 20, y + 32, 260, { size: 30, bold: true, color: INK, align: "center" }),
+    ]),
+  ]),
+  page(WHITE, [
+    T("Key words", 80, 60, 860, { size: 64, bold: true, color: "#0c4a6e" }),
+    ...[["Evaporate", "to turn from liquid into gas"], ["Condense", "to turn from gas into liquid"], ["Vapour", "water as an invisible gas"], ["Precipitation", "rain, snow or hail"]].flatMap(([w, d], i) => [
+      R(80 + (i % 2) * 440, 200 + Math.floor(i / 2) * 250, 410, 220, ["#e0f2fe", "#ccfbf1", "#ede9fe", "#fef3c7"][i], { radius: 24, name: "Word card" }),
+      T(w, 110 + (i % 2) * 440, 230 + Math.floor(i / 2) * 250, 350, { size: 40, bold: true, color: "#0c4a6e" }),
+      T(d, 110 + (i % 2) * 440, 300 + Math.floor(i / 2) * 250, 350, { size: 28, color: MUTED, lh: 1.3 }),
+    ]),
+  ]),
+  page("#f0fdf4", [
+    T("Try it at home", 80, 60, 860, { size: 64, bold: true, color: "#166534" }),
+    T("1.  Put a bowl of warm water in the sun.\n2.  Cover it with cling film and a cold cup on top.\n3.  Wait 30 minutes and look for drops.\n4.  Write down what you see.", 80, 200, 600, { size: 34, color: INK, lh: 1.6 }),
+    F(720, 200, 230, 300, { shape: "rounded", radius: 24, name: "Experiment photo" }),
   ]),
   page("#fef3c7", [
     E("icon-question", 412, 120, 200, { c1: AMB }),
@@ -511,6 +600,22 @@ tpl("achievement-certificate", "Certificate of achievement", "a4", "certificate 
   R(120, H - 230, 220, 1.5, INK, { name: "Signature line" }), R(W - 340, H - 230, 220, 1.5, INK, { name: "Signature line" }),
   T("Principal", 120, H - 218, 220, { size: 15, color: MUTED, align: "center" }), T("Class teacher", W - 340, H - 218, 220, { size: 15, color: MUTED, align: "center" }),
 ])]);
+
+/* ================= more own templates (other files) ================= */
+const KIT = { tpl, T, S, R, C, E, F, page, flow, collagePage, bg, K: { INK, MUTED, IND, COR, TEA, AMB, ROS, WHITE, GOLD, NAVY } };
+const DECKS = addDecks(KIT); addPrint(KIT); addMerch(KIT); addXtraPrint(KIT); addXtraMerch(KIT); addXtraCards(KIT); addXtraSocial(KIT); addXtra4Print(KIT); addXtra4Merch(KIT); addXtra6A(KIT); addXtra6B(KIT);
+for (const add of [addR2DeckA, addR2DeckB, addR2IgA, addR2IgB, addR2CardA, addR2CardB, addR2Print, addR2Small, addR2Merch, addR2Logo, addWb1, addWb2, addWb3, addWb4, addR4Depth, addR4Motion]) add(KIT);
+/** The template helpers (for building and checking new template files in tests). */
+export const TEMPLATE_KIT = KIT;
+/** Presentation generator (gallery.js): content key × theme key × layout variant 0–3 -> { title, design } or null. */
+export const DECK_PARTS = { contents: DECKS.contents, themes: DECKS.themes, variants: DECKS.variants, themeName: DECKS.themeName, content: DECKS.content, styleOf: DECKS.styleOf };
+export function makeDeck(contentKey, themeKey, variant = 0) {
+  seq = 0;
+  const pages = DECKS.pages(contentKey, themeKey, variant);
+  if (!pages) return null;
+  const p = getPreset("presentation-16x9");
+  return { title: DECKS.content(contentKey).title, design: { version: 1, name: DECKS.content(contentKey).title, preset: designPreset(p), pages: JSON.parse(JSON.stringify(pages)) } };
+}
 
 /* ================= catalogue ================= */
 let built = null;

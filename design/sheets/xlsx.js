@@ -1,7 +1,8 @@
 // Minimal Excel (.xlsx) writer and reader. Zip work is done by fflate (passed in, so this file has no DOM
 // and no global state): writeXlsx(book, { zipSync, strToU8 }) and readXlsx(bytes, { unzipSync, strFromU8 }).
 // book = { sheets: [{ name, cells: [{ r, c, v, f?, style? }], colW?: { col: px }, rowH?: { row: px } }] }
-// style = { b, i, color, fill, align, wrap, fmt }  (fmt = a FORMATS id from model.js or an Excel format code)
+// style = { b, i, u, color, fill, align, valign, wrap, fmt, size (px), font, bd ("trbl" sides), bc (border colour) }
+// (fmt = a FORMATS id from model.js or an Excel format code). A sheet may also list merges: ["A1:C1", …].
 import { cellName, colIndex, FormulaError, tokenize, shiftFormula, parseDateText } from "./formula.js";
 import { FORMATS, fmtCode } from "./model.js";
 
@@ -41,14 +42,26 @@ export function writeXlsx(book, { zipSync, strToU8 }) {
   // Styles: fonts, fills, number formats and cell formats (xf) are de-duplicated.
   const fonts = ['<font><sz val="11"/><name val="Calibri"/><family val="2"/></font>'], fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
   const numFmts = [], xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'];
-  const fontIdx = new Map(), fillIdx = new Map(), fmtIdx = new Map(), xfIdx = new Map();
+  const fontIdx = new Map(), fillIdx = new Map(), fmtIdx = new Map(), xfIdx = new Map(), borders = ["<border><left/><right/><top/><bottom/><diagonal/></border>"], borderIdx = new Map();
+  const fontName = (f) => esc(String(f || "Calibri").split(",")[0].replace(/["']/g, "").trim() || "Calibri");
+  // Differential formats for conditional formatting rules (font colour / bold, fill).
+  const dxfs = [];
+  const dxfXml = (st) => `<dxf>${st.color || st.b ? `<font>${st.b ? "<b/>" : ""}${st.color ? `<color rgb="${argb(st.color)}"/>` : ""}</font>` : ""}${st.fill ? `<fill><patternFill patternType="solid"><fgColor rgb="${argb(st.fill)}"/><bgColor rgb="${argb(st.fill)}"/></patternFill></fill>` : ""}</dxf>`;
   const styleId = (st) => {
     if (!st) return 0;
-    const fontKey = `${st.b ? 1 : 0}${st.i ? 1 : 0}${st.color || ""}`;
+    const sz = st.size ? Math.round(st.size * 0.85 * 2) / 2 : 11;
+    const fontKey = `${st.b ? 1 : 0}${st.i ? 1 : 0}${st.u ? 1 : 0}${st.color || ""}|${sz}|${st.font || ""}`;
     let fontId = 0;
-    if (fontKey !== "00") {
-      if (!fontIdx.has(fontKey)) { fontIdx.set(fontKey, fonts.length); fonts.push(`<font>${st.b ? "<b/>" : ""}${st.i ? "<i/>" : ""}<sz val="11"/>${st.color ? `<color rgb="${argb(st.color)}"/>` : ""}<name val="Calibri"/><family val="2"/></font>`); }
+    if (fontKey !== "000|11|") {
+      if (!fontIdx.has(fontKey)) { fontIdx.set(fontKey, fonts.length); fonts.push(`<font>${st.b ? "<b/>" : ""}${st.i ? "<i/>" : ""}${st.u ? "<u/>" : ""}<sz val="${sz}"/>${st.color ? `<color rgb="${argb(st.color)}"/>` : ""}<name val="${fontName(st.font)}"/><family val="2"/></font>`); }
       fontId = fontIdx.get(fontKey);
+    }
+    let borderId = 0;
+    if (st.bd) {
+      const bk = st.bd + (st.bc || "") + (st.bs || "");
+      const bstyle = { thick: "medium", dashed: "dashed", dotted: "dotted" }[st.bs] || "thin";
+      if (!borderIdx.has(bk)) { const side = (n, x) => (st.bd.includes(x) ? `<${n} style="${bstyle}"><color rgb="${argb(st.bc || "#334155")}"/></${n}>` : `<${n}/>`); borderIdx.set(bk, borders.length); borders.push(`<border>${side("left", "l")}${side("right", "r")}${side("top", "t")}${side("bottom", "b")}<diagonal/></border>`); }
+      borderId = borderIdx.get(bk);
     }
     let fillId = 0;
     if (st.fill) {
@@ -61,8 +74,9 @@ export function writeXlsx(book, { zipSync, strToU8 }) {
       if (code in BUILTIN_IDS) numFmtId = BUILTIN_IDS[code];
       else { if (!fmtIdx.has(code)) { fmtIdx.set(code, 164 + numFmts.length); numFmts.push(`<numFmt numFmtId="${164 + numFmts.length}" formatCode="${esc(code)}"/>`); } numFmtId = fmtIdx.get(code); }
     }
-    const align = st.align || st.wrap ? `<alignment${st.align ? ` horizontal="${st.align}"` : ""}${st.wrap ? ' wrapText="1"' : ""}${st.wrap ? ' vertical="top"' : ""}/>` : "";
-    const xf = `<xf numFmtId="${numFmtId}" fontId="${fontId}" fillId="${fillId}" borderId="0" xfId="0"${numFmtId ? ' applyNumberFormat="1"' : ""}${fontId ? ' applyFont="1"' : ""}${fillId ? ' applyFill="1"' : ""}${align ? ' applyAlignment="1">' + align + "</xf>" : "/>"}`;
+    const va = st.valign === "middle" ? "center" : st.valign === "top" || st.wrap ? "top" : "";
+    const align = st.align || st.wrap || va ? `<alignment${st.align ? ` horizontal="${st.align}"` : ""}${st.wrap ? ' wrapText="1"' : ""}${va ? ` vertical="${va}"` : ""}/>` : "";
+    const xf = `<xf numFmtId="${numFmtId}" fontId="${fontId}" fillId="${fillId}" borderId="${borderId}" xfId="0"${numFmtId ? ' applyNumberFormat="1"' : ""}${fontId ? ' applyFont="1"' : ""}${fillId ? ' applyFill="1"' : ""}${borderId ? ' applyBorder="1"' : ""}${align ? ' applyAlignment="1">' + align + "</xf>" : "/>"}`;
     if (xf === xfs[0]) return 0;
     if (!xfIdx.has(xf)) { xfIdx.set(xf, xfs.length); xfs.push(xf); }
     return xfIdx.get(xf);
@@ -99,7 +113,28 @@ export function writeXlsx(book, { zipSync, strToU8 }) {
     }).join("");
     const colEntries = Object.entries(sh.colW || {}).map(([c, px]) => [+c, px]).sort((a, b) => a[0] - b[0]);
     const cols = colEntries.length ? `<cols>${colEntries.map(([c, px]) => `<col min="${c + 1}" max="${c + 1}" width="${pxToWidth(px)}" customWidth="1"/>`).join("")}</cols>` : "";
-    return `${XML_HEAD}<worksheet xmlns="${NS}" xmlns:r="${RNS}"><dimension ref="A1:${cellName(maxR, maxC)}"/><sheetViews><sheetView workbookViewId="0"${si === 0 ? ' tabSelected="1"' : ""}/></sheetViews><sheetFormatPr defaultRowHeight="15"/>${cols}<sheetData>${body}</sheetData></worksheet>`;
+    // Frozen rows / columns (a pane), gridlines off, conditional formatting, dropdown lists (data validation).
+    const fr = Math.max(0, Math.min(1000, +sh.freeze || 0)), fc = Math.max(0, Math.min(100, +sh.freezeCols || 0));
+    const pane = fr || fc ? `<pane${fc ? ` xSplit="${fc}"` : ""}${fr ? ` ySplit="${fr}"` : ""} topLeftCell="${cellName(fr, fc)}" activePane="${fr && fc ? "bottomRight" : fr ? "bottomLeft" : "topRight"}" state="frozen"/>` : "";
+    const view = `<sheetViews><sheetView workbookViewId="0"${si === 0 ? ' tabSelected="1"' : ""}${sh.noGrid ? ' showGridLines="0"' : ""}${pane ? `>${pane}</sheetView>` : "/>"}</sheetViews>`;
+    let prio = 1;
+    const cfXml = (sh.cf || []).map((x) => {
+      const ref = esc(String(x.range || "")), first = esc(String(x.range || "").split(":")[0]);
+      const dxf = dxfs.length; dxfs.push(dxfXml(x.style || {}));
+      const num = (v) => (v === "" || v == null || !Number.isFinite(+v) ? null : +v), str = (v) => `"${esc(String(v ?? "").replace(/"/g, '""'))}"`;
+      const ops = { gt: "greaterThan", lt: "lessThan", ge: "greaterThanOrEqual", le: "lessThanOrEqual", eq: "equal", ne: "notEqual", between: "between" };
+      if (ops[x.op]) {
+        const f1 = num(x.v1) ?? str(x.v1), f2 = num(x.v2) ?? str(x.v2);
+        return `<conditionalFormatting sqref="${ref}"><cfRule type="cellIs" dxfId="${dxf}" priority="${prio++}" operator="${ops[x.op]}"><formula>${f1}</formula>${x.op === "between" ? `<formula>${f2}</formula>` : ""}</cfRule></conditionalFormatting>`;
+      }
+      const t = String(x.v1 ?? "").replace(/"/g, '""'), et = esc(t);
+      const expr = { contains: [`containsText" operator="containsText" text="${et}`, `NOT(ISERROR(SEARCH("${et}",${first})))`], notContains: [`notContainsText" operator="notContains" text="${et}`, `ISERROR(SEARCH("${et}",${first}))`], startsWith: [`beginsWith" operator="beginsWith" text="${et}`, `LEFT(${first},LEN("${et}"))="${et}"`], endsWith: [`endsWith" operator="endsWith" text="${et}`, `RIGHT(${first},LEN("${et}"))="${et}"`], empty: ["containsBlanks", `LEN(TRIM(${first}))=0`], notEmpty: ["notContainsBlanks", `LEN(TRIM(${first}))>0`] }[x.op];
+      if (expr) return `<conditionalFormatting sqref="${ref}"><cfRule type="${expr[0]}" dxfId="${dxf}" priority="${prio++}"><formula>${expr[1]}</formula></cfRule></conditionalFormatting>`;
+      return "";
+    }).join("") + (sh.scales || []).map((x) => `<conditionalFormatting sqref="${esc(String(x.range || ""))}"><cfRule type="colorScale" priority="${prio++}"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="${argb(x.min || "#ffffff")}"/><color rgb="${argb(x.max || "#16a34a")}"/></colorScale></cfRule></conditionalFormatting>`).join("");
+    const dv = (sh.dropdowns || []).filter((d) => d.options?.length && d.options.join(",").length < 250);
+    const dvXml = dv.length ? `<dataValidations count="${dv.length}">${dv.map((d) => `<dataValidation type="list" allowBlank="1" showDropDown="0" sqref="${esc(d.range)}"><formula1>"${esc(d.options.map((o) => String(o).replace(/[",]/g, " ")).join(","))}"</formula1></dataValidation>`).join("")}</dataValidations>` : "";
+    return `${XML_HEAD}<worksheet xmlns="${NS}" xmlns:r="${RNS}"><dimension ref="A1:${cellName(maxR, maxC)}"/>${view}<sheetFormatPr defaultRowHeight="15"/>${cols}<sheetData>${body}</sheetData>${sh.merges?.length ? `<mergeCells count="${sh.merges.length}">${sh.merges.map((m) => `<mergeCell ref="${esc(m)}"/>`).join("")}</mergeCells>` : ""}${cfXml}${dvXml}</worksheet>`;
   });
 
   const n = book.sheets.length;
@@ -113,7 +148,7 @@ export function writeXlsx(book, { zipSync, strToU8 }) {
   };
   sheetXml.forEach((x, i) => { files[`xl/worksheets/sheet${i + 1}.xml`] = x; });
   files["xl/sharedStrings.xml"] = `${XML_HEAD}<sst xmlns="${NS}" count="${strings.length}" uniqueCount="${strings.length}">${strings.map((s) => `<si><t${/^\s|\s$/.test(s) ? ' xml:space="preserve"' : ""}>${esc(s)}</t></si>`).join("")}</sst>`;
-  files["xl/styles.xml"] = `${XML_HEAD}<styleSheet xmlns="${NS}">${numFmts.length ? `<numFmts count="${numFmts.length}">${numFmts.join("")}</numFmts>` : ""}<fonts count="${fonts.length}">${fonts.join("")}</fonts><fills count="${fills.length}">${fills.join("")}</fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${xfs.length}">${xfs.join("")}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  files["xl/styles.xml"] = `${XML_HEAD}<styleSheet xmlns="${NS}">${numFmts.length ? `<numFmts count="${numFmts.length}">${numFmts.join("")}</numFmts>` : ""}<fonts count="${fonts.length}">${fonts.join("")}</fonts><fills count="${fills.length}">${fills.join("")}</fills><borders count="${borders.length}">${borders.join("")}</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${xfs.length}">${xfs.join("")}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>${dxfs.length ? `<dxfs count="${dxfs.length}">${dxfs.join("")}</dxfs>` : ""}</styleSheet>`;
   const zipped = {};
   for (const [p, x] of Object.entries(files)) zipped[p] = strToU8(x);
   return zipSync(zipped, { level: 6 });

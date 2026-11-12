@@ -44,7 +44,9 @@ export function elementLayer(el, { x = 0, y = 0, w, h, colors = {}, name } = {})
   if (!w && !h) { w = 160; }
   if (w && !h) h = (w * vh) / vw;
   if (h && !w) w = (h * vw) / vh;
-  return base("element", x, y, w, h, { name: name || el.name || "Sticker", element: { id: el.id, vb: [vw, vh], parts: clone(el.parts), colors: { ...(el.defaults || {}), ...colors } } });
+  // QR codes and barcodes keep what they encode, so the QR tool can show and update it later.
+  const extra = { ...(el.qr ? { qr: { ...el.qr } } : {}), ...(el.barcode ? { barcode: typeof el.barcode === "object" ? { ...el.barcode } : el.barcode } : {}) };
+  return base("element", x, y, w, h, { name: name || el.name || "Sticker", element: { id: el.id, vb: [vw, vh], parts: clone(el.parts), colors: { ...(el.defaults || {}), ...colors }, ...extra } });
 }
 export function chartLayer(spec, { x = 0, y = 0, w = 480, h = 320, name = "Chart" } = {}) { return base("chart", x, y, w, h, { name, chart: { spec: clone(spec) } }); }
 export function tableLayer(table, { x = 0, y = 0, w = 480, h = 160, size = 18, name = "Table" } = {}) { return base("table", x, y, w, h, { name, table: { ...clone(table), size } }); }
@@ -104,7 +106,7 @@ export function layerProblems(l, path = "layer") {
     need(typeof e.id === "string" && Array.isArray(e.vb) && e.vb.length === 2 && Array.isArray(e.parts) && e.parts.length > 0, "element");
   } else if (l.type === "chart") need(l.chart?.spec && Array.isArray(l.chart.spec.series), "chart.spec");
   else if (l.type === "table") need(Array.isArray(l.table?.cells), "table.cells");
-  else if (l.type === "frame") need(["rect", "circle", "rounded"].includes(l.frame?.shape), "frame.shape");
+  else if (l.type === "frame") need(["rect", "circle", "rounded", "heart", "star", "hexagon", "triangle", "diamond", "arch", "blob"].includes(l.frame?.shape), "frame.shape");
   else if (l.type === "group") {
     need(Array.isArray(l.children) && l.children.length > 0, "group.children");
     (l.children || []).forEach((c, i) => bad.push(...layerProblems(c, `${path}.children[${i}]`)));

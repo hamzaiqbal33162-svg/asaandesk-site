@@ -1,9 +1,10 @@
 // AsaanDesk Docs: a document editor (contenteditable page + a clean model in model.js).
 // Big libraries load only when used: docx (Word export), mammoth (Word import), pdf-lib + fonts (PDF export).
-import { htmlToModel, modelToHtml, runsToHtml, escHtml, newDoc, normalizeDoc, countWords, outline, exportHtmlPage, modelToMarkdown, modelToText, mdToModel, textToModel, mapDocText, isRtlLang, PAGE_SIZES, fontKeyFromCss } from "./model.js";
+import { htmlToModel, modelToHtml, runsToHtml, escHtml, newDoc, normalizeDoc, countWords, outline, exportHtmlPage, modelToMarkdown, modelToText, mdToModel, textToModel, mapDocText, isRtlLang, PAGE_SIZES, fontKeyFromCss, withoutSuggestions, listSuggestions } from "./model.js";
 import { FONT_FAMILIES, ensureFont } from "../shared/brand.js";
 import { saveProject, listProjects, getProject, deleteProject, takeHandoff } from "../shared/store.js";
 import { aiText, aiStatus, comingSoon } from "../shared/ai.js";
+import { initUi } from "./ui.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -12,6 +13,7 @@ const isPhone = () => matchMedia("(max-width: 640px)").matches;
 
 const state = { id: null, doc: newDoc(), zoom: 1, dirty: false, saving: null, lastSaved: 0, aiBusy: false };
 let savedRange = null;
+const hooks = { save: [], render: [], panel: {} };
 
 /* ---------------- small UI helpers ---------------- */
 let toastTimer = 0;
@@ -166,7 +168,7 @@ function updateCounts() {
 }
 let saveTimer = 0;
 function markDirty() { state.dirty = true; setSaveState("Saving…"); clearTimeout(saveTimer); saveTimer = setTimeout(() => flushSave(), 800); }
-function setSaveState(t, err = false) { const s = $("#saveState"); s.textContent = t; s.classList.toggle("err", err); }
+function setSaveState(t, err = false) { const s = $("#saveState"); s.textContent = t; s.classList.toggle("err", err); for (const f of hooks.save) try { f(t, err); } catch {} }
 async function flushSave() {
   clearTimeout(saveTimer);
   saveTimer = 0;
@@ -180,7 +182,8 @@ async function flushSave() {
     state.dirty = false;
     state.lastSaved = rec.updated;
     const u = new URL(location.href);
-    if (u.searchParams.get("id") !== rec.id) { ["template", "mode", "new", "handoff"].forEach((k) => u.searchParams.delete(k)); u.searchParams.set("id", rec.id); history.replaceState(null, "", u); }
+    // Keep ?template=<id> (the link the user came from); the saved copy's id is added, and on reload the id wins.
+    if (u.searchParams.get("id") !== rec.id) { ["mode", "new", "handoff"].forEach((k) => u.searchParams.delete(k)); u.searchParams.set("id", rec.id); history.replaceState(null, "", u); }
     setSaveState("Saved");
   })();
   try { await state.saving; } catch (e) { setSaveState("Not saved", true); toast("Could not save in this browser (storage may be blocked)."); console.warn(e); }
@@ -205,7 +208,7 @@ function normalizeEditor() {
     }
   }
   // Font sizes picked with nothing selected apply to the next typed letters (Chrome marks them xxx-large).
-  if (state.pendingSize) for (const el of $$('span[style*="xxx-large"]', editor)) el.style.fontSize = state.pendingSize + "pt";
+  if (state.pendingSize) for (const el of $$('[style*="xxx-large"]', editor)) el.style.fontSize = state.pendingSize + "pt";
   // Tables, code, rules, pictures and page breaks always have a paragraph after them, so the caret can get below.
   const last = editor.lastElementChild;
   if (!last || /^(TABLE|PRE|HR|FIGURE)$/.test(last.tagName) || last.classList.contains("pb") || (last.tagName === "P" && last.querySelector("img") && !last.textContent.trim())) editor.append(Object.assign(document.createElement("p"), { innerHTML: "<br>" }));
@@ -222,6 +225,7 @@ function renderDoc() {
   ensureFont(state.doc.font);
   savedRange = null;
   histReset();
+  for (const f of hooks.render) try { f(); } catch {}
 }
 function setDoc(doc, { id = null } = {}) {
   state.doc = normalizeDoc(doc);
@@ -238,6 +242,8 @@ function applyPage() {
   root.setProperty("--m", p.margin + "mm");
   root.setProperty("--doc-font", (FONT_FAMILIES[state.doc.font] || FONT_FAMILIES.calibri).css);
   root.setProperty("--doc-size", (state.doc.size || 11) + "pt");
+  paper.classList.toggle("digital", !!ps.digital);
+  paper.classList.toggle("pageless", !!ps.pageless);
   $("#pageHead").textContent = p.header || "";
   $("#pageFoot").textContent = [p.footer, p.pageNumbers ? "Page 1" : ""].filter(Boolean).join("   ·   ");
   $("#pageInfo").textContent = `${ps.label} · ${Math.round(state.zoom * 100)}%`;
@@ -253,9 +259,20 @@ function applyPage() {
   ${p.header ? `@top-center { content: ${q(p.header)}; font: 9pt sans-serif; color: #6a7389; }` : ""}
   @bottom-center { content: ${p.footer ? q(p.footer + (p.pageNumbers ? "    " : "")) : '""'}${p.pageNumbers ? ' "Page " counter(page) " of " counter(pages)' : ""}; font: 9pt sans-serif; color: #6a7389; } }`;
 }
+function setZoom(z) {
+  z = Math.max(0.25, Math.min(3, +z || 1));
+  const opt = [...$("#zoom").options].find((o) => Math.abs(+o.value - z) < 0.001);
+  $("#zoom").value = opt ? opt.value : "";
+  state.zoom = z;
+  paperWrap.style.zoom = String(z);
+  $("#pageInfo").textContent = `${(PAGE_SIZES[state.doc.page.size] || PAGE_SIZES.A4).label} · ${Math.round(z * 100)}%`;
+  positionImgHandle();
+  return z;
+}
 function applyZoom() {
   let z = $("#zoom").value;
   if (z === "fit") { const avail = viewer.clientWidth - 40; z = Math.max(0.3, Math.min(2, avail / paper.offsetWidth)); }
+  if (!z) z = state.zoom;
   state.zoom = +z || 1;
   paperWrap.style.zoom = String(state.zoom);
   $("#pageInfo").textContent = `${(PAGE_SIZES[state.doc.page.size] || PAGE_SIZES.A4).label} · ${Math.round(state.zoom * 100)}%`;
@@ -363,15 +380,51 @@ function setFontFamily(key) {
   const f = FONT_FAMILIES[key];
   if (!f) return;
   ensureFont(key); ensureFont(key, true); ensureFont(key, false, true);
-  change(() => withCss(() => exec("fontName", f.css)));
+  // Selected text: wrap every selected piece of text ourselves, so the font is always the innermost style (Chrome's own
+  // fontName command puts it on whichever element it likes, and an inner element's style can then win). Caret only: the
+  // browser command, so the next typed letters get the font.
+  change(() => { if (!styleSelectedText((s) => { s.style.fontFamily = f.css; }).length) withCss(() => exec("fontName", f.css)); });
+}
+/** Wraps each selected piece of text in its own span styled by apply(span); keeps those pieces selected. */
+function styleSelectedText(apply) {
+  const r = savedRange;
+  if (!r || r.collapsed || !inEditor(r.startContainer) || !inEditor(r.endContainer)) return [];
+  // Split partly selected text nodes; the live range follows the splits.
+  if (r.endContainer.nodeType === 3 && r.endOffset > 0 && r.endOffset < r.endContainer.length) r.endContainer.splitText(r.endOffset);
+  if (r.startContainer.nodeType === 3 && r.startOffset > 0 && r.startOffset < r.startContainer.length) r.startContainer.splitText(r.startOffset);
+  const nodes = [];
+  const tw = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+  for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+    if (!t.nodeValue || !r.intersectsNode(t)) continue;
+    if (t === r.startContainer && r.startOffset >= t.length) continue;
+    if (t === r.endContainer && r.endOffset === 0) continue;
+    if (t.parentElement?.closest(".pb")) continue;
+    nodes.push(t);
+  }
+  const spans = nodes.map((t) => { const s = document.createElement("span"); apply(s); t.replaceWith(s); s.append(t); return s; });
+  if (spans.length) {
+    const nr = document.createRange(), last = spans[spans.length - 1];
+    nr.setStart(spans[0], 0);
+    nr.setEnd(last, last.childNodes.length);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(nr);
+  }
+  return spans;
 }
 function setFontSize(pt) {
   state.pendingSize = savedRange && savedRange.collapsed ? pt : 0;
   change(() => {
     withCss(() => exec("fontSize", "7"));
-    for (const el of $$('span[style*="xxx-large"], font[size="7"]', editor)) {
-      if (el.tagName === "FONT") { const s = document.createElement("span"); s.style.fontSize = pt + "pt"; s.append(...el.childNodes); el.replaceWith(s); }
-      else el.style.fontSize = pt + "pt";
+    const done = [];
+    for (const el of $$('[style*="xxx-large"], font[size="7"]', editor)) {
+      if (el.tagName === "FONT") { const s = document.createElement("span"); s.style.fontSize = pt + "pt"; s.append(...el.childNodes); el.replaceWith(s); done.push(s); }
+      else { el.style.fontSize = pt + "pt"; done.push(el); }
+    }
+    if (done.length && !state.pendingSize) {
+      const r = document.createRange();
+      r.setStart(done[0], 0);
+      const last = done[done.length - 1];
+      r.setEnd(last, last.childNodes.length);
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
     }
   });
 }
@@ -588,12 +641,12 @@ const CMDS = {
   pagebreak: () => change(() => insertHtml('<div class="pb" contenteditable="false" data-pb="1"></div><p><br></p>')),
 };
 // Buttons keep the text selection (mousedown would otherwise move focus away from the page).
-for (const el of $$("#toolbar .tb, .ctxbar .btn, #side .btn, #linkPop .btn")) el.addEventListener("mousedown", (e) => { if (el.tagName === "BUTTON") e.preventDefault(); });
-$("#toolbar").addEventListener("click", (e) => {
+for (const el of $$("#toolbar .tb, #morePop .tb, .ctxbar .btn, #side .btn, #linkPop .btn")) el.addEventListener("mousedown", (e) => { if (el.tagName === "BUTTON") e.preventDefault(); });
+for (const box of ["#toolbar", "#morePop"]) $(box).addEventListener("click", (e) => {
   const b = e.target.closest("[data-cmd]");
-  if (b && CMDS[b.dataset.cmd]) { CMDS[b.dataset.cmd](); return; }
+  if (b && CMDS[b.dataset.cmd]) { if (box === "#morePop" && !["indent", "outdent"].includes(b.dataset.cmd)) $("#morePop").hidden = true; CMDS[b.dataset.cmd](); return; }
   const p = e.target.closest("[data-panel-btn]");
-  if (p) togglePanel(p.dataset.panelBtn);
+  if (p) { $("#morePop").hidden = true; togglePanel(p.dataset.panelBtn); }
 });
 $("#blockType").addEventListener("change", (e) => setBlockType(e.target.value));
 $("#fontFamily").addEventListener("change", (e) => setFontFamily(e.target.value));
@@ -630,14 +683,44 @@ editor.addEventListener("beforeinput", (e) => {
 editor.addEventListener("input", (e) => {
   if (e.inputType === "insertText" || e.inputType === "insertCompositionText") {
     histSchedule();
-    if (state.pendingSize && editor.querySelector('span[style*="xxx-large"]')) normalizeEditor();
+    if (state.pendingSize && editor.querySelector('[style*="xxx-large"]')) normalizeEditor();
     if (e.data === " ") autoFormat();
+    else if (e.data === "-") dashDivider();
   }
-  else { normalizeEditor(); histCommit(); }
+  else {
+    if (e.inputType === "insertParagraph") plainAfterBand();
+    normalizeEditor(); histCommit();
+  }
   rememberSelection();
   afterChange(true);
   updateUndoButtons();
 });
+/** Enter at the end of a coloured block (Canva-like): the new line is a plain paragraph, not another coloured block. */
+function plainAfterBand() {
+  const s = getSelection();
+  const b = s.rangeCount ? closestIn(s.anchorNode, "p,h1,h2,h3,div") : null;
+  if (!b || b.parentNode !== editor || !b.classList.contains("band") || b.textContent.trim()) return;
+  const prev = b.previousElementSibling;
+  if (!prev || !prev.classList.contains("band")) return;
+  const p = document.createElement("p");
+  p.innerHTML = "<br>";
+  b.replaceWith(p);
+  placeCaret(p, true);
+}
+/** Canva's divider shortcut: a paragraph that is just "---" becomes a divider, with an empty line after it. */
+function dashDivider() {
+  const sel = getSelection();
+  if (!sel.rangeCount || !sel.isCollapsed) return;
+  const p = closestIn(sel.anchorNode, "p");
+  if (!p || p.parentElement !== editor || p.textContent !== "---" || p.classList.contains("band")) return;
+  histCommit();
+  const hr = document.createElement("hr"), next = document.createElement("p");
+  next.innerHTML = "<br>";
+  p.replaceWith(hr, next);
+  placeCaret(next, true);
+  histCommit();
+  markDirty();
+}
 /** Markdown-style shortcuts typed at the start of a paragraph: "# ", "## ", "- ", "1. ", "[] ", "> ". */
 function autoFormat() {
   const sel = getSelection();
@@ -776,6 +859,7 @@ function openPanel(name) {
   if (name === "recent") renderRecent();
   if (name === "magic") setupMagic();
   if (name === "find") { const s = getSelection().toString(); if (s && s.length < 80 && !s.includes("\n")) $("#findText").value = s; runFind(); }
+  hooks.panel[name]?.();
 }
 function closePanel() {
   $("#side").hidden = true;
@@ -958,39 +1042,81 @@ function setMagicTab(tab) {
   $$("[data-mtab-body]").forEach((b) => { b.hidden = b.dataset.mtabBody !== tab; });
 }
 $$("[data-mtab]").forEach((b) => b.addEventListener("click", () => setMagicTab(b.dataset.mtab)));
-async function runAi(task, style) {
+/** The text just before the caret (or the selection), for "Continue writing": the current block and the ones above it. */
+function textBeforeCaret(range) {
+  if (!range) return modelToText(syncModel()).slice(-800);
+  if (!range.collapsed) return range.toString().trim();
+  const r = document.createRange();
+  r.setStart(editor, 0);
+  r.setEnd(range.endContainer, range.endOffset);
+  return r.toString().trim().slice(-800);
+}
+let aiRun = 0, lastAi = null;
+async function runAi(task, style, again = null) {
   if (state.aiBusy) return;
-  const range = savedRange && inEditor(savedRange.startContainer) ? savedRange.cloneRange() : null;
+  const range = again ? again.range : savedRange && inEditor(savedRange.startContainer) ? savedRange.cloneRange() : null;
   let text = "";
-  if (task === "write") {
+  if (again) text = again.text;
+  else if (task === "write") {
     text = $("#aiPrompt").value.trim();
     if (!text) { aiMessage("Describe what you want written first."); $("#aiPrompt").focus(); return; }
+  } else if (task === "continue") {
+    text = textBeforeCaret(range);
+    if (!text) { aiMessage("Write a sentence or two first (or put the cursor after some text), then Continue writing."); return; }
   } else {
     text = range && !range.collapsed ? range.toString().trim() : "";
     if (!text) { aiMessage("Select some text in your document first, then pick an action."); return; }
   }
+  lastAi = { task, style, text, range };
+  const run = ++aiRun;
   state.aiBusy = true;
   $("#aiResult").hidden = true;
+  $("#aiStop").hidden = false;
   aiMessage("Working…", "busy");
   $$("[data-ai], #translateDoc").forEach((b) => (b.disabled = true));
   try {
-    const context = task === "write" ? modelToText(syncModel()).slice(0, 600) : "";
-    const out = await aiText(task, text, { style, target: $("#aiLang").value, context, onStatus: (m) => aiMessage(m, "busy") });
+    const isNew = task === "write" || task === "continue";
+    const context = task === "write" ? modelToText(syncModel()).slice(0, 600) : task === "continue" ? text : "";
+    const ask = task === "continue" ? `Continue this text with one or two more sentences in the same voice and language. Text: ${text}` : text;
+    const out = await aiText(task === "continue" ? "write" : task, ask, { style, target: $("#aiLang").value, context, onStatus: (m) => { if (run === aiRun) aiMessage(m, "busy"); } });
+    if (run !== aiRun) return; // stopped
     if (!out) throw new Error("The AI did not return any text. Your text was not changed.");
-    aiPending = { kind: task === "write" ? "insert" : "replace", text: out, range };
+    aiPending = { kind: isNew ? "insert" : "replace", text: out, range: task === "continue" && range ? (() => { const r = range.cloneRange(); r.collapse(false); return r; })() : range };
     $("#aiText").textContent = out;
-    $("#aiReplace").textContent = task === "write" ? "Insert at cursor" : "Replace selection";
+    $("#aiReplace").textContent = isNew ? "Insert at cursor" : "Replace selection";
     $("#aiResult").hidden = false;
     aiMessage("");
   } catch (e) {
+    if (run !== aiRun) return;
     aiPending = null;
     const unavailable = e?.code === "AI_UNAVAILABLE";
     aiMessage(unavailable ? `${e.message} Your text was not changed.` : `${e?.message || "Something went wrong."}${/not changed/.test(e?.message || "") ? "" : " Your text was not changed."}`);
   } finally {
-    state.aiBusy = false;
-    $$("[data-ai], #translateDoc").forEach((b) => (b.disabled = false));
+    if (run === aiRun) {
+      state.aiBusy = false;
+      $("#aiStop").hidden = true;
+      $$("[data-ai], #translateDoc").forEach((b) => (b.disabled = false));
+    }
   }
 }
+// Stop: the answer is thrown away when it arrives (the on-device model may still finish in the background).
+$("#aiStop").addEventListener("click", () => {
+  aiRun++;
+  state.aiBusy = false;
+  $("#aiStop").hidden = true;
+  $$("[data-ai], #translateDoc").forEach((b) => (b.disabled = false));
+  aiMessage("Stopped. Your text was not changed.");
+});
+$("#aiAgain").addEventListener("click", () => { if (lastAi && !state.aiBusy) runAi(lastAi.task, lastAi.style, lastAi); });
+$("#aiCopy").addEventListener("click", async () => {
+  const t = $("#aiText").textContent;
+  let okCopy = false;
+  try { await navigator.clipboard.writeText(t); okCopy = true; } catch {
+    const ta = Object.assign(document.createElement("textarea"), { value: t });
+    document.body.append(ta); ta.select(); try { okCopy = document.execCommand("copy"); } catch {} ta.remove();
+  }
+  aiMessage(okCopy ? "Copied. Paste it anywhere." : "Copying did not work in this browser: select the text and press Ctrl+C.", okCopy ? "ok" : "");
+});
 $$("[data-ai]").forEach((b) => b.addEventListener("click", () => runAi(b.dataset.ai, b.dataset.style)));
 $("#aiReplace").addEventListener("click", () => {
   if (!aiPending) return;
@@ -1064,6 +1190,10 @@ async function openTemplate(id) {
   if (!t) { toast("That template was not found."); return false; }
   if (state.dirty) await flushSave();
   setDoc(t.build());
+  const u = new URL(location.href);
+  u.searchParams.delete("id");
+  u.searchParams.set("template", id);
+  history.replaceState(null, "", u);
   await flushSave();
   return true;
 }
@@ -1150,6 +1280,7 @@ async function importFile(file) {
     else throw new Error("Open a Word (.docx), web page (.html), Markdown (.md), text (.txt) or AsaanDesk (.json) file.");
     if (state.dirty) await flushSave();
     setDoc(doc);
+    { const u = new URL(location.href); u.searchParams.delete("template"); u.searchParams.delete("id"); history.replaceState(null, "", u); }
     await flushSave();
     toast(`Opened “${file.name}”.`);
     if (isPhone()) closePanel();
@@ -1200,7 +1331,7 @@ async function rasterize(text, o) {
 async function exportDocx() {
   await loadScript("lib/docx/docx.umd.min.js");
   const { modelToDocx } = await import("./docx-export.js");
-  return modelToDocx(syncModel(), window.docx, { loadImage: loadImageAsPng });
+  return modelToDocx(exportModel(), window.docx, { loadImage: loadImageAsPng });
 }
 let pdfDeps = null;
 async function loadPdfDeps() {
@@ -1215,12 +1346,22 @@ async function loadPdfDeps() {
 }
 async function exportPdf() {
   const { fm, modelToPdf } = await loadPdfDeps();
-  return modelToPdf(syncModel(), { PDFLib: window.PDFLib, writeLines: fm.writeLines, pickWriter: fm.pickWriter, rasterize, loadImage: loadImageAsPng });
+  return modelToPdf(exportModel(), { PDFLib: window.PDFLib, writeLines: fm.writeLines, pickWriter: fm.pickWriter, rasterize, loadImage: loadImageAsPng });
 }
-async function doExport(kind) {
-  const doc = syncModel();
-  doc.title = $("#docTitle").value.trim() || "Untitled document";
+/** What downloads contain: the document without pending suggestions (accept them to include them), in the chosen size. */
+let exportSize = "";
+function exportModel() { const m = withoutSuggestions(syncModel()); if (exportSize && PAGE_SIZES[exportSize]) m.page = { ...m.page, size: exportSize }; return m; }
+async function doExport(kind, o = {}) {
+  exportSize = o && PAGE_SIZES[o.size] ? o.size : "";
+  try { await doExportNow(kind); } finally { exportSize = ""; }
+}
+async function doExportNow(kind) {
+  const full = syncModel();
+  full.title = $("#docTitle").value.trim() || "Untitled document";
+  const doc = kind === "json" ? full : withoutSuggestions(full);
   const base = safeName(doc.title);
+  const pending = listSuggestions(full).length;
+  if (pending && kind !== "json" && kind !== "print") setTimeout(() => toast(`${pending} pending suggestion${pending === 1 ? " is" : "s are"} not in this file. Accept ${pending === 1 ? "it" : "them"} first to include ${pending === 1 ? "it" : "them"}.`, 6000), 2200);
   try {
     if (kind === "docx") { toast("Making the Word file…", 8000); download(await exportDocx(), base + ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"); toast("Word file downloaded."); }
     else if (kind === "pdf") { toast("Making the PDF…", 15000); download(await exportPdf(), base + ".pdf", "application/pdf"); toast("PDF downloaded."); }
@@ -1247,8 +1388,8 @@ async function start() {
       if (p?.type === "doc" && p.doc) { setDoc(p.doc); opened = true; }
       else if (p?.type === "text" && p.text) { setDoc(textToModel(p.text, p.title)); opened = true; }
     }
-    if (!opened && q.get("template")) opened = await openTemplate(q.get("template"));
     if (!opened && q.get("id")) { const rec = await getProject(q.get("id")); if (rec?.app === "docs") { setDoc(rec.data, { id: rec.id }); opened = true; } }
+    if (!opened && q.get("template")) opened = await openTemplate(q.get("template"));
     if (!opened && !q.has("new") && !q.get("mode")) { const [last] = await listProjects("docs"); if (last) { setDoc(last.data, { id: last.id }); opened = true; } }
   } catch (e) { console.warn("Saved documents could not be read", e); }
   if (!opened) setDoc(newDoc());
@@ -1266,8 +1407,26 @@ async function start() {
 
 const ready = start().catch((e) => { console.error(e); toast("Docs could not start: " + e.message, 8000); });
 
+async function downloadPdfOf(doc, suffix = "") {
+  try {
+    toast("Making the PDF…", 15000);
+    const { fm, modelToPdf } = await loadPdfDeps();
+    const bytes = await modelToPdf(doc, { PDFLib: window.PDFLib, writeLines: fm.writeLines, pickWriter: fm.pickWriter, rasterize, loadImage: loadImageAsPng });
+    download(bytes, safeName(($("#docTitle").value.trim() || "Untitled document") + suffix) + ".pdf", "application/pdf");
+    toast("PDF downloaded.");
+  } catch (e) { console.warn(e); toast(e?.message || "That download did not work. Please try again.", 5000); }
+}
+function setTitle(t) { $("#docTitle").value = String(t || "").slice(0, 200); state.doc.title = $("#docTitle").value.trim() || "Untitled document"; document.title = `${state.doc.title} | AsaanDesk Docs`; markDirty(); }
+function setDocFont(key) { if (!FONT_FAMILIES[key]) return; $("#docFont").value = key; pageChanged(); }
+const ui = initUi({
+  editor, viewer, paper, state, CMDS, change, exec, toast, placeCaret, rememberSelection, restoreSelection, selectedBlocks, syncModel, markDirty,
+  savedRange: () => savedRange, openPanel, closePanel, doExport, downloadPdfOf, newDocument, openTemplate, flushSave, setDoc, setZoom, setTitle, setDocFont,
+  onSave: (f) => hooks.save.push(f), onRender: (f) => hooks.render.push(f), onPanel: (name, f) => { hooks.panel[name] = f; },
+});
+
 // Test hooks for automated checks.
 window.adApp = {
+  ui,
   app: "docs",
   version: "1.0.0",
   ready,

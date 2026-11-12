@@ -61,7 +61,18 @@ function runOpts(r, base, D, extra = {}) {
   if (r.size) o.size = Math.round(r.size * 2);
   else if (base.size) o.size = Math.round(base.size * 2);
   if (base.rtl) o.rightToLeft = true;
+  if (base.lsp) o.characterSpacing = Math.round((base.lsp / 1000) * (r.size || base.size || 11) * 20); // twips
   return o;
+}
+
+/** Word border style for a divider. */
+export function hrBorder(b, D) {
+  const color = hex(b.hc || "#c7cbe0");
+  if (b.hs === "dashed") return { style: D.BorderStyle.DASHED, size: 12, color, space: 1 };
+  if (b.hs === "dotted") return { style: D.BorderStyle.DOTTED, size: 18, color, space: 1 };
+  if (b.hs === "double") return { style: D.BorderStyle.DOUBLE, size: 6, color, space: 1 };
+  if (b.hs === "thick") return { style: D.BorderStyle.SINGLE, size: 24, color, space: 1 };
+  return { style: D.BorderStyle.SINGLE, size: 6, color, space: 1 };
 }
 
 /** TextRuns (and hyperlinks) for runs; "\n" inside a run becomes a line break. */
@@ -85,6 +96,14 @@ function paraOpts(b, D) {
   o.spacing = { after: 120, ...(b.lineHeight ? { line: Math.round(240 * b.lineHeight), lineRule: D.LineRuleType ? D.LineRuleType.AUTO : "auto" } : {}) };
   if (b.dir === "rtl") o.bidirectional = true;
   if (b.indent) o.indent = { left: 720 * b.indent };
+  if (b.bg) {
+    // Coloured block: shaded paragraph with a little room around the text (borders in the same colour pad it out).
+    o.shading = { type: D.ShadingType.CLEAR, color: "auto", fill: hex(b.bg) };
+    const edge = { style: D.BorderStyle.SINGLE, size: 6, color: hex(b.bg), space: Math.min(31, Math.round((b.pad ?? 14) * 0.75)) };
+    o.border = { top: edge, bottom: edge, left: edge, right: edge };
+    o.spacing = { ...o.spacing, before: 160, after: 200 };
+  }
+  if (b.ps) o.spacing = { ...o.spacing, before: b.ps * 20, after: b.ps * 20 };
   return o;
 }
 
@@ -122,23 +141,23 @@ export async function buildWordDocument(doc, D, { loadImage } = {}) {
     switch (b.type) {
       case "h1": case "h2": case "h3": {
         const lvl = { h1: D.HeadingLevel.HEADING_1, h2: D.HeadingLevel.HEADING_2, h3: D.HeadingLevel.HEADING_3 }[b.type];
-        children.push(new D.Paragraph({ ...paraOpts(b, D), heading: lvl, children: runsToWord(b.runs, D, { size: HEADING_PT[b.type], rtl }, { bold: true }) }));
+        children.push(new D.Paragraph({ ...paraOpts(b, D), heading: lvl, children: runsToWord(b.runs, D, { size: HEADING_PT[b.type], rtl, lsp: b.lsp }, { bold: true }) }));
         break;
       }
       case "p":
-        children.push(new D.Paragraph({ ...paraOpts(b, D), children: runsToWord(b.runs, D, { ...base, rtl }) }));
+        children.push(new D.Paragraph({ ...paraOpts(b, D), children: runsToWord(b.runs, D, { ...base, rtl, lsp: b.lsp }) }));
         break;
       case "quote":
-        children.push(new D.Paragraph({ ...paraOpts(b, D), indent: { left: 400 }, border: { left: { style: D.BorderStyle.SINGLE, size: 18, color: "B4B0F5", space: 10 } }, children: runsToWord(b.runs, D, { ...base, rtl }, { italics: true, color: "475569" }) }));
+        children.push(new D.Paragraph({ ...paraOpts(b, D), indent: { left: 400 }, border: { left: { style: D.BorderStyle.SINGLE, size: 18, color: "B4B0F5", space: 10 } }, children: runsToWord(b.runs, D, { ...base, rtl, lsp: b.lsp }, { italics: true, color: "475569" }) }));
         break;
       case "li": {
         if (!prevList) listInstance++;
         prevList = true;
         const level = Math.min(8, b.level || 0);
         if (b.list === "check") {
-          children.push(new D.Paragraph({ ...paraOpts(b, D), indent: { left: 720 * (level + 1), hanging: 360 }, children: [new D.TextRun({ text: (b.checked ? "☒" : "☐") + " ", font: "Segoe UI Symbol", size: base.size * 2 }), ...runsToWord(b.runs, D, { ...base, rtl })] }));
+          children.push(new D.Paragraph({ ...paraOpts(b, D), indent: { left: 720 * (level + 1), hanging: 360 }, children: [new D.TextRun({ text: (b.checked ? "☒" : "☐") + " ", font: "Segoe UI Symbol", size: base.size * 2 }), ...runsToWord(b.runs, D, { ...base, rtl, lsp: b.lsp })] }));
         } else {
-          children.push(new D.Paragraph({ ...paraOpts(b, D), spacing: { after: 60 }, numbering: { reference: b.list === "number" ? "ad-numbers" : "ad-bullets", level, ...(b.list === "number" ? { instance: listInstance } : {}) }, children: runsToWord(b.runs, D, { ...base, rtl }) }));
+          children.push(new D.Paragraph({ ...paraOpts(b, D), spacing: { after: 60 }, numbering: { reference: b.list === "number" ? "ad-numbers" : "ad-bullets", level, ...(b.list === "number" ? { instance: listInstance } : {}) }, children: runsToWord(b.runs, D, { ...base, rtl, lsp: b.lsp }) }));
         }
         break;
       }
@@ -148,7 +167,7 @@ export async function buildWordDocument(doc, D, { loadImage } = {}) {
         break;
       }
       case "hr":
-        children.push(new D.Paragraph({ border: { bottom: { style: D.BorderStyle.SINGLE, size: 6, color: "C7CBE0", space: 1 } }, spacing: { after: 160 }, children: [] }));
+        children.push(new D.Paragraph({ border: { bottom: hrBorder(b, D) }, spacing: { after: 160, ...(b.ps ? { before: b.ps * 20, after: 160 + b.ps * 20 } : {}) }, children: [] }));
         break;
       case "pagebreak":
         children.push(new D.Paragraph({ children: [new D.PageBreak()] }));
@@ -156,19 +175,21 @@ export async function buildWordDocument(doc, D, { loadImage } = {}) {
       case "table": {
         const cols = Math.max(1, ...b.rows.map((r) => r.length));
         const contentTw = mmToTwip(ps.w) - 2 * margin;
-        const colW = Math.floor(contentTw / cols);
-        const border = { style: D.BorderStyle.SINGLE, size: 4, color: "94A3B8" };
+        // Column widths (columns and sidebars keep their %), plain columns have no borders.
+        const colWs = b.cw && b.cw.length === cols ? b.cw.map((p) => Math.floor((contentTw * p) / 100)) : Array(cols).fill(Math.floor(contentTw / cols));
+        const border = b.tstyle === "cols" ? { style: D.BorderStyle.NONE, size: 0, color: "FFFFFF" } : { style: D.BorderStyle.SINGLE, size: 4, color: "94A3B8" };
         const borders = { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border };
+        if (b.ps) children.push(new D.Paragraph({ spacing: { after: b.ps * 20 }, children: [] }));
         children.push(new D.Table({
           width: { size: contentTw, type: D.WidthType.DXA },
-          columnWidths: Array(cols).fill(colW),
+          columnWidths: colWs,
           borders,
           rows: b.rows.map((r, ri) => new D.TableRow({
             tableHeader: !!(b.header && ri === 0),
-            children: r.map((c) => new D.TableCell({
-              width: { size: colW, type: D.WidthType.DXA },
+            children: r.map((c, ci) => new D.TableCell({
+              width: { size: colWs[ci] || colWs[0], type: D.WidthType.DXA },
               margins: { top: 60, bottom: 60, left: 100, right: 100 },
-              ...(b.header && ri === 0 ? { shading: { type: D.ShadingType.CLEAR, color: "auto", fill: "EFEDFF" } } : {}),
+              ...(b.header && ri === 0 ? { shading: { type: D.ShadingType.CLEAR, color: "auto", fill: b.accent ? hex(b.accent) : "EFEDFF" } } : {}),
               children: [new D.Paragraph({ children: runsToWord(c.runs, D, base, b.header && ri === 0 ? { bold: true } : {}) })],
             })),
           })),
@@ -180,12 +201,20 @@ export async function buildWordDocument(doc, D, { loadImage } = {}) {
         const img = await wordImage(b, loadImage);
         if (!img) { children.push(new D.Paragraph({ children: [new D.TextRun({ text: b.alt ? `[Image: ${b.alt}]` : "[Image]", italics: true, color: "6A7389" })] })); break; }
         let w = b.w || img.w, h = b.h && b.w ? b.h : Math.round(w * (img.h / img.w));
+        if (b.full) {
+          // "Set as full page": the picture alone on its page, as large as the page's text area allows.
+          const contentHpx = ((ps.h - 2 * (page.margin || 25.4)) / 25.4) * 96 - 24;
+          const k = Math.min(contentPx / img.w, contentHpx / img.h);
+          w = Math.round(img.w * k); h = Math.round(img.h * k);
+          if (children.length) children.push(new D.Paragraph({ children: [new D.PageBreak()] }));
+        }
         if (w > contentPx) { h = Math.round(h * (contentPx / w)); w = Math.round(contentPx); }
         children.push(new D.Paragraph({
-          alignment: ALIGN(D, b.align),
-          spacing: { after: 120 },
+          alignment: b.full ? D.AlignmentType.CENTER : ALIGN(D, b.align),
+          spacing: { after: 120, ...(b.ps ? { before: b.ps * 20, after: b.ps * 20 } : {}) },
           children: [new D.ImageRun({ type: img.type, data: img.bytes, transformation: { width: Math.max(1, Math.round(w)), height: Math.max(1, Math.round(h)) }, altText: { title: b.alt || "Image", description: b.alt || "Image", name: b.alt || "Image" } })],
         }));
+        if (b.full && i < blocks.length - 1 && blocks[i + 1].type !== "pagebreak") children.push(new D.Paragraph({ children: [new D.PageBreak()] }));
         break;
       }
       default: break;

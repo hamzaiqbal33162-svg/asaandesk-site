@@ -1792,6 +1792,394 @@ ${o.footer ? `    <footer>${esc(o.footer)}</footer>\n` : ""}  </div>
   },
 });
 
+def({
+  id: "quiz", name: "Quiz", blurb: "Multiple-choice questions with a score.", icon: "M9 9a3 3 0 1 1 4 2.8c-.6.3-1 .9-1 1.6V14M12 17.5v.5M4 4h16v16H4z",
+  options: [
+    { key: "title", label: "Heading", type: "text", default: "Quick quiz" },
+    { key: "lead", label: "Text under the heading", type: "text", default: "Pick one answer for each question, then check your score." },
+    { key: "items", label: "Questions", type: "items", itemName: "Question", min: 1, max: 20, fields: [
+      { key: "q", label: "Question", type: "text" },
+      { key: "a1", label: "Answer 1", type: "text" },
+      { key: "a2", label: "Answer 2", type: "text" },
+      { key: "a3", label: "Answer 3 (optional)", type: "text" },
+      { key: "a4", label: "Answer 4 (optional)", type: "text" },
+      { key: "correct", label: "Right answer", type: "select", choices: [["1", "Answer 1"], ["2", "Answer 2"], ["3", "Answer 3"], ["4", "Answer 4"]] },
+    ], default: [
+      { q: "Which planet is closest to the Sun?", a1: "Venus", a2: "Mercury", a3: "Mars", a4: "Earth", correct: "2" },
+      { q: "How many sides does a hexagon have?", a1: "Five", a2: "Seven", a3: "Six", a4: "Eight", correct: "3" },
+      { q: "Which gas do plants take in from the air?", a1: "Carbon dioxide", a2: "Oxygen", a3: "Nitrogen", a4: "", correct: "1" },
+    ] },
+    { key: "button", label: "Button text", type: "text", default: "Check my answers" },
+    { key: "result", label: "Score text ({score} and {total} are filled in)", type: "text", default: "You got {score} of {total} right." },
+    ...STYLE(),
+  ],
+  check(o) { return o.items.some((it) => !String(it[`a${it.correct || 1}`] || "").trim()) ? ["A question's right answer is empty. Pick an answer that has text."] : []; },
+  render(o, u) {
+    const p = "adw-quiz";
+    const css = baseCss(p, o, `${card(p, 720)}
+.${p} fieldset {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--adw-line);
+  border-radius: var(--adw-radius);
+}
+.${p} legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+.${p} label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin: 4px 0;
+  border-radius: var(--adw-radius);
+  cursor: pointer;
+}
+.${p} label:hover {
+  background: var(--adw-soft);
+}
+.${p} input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--adw-accent);
+}
+.${p} .adw-right {
+  background: #dcfce7;
+  color: #14532d;
+}
+.${p} .adw-wrong {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+.${p} .adw-result {
+  margin: 14px 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--adw-accent);
+}`);
+    const qs = o.items.map((it, i) => {
+      const answers = [1, 2, 3, 4].map((k) => [k, String(it[`a${k}`] || "").trim()]).filter(([, t]) => t);
+      return `<fieldset class="adw-q" data-correct="${esc(it.correct || "1")}">
+  <legend>${i + 1}. ${esc(it.q)}</legend>
+${answers.map(([k, t]) => `  <label><input type="radio" name="${u}-q${i + 1}" value="${k}"> ${esc(t)}</label>`).join("\n")}
+</fieldset>`;
+    }).join("\n");
+    const html = `<section class="${p}" aria-labelledby="${u}-title" data-result="${esc(o.result)}">
+  <h2 id="${u}-title">${esc(o.title)}</h2>
+${o.lead ? `  <p class="adw-lead">${esc(o.lead)}</p>\n` : ""}${ind(qs, 2)}
+  <button type="button" class="adw-btn adw-check">${esc(o.button || "Check my answers")}</button>
+  <p class="adw-result" role="status" aria-live="polite"></p>
+</section>`;
+    const js = `(function () {
+  var root = document.currentScript.previousElementSibling;
+  var out = root.querySelector('.adw-result');
+  root.querySelector('.adw-check').addEventListener('click', function () {
+    var qs = root.querySelectorAll('.adw-q'), score = 0;
+    Array.prototype.forEach.call(qs, function (q) {
+      var right = q.getAttribute('data-correct');
+      Array.prototype.forEach.call(q.querySelectorAll('label'), function (l) {
+        var input = l.querySelector('input');
+        l.classList.remove('adw-right', 'adw-wrong');
+        if (input.value === right) l.classList.add('adw-right');
+        else if (input.checked) l.classList.add('adw-wrong');
+      });
+      var picked = q.querySelector('input:checked');
+      if (picked && picked.value === right) score++;
+    });
+    out.textContent = root.getAttribute('data-result').replace('{score}', score).replace('{total}', qs.length);
+  });
+})();`;
+    return { title: o.title, css, html, js };
+  },
+});
+
+def({
+  id: "timer", name: "Timer and stopwatch", blurb: "A countdown timer or a stopwatch with start, pause and reset.", icon: "M12 8v5l3 2M9 2h6M12 4a9 9 0 1 0 0 18 9 9 0 0 0 0-18z",
+  options: [
+    { key: "title", label: "Heading", type: "text", default: "Focus timer" },
+    { key: "mode", label: "Kind", type: "select", choices: [["timer", "Countdown timer"], ["stopwatch", "Stopwatch"]], default: "timer" },
+    { key: "minutes", label: "Minutes (timer)", type: "number", min: 1, max: 180, default: 25, show: (o) => o.mode !== "stopwatch" },
+    { key: "done", label: "Text when the time is up", type: "text", default: "Time is up. Take a short break!", show: (o) => o.mode !== "stopwatch" },
+    { key: "sound", label: "Beep when the time is up", type: "checkbox", default: true, show: (o) => o.mode !== "stopwatch" },
+    ...STYLE(),
+  ],
+  render(o, u) {
+    const p = "adw-timer", stop = o.mode === "stopwatch", total = Math.round(o.minutes || 25) * 60;
+    const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+    const css = baseCss(p, o, `${card(p, 460)}
+.${p} {
+  text-align: center;
+}
+.${p} .adw-time {
+  margin: 14px 0 18px;
+  font-size: clamp(2.6rem, 12vw, 4.2rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--adw-accent);
+}
+.${p} .adw-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.${p} .adw-done {
+  margin: 14px 0 0;
+  font-weight: 700;
+}`);
+    const html = `<section class="${p}" aria-labelledby="${u}-title" data-mode="${stop ? "stopwatch" : "timer"}" data-total="${stop ? 0 : total}" data-sound="${!!o.sound}">
+  <h2 id="${u}-title">${esc(o.title)}</h2>
+  <p class="adw-time" role="timer" aria-live="off">${stop ? "00:00" : fmt(total)}</p>
+  <div class="adw-row">
+    <button type="button" class="adw-btn adw-go">Start</button>
+    <button type="button" class="adw-btn adw-ghost adw-reset">Reset</button>
+  </div>
+${stop ? "" : `  <p class="adw-done" role="status" hidden>${esc(o.done)}</p>\n`}</section>`;
+    const js = `(function () {
+  var root = document.currentScript.previousElementSibling;
+  var stop = root.getAttribute('data-mode') === 'stopwatch';
+  var total = Number(root.getAttribute('data-total')) || 0;
+  var timeEl = root.querySelector('.adw-time'), go = root.querySelector('.adw-go'), done = root.querySelector('.adw-done');
+  var ms = stop ? 0 : total * 1000, last = 0, iv = 0;
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function show() {
+    var s = stop ? Math.floor(ms / 1000) : Math.ceil(ms / 1000);
+    timeEl.textContent = pad(Math.floor(s / 60)) + ':' + pad(s % 60);
+  }
+  function beep() {
+    if (root.getAttribute('data-sound') !== 'true') return;
+    try { var a = new (window.AudioContext || window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain(); o.frequency.value = 880; g.gain.value = 0.1; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + 0.4); } catch (e) {}
+  }
+  function tick() {
+    var now = Date.now(), d = now - last; last = now;
+    ms = stop ? ms + d : Math.max(0, ms - d);
+    show();
+    if (!stop && ms === 0) { pause(); if (done) done.hidden = false; beep(); }
+  }
+  function pause() { clearInterval(iv); iv = 0; go.textContent = 'Start'; }
+  go.addEventListener('click', function () {
+    if (iv) { pause(); return; }
+    if (!stop && ms === 0) ms = total * 1000;
+    if (done) done.hidden = true;
+    last = Date.now(); iv = setInterval(tick, 200); go.textContent = 'Pause';
+  });
+  root.querySelector('.adw-reset').addEventListener('click', function () { pause(); ms = stop ? 0 : total * 1000; if (done) done.hidden = true; show(); });
+  show();
+})();`;
+    return { title: o.title, css, html, js };
+  },
+});
+
+def({
+  id: "flashcards", name: "Flashcards", blurb: "Cards that flip to show the answer, for learning.", icon: "M3 7h14v12H3zM7 3h14v12",
+  options: [
+    { key: "title", label: "Heading", type: "text", default: "Learn the capitals" },
+    { key: "items", label: "Cards", type: "items", itemName: "Card", min: 1, max: 40, fields: [
+      { key: "front", label: "Front", type: "text" },
+      { key: "back", label: "Back", type: "textarea" },
+    ], default: [
+      { front: "Capital of Japan", back: "Tokyo" },
+      { front: "Capital of Canada", back: "Ottawa" },
+      { front: "Capital of Kenya", back: "Nairobi" },
+      { front: "Capital of Brazil", back: "Brasília" },
+    ] },
+    { key: "shuffle", label: "Shuffle the cards each time", type: "checkbox", default: false },
+    ...STYLE(),
+  ],
+  render(o, u) {
+    const p = "adw-flashcards";
+    const css = baseCss(p, o, `${card(p, 560)}
+.${p} {
+  text-align: center;
+}
+.${p} .adw-deck {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+}
+.${p} .adw-flip {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 190px;
+  padding: 24px;
+  border: 2px solid var(--adw-line);
+  border-radius: calc(var(--adw-radius) * 1.4);
+  background: var(--adw-soft);
+  color: var(--adw-text);
+  font: inherit;
+  font-size: 1.35rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.${p} .adw-flip[aria-pressed="true"] {
+  background: var(--adw-accent);
+  color: var(--adw-on-accent);
+  border-color: var(--adw-accent);
+}
+.${p} .adw-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.${p} .adw-count {
+  min-width: 64px;
+  color: var(--adw-muted);
+  font-variant-numeric: tabular-nums;
+}
+.${p} .adw-hint {
+  margin: 0;
+  font-size: .9rem;
+  color: var(--adw-muted);
+}`);
+    const cards = o.items.map((c, i) => `<li${i ? " hidden" : ""}><button type="button" class="adw-flip" aria-pressed="false"><span class="adw-front">${esc(c.front)}</span><span class="adw-back" hidden>${lines(c.back).map(esc).join("<br>")}</span></button></li>`).join("\n");
+    const html = `<section class="${p}" aria-labelledby="${u}-title" data-shuffle="${!!o.shuffle}">
+  <h2 id="${u}-title">${esc(o.title)}</h2>
+  <p class="adw-hint">Tap a card to turn it over.</p>
+  <ol class="adw-deck">
+${ind(cards, 4)}
+  </ol>
+  <div class="adw-row">
+    <button type="button" class="adw-btn adw-ghost adw-prev" aria-label="Previous card">Back</button>
+    <span class="adw-count" aria-live="polite">1 / ${o.items.length}</span>
+    <button type="button" class="adw-btn adw-next" aria-label="Next card">Next</button>
+  </div>
+</section>`;
+    const js = `(function () {
+  var root = document.currentScript.previousElementSibling;
+  var deck = root.querySelector('.adw-deck'), items = Array.prototype.slice.call(deck.children), count = root.querySelector('.adw-count'), i = 0;
+  if (root.getAttribute('data-shuffle') === 'true') {
+    for (var k = items.length - 1; k > 0; k--) { var j = Math.floor(Math.random() * (k + 1)), t = items[k]; items[k] = items[j]; items[j] = t; }
+    items.forEach(function (li) { deck.appendChild(li); });
+  }
+  function flip(btn, on) {
+    btn.setAttribute('aria-pressed', String(on));
+    btn.querySelector('.adw-front').hidden = on;
+    btn.querySelector('.adw-back').hidden = !on;
+  }
+  function show(n) {
+    i = (n + items.length) % items.length;
+    items.forEach(function (li, k) { li.hidden = k !== i; flip(li.querySelector('.adw-flip'), false); });
+    count.textContent = (i + 1) + ' / ' + items.length;
+  }
+  deck.addEventListener('click', function (e) { var b = e.target.closest('.adw-flip'); if (b) flip(b, b.getAttribute('aria-pressed') !== 'true'); });
+  root.querySelector('.adw-prev').addEventListener('click', function () { show(i - 1); });
+  root.querySelector('.adw-next').addEventListener('click', function () { show(i + 1); });
+  show(0);
+})();`;
+    return { title: o.title, css, html, js };
+  },
+});
+
+const UNIT_KINDS = {
+  length: ["Length", [["m", "Metres", 1], ["km", "Kilometres", 1000], ["cm", "Centimetres", 0.01], ["mm", "Millimetres", 0.001], ["mi", "Miles", 1609.344], ["yd", "Yards", 0.9144], ["ft", "Feet", 0.3048], ["in", "Inches", 0.0254]]],
+  weight: ["Weight", [["kg", "Kilograms", 1], ["g", "Grams", 0.001], ["lb", "Pounds", 0.45359237], ["oz", "Ounces", 0.028349523125], ["t", "Tonnes", 1000]]],
+  volume: ["Volume", [["l", "Litres", 1], ["ml", "Millilitres", 0.001], ["gal", "US gallons", 3.785411784], ["cup", "US cups", 0.2365882365], ["m3", "Cubic metres", 1000]]],
+  temperature: ["Temperature", [["c", "Celsius", 0], ["f", "Fahrenheit", 0], ["k", "Kelvin", 0]]],
+};
+/** Unit conversion used by the converter widget (also tested in Node). */
+export function convertUnit(kind, value, from, to) {
+  const v = Number(value);
+  if (!Number.isFinite(v)) return NaN;
+  if (kind === "temperature") {
+    const c = from === "f" ? (v - 32) * 5 / 9 : from === "k" ? v - 273.15 : v;
+    return to === "f" ? c * 9 / 5 + 32 : to === "k" ? c + 273.15 : c;
+  }
+  const list = UNIT_KINDS[kind]?.[1] || [], a = list.find((x) => x[0] === from), b = list.find((x) => x[0] === to);
+  return a && b ? (v * a[2]) / b[2] : NaN;
+}
+def({
+  id: "converter", name: "Unit converter", blurb: "Convert length, weight, volume and temperature.", icon: "M4 8h13l-3-3M20 16H7l3 3",
+  options: [
+    { key: "title", label: "Heading", type: "text", default: "Unit converter" },
+    { key: "kind", label: "Start with", type: "select", choices: Object.entries(UNIT_KINDS).map(([k, v]) => [k, v[0]]), default: "length" },
+    { key: "value", label: "Starting value", type: "number", min: -1000000, max: 1000000, default: 1 },
+    ...STYLE(),
+  ],
+  render(o, u) {
+    const p = "adw-converter";
+    const css = baseCss(p, o, `${card(p, 520)}
+.${p} .adw-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.${p} label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+  font-size: .95rem;
+}
+.${p} .adw-wide {
+  grid-column: 1 / -1;
+}
+.${p} input,
+.${p} select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--adw-line);
+  border-radius: var(--adw-radius);
+  background: var(--adw-bg);
+  color: var(--adw-text);
+  font: inherit;
+}
+.${p} .adw-out {
+  margin: 16px 0 0;
+  padding: 14px;
+  border-radius: var(--adw-radius);
+  background: var(--adw-soft);
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--adw-accent);
+  text-align: center;
+}`);
+    const opts = (list) => list.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("");
+    const html = `<section class="${p}" aria-labelledby="${u}-title" data-units="${esc(json(Object.fromEntries(Object.entries(UNIT_KINDS).map(([k, v]) => [k, v[1]]))))}">
+  <h2 id="${u}-title">${esc(o.title)}</h2>
+  <div class="adw-grid">
+    <label class="adw-wide" for="${u}-kind">Measure<select id="${u}-kind">${opts(Object.entries(UNIT_KINDS).map(([k, v]) => [k, v[0]])).replace(`value="${o.kind}"`, `value="${o.kind}" selected`)}</select></label>
+    <label class="adw-wide" for="${u}-val">Value<input id="${u}-val" type="number" step="any" value="${esc(String(o.value))}"></label>
+    <label for="${u}-from">From<select id="${u}-from"></select></label>
+    <label for="${u}-to">To<select id="${u}-to"></select></label>
+  </div>
+  <p class="adw-out" role="status" aria-live="polite"></p>
+</section>`;
+    const js = `(function () {
+  var root = document.currentScript.previousElementSibling;
+  var units = JSON.parse(root.getAttribute('data-units'));
+  var kind = root.querySelector('select[id$="-kind"]'), val = root.querySelector('input'), from = root.querySelector('select[id$="-from"]'), to = root.querySelector('select[id$="-to"]'), out = root.querySelector('.adw-out');
+  function fill() {
+    var list = units[kind.value];
+    from.innerHTML = to.innerHTML = '';
+    list.forEach(function (u) { from.add(new Option(u[1], u[0])); to.add(new Option(u[1], u[0])); });
+    to.selectedIndex = list.length > 1 ? 1 : 0;
+  }
+  function conv(v, a, b) {
+    if (kind.value === 'temperature') {
+      var c = a === 'f' ? (v - 32) * 5 / 9 : a === 'k' ? v - 273.15 : v;
+      return b === 'f' ? c * 9 / 5 + 32 : b === 'k' ? c + 273.15 : c;
+    }
+    var list = units[kind.value], x, y;
+    list.forEach(function (u) { if (u[0] === a) x = u[2]; if (u[0] === b) y = u[2]; });
+    return v * x / y;
+  }
+  function run() {
+    var v = parseFloat(val.value);
+    if (!isFinite(v)) { out.textContent = 'Type a number.'; return; }
+    var r = conv(v, from.value, to.value);
+    out.textContent = v + ' ' + from.options[from.selectedIndex].text + ' = ' + (Math.round(r * 10000) / 10000) + ' ' + to.options[to.selectedIndex].text;
+  }
+  kind.addEventListener('change', function () { fill(); run(); });
+  [val, from, to].forEach(function (el) { el.addEventListener('input', run); el.addEventListener('change', run); });
+  fill(); run();
+})();`;
+    return { title: o.title, css, html, js };
+  },
+});
+
 export const WIDGETS = W;
 export const widgetById = (id) => W.find((w) => w.id === id);
 

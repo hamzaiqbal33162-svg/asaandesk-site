@@ -13,6 +13,16 @@ export const FORMATS = {
   percent: { label: "Percent  12.34%", code: "0.00%" },
   date: { label: "Date  15 Jan 2024", code: "dd mmm yyyy" },
   time: { label: "Time  2:30 PM", code: "h:mm AM/PM" },
+  dateShort: { label: "Date  15/01/2024", code: "dd/mm/yyyy" },
+  dateMdy: { label: "Month Day, Year  Jan 15, 2024", code: "mmm d, yyyy" },
+  dateUs: { label: "Month/Day/Year  1/15/2024", code: "m/d/yyyy" },
+  monthYear: { label: "Month Year  Jan 2024", code: "mmm yyyy" },
+  dateLong: { label: "Long date  Monday, 15 January 2024", code: "dddd, d mmmm yyyy" },
+  dateTime: { label: "Date and time  15 Jan 2024 2:30 PM", code: "dd mmm yyyy h:mm AM/PM" },
+  eur: { label: "Euros  €1,234.00", code: '"€"#,##0.00' },
+  gbp: { label: "Pounds  £1,234.00", code: '"£"#,##0.00' },
+  accounting: { label: "Accounting  (Rs 1,234.00)", code: '"Rs "#,##0.00;("Rs "#,##0.00)' },
+  scientific: { label: "Scientific  1.23E+03", code: "0.00E+00" },
 };
 export const fmtCode = (fmt) => (!fmt ? "General" : FORMATS[fmt] ? FORMATS[fmt].code : fmt);
 export const isDateCode = (code) => /[dy]/i.test(String(code).replace(/"[^"]*"|\\./g, "")) || /^[^"]*h+[^"]*:/.test(code);

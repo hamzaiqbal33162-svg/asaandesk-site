@@ -63,6 +63,10 @@ export const BRUSHES = {
   pencil: { label: "Pencil", size: 3, opacity: 0.9, hardness: 1, spacing: 0.12, pressureSize: 0.35, pressureOpacity: 0.4, grain: 0.45, smoothing: 0.15, combine: "max" },
   pen: { label: "Pen", size: 8, opacity: 1, hardness: 0.9, spacing: 0.08, pressureSize: 0.85, smoothing: 0.45, combine: "max" },
   marker: { label: "Marker", size: 22, opacity: 0.5, hardness: 0.75, spacing: 0.06, aspect: 0.6, angle: -30, smoothing: 0.3, combine: "max" },
+  // Glow pen: a soft halo in the colour with a bright, almost white core (mode "glow" in applyMask).
+  glow: { label: "Glow pen", size: 22, opacity: 1, hardness: 0, spacing: 0.05, smoothing: 0.4, combine: "max", mode: "glow" },
+  // Highlighter: a flat, upright chisel tip; see-through and even, like a marker pen over text.
+  highlighter: { label: "Highlighter", size: 34, opacity: 0.4, hardness: 0.95, spacing: 0.05, aspect: 0.28, angle: 90, smoothing: 0.35, combine: "max" },
   airbrush: { label: "Airbrush", size: 48, opacity: 0.6, hardness: 0, spacing: 0.08, flow: 0.06, scatter: 0.2, pressureOpacity: 1, smoothing: 0.2, combine: "add" },
   calligraphy: { label: "Calligraphy", size: 18, opacity: 1, hardness: 1, spacing: 0.04, aspect: 0.2, angle: 35, pressureSize: 0.5, smoothing: 0.4, combine: "max" },
   smudge: { label: "Smudge", size: 28, opacity: 0.7, hardness: 0.3, spacing: 0.12, smoothing: 0.2, mode: "smudge" },
@@ -167,10 +171,13 @@ export function applyMask(dst, base, mask, rect, rgb, opacity = 1, mode = "paint
         D[j] = B[j]; D[j + 1] = B[j + 1]; D[j + 2] = B[j + 2]; D[j + 3] = B[j + 3] * (1 - m);
         continue;
       }
+      // glow: the inner part of the (soft) stroke turns towards white, so the line looks lit from inside
+      let r = rgb[0], g = rgb[1], b = rgb[2];
+      if (mode === "glow") { const raw = mask[i], core = raw > 0.62 ? Math.min(1, (raw - 0.62) / 0.3) * 0.88 : 0; r += (255 - r) * core; g += (255 - g) * core; b += (255 - b) * core; }
       const ba = B[j + 3] / 255, k = ba * (1 - m), oa = m + k;
-      D[j] = (rgb[0] * m + B[j] * k) / oa;
-      D[j + 1] = (rgb[1] * m + B[j + 1] * k) / oa;
-      D[j + 2] = (rgb[2] * m + B[j + 2] * k) / oa;
+      D[j] = (r * m + B[j] * k) / oa;
+      D[j + 1] = (g * m + B[j + 1] * k) / oa;
+      D[j + 2] = (b * m + B[j + 2] * k) / oa;
       D[j + 3] = oa * 255;
     }
   }
@@ -307,6 +314,24 @@ export function fillMask(dst, mask, rect, rgb, opacity = 1) {
   }
 }
 
+/* ---------- canvas resize ---------- */
+/** Where the old picture goes when the canvas changes by (dw, dh) px: anchor tl, t, tr, l, c, r, bl, b, br. */
+export function anchorOffset(anchor, dw, dh) {
+  const a = String(anchor || "c");
+  const fx = a !== "c" && /l$/.test(a) ? 0 : /r$/.test(a) ? 1 : 0.5, fy = a[0] === "t" ? 0 : a[0] === "b" ? 1 : 0.5;
+  return [Math.round(dw * fx), Math.round(dh * fy)];
+}
+/** Pure version of the canvas-mode resize (used by tests): the buffer grows/shrinks around the anchor, new space = fill rgb or clear. */
+export function resizeCanvasBuffer(buf, w, h, anchor = "c", fill = null) {
+  const out = makeBuffer(w, h), [dx, dy] = anchorOffset(anchor, w - buf.width, h - buf.height), O = out.data, S = buf.data;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const sx = x - dx, sy = y - dy, j = (y * w + x) * 4;
+    if (sx >= 0 && sy >= 0 && sx < buf.width && sy < buf.height) { const i = (sy * buf.width + sx) * 4; O[j] = S[i]; O[j + 1] = S[i + 1]; O[j + 2] = S[i + 2]; O[j + 3] = S[i + 3]; }
+    else if (fill) { O[j] = fill[0]; O[j + 1] = fill[1]; O[j + 2] = fill[2]; O[j + 3] = 255; }
+  }
+  return out;
+}
+
 /* ---------- layers ---------- */
 /**
  * Flattens layers (bottom first): [{ data: buffer | Uint8ClampedArray, opacity, hidden }] with source-over and the
@@ -329,4 +354,34 @@ export function composite(layers, width, height, background = null) {
     if (a > 0) { const u = 255 / a; O[j] = r * u; O[j + 1] = g * u; O[j + 2] = b * u; O[j + 3] = a; }
   }
   return out;
+}
+
+/**
+ * The colours used in a drawing (Canva's "document colours"): opaque pixels counted in coarse colour boxes, the
+ * paper colour left out, look-alike boxes merged, the most used first. buf: RGBA pixels; returns hex strings.
+ */
+export function drawingColors(buf, { max = 8, paper = null, minShare = 0.002 } = {}) {
+  const d = buf.data, n = buf.width * buf.height, step = Math.max(1, Math.floor(n / 250000));
+  const bins = new Map(), pr = paper ? hexToRgb(paper) : null;
+  let total = 0;
+  for (let p = 0; p < n; p += step) {
+    const j = p * 4;
+    if (d[j + 3] < 200) continue;
+    const r = d[j], g = d[j + 1], b = d[j + 2];
+    if (pr && Math.abs(r - pr[0]) + Math.abs(g - pr[1]) + Math.abs(b - pr[2]) < 24) continue;
+    const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    let e = bins.get(key);
+    if (!e) bins.set(key, (e = { n: 0, r: 0, g: 0, b: 0 }));
+    e.n++; e.r += r; e.g += g; e.b += b; total++;
+  }
+  const out = [];
+  for (const e of [...bins.values()].sort((a, b) => b.n - a.n)) {
+    if (e.n < total * minShare) break;
+    const c = [e.r / e.n, e.g / e.n, e.b / e.n];
+    // anti-aliased edges and shading make many near colours: keep the most used of each look-alike group
+    if (out.some((o) => Math.abs(o[0] - c[0]) + Math.abs(o[1] - c[1]) + Math.abs(o[2] - c[2]) < 60)) continue;
+    out.push(c);
+    if (out.length >= max) break;
+  }
+  return out.map(rgbToHex);
 }

@@ -1,9 +1,10 @@
 // Canvas renderer (browser): PNG/JPG export, animation frames (WebM/GIF), present mode, mockups and thumbnails.
 // Uses the same text layout and vector primitives as the SVG renderer and the PDF export.
-import { layoutText, cssFont, underlineMetrics, CSS_FAMILY, setFallbackMeasure } from "./textlayout.js";
+import { layoutText, cssFont, underlineMetrics, strikeMetrics, CSS_FAMILY, setFallbackMeasure } from "./textlayout.js";
+import { textPaint, curveLayout, curveOffset, gradientOk, hasGradient } from "./textfx.js";
 import { shapePrims, elementPrims, rectPath, framePath, gradientLine, cssFilter } from "./shapes.js";
 import { revealRuns } from "./svg.js";
-import { animState } from "./animate.js";
+import { animState, pageDuration, withClicks } from "./animate.js";
 import { presetPx } from "./presets.js";
 import { ensureFont } from "../shared/brand.js";
 
@@ -80,7 +81,7 @@ export function drawPrims(ctx, prims, sx = 1, sy = sx) {
       ctx.scale(sx, sy);
       const path = P2D(p.d);
       if (p.fill && p.fill !== "none") { ctx.fillStyle = p.fill; ctx.fill(path); }
-      if (p.stroke && p.stroke !== "none") { ctx.strokeStyle = p.stroke; ctx.lineWidth = p.sw ?? 1; ctx.lineCap = p.cap || "round"; ctx.lineJoin = p.join || "round"; ctx.stroke(path); }
+      if (p.stroke && p.stroke !== "none") { ctx.strokeStyle = p.stroke; ctx.lineWidth = p.sw ?? 1; ctx.lineCap = p.cap || "round"; ctx.lineJoin = p.join || "round"; if (p.dash) ctx.setLineDash(p.dash); ctx.stroke(path); }
     }
     ctx.restore();
   }
@@ -109,25 +110,69 @@ function drawText(ctx, l, env) {
     ctx.shadowOffsetY = m.b * (sh.x || 0) + m.d * (sh.y || 0);
     ctx.shadowBlur = (sh.blur || 0) * k;
   };
-  const each = (fn) => { for (const ln of lines) for (const r of ln.runs) if (r.t) fn(r, ln); };
-  if (t.outline && t.outline.width > 0) {
-    ctx.strokeStyle = t.outline.color || "#000000"; ctx.lineWidth = t.outline.width * 2; ctx.lineJoin = "round"; ctx.miterLimit = 2;
-    setShadow(true);
-    each((r, ln) => fillTextSpaced(ctx, r.t, r.x, ln.baseline, t.letterSpacing, true));
-    setShadow(false);
-  } else setShadow(true);
-  ctx.fillStyle = t.color;
-  each((r, ln) => fillTextSpaced(ctx, r.t, r.x, ln.baseline, t.letterSpacing));
-  setShadow(false);
-  if (t.underline) {
-    const um = underlineMetrics(t.size);
+  // Curved text: each letter at its place on the arc; straight text: the laid-out runs.
+  const cl = curveLayout(t);
+  let glyphs = null;
+  if (cl) {
+    const [ox, oy] = curveOffset(cl, l.w, l.h);
+    const shown = env.reveal == null || env.reveal >= 1 ? cl.glyphs.length : Math.floor(cl.glyphs.length * Math.max(0, env.reveal));
+    glyphs = cl.glyphs.slice(0, shown).map((g) => ({ ...g, x: g.x + ox, y: g.y + oy }));
+  }
+  const each = (fn) => {
+    if (glyphs) { for (const g of glyphs) if (g.ch.trim()) fn(g, null); return; }
+    for (const ln of lines) for (const r of ln.runs) if (r.t) fn(r, ln);
+  };
+  const put = (r, ln, stroke) => {
+    if (!ln) { ctx.save(); ctx.translate(r.x, r.y); ctx.rotate((r.rot * Math.PI) / 180); ctx.textAlign = "center"; stroke ? ctx.strokeText(r.ch, 0, 0) : ctx.fillText(r.ch, 0, 0); ctx.restore(); return; }
+    fillTextSpaced(ctx, r.t, r.x, ln.baseline, t.letterSpacing, stroke);
+  };
+  const bars = (color) => {
+    if (glyphs || !(t.underline || t.strike)) return;
+    const um = underlineMetrics(t.size), sm = strikeMetrics(t.size);
+    ctx.fillStyle = color;
     for (const ln of lines) {
       const shown = ln.runs.filter((r) => r.t);
       if (!shown.length || !ln.text.trim()) continue;
       const x0 = shown[0].x, x1 = shown.length === ln.runs.length ? ln.x + ln.width : shown[shown.length - 1].x + shown[shown.length - 1].w;
-      ctx.fillRect(x0, ln.baseline + um.offset - um.thickness / 2, x1 - x0, um.thickness);
+      if (t.underline) ctx.fillRect(x0, ln.baseline + um.offset - um.thickness / 2, x1 - x0, um.thickness);
+      if (t.strike) ctx.fillRect(x0, ln.baseline - sm.offset - sm.thickness / 2, x1 - x0, sm.thickness);
     }
+  };
+  // One paint of all the letters: fill (colour, gradient or none) and an optional stroke.
+  // main: the drop shadow (t.shadow) falls from the outline when there is one, else from the letters.
+  const paintAll = (fill, stroke, main = false) => {
+    if (main) setShadow(true);
+    if (stroke) {
+      ctx.strokeStyle = stroke.color; ctx.lineWidth = stroke.width; ctx.lineJoin = "round"; ctx.miterLimit = 2;
+      each((r, ln) => put(r, ln, true));
+      if (main) setShadow(false);
+    }
+    if (fill) { ctx.fillStyle = fill; each((r, ln) => put(r, ln, false)); }
+    bars(typeof fill === "string" ? fill : stroke?.color || t.color);
+    if (main) setShadow(false);
+  };
+  const paint = textPaint(t);
+  // Effect passes under the text (offset copies; blurred ones are drawn far away and brought back as a shadow,
+  // which blurs in every browser).
+  for (const p of paint.passes) {
+    ctx.save();
+    ctx.globalAlpha *= p.opacity;
+    if (p.blur > 0) {
+      const FAR = 10000, m = ctx.getTransform(), k = scaleOf(ctx);
+      ctx.shadowColor = p.fill || p.stroke?.color || t.color; ctx.shadowBlur = p.blur * k;
+      ctx.shadowOffsetX = m.a * (FAR + p.dx) + m.c * p.dy; ctx.shadowOffsetY = m.b * (FAR + p.dx) + m.d * p.dy;
+      ctx.translate(-FAR, 0);
+    } else ctx.translate(p.dx, p.dy);
+    paintAll(p.fill, p.stroke);
+    ctx.restore();
   }
+  let fill = paint.main.fill;
+  if (fill && gradientOk(t)) {
+    const g = gradientLine(t.gradient.angle ?? 90, l.w, l.h), lg = ctx.createLinearGradient(g.x1, g.y1, g.x2, g.y2);
+    t.gradient.stops.forEach((c, i, a) => lg.addColorStop(i / Math.max(1, a.length - 1), c));
+    fill = lg;
+  }
+  paintAll(fill, paint.main.stroke, true);
   ctx.restore();
 }
 
@@ -147,6 +192,8 @@ function drawImageLayer(ctx, l, env) {
     drawCropped(ctx, img, im.crop, l.w, l.h);
   } else { ctx.fillStyle = "#ecebfb"; ctx.fillRect(0, 0, l.w, l.h); }
   ctx.restore();
+  // Border (Canva: border colour and weight on photos), inside the photo's edge.
+  if (im.border && im.border.width > 0) { const p = P2D(rectPath(0, 0, l.w, l.h, im.radius || 0)); ctx.save(); ctx.clip(p); ctx.strokeStyle = im.border.color || "#ffffff"; ctx.lineWidth = im.border.width * 2; ctx.stroke(p); ctx.restore(); }
 }
 
 function drawFrame(ctx, l, env) {
@@ -163,7 +210,9 @@ function drawFrame(ctx, l, env) {
 
 export function drawLayer(ctx, l, env) {
   if (l.hidden) return;
-  const st = env.time != null ? animState(l.animation, env.time, env.size) : null;
+  // Element timing (Canva "Show element timing"): only on screen between its start and end second.
+  if (env.time != null && l.timing && (env.time < (+l.timing.start || 0) || (l.timing.end != null && env.time > +l.timing.end))) return;
+  const st = env.time != null ? animState(l.animation, env.time, env.size, env.end) : null;
   if (st && st.opacity <= 0) return;
   ctx.save();
   ctx.globalAlpha *= (l.opacity ?? 1) * (st ? st.opacity : 1);
@@ -175,8 +224,16 @@ export function drawLayer(ctx, l, env) {
   const sub = { ...env, reveal: st ? st.reveal : null };
   switch (l.type) {
     case "text": drawText(ctx, l, sub); break;
-    case "shape": drawPrims(ctx, shapePrims(l.shape, l.w, l.h)); break;
-    case "element": drawPrims(ctx, elementPrims(l.element), l.w / l.element.vb[0], l.h / l.element.vb[1]); break;
+    case "shape": {
+      let pr = shapePrims(l.shape, l.w, l.h);
+      if (hasGradient(l.shape.gradient)) { const g = gradientLine(l.shape.gradient.angle ?? 90, l.w, l.h), lg = ctx.createLinearGradient(g.x1, g.y1, g.x2, g.y2); l.shape.gradient.stops.forEach((c, i, a) => lg.addColorStop(i / Math.max(1, a.length - 1), c)); pr = pr.map((p) => (p.fill && p.fill !== "none" ? { ...p, fill: lg } : p)); }
+      drawPrims(ctx, pr); break;
+    }
+    case "element": {
+      const e = l.element;
+      if (e.flipX || e.flipY) { ctx.translate(e.flipX ? l.w : 0, e.flipY ? l.h : 0); ctx.scale(e.flipX ? -1 : 1, e.flipY ? -1 : 1); }
+      drawPrims(ctx, elementPrims(e), l.w / e.vb[0], l.h / e.vb[1]); break;
+    }
     case "chart": { const pr = env.chartPrims?.(l.chart.spec, l.w, l.h); if (pr) drawPrims(ctx, pr); break; }
     case "table": { const pr = env.tablePrims?.(l.table, l.w); if (pr) drawPrims(ctx, pr); break; }
     case "image": drawImageLayer(ctx, l, env); break;
@@ -213,14 +270,16 @@ export function drawBackground(ctx, bg, W, H, b, env) {
  * images (Map), time (s, for animations), chartPrims, tablePrims, background: false to skip it }.
  */
 export function drawPage(ctx, design, index, opts = {}) {
-  const pg = design.pages[index];
+  // With a time (videos, GIFs, Present), "appear on click" items play in their build order (opts.reveal: the
+  // times they were revealed in Present; none = one after another).
+  const pg = opts.time != null ? withClicks(design.pages[index], opts.reveal || null) : design.pages[index];
   const { w: W, h: H } = presetPx(design.preset);
   const b = opts.bleed || 0, k = opts.scale || 1;
   ctx.save();
   ctx.scale(k, k);
   ctx.translate(b, b);
   if (opts.background !== false) drawBackground(ctx, pg.background, W, H, b, opts);
-  const env = { ...opts, size: { w: W, h: H } };
+  const env = { ...opts, size: { w: W, h: H }, end: opts.time != null && pg.layers.some((l) => l.animation?.exit) ? pageDuration(pg) : null };
   for (const l of pg.layers) drawLayer(ctx, l, env);
   ctx.restore();
 }

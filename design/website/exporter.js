@@ -1,9 +1,10 @@
 // Export: one self-contained index.html (images inline as data: URLs), or a .zip with index.html + images/.
 // Pure: the zip function gets fflate's zipSync passed in, so Node tests can run it directly.
-import { renderSite, slugify } from "./blocks.js";
+import { renderSite, slugify, pageList, pageFile, normSettings, siteBase } from "./blocks.js";
 
-/** Single-file site: inline CSS, images as data: URLs, tiny inline script for the menu and FAQ only. */
-export function exportHtml(site) { return renderSite(site, { mode: "export", imageMode: "inline" }); }
+/** Single-file page: inline CSS, images as data: URLs, tiny inline script. Multi-page sites: the page open in the
+ *  editor (or `page`); the ZIP has every page. */
+export function exportHtml(site, page = null) { return renderSite(site, { mode: "export", imageMode: "inline", page }); }
 
 /** data: URL -> { mime, bytes } (base64 or percent-encoded). */
 export function dataUrlToBytes(url) {
@@ -19,21 +20,36 @@ export function dataUrlToBytes(url) {
   return { mime, bytes: new TextEncoder().encode(decodeURIComponent(body)) };
 }
 
-/** Files of the zip version: { "index.html": Uint8Array, "images/…": Uint8Array }. */
-export function siteFiles(site) {
-  const assets = new Map();
-  const html = renderSite(site, { mode: "export", imageMode: "files", assets });
-  const files = { "index.html": new TextEncoder().encode(html) };
+/** Files of the zip version: { "index.html": Uint8Array, "<page>.html": …, "images/…": Uint8Array }.
+ *  publish: also robots.txt (search visibility) and, with a site address, sitemap.xml. `html` = the home page. */
+export function siteFiles(site, { publish = false } = {}) {
+  const assets = new Map(), enc = new TextEncoder(), files = {};
+  const pages = pageList(site);
+  let html = "";
+  pages.forEach((_, i) => {
+    const h = renderSite(site, { mode: "export", imageMode: "files", assets, page: site.pages?.length ? i : null });
+    files[pageFile(site, i)] = enc.encode(h);
+    if (i === 0) html = h;
+  });
   for (const [url, name] of assets) files[name] = dataUrlToBytes(url).bytes;
+  if (publish) {
+    const S = normSettings(site.settings);
+    const base = siteBase(S);
+    files["robots.txt"] = enc.encode(S.indexable ? `User-agent: *\nAllow: /\n${base ? `Sitemap: ${base}sitemap.xml\n` : ""}` : "User-agent: *\nDisallow: /\n");
+    if (base) {
+      const urls = pages.map((_, i) => `  <url><loc>${base}${i ? pageFile(site, i) : ""}</loc></url>`).join("\n");
+      files["sitemap.xml"] = enc.encode(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
+    }
+  }
   return { html, files };
 }
 
 /** The .zip bytes. Images that are already compressed are stored, text files are deflated. */
-export function buildZip(site, { zipSync }) {
-  const { files } = siteFiles(site);
+export function buildZip(site, { zipSync, publish = false }) {
+  const { files } = siteFiles(site, { publish });
   const input = {};
   const mtime = new Date();
-  for (const [name, bytes] of Object.entries(files)) input[name] = [bytes, { level: /\.(html|svg|css|js|txt)$/.test(name) ? 6 : 0, mtime }];
+  for (const [name, bytes] of Object.entries(files)) input[name] = [bytes, { level: /\.(html|svg|css|js|txt|xml)$/.test(name) ? 6 : 0, mtime }];
   return zipSync(input);
 }
 

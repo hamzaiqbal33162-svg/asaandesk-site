@@ -1,6 +1,7 @@
 // Studio editor state shared by the stage, the panels and the app shell.
 import { presetPx } from "./presets.js";
 import { History, findLayer } from "./model.js";
+import { renumberPages } from "./pagetools.js";
 
 export const S = {
   design: null,      // the open Design JSON
@@ -29,10 +30,13 @@ export const single = () => { const s = selLayers(); return s.length === 1 ? s[0
 
 // Changes that come in quick streams (typing, sliders, colour pickers, nudges) merge into one undo step;
 // discrete actions (move, resize, add, delete …) always get their own step.
-const MERGE = /^(type:|nudge$|name$|geo-|f-|lh$|ls$|opacity$|tcolor$|size$|fill$|stroke$|sw$|radius$|sides$|points$|el-|sh-|ol-|bg-c|bg-r|bg-color$|grad|anim-delay$|anim-dur$|collage-gap$|collage-radius$|fb-|frame-r$|tsize$|th$|chart-title$|chart-data$|table$|color$)/;
+const MERGE = /^(type:|nudge$|name$|fx-|grad$|curve-v$|page-title$|table-|chart-color$|chart-text$|chart-center$|geo-|f-|lh$|ls$|opacity$|tcolor$|size$|fill$|stroke$|sw$|radius$|sides$|points$|el-|sh-|ol-|bg-c|bg-r|bg-color$|grad|anim-delay$|anim-dur$|collage-gap$|collage-radius$|fb-|frame-r$|tsize$|th$|chart-title$|chart-data$|table$|color$|notes$|list$)/
 /** Records a change for undo/redo and autosave. */
 export function commit(key = null) {
   if (!S.design) return;
+  // Automatic page numbers follow every change of pages (add, delete, move, hide, duplicate).
+  const renumbered = renumberPages(S.design);
+  if (renumbered.length) emit("renumbered", renumbered);
   if (S.history.commit(S.design, key && MERGE.test(key) ? key : null)) emit("change", key);
   emit("history");
 }

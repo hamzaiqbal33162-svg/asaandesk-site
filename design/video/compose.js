@@ -1,5 +1,5 @@
 // Composition timing maths (pure, no DOM, unit tested): what is visible and audible at time t.
-import { PRESETS, layoutVideo, itemEnd } from "./model.js";
+import { PRESETS, layoutVideo, itemEnd, OVERLAP_TRANSITIONS, isVideoOverlay, overlaySrc } from "./model.js";
 
 const EPS = 1e-6;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -53,34 +53,94 @@ export function frameAt(p, t, layout = layoutVideo(p.video)) {
     env = clipEnvelope(e, t);
   } else if (act.length >= 2) {
     const [a, b] = act.slice(-2);
-    const pr = b.tIn.type === "crossfade" && b.tIn.dur > 0 ? clamp((t - b.start) / b.tIn.dur, 0, 1) : 1;
-    visuals.push({ entry: a, src: srcTime(a, t), alpha: 1 }, { entry: b, src: srcTime(b, t), alpha: pr });
+    const type = b.tIn.type, overlap = OVERLAP_TRANSITIONS.has(type) && b.tIn.dur > 0;
+    const pr = overlap ? clamp((t - b.start) / b.tIn.dur, 0, 1) : 1;
+    // crossfade and zoom blend the incoming clip in; slide, push, wipe and circle draw it fully, moved or cut to shape
+    const alpha = type === "crossfade" || type === "zoom" ? pr : 1;
+    const tr = overlap && type !== "crossfade" ? { type, dir: b.tIn.dir || "left", pr } : null;
+    visuals.push({ entry: a, src: srcTime(a, t), alpha: 1, ...(tr && type === "push" ? { tr: { ...tr, role: "out" } } : {}) },
+      { entry: b, src: srcTime(b, t), alpha, ...(tr ? { tr: { ...tr, role: "in" } } : {}) });
     env = (1 - pr) * clipEnvelope(a, t) + pr * clipEnvelope(b, t);
   }
   const texts = [];
   for (const c of p.text) { const s = textState(c, t); if (s) texts.push({ clip: c, ...s }); }
-  return { visuals, black: visuals.length ? clamp(1 - env, 0, 1) : 0, texts };
+  const overlays = [];
+  for (const c of p.overlay || []) {
+    const a = overlayAlpha(c, t); if (!(a > 0)) continue;
+    const an = (c.animIn && c.animIn !== "none") || (c.animOut && c.animOut !== "none") ? animState(c, t - c.start) : null;
+    overlays.push({ clip: c, alpha: a * (an ? an.alpha : 1), ...(an ? { anim: an } : {}), src: isVideoOverlay(p, c) ? overlaySrc(c, t) : t - c.start });
+  }
+  return { visuals, black: visuals.length ? clamp(1 - env, 0, 1) : 0, texts, overlays };
+}
+/** Opacity of an overlay picture at t (fades in/out at its ends), 0 when it isn't on screen. */
+export function overlayAlpha(c, t) {
+  const local = t - c.start;
+  if (local < -EPS || local >= c.dur - EPS) return 0;
+  let a = c.opacity ?? 1;
+  if (c.fadeIn > 0 && local < c.fadeIn) a *= clamp(local / c.fadeIn, 0, 1);
+  if (c.fadeOut > 0 && c.dur - local < c.fadeOut) a *= clamp((c.dur - local) / c.fadeOut, 0, 1);
+  return clamp(a, 0, 1);
+}
+/** Where an overlay picture of size sw x sh sits in a W x H frame: { x, y, w, h } (width c.w of the frame, centred on c.x, c.y). */
+export function overlayRect(c, sw, sh, W, H) {
+  const w = clamp(c.w ?? 0.3, 0.02, 2) * W, h = sw > 0 ? (w * sh) / sw : w;
+  return { x: (c.x ?? 0.5) * W - w / 2, y: (c.y ?? 0.5) * H - h / 2, w, h };
 }
 
 /** Text animation state at t, or null when the text isn't on screen. dx/dy are in 1080p pixels. */
 export function textState(c, t) {
   const local = t - c.start;
   if (local < -EPS || local >= c.dur - EPS) return null;
-  const ad = Math.min(ANIM_DUR, c.dur / 2);
-  const s = { alpha: 1, dx: 0, dy: 0, scale: 1, chars: Infinity };
+  const s = animState(c, local, c.text);
+  if (c.capAnim && c.capAnim !== "none") s.word = captionWord(c.text, local, c.dur);
+  return s;
+}
+const NEON = [0, 0.9, 0.15, 1, 0.35, 1];
+/**
+ * Intro/outro animation of a text or picture `local` seconds into it: { alpha, dx, dy (1080p px), scale, rot (rad), wipe (0..1
+ * of the width shown from the left), chars }. Intro/outro lengths: c.animInDur / c.animOutDur (default 0.5 s, at most half).
+ */
+export function animState(c, local, text = "") {
+  const inD = Math.min(c.animInDur ?? ANIM_DUR, c.dur / 2), outD = Math.min(c.animOutDur ?? ANIM_DUR, c.dur / 2);
+  const s = { alpha: 1, dx: 0, dy: 0, scale: 1, chars: Infinity, rot: 0, wipe: 1 };
   const apply = (kind, q, dir) => {
     if (!kind || kind === "none" || q >= 1) return;
     const e = easeOut(q);
-    if (kind === "fade") s.alpha *= e;
+    if (kind === "fade" || kind === "breathe" || kind === "drift") s.alpha *= e;
     else if (kind === "slide-up") { s.alpha *= e; s.dy += (1 - e) * 60 * dir; }
     else if (kind === "slide-left") { s.alpha *= e; s.dx += (1 - e) * 140 * dir; }
     else if (kind === "pop") { s.alpha *= Math.min(1, q * 2); s.scale *= 0.6 + 0.4 * backOut(q); }
-    else if (kind === "typewriter") s.chars = Math.min(s.chars, Math.floor(String(c.text || "").length * q));
+    else if (kind === "typewriter") s.chars = Math.min(s.chars, Math.floor(String(text || "").length * q));
+    else if (kind === "wipe") s.wipe = Math.min(s.wipe, e);
+    else if (kind === "baseline") { s.alpha *= Math.min(1, q * 1.5); s.dy += (1 - e) * 40 * dir; s.wipe = Math.min(s.wipe, 0.25 + 0.75 * e); }
+    else if (kind === "tumble") { s.alpha *= e; s.rot += (1 - e) * -0.6 * dir; s.scale *= 0.7 + 0.3 * e; }
+    else if (kind === "stomp") { s.alpha *= Math.min(1, q * 3); s.scale *= 1 + (1 - e) * 0.8; }
+    else if (kind === "bounce") { s.alpha *= Math.min(1, q * 3); s.dy -= Math.abs(Math.sin(q * Math.PI * 2.5)) * (1 - q) * 90; }
+    else if (kind === "neon") s.alpha *= NEON[Math.min(NEON.length - 1, Math.floor(q * NEON.length))];
   };
-  apply(c.animIn, ad > 0 ? clamp(local / ad, 0, 1) : 1, 1);
-  apply(c.animOut, ad > 0 ? clamp((c.dur - local) / ad, 0, 1) : 1, -1);
+  apply(c.animIn, inD > 0 ? clamp(local / inD, 0, 1) : 1, 1);
+  apply(c.animOut, outD > 0 ? clamp((c.dur - local) / outD, 0, 1) : 1, -1);
+  // effects that last the whole time on screen
+  if (c.animIn === "breathe" || c.animOut === "breathe") s.scale *= 1 + 0.035 * Math.sin((2 * Math.PI * local) / 1.6);
+  if (c.animIn === "drift" || c.animOut === "drift") s.dx += (local / Math.max(EPS, c.dur) - 0.5) * 60;
   s.alpha = clamp(s.alpha, 0, 1);
   return s;
+}
+/**
+ * Word-by-word caption timing: the words share the caption's time (by length, the last 8% is a pause).
+ * Returns { index (word being said), frac (0..1 through it), count }.
+ */
+export function captionWord(text, local, dur) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  if (!words.length) return { index: -1, frac: 0, count: 0 };
+  const w = words.map((x) => x.length + 1), total = w.reduce((a, b) => a + b, 0), span = Math.max(EPS, dur * 0.92);
+  let at = 0;
+  for (let i = 0; i < words.length; i++) {
+    const len = (w[i] / total) * span;
+    if (local < at + len || i === words.length - 1) return { index: i, frac: clamp((local - at) / len, 0, 1), count: words.length };
+    at += len;
+  }
+  return { index: words.length - 1, frac: 1, count: words.length };
 }
 
 /** Gain of a video clip's own sound at t: volume x fades x crossfade ramps. */
@@ -88,8 +148,30 @@ export function videoGain(e, t) {
   const c = e.clip;
   if (c.muted) return 0;
   let g = (c.volume ?? 1) * clipEnvelope(e, t);
-  if (e.tIn.type === "crossfade" && e.tIn.dur > 0) g *= clamp((t - e.start) / e.tIn.dur, 0, 1);
-  if (e.tOut.type === "crossfade" && e.tOut.dur > 0) g *= clamp((e.end - t) / e.tOut.dur, 0, 1);
+  if (OVERLAP_TRANSITIONS.has(e.tIn.type) && e.tIn.dur > 0) g *= clamp((t - e.start) / e.tIn.dur, 0, 1);
+  if (OVERLAP_TRANSITIONS.has(e.tOut.type) && e.tOut.dur > 0) g *= clamp((e.end - t) / e.tOut.dur, 0, 1);
+  return g;
+}
+export const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+/**
+ * How a clip is drawn during a slide / push / wipe / circle / zoom transition (W x H frame):
+ * { dx, dy (move), scale (around the centre), clip: null | { kind: 'rect', x, y, w, h } | { kind: 'circle', cx, cy, r } }.
+ * dir = where the new clip moves to: "left" (comes in from the right), "right", "up" (from the bottom), "down".
+ */
+export function transitionGeom(tr, W, H) {
+  const g = { dx: 0, dy: 0, scale: 1, clip: null };
+  if (!tr) return g;
+  const e = easeInOut(clamp(tr.pr, 0, 1)), dir = tr.dir || "left";
+  const vx = dir === "left" ? -1 : dir === "right" ? 1 : 0, vy = dir === "up" ? -1 : dir === "down" ? 1 : 0;
+  if (tr.type === "slide" || tr.type === "push") {
+    if (tr.role === "out") { g.dx = vx * e * W; g.dy = vy * e * H; }
+    else { g.dx = -vx * (1 - e) * W; g.dy = -vy * (1 - e) * H; }
+  } else if (tr.type === "wipe" && tr.role === "in") {
+    const w = W * e, h = H * e;
+    g.clip = dir === "left" ? { kind: "rect", x: W - w, y: 0, w, h: H } : dir === "right" ? { kind: "rect", x: 0, y: 0, w, h: H }
+      : dir === "up" ? { kind: "rect", x: 0, y: H - h, w: W, h } : { kind: "rect", x: 0, y: 0, w: W, h };
+  } else if (tr.type === "circle" && tr.role === "in") g.clip = { kind: "circle", cx: W / 2, cy: H / 2, r: (e * Math.hypot(W, H)) / 2 };
+  else if (tr.type === "zoom" && tr.role === "in") g.scale = 1.3 - 0.3 * e;
   return g;
 }
 /** Gain of an audio-track clip at t. */
@@ -134,6 +216,14 @@ export function audioSegments(p, layout = layoutVideo(p.video)) {
     segs.push({ id: c.id, mediaId: c.mediaId, start: e.start, end: e.end, offset: c.in, speed: c.speed || 1,
       points: gainPoints((t) => videoGain(e, t), e.start, e.end, [e.start + c.fadeIn, e.end - c.fadeOut, e.start + e.tIn.dur, e.end - e.tOut.dur, e.start + e.tIn.dur / 2, e.end - e.tOut.dur / 2]) });
   }
+  // videos on the overlay track (picture-in-picture) play their own sound too
+  for (const c of p.overlay || []) {
+    const m = p.media[c.mediaId];
+    if (m?.kind !== "video" || !m.hasAudio || c.muted || !((c.volume ?? 1) > 0)) continue;
+    const end = c.start + c.dur;
+    segs.push({ id: c.id, mediaId: c.mediaId, start: c.start, end, offset: c.in || 0, speed: c.speed || 1,
+      points: gainPoints((t) => audioGain(c, t), c.start, end, [c.start + (c.fadeIn || 0), end - (c.fadeOut || 0)]) });
+  }
   for (const c of p.audio) {
     const m = p.media[c.mediaId];
     if (c.muted || !(c.volume > 0) || !m || m.hasAudio === false) continue;
@@ -148,6 +238,42 @@ export function scheduleFor(seg, t0) {
   if (seg.end <= t0 + EPS) return null;
   const from = Math.max(t0, seg.start);
   return { when: from - t0, offset: seg.offset + (from - seg.start) * seg.speed, stopAfter: seg.end - t0 };
+}
+
+/** The frame of an animated picture at t seconds (it loops). */
+export function frameIndexAt(frames, dur, t) {
+  if (!frames?.length) return -1;
+  const x = dur > 0 ? ((t % dur) + dur) % dur : 0;
+  let lo = 0, hi = frames.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (frames[mid].t <= x + 1e-9) lo = mid; else hi = mid - 1; }
+  return lo;
+}
+/** Video and photo filters (canvas filter strings) and the Adjust sliders (-100..100). */
+export const FILTERS = {
+  none: { label: "None", css: "" },
+  mono: { label: "Mono", css: "grayscale(1)" },
+  sepia: { label: "Sepia", css: "sepia(0.8)" },
+  vivid: { label: "Vivid", css: "saturate(1.5) contrast(1.1)" },
+  warm: { label: "Warm", css: "sepia(0.25) saturate(1.3)" },
+  cool: { label: "Cool", css: "hue-rotate(12deg) saturate(1.1) brightness(1.03)" },
+  faded: { label: "Faded", css: "contrast(0.85) brightness(1.1) saturate(0.8)" },
+  dramatic: { label: "Dramatic", css: "contrast(1.35) saturate(1.2) brightness(0.95)" },
+};
+/** Canvas filter for a clip: its filter preset plus brightness / contrast / saturation, or "none". */
+export function filterCss(c) {
+  const parts = [];
+  const f = FILTERS[c?.filter]?.css; if (f) parts.push(f);
+  const a = c?.adj || {}, k = (v) => Math.round((1 + clamp(Number(v) || 0, -100, 100) / 100) * 100) / 100;
+  if (a.brightness) parts.push(`brightness(${k(a.brightness)})`);
+  if (a.contrast) parts.push(`contrast(${k(a.contrast)})`);
+  if (a.saturation) parts.push(`saturate(${k(a.saturation)})`);
+  return parts.length ? parts.join(" ") : "none";
+}
+/** Crop: the part of a sw x sh picture that is kept, crop = { l, t, r, b } fractions cut off each side (each side up to 45%). */
+export function cropSource(sw, sh, crop) {
+  const q = (v) => clamp(Number(v) || 0, 0, 0.45);
+  const l = q(crop?.l), r = q(crop?.r), t = q(crop?.t), b = q(crop?.b);
+  return { sx: sw * l, sy: sh * t, sw: Math.max(1, sw * (1 - l - r)), sh: Math.max(1, sh * (1 - t - b)) };
 }
 
 /** Safe-area guide boxes (fractions of the frame) for a preset: [{ x, y, w, h, label, kind: 'box' | 'zone' }]. */

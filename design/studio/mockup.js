@@ -4,9 +4,19 @@ import { renderPage } from "./canvas.js";
 import { presetPx } from "./presets.js";
 
 export const PRODUCTS = [
-  { id: "tshirt", label: "T-shirt" },
-  { id: "hoodie", label: "Hoodie" },
-  { id: "mug", label: "Mug" },
+  { id: "tshirt", label: "T-shirt", cat: "Clothing" },
+  { id: "hoodie", label: "Hoodie", cat: "Clothing" },
+  { id: "tote", label: "Tote bag", cat: "Clothing" },
+  { id: "mug", label: "Mug", cat: "Home" },
+  { id: "poster", label: "Framed poster", cat: "Home" },
+  { id: "frame", label: "Square frame", cat: "Home" },
+  { id: "phone", label: "Phone screen", cat: "Devices" },
+  { id: "laptop", label: "Laptop screen", cat: "Devices" },
+  { id: "card", label: "Business card", cat: "Print" },
+  { id: "brochure", label: "Tri-fold brochure", cat: "Print" },
+  { id: "book", label: "Book cover", cat: "Print" },
+  { id: "magazine", label: "Magazine", cat: "Print" },
+  { id: "bottle", label: "Bottle label", cat: "Products" },
 ];
 export const SHIRT_COLORS = [
   { id: "#ffffff", label: "White" }, { id: "#1f2937", label: "Black" }, { id: "#1e3a8a", label: "Navy" }, { id: "#b91c1c", label: "Red" },
@@ -48,6 +58,67 @@ const SHAPES = {
       <ellipse cx="470" cy="232" rx="212" ry="31" fill="${shade(c, -0.42)}"/>`,
     area: { x: 260, y: 272, w: 420, h: 528 }, // visible half of an 8.5 × 3.5 in wrap (below the rim)
   },
+  tote: {
+    body: "M290 340L710 340L740 880Q500 900 260 880Z",
+    under: (c) => `<path d="M370 342C360 170 470 150 476 342M524 342C530 150 640 170 630 342" fill="none" stroke="${shade(c, -0.3)}" stroke-width="26" stroke-linecap="round"/>`,
+    details: (c) => `<path d="M290 340L710 340L712 372L288 372Z" fill="${shade(c, -0.08)}"/>`,
+    area: { x: 350, y: 430, w: 300, h: 340 },
+  },
+  poster: {
+    body: "M290 150H710V750H290Z", flat: true, floor: false,
+    under: () => `<rect x="300" y="168" width="420" height="600" fill="#000" fill-opacity=".12"/>`,
+    details: () => `<path d="M290 150H710V750H290Z" fill="none" stroke="#3f2d20" stroke-width="34" stroke-linejoin="miter"/>`,
+    area: { x: 307, y: 167, w: 386, h: 566 },
+  },
+  frame: {
+    body: "M310 230H690V610H310Z", flat: true, floor: false,
+    under: () => `<rect x="268" y="196" width="464" height="464" fill="#000" fill-opacity=".1"/><rect x="262" y="182" width="476" height="476" fill="#f8fafc" stroke="#1f2937" stroke-width="22"/>`,
+    details: () => `<path d="M310 230H690V610H310Z" fill="none" stroke="#e5e7eb" stroke-width="2"/>`,
+    area: { x: 310, y: 230, w: 380, h: 380 },
+  },
+  phone: {
+    body: "M352 176Q352 160 368 160H632Q648 160 648 176V824Q648 840 632 840H368Q352 840 352 824Z", flat: true,
+    under: () => `<rect x="330" y="132" width="340" height="736" rx="52" fill="#111827"/>`,
+    details: () => `<rect x="455" y="168" width="90" height="22" rx="11" fill="#111827"/>`,
+    area: { x: 352, y: 196, w: 296, h: 628 },
+  },
+  laptop: {
+    body: "M232 222H768V598H232Z", flat: true,
+    under: () => `<rect x="212" y="202" width="576" height="416" rx="18" fill="#1f2937"/><path d="M140 618H860L820 668Q500 684 180 668Z" fill="#cbd5e1"/><path d="M440 618H560L552 632H448Z" fill="#94a3b8"/>`,
+    details: () => ``,
+    area: { x: 232, y: 222, w: 536, h: 376 },
+  },
+  card: {
+    body: "M280 380H720V632H280Z", flat: true,
+    under: () => `<rect x="300" y="330" width="440" height="252" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2" transform="rotate(-8 520 456)"/><rect x="286" y="392" width="440" height="252" fill="#000" fill-opacity=".1"/>`,
+    details: () => `<path d="M280 380H720V632H280Z" fill="none" stroke="#000" stroke-opacity=".08" stroke-width="2"/>`,
+    area: { x: 280, y: 380, w: 440, h: 252 },
+  },
+  book: {
+    body: "M350 160H690V840H350Z", flat: true,
+    under: () => `<path d="M350 160L690 160L712 178L712 858L372 858L350 840Z" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/><path d="M700 172V852" stroke="#e2e8f0" stroke-width="4"/><path d="M706 176V856" stroke="#e2e8f0" stroke-width="3"/>`,
+    details: () => `<rect x="350" y="160" width="22" height="680" fill="#000" fill-opacity=".12"/><path d="M372 160V840" stroke="#fff" stroke-opacity=".35" stroke-width="2"/>`,
+    area: { x: 350, y: 160, w: 340, h: 680 },
+  },
+  magazine: {
+    body: "M330 150H690V830H330Z", flat: true,
+    under: () => `<rect x="360" y="170" width="360" height="680" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2" transform="rotate(7 540 510)"/><rect x="340" y="166" width="360" height="680" fill="#000" fill-opacity=".1"/>`,
+    details: () => `<path d="M330 150H690V830H330Z" fill="none" stroke="#000" stroke-opacity=".06" stroke-width="2"/>`,
+    area: { x: 330, y: 150, w: 360, h: 680 },
+  },
+  bottle: {
+    body: "M370 480H630V740H370Z", flat: true,
+    under: (c) => `<path d="M455 120H545V200C545 236 640 280 640 360V860Q640 890 610 890H390Q360 890 360 860V360C360 280 455 236 455 200Z" fill="${shade(c, -0.55)}" fill-opacity=".9"/><rect x="448" y="92" width="104" height="44" rx="8" fill="#1f2937"/><path d="M392 380V850" stroke="#fff" stroke-opacity=".25" stroke-width="14" stroke-linecap="round"/>`,
+    details: () => `<path d="M370 480H630V740H370Z" fill="none" stroke="#000" stroke-opacity=".08" stroke-width="2"/>`,
+    area: { x: 370, y: 480, w: 260, h: 260 },
+  },
+  brochure: {
+    body: "M120 300H880V838H120Z", flat: true,
+    under: () => `<rect x="132" y="316" width="760" height="538" fill="#000" fill-opacity=".1"/>`,
+    details: () => `<defs><linearGradient id="f1" x1="0" x2="1"><stop offset="0" stop-color="#000" stop-opacity=".12"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient><linearGradient id="f2" x1="1" x2="0"><stop offset="0" stop-color="#000" stop-opacity=".12"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient></defs>
+      <rect x="373" y="300" width="40" height="538" fill="url(#f1)"/><rect x="587" y="300" width="40" height="538" fill="url(#f2)"/><path d="M373 300V838M627 300V838" stroke="#000" stroke-opacity=".18" stroke-width="2"/>`,
+    area: { x: 120, y: 300, w: 760, h: 538 },
+  },
 };
 
 function svgImage(markup) {
@@ -55,11 +126,12 @@ function svgImage(markup) {
 }
 function productSvg(kind, color) {
   const s = SHAPES[kind];
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">${s.under ? s.under(color) : ""}
     <path d="${s.body}" fill="${color}" stroke="${shade(color, -0.25)}" stroke-width="3" stroke-linejoin="round"/>${s.details(color)}</svg>`;
 }
 function shadeSvg(kind) {
   const s = SHAPES[kind];
+  if (s.flat) return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".06"/></linearGradient></defs><path d="${s.body}" fill="url(#g)"/></svg>`;
   if (kind === "mug") return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000"><defs><linearGradient id="g" x1="240" x2="700" gradientUnits="userSpaceOnUse">
     <stop offset="0" stop-color="#000" stop-opacity=".34"/><stop offset=".18" stop-color="#000" stop-opacity=".06"/><stop offset=".32" stop-color="#fff" stop-opacity=".28"/><stop offset=".42" stop-color="#fff" stop-opacity="0"/><stop offset=".78" stop-color="#000" stop-opacity=".08"/><stop offset="1" stop-color="#000" stop-opacity=".38"/></linearGradient></defs>
     <path d="${s.body}" fill="url(#g)"/></svg>`;
@@ -73,7 +145,9 @@ function shadeSvg(kind) {
 /**
  * Renders a mockup canvas (size × size px). opts: { product: 'tshirt' | 'hoodie' | 'mug', color, view: 'front' | 'left' | 'right', size }.
  */
-export async function renderMockup(design, pageIndex, { product = "tshirt", color = "#ffffff", view = "front", size = 1000, chartPrims, tablePrims } = {}) {
+export async function renderMockup(design, pageIndex, { product = "tshirt", color = "#ffffff", view = "front", size = 1000, place = null, chartPrims, tablePrims } = {}) {
+  // place = { scale (1 = fit the print area), dx, dy (share of the print area), rot (degrees) }: where the design sits.
+  const pl = { scale: 1, dx: 0, dy: 0, rot: 0, ...(place || {}) };
   const S = SHAPES[product];
   if (!S) throw new Error("Unknown product " + product);
   const k = size / 1000;
@@ -86,7 +160,7 @@ export async function renderMockup(design, pageIndex, { product = "tshirt", colo
   ctx.fillStyle = bg; ctx.fillRect(0, 0, size, size);
   ctx.save(); ctx.scale(k, k);
   ctx.fillStyle = "rgba(27,33,51,.12)";
-  ctx.beginPath(); ctx.ellipse(product === "mug" ? 500 : 500, product === "mug" ? 822 : 930, product === "mug" ? 300 : 300, product === "mug" ? 26 : 22, 0, 0, Math.PI * 2); ctx.fill();
+  if (S.floor !== false) { ctx.beginPath(); ctx.ellipse(500, product === "mug" ? 822 : product === "laptop" ? 690 : product === "card" ? 660 : 930, 300, product === "mug" ? 26 : 22, 0, 0, Math.PI * 2); ctx.fill(); }
   ctx.drawImage(await svgImage(productSvg(product, color)), 0, 0, 1000, 1000);
   // The design.
   const { w: W, h: H } = presetPx(design.preset);
@@ -107,11 +181,13 @@ export async function renderMockup(design, pageIndex, { product = "tshirt", colo
     }
     ctx.restore();
   } else {
-    const s = Math.min(a.w / W, a.h / H);
+    const s = Math.min(a.w / W, a.h / H) * Math.max(0.2, Math.min(2, pl.scale));
     const dw = W * s, dh = H * s;
     const page = await renderPage(design, pageIndex, { width: Math.min(2400, dw * k * 2), chartPrims, tablePrims });
     ctx.save(); ctx.clip(body);
-    ctx.drawImage(page, a.x + (a.w - dw) / 2, a.y, dw, dh);
+    ctx.translate(a.x + a.w / 2 + pl.dx * a.w, a.y + Math.min(dh, a.h) / 2 + pl.dy * a.h);
+    if (pl.rot) ctx.rotate((pl.rot * Math.PI) / 180);
+    ctx.drawImage(page, -dw / 2, -Math.min(dh, a.h) / 2, dw, dh);
     ctx.restore();
   }
   ctx.drawImage(await svgImage(shadeSvg(product)), 0, 0, 1000, 1000);

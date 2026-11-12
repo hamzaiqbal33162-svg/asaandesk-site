@@ -3,9 +3,12 @@
 // trim/bleed boxes and optional crop marks. Needs window.PDFLib (and window.fontkit for the open fonts) before it
 // runs; works the same in Node tests (window.PDFLib = pdf-lib).
 import { presetPx, bleedPx, marginPx, PT_PER_PX, toPx, CROP_MARK } from "./presets.js";
-import { layoutText, underlineMetrics, textWidth } from "./textlayout.js";
-import { shapePrims, elementPrims, rectPath, framePath, gradientLine, hasFilters } from "./shapes.js";
+import { layoutText, underlineMetrics, strikeMetrics, textWidth } from "./textlayout.js";
+import { textPaint, paintReach, curveLayout, curveOffset, gradientOk, hasGradient } from "./textfx.js";
+import { shapePrims, elementPrims, rectPath, framePath, frameOutline, gradientLine, hasFilters } from "./shapes.js";
 import { ungroup, rotate } from "./geometry.js";
+import { withFills } from "./tableops.js";
+import { extraChartPrims } from "./chartsx.js";
 
 let mods = null;
 /** Loads the site's vector modules (they read window.PDFLib when imported, so pdf-lib must be loaded first). */
@@ -50,6 +53,8 @@ function roundRectPts(w, h, r, seg = 10) {
   return pts;
 }
 export function clipOutline(kind, w, h, radius = 0) {
+  const pts = frameOutline(kind, w, h);
+  if (pts) return pts;
   if (kind === "circle") return ellipsePts(w / 2, h / 2, w / 2, h / 2);
   if (kind === "rounded") return roundRectPts(w, h, radius || Math.min(w, h) * 0.12);
   return roundRectPts(w, h, radius || 0);
@@ -115,25 +120,61 @@ export async function buildPdf(design, opts = {}, env = {}) {
     const runs = (dx = 0, dy = 0) => lay.lines.flatMap((ln) => ln.runs.filter((r) => r.t).map((r) => { const [x, y] = at(l, r.x + dx, ln.baseline + dy); return { text: r.t, x, y }; }));
     const base = { size: t.size * k, rotationDeg: -(l.rotation || 0), family: t.family, bold: !!t.bold, italic: !!t.italic, spacing: t.letterSpacing ? { charSpacing: t.letterSpacing * k } : null, embedded };
     const op = l.opacity ?? 1;
-    if (!runs().length) return;
+    const cl = curveLayout(t);
+    if (!cl && !runs().length) return;
+    // A gradient colour cannot be text paint here: the text goes in as a sharp picture (Canva also says to use
+    // PNG/JPG for gradient text).
+    const raster = async () => {
+      const pad = paintReach(t) + 2;
+      const r = await env.rasterLayer(l, rasterScale, pad);
+      const img = r.type === "png" ? await out.embedPng(r.bytes) : await out.embedJpg(r.bytes);
+      drawCropped(p, { ...l, opacity: 1, x: l.x - pad, y: l.y - pad, w: l.w + 2 * pad, h: l.h + 2 * pad }, img, null, l.w + 2 * pad, l.h + 2 * pad);
+    };
+    if (gradientOk(t) && env.rasterLayer) { await raster(); return; }
+    // Curved text: one letter at a time, each turned to its place on the arc.
+    const letters = (dx = 0, dy = 0) => {
+      if (!cl) return [{ rot: -(l.rotation || 0), lines: runs(dx, dy) }];
+      const [ox, oy] = curveOffset(cl, l.w, l.h);
+      return cl.glyphs.filter((g) => g.ch.trim()).map((g) => {
+        const a = (g.rot * Math.PI) / 180, bx = g.x + ox + dx - (Math.cos(a) * g.w) / 2, by = g.y + oy + dy - (Math.sin(a) * g.w) / 2;
+        const [x, y] = at(l, bx, by);
+        return { rot: -(l.rotation || 0) - g.rot, lines: [{ text: g.ch, x, y }] };
+      });
+    };
+    const write = async (o, dx = 0, dy = 0) => { for (const g of letters(dx, dy)) await fontmatch.writeLines(out, p, { ...base, ...(cl ? { spacing: null } : {}), rotationDeg: g.rot, lines: g.lines, ...o }); };
+    const paintOnce = async (fill, stroke, opacity, dx = 0, dy = 0) => {
+      if (stroke) await write({ color: vector.rgbOf(fill || stroke.color), render: fill ? 2 : 1, stroke: { color: vector.rgbOf(stroke.color), width: stroke.width * k }, opacity }, dx, dy);
+      else if (fill) await write({ color: vector.rgbOf(fill), opacity }, dx, dy);
+    };
+    const paint = textPaint(t);
     try {
-      if (t.shadow && (t.shadow.x || t.shadow.y || t.shadow.blur)) await fontmatch.writeLines(out, p, { ...base, lines: runs(t.shadow.x || 0, t.shadow.y || 0), color: vector.rgbOf(t.shadow.color || "#000000"), opacity: op * (t.shadow.opacity ?? 0.5) });
-      if (t.outline && t.outline.width > 0) await fontmatch.writeLines(out, p, { ...base, lines: runs(), color: vector.rgbOf(t.outline.color || "#000000"), render: 1, stroke: { color: vector.rgbOf(t.outline.color || "#000000"), width: t.outline.width * 2 * k }, opacity: op });
-      await fontmatch.writeLines(out, p, { ...base, lines: runs(), color: vector.rgbOf(t.color), opacity: op });
+      if (t.shadow && (t.shadow.x || t.shadow.y || t.shadow.blur)) await write({ color: vector.rgbOf(t.shadow.color || "#000000"), opacity: op * (t.shadow.opacity ?? 0.5) }, t.shadow.x || 0, t.shadow.y || 0);
+      for (const ps of paint.passes) {
+        // PDF has no blur: a glow is drawn as a few wide, faint outlines around the letters.
+        if (ps.blur > 0) for (const f of [1, 0.6, 0.3]) await paintOnce(ps.fill, { color: ps.fill || ps.stroke?.color || t.color, width: ps.blur * f + (ps.stroke?.width || 0) }, op * ps.opacity * 0.3, ps.dx, ps.dy);
+        else await paintOnce(ps.fill, ps.stroke, op * ps.opacity, ps.dx, ps.dy);
+      }
+      await paintOnce(paint.main.fill, paint.main.stroke, op);
     } catch (e) {
       if (!env.rasterLayer) throw e;
-      const r = await env.rasterLayer(l, rasterScale);
-      const img = r.type === "png" ? await out.embedPng(r.bytes) : await out.embedJpg(r.bytes);
-      drawCropped(p, { ...l, opacity: 1 }, img, null, l.w, l.h);
+      await raster();
       return;
     }
-    if (t.underline) {
-      const um = underlineMetrics(t.size);
-      const lines = lay.lines.filter((ln) => ln.text.trim()).map((ln) => ({ d: rectPath(ln.x, ln.baseline + um.offset - um.thickness / 2, ln.width, um.thickness), fill: t.color }));
-      if (lines.length) await prims(p, l, lines);
+    if (!cl && (t.underline || t.strike)) {
+      const um = underlineMetrics(t.size), sm = strikeMetrics(t.size), col = paint.main.fill || paint.main.stroke?.color || t.color;
+      const bars = lay.lines.filter((ln) => ln.text.trim()).flatMap((ln) => [
+        t.underline ? { d: rectPath(ln.x, ln.baseline + um.offset - um.thickness / 2, ln.width, um.thickness), fill: col } : null,
+        t.strike ? { d: rectPath(ln.x, ln.baseline - sm.offset - sm.thickness / 2, ln.width, sm.thickness), fill: col } : null].filter(Boolean));
+      if (bars.length) await prims(p, l, bars);
     }
   }
 
+  // Gradient shapes, dashed borders and flipped graphics: a sharp picture at print resolution (pdf-lib has no gradients or dashes here).
+  async function rasterBox(p, l, pad = 0) {
+    const r = await env.rasterLayer(l, rasterScale, pad);
+    const img = r.type === "png" ? await out.embedPng(r.bytes) : await out.embedJpg(r.bytes);
+    drawCropped(p, { ...l, opacity: 1, x: l.x - pad, y: l.y - pad, w: l.w + 2 * pad, h: l.h + 2 * pad }, img, null, l.w + 2 * pad, l.h + 2 * pad);
+  }
   async function drawImageLayer(p, l) {
     const im = l.image;
     if ((hasFilters(im.filters) || im.flipX || im.flipY) && env.rasterImage) {
@@ -146,6 +187,8 @@ export async function buildPdf(design, opts = {}, env = {}) {
     clipTo(p, l, clipOutline("rect", l.w, l.h, im.radius || 0));
     drawCropped(p, l, img, im.crop, l.w, l.h);
     p.pushOperators(popGraphicsState());
+    const bw = im.border?.width || 0;
+    if (bw > 0) await prims(p, l, [{ d: rectPath(bw / 2, bw / 2, Math.max(1, l.w - bw), Math.max(1, l.h - bw), Math.max(0, (im.radius || 0) - bw / 2)), stroke: im.border.color || "#ffffff", sw: bw, fill: "none" }]);
   }
 
   async function drawFrame(p, l) {
@@ -192,6 +235,11 @@ export async function buildPdf(design, opts = {}, env = {}) {
     }
   }
 
+  function addLink(p, l) {
+    const pts = [[0, 0], [l.w, 0], [l.w, l.h], [0, l.h]].map(([x, y]) => at(l, x, y)), xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+    const annot = out.context.obj({ Type: "Annot", Subtype: "Link", Rect: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], Border: [0, 0, 0], A: { Type: "Action", S: "URI", URI: L.PDFString.of(l.link) } });
+    p.node.addAnnot(out.context.register(annot));
+  }
   function cropMarks(p) {
     const off = Math.max(toPx(CROP_MARK.offsetMm, "mm"), b) * k, len = toPx(CROP_MARK.lengthMm, "mm") * k;
     const L0 = outer * k, R0 = (outer + W) * k, B0 = outer * k, T0 = (outer + H) * k;
@@ -214,13 +262,15 @@ export async function buildPdf(design, opts = {}, env = {}) {
     await drawBackground(p, pg.background);
     for (const l of flatLayers(pg.layers)) {
       if (l.type === "text") await drawText(p, l);
-      else if (l.type === "shape") await prims(p, l, shapePrims(l.shape, l.w, l.h));
-      else if (l.type === "element") await prims(p, l, elementPrims(l.element), l.w / l.element.vb[0], l.h / l.element.vb[1]);
-      else if (l.type === "chart") await prims(p, l, charts.chartPrims(l.chart.spec, l.w, l.h));
-      else if (l.type === "table") await prims(p, l, tables.tablePrims(l.table, l.w, l.table.size || 16, tableMeasure(l.table.size || 16)).prims);
+      else if (l.type === "shape") { const pr = shapePrims(l.shape, l.w, l.h); if ((hasGradient(l.shape.gradient) || pr.some((x) => x.dash)) && env.rasterLayer) await rasterBox(p, l); else await prims(p, l, pr); }
+      else if (l.type === "element") { if ((l.element.flipX || l.element.flipY) && env.rasterLayer) await rasterBox(p, l); else await prims(p, l, elementPrims(l.element), l.w / l.element.vb[0], l.h / l.element.vb[1]); }
+      else if (l.type === "chart") await prims(p, l, extraChartPrims(l.chart.spec, l.w, l.h) || charts.chartPrims(l.chart.spec, l.w, l.h));
+      else if (l.type === "table") await prims(p, l, withFills(l.table, tables.tablePrims(l.table, l.w, l.table.size || 16, tableMeasure(l.table.size || 16))));
       else if (l.type === "image") await drawImageLayer(p, l);
       else if (l.type === "frame") await drawFrame(p, l);
     }
+    // Links (Canva: links on text and elements stay clickable in PDF downloads).
+    for (const l of pg.layers) if (l.link && !l.hidden) addLink(p, l);
     if (opts.marks) cropMarks(p);
   }
   return out.save();

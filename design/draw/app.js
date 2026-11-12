@@ -1,20 +1,24 @@
 // AsaanDesk Draw: bitmap painting with layers, brushes, pen pressure, fill, shapes and text. Everything runs in the
 // browser and is saved only on this device (IndexedDB). Pixel maths lives in paint.js, undo in history.js.
-import { BRUSHES, Stroke, stampMask, applyMask, clearMask, smudgeDab, floodFill, growMask, fillMask, composite, hexToRgb, rgbToHex, normHex, pushRecent, clamp, unionRect } from "./paint.js";
+import { BRUSHES, Stroke, stampMask, applyMask, clearMask, smudgeDab, floodFill, growMask, fillMask, composite, hexToRgb, rgbToHex, normHex, pushRecent, clamp, unionRect, anchorOffset, drawingColors } from "./paint.js";
 import { History, rectTileKeys, tileRect, copyRegion, makeTiles } from "./history.js";
 import { nextLayerName, insertAt, removeAt, moveItem, afterDelete } from "./layers.js";
 import { serializeDrawing, parseDrawing, PRESETS, clampSize, slugName, FILE_EXT } from "./fileformat.js";
-import { saveProject, listProjects, getProject, deleteProject, uid } from "../shared/store.js";
+import { saveProject, listProjects, getProject, deleteProject, uid, putHandoff } from "../shared/store.js";
+import { recognise, shapeBounds, tracePath, SHAPE_NAMES } from "./shapes-assist.js";
 import { loadBrand, FONT_FAMILIES, ensureFont } from "../shared/brand.js";
+import { TEMPLATES as GALLERY, templateById, svg as templateSvg, thumb as templateThumb } from "./gallery.js";
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
-const TOOLS = [...Object.keys(BRUSHES), "fill", "shape", "text", "picker", "hand"];
-const LABEL = { ...Object.fromEntries(Object.entries(BRUSHES).map(([k, b]) => [k, b.label])), fill: "Paint bucket", shape: "Shapes", text: "Text", picker: "Colour picker", hand: "Move the view" };
+const TOOLS = [...Object.keys(BRUSHES), "fill", "shape", "text", "picker", "move", "hand"];
+const LABEL = { ...Object.fromEntries(Object.entries(BRUSHES).map(([k, b]) => [k, b.label])), fill: "Paint bucket", shape: "Shapes", text: "Text", picker: "Colour picker", move: "Select and move", hand: "Move the view" };
 const HINT = {
   pencil: "Light, grainy lines, like a real pencil.",
   pen: "Smooth ink. With a stylus, press harder for thicker lines.",
   marker: "See-through ink. One stroke does not get darker where it crosses itself.",
+  glow: "A glowing line: bright in the middle, soft colour around it. Looks best on dark paper.",
+  highlighter: "A flat, see-through tip for marking things, like a highlighter pen.",
   airbrush: "Soft spray. Go over an area again to build up colour.",
   calligraphy: "A flat nib: lines turn thick or thin with the direction.",
   smudge: "Drag to blend and push colours around.",
@@ -23,6 +27,7 @@ const HINT = {
   shape: "Drag to draw. Hold Shift for a square, a circle or a straight line.",
   text: "Tap where the text should go, type, then press Enter.",
   picker: "Tap the drawing to take its colour. Tip: hold Alt while painting.",
+  move: "Leaves drawing mode. Drag to move what is on the selected layer (hold Shift to keep it straight); pick a brush to draw again.",
   hand: "Drag to move around. Pinch or use the mouse wheel to zoom.",
 };
 const SETTINGS_KEY = "asaandesk-draw-settings", RECENT_KEY = "asaandesk-draw-recent";
@@ -48,10 +53,16 @@ function loadSettings() {
 const state = {
   doc: null, tool: "pen", lastBrush: "pen", color: "#1f2937", recent: [], settings: loadSettings(),
   cam: { zoom: 1, x: 0, y: 0, fitted: true }, saveStatus: "saved", ready: false, penSeen: false,
+  shapeAssist: false, lastShape: null,
 };
+// Shape assist (Canva Draw): rough lines, boxes, circles and triangles become clean shapes. Saved per browser.
+const ASSIST_KEY = "asaandesk-draw-shape-assist";
+const ASSIST_TOOLS = new Set(["pencil", "pen", "marker", "highlighter", "calligraphy"]);
+try { state.shapeAssist = localStorage.getItem(ASSIST_KEY) === "1"; } catch {}
 const history = new History();
 try { state.recent = (JSON.parse(localStorage.getItem(RECENT_KEY) || "[]") || []).map(normHex).filter(Boolean).slice(0, 12); } catch {}
 const brand = loadBrand();
+let shell = null, framePanel = null, pillColor = null; // the shared editor frame (../shared/editor-shell.js), when it loads
 if (FONT_FAMILIES[brand.fonts?.heading] && !localStorage.getItem(SETTINGS_KEY)) state.settings.text.font = brand.fonts.heading;
 
 /* ---------- elements ---------- */
@@ -161,6 +172,12 @@ function applyEntry(e, side) {
     e.layer.version++; queueThumb(e.layer);
   } else if (e.kind === "layers") restoreLayers(e[side]);
   else if (e.kind === "bg") { state.doc.background = state.doc._savedBg = e[side]; $("#bgColor").value = e[side]; }
+  else if (e.kind === "resize") {
+    const s = e[side];
+    for (const x of s.layers) { x.l.canvas.width = s.w; x.l.canvas.height = s.h; x.l.ctx.putImageData(x.img, 0, 0); x.l.version++; x.l._src = null; queueThumb(x.l); }
+    state.doc.w = s.w; state.doc.h = s.h; maskBuf = null;
+    sizeChanged();
+  }
   else if (e.kind === "group") (side === "before" ? [...e.entries].reverse() : e.entries).forEach((x) => applyEntry(x, side));
 }
 function undo() {
@@ -176,7 +193,7 @@ function redo() {
   if (!e) return;
   applyEntry(e, "after"); afterHistory();
 }
-function afterHistory() { renderLayerList(); updateHistoryButtons(); scheduleSave(); requestRender(); }
+function afterHistory() { renderLayerList(); updateHistoryButtons(); scheduleSave(); requestRender(); refreshDocColors(); }
 function layerOp(fn, extraBytes = 0) {
   const before = snapLayers();
   fn();
@@ -194,7 +211,7 @@ function editRegion(layer, rect, fn) {
 }
 function markChanged(layer) {
   if (layer) { layer.version++; queueThumb(layer); }
-  scheduleSave(); updateHistoryButtons(); requestRender();
+  scheduleSave(); updateHistoryButtons(); requestRender(); refreshDocColors();
 }
 
 /* ---------- painting ---------- */
@@ -209,7 +226,9 @@ function beginStroke(e, pt) {
     tool, layer, cur, base: new Uint8ClampedArray(cur.data), keys: new Set(), dirty: null, total: null, pointerId: e.pointerId,
     engine: new Stroke(tool, { size: s.size, smoothing: s.smoothing, seed: (Math.random() * 2 ** 31) | 0 }),
     rgb: hexToRgb(state.color), opacity: s.opacity, mode: b.mode || "paint", combine: b.combine || "max", smudge: {}, lastP: pt.p,
+    points: [{ x: pt.x, y: pt.y }], assist: ASSIST_TOOLS.has(tool), size: s.size, shift: !!e.shiftKey,
   };
+  armHold();
   addDabs(stroke.engine.begin(pt));
   flushStroke();
 }
@@ -233,20 +252,62 @@ function flushStroke() {
   st.layer.ctx.putImageData(st.cur, 0, 0, r[0], r[1], r[2] - r[0], r[3] - r[1]);
   requestRender();
 }
-function endStroke(pt) {
+function endStroke(pt, { snap = false } = {}) {
   const st = stroke;
   if (!st) return;
-  if (pt) addDabs(st.engine.end({ ...pt, p: st.lastP ?? 1 }));
+  clearTimeout(holdTimer);
+  if (pt) { addDabs(st.engine.end({ ...pt, p: st.lastP ?? 1 })); st.points.push({ x: pt.x, y: pt.y }); }
   flushStroke();
   const { w, h } = state.doc;
-  const tiles = makeTiles(st.keys, { width: w, height: h, data: st.base }, st.cur);
+  let cur = st.cur, shape = null;
+  // Shift held while drawing: a straight line from where the stroke began to where it ends (Canva Draw)
+  if (st.assist && st.shift && st.points.length > 1) { const a = st.points[0], b = st.points[st.points.length - 1]; if (Math.hypot(b.x - a.x, b.y - a.y) > 2) shape = { type: "line", x0: a.x, y0: a.y, x1: b.x, y1: b.y }; }
+  else if (st.assist && (state.shapeAssist || snap)) shape = recognise(st.points, { minSize: Math.max(12, (st.size || 8) * 1.5) });
+  if (shape) {
+    // the rough stroke goes, the clean shape is drawn in its place: one undo step back to before the stroke
+    st.cur.data.set(st.base);
+    st.layer.ctx.putImageData(st.cur, 0, 0);
+    drawCleanShape(st.layer.ctx, shape, st);
+    cur = st.layer.ctx.getImageData(0, 0, w, h);
+    rectTileKeys(shapeBounds(shape, (st.size || 8) + 2), w, h, st.keys);
+    state.lastShape = shape.type;
+    if (!st.shift) toast(`Shape assist: ${SHAPE_NAMES[shape.type] || "shape"}. Undo brings back the empty space.`);
+  }
+  const tiles = makeTiles(st.keys, { width: w, height: h, data: st.base }, cur);
   clearMask(maskBuf, w, st.total);
   stroke = null;
   if (tiles.length) pushHistory({ kind: "pixels", layer: st.layer, tiles });
-  if (st.mode === "paint") addRecent(rgbToHex(st.rgb));
+  if (st.mode === "paint" || st.mode === "glow") addRecent(rgbToHex(st.rgb));
   markChanged(st.layer);
 }
+function drawCleanShape(ctx, shape, st) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0.02, Math.min(1, st.opacity ?? 1));
+  ctx.strokeStyle = `rgb(${st.rgb[0]}, ${st.rgb[1]}, ${st.rgb[2]})`;
+  ctx.lineWidth = Math.max(1, st.size || 8);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  tracePath(ctx, shape);
+  ctx.stroke();
+  ctx.restore();
+}
+// Hold still for a moment at the end of a stroke: it snaps to a clean shape even with Shape assist off (Canva's gesture).
+let holdTimer = 0;
+function armHold() {
+  clearTimeout(holdTimer);
+  const st = stroke;
+  if (!st?.assist) return;
+  holdTimer = setTimeout(() => {
+    if (stroke !== st || st.points.length < 4) return;
+    if (recognise(st.points, { minSize: Math.max(12, (st.size || 8) * 1.5) })) endStroke(null, { snap: true });
+  }, 600);
+}
+function setShapeAssist(on) {
+  state.shapeAssist = !!on;
+  try { localStorage.setItem(ASSIST_KEY, on ? "1" : "0"); } catch {}
+  for (const b of document.querySelectorAll("#shapeAssist, #shapeAssistToggle")) { b.setAttribute("aria-pressed", String(!!on)); b.classList.toggle("on", !!on); }
+}
 function abortStroke() {
+  clearTimeout(holdTimer);
   const st = stroke;
   if (!st) return;
   stroke = null;
@@ -407,7 +468,9 @@ function onDown(e) {
   lastPointerType = e.pointerType || "mouse";
   if (e.pointerType === "pen" && !state.penSeen) { state.penSeen = true; toast("Stylus found: draw with the pen, move the view with your fingers."); }
   closeMenus();
-  if (document.body.dataset.sheet) { toggleSheet(null); return; }
+  // A tap on the canvas closes an open brush/layers sheet on phones. In the editor frame on wider screens the side panel
+  // sits beside the canvas, so the canvas paints straight away and the panel stays open.
+  if (document.body.dataset.sheet && (!shell || matchMedia("(max-width: 759.98px)").matches)) { toggleSheet(null); return; }
   const focused = document.activeElement;
   if (focused && focused !== document.body && focused !== textInput) focused.blur?.();
   try { stage.setPointerCapture(e.pointerId); } catch {}
@@ -431,6 +494,35 @@ function onDown(e) {
   else if (t === "picker") pickAt(pt, true);
   else if (t === "shape") beginShape(e, pt);
   else if (t === "text") placeText(pt);
+  else if (t === "move") beginMove(e, pt);
+}
+// Select and move: drag everything on the active layer (one undo step for the whole move).
+let moveDraft = null;
+function beginMove(e, pt) {
+  const layer = activeLayer();
+  if (!canDraw(layer)) return;
+  const { w, h } = state.doc, copy = makeCanvas(w, h);
+  copy.getContext("2d").drawImage(layer.canvas, 0, 0);
+  moveDraft = { layer, copy, base: layer.ctx.getImageData(0, 0, w, h), x: pt.x, y: pt.y, dx: 0, dy: 0, pointerId: e.pointerId };
+}
+function dragMove(e) {
+  const m = moveDraft, pt = toDoc(e);
+  m.dx = Math.round(pt.x - m.x); m.dy = Math.round(pt.y - m.y);
+  if (e.shiftKey) { if (Math.abs(m.dx) > Math.abs(m.dy)) m.dy = 0; else m.dx = 0; }
+  m.layer.ctx.clearRect(0, 0, state.doc.w, state.doc.h);
+  m.layer.ctx.drawImage(m.copy, m.dx, m.dy);
+  requestRender();
+}
+function commitMove() {
+  const m = moveDraft;
+  moveDraft = null;
+  if (!m || (!m.dx && !m.dy)) return;
+  const { w, h } = state.doc;
+  const after = m.layer.ctx.getImageData(0, 0, w, h);
+  const same = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const tiles = makeTiles(rectTileKeys([0, 0, w, h], w, h), { width: w, height: h, data: m.base.data }, after).filter((t) => !same(t.before, t.after));
+  if (tiles.length) pushHistory({ kind: "pixels", layer: m.layer, tiles });
+  markChanged(m.layer);
 }
 function onMove(e) {
   const p = pointers.get(e.pointerId);
@@ -444,15 +536,19 @@ function onMove(e) {
   }
   if (e.pointerType !== "touch") { hover = screenToDoc(e.clientX, e.clientY); lastPointerType = e.pointerType || "mouse"; }
   if (stroke && e.pointerId === stroke.pointerId) {
+    if (e.shiftKey) stroke.shift = true;
     const list = e.getCoalescedEvents?.() || [];
     for (const ce of list.length ? list : [e]) {
       const pt = toDoc(ce);
       if (ce.pointerType === "pen" && !(ce.pressure > 0)) pt.p = stroke.lastP;
       stroke.lastP = pt.p;
+      const lastPt = stroke.points[stroke.points.length - 1];
+      if (!lastPt || Math.hypot(pt.x - lastPt.x, pt.y - lastPt.y) > 1.5 / state.cam.zoom) { stroke.points.push({ x: pt.x, y: pt.y }); armHold(); }
       addDabs(stroke.engine.move(pt));
     }
     scheduleFlush();
   } else if (shapeDraft && e.pointerId === shapeDraft.pointerId) moveShape(e);
+  else if (moveDraft && e.pointerId === moveDraft.pointerId) dragMove(e);
   else if (BRUSHES[state.tool]) requestRender();
 }
 function onUp(e) {
@@ -460,8 +556,9 @@ function onUp(e) {
   try { stage.releasePointerCapture(e.pointerId); } catch {}
   if (gesture) { if (touchList().length < 2) gesture = null; return; }
   if (pan && e.pointerId === pan.id) { pan = null; stage.classList.remove("panning"); return; }
-  if (stroke && e.pointerId === stroke.pointerId) { endStroke(e.type === "pointercancel" ? null : toDoc(e)); return; }
+  if (stroke && e.pointerId === stroke.pointerId) { if (e.shiftKey) stroke.shift = true; endStroke(e.type === "pointercancel" ? null : toDoc(e)); return; }
   if (shapeDraft && e.pointerId === shapeDraft.pointerId) { if (e.type !== "pointercancel") moveShape(e); commitShape(); }
+  if (moveDraft && e.pointerId === moveDraft.pointerId) { if (e.type !== "pointercancel") dragMove(e); commitMove(); }
 }
 stage.addEventListener("pointerdown", onDown);
 stage.addEventListener("pointermove", onMove);
@@ -502,7 +599,9 @@ function syncOptions() {
   $("#sizeLabel").textContent = g === "text" ? "Text size" : g === "shape" ? "Line width" : "Size";
   sizeRange.min = g === "text" ? 8 : 1;
   sizeRange.max = g === "text" ? 300 : g === "shape" ? 80 : 200;
-  if (s.size != null) { sizeRange.value = s.size; $("#sizeVal").textContent = Math.round(s.size) + " px"; }
+  if (s.size != null) { sizeRange.value = s.size; $("#sizeVal").textContent = Math.round(s.size) + " px"; $("#sizeNum").value = Math.round(s.size); }
+  $("#sizeNum").min = sizeRange.min; $("#sizeNum").max = sizeRange.max;
+  syncSizePresets();
   $("#opacityLabel").textContent = t === "smudge" ? "Strength" : "Opacity";
   if (s.opacity != null) { opacityRange.value = Math.round(s.opacity * 100); $("#opacityVal").textContent = Math.round(s.opacity * 100) + "%"; }
   if (s.smoothing != null) { smoothRange.value = Math.round(s.smoothing * 100); $("#smoothVal").textContent = Math.round(s.smoothing * 100) + "%"; }
@@ -513,6 +612,7 @@ function syncOptions() {
   $("#shapeFill").checked = !!sh.fill;
   $("#fontSel").value = tx.font; $("#textBold").checked = !!tx.bold;
   $("#toolHint").textContent = HINT[t] || "";
+  syncPill();
 }
 let settingsTimer = null;
 function saveSettings() { clearTimeout(settingsTimer); settingsTimer = setTimeout(() => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings)); } catch {} }, 300); }
@@ -524,7 +624,18 @@ function changeSize(dir) {
   s.size = clamp(Math.round(dir > 0 ? s.size * 1.2 + 1 : s.size / 1.2 - 0.5), min, max);
   syncOptions(); saveSettings(); requestRender(); positionTextInput();
 }
-sizeRange.addEventListener("input", () => { cur().size = +sizeRange.value; $("#sizeVal").textContent = sizeRange.value + " px"; saveSettings(); requestRender(); positionTextInput(); });
+sizeRange.addEventListener("input", () => { cur().size = +sizeRange.value; $("#sizeVal").textContent = sizeRange.value + " px"; $("#sizeNum").value = sizeRange.value; syncSizePresets(); saveSettings(); requestRender(); positionTextInput(); });
+// thickness presets and an exact number (Canva Draw's Settings: presets or type a weight)
+function setSize(v) {
+  const s = cur();
+  if (s.size == null) return;
+  s.size = clamp(Math.round(+v) || 1, +sizeRange.min, +sizeRange.max);
+  syncOptions(); saveSettings(); requestRender(); positionTextInput();
+}
+function syncSizePresets() { const v = Math.round(cur().size ?? -1); for (const b of $$("#sizePresets [data-size]")) { const on = +b.dataset.size === v; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); } }
+$("#sizePresets").addEventListener("click", (e) => { const b = e.target.closest("[data-size]"); if (b) setSize(b.dataset.size); });
+$("#sizeNum").addEventListener("change", () => setSize($("#sizeNum").value));
+$("#sizeNum").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); setSize($("#sizeNum").value); } });
 opacityRange.addEventListener("input", () => { cur().opacity = +opacityRange.value / 100; $("#opacityVal").textContent = opacityRange.value + "%"; saveSettings(); positionTextInput(); });
 smoothRange.addEventListener("input", () => { cur().smoothing = +smoothRange.value / 100; $("#smoothVal").textContent = smoothRange.value + "%"; saveSettings(); });
 tolRange.addEventListener("input", () => { state.settings.fill.tolerance = +tolRange.value; $("#tolVal").textContent = tolRange.value; saveSettings(); });
@@ -547,6 +658,7 @@ function setColor(hex) {
   document.documentElement.style.setProperty("--draw-color", h);
   for (const s of $$(".swatch")) s.classList.toggle("on", s.dataset.color === h);
   if (textEdit) textInput.style.color = h;
+  if (pillColor) pillColor.value = h;
   requestRender();
 }
 function addRecent(hex) {
@@ -565,7 +677,22 @@ function renderSwatches(box, colors, label) {
   }));
 }
 function renderBrandSwatches() { renderSwatches($("#brandColors"), [...new Set((loadBrand().colors || []).map(normHex).filter(Boolean))].slice(0, 10), "Brand colour"); }
-for (const box of [$("#brandColors"), $("#recentColors")]) box.addEventListener("click", (e) => { const b = e.target.closest(".swatch"); if (b) setColor(b.dataset.color); });
+for (const box of [$("#brandColors"), $("#recentColors"), $("#docColors")]) box.addEventListener("click", (e) => { const b = e.target.closest(".swatch"); if (b) setColor(b.dataset.color); });
+// "In this drawing": the colours already used (like Canva's document colours), worked out from a small copy
+let docColorTimer = 0;
+function refreshDocColors(now = false) {
+  clearTimeout(docColorTimer);
+  const run = () => {
+    if (!state.doc) return;
+    const { w, h } = state.doc, k = Math.min(1, 300 / Math.max(w, h));
+    const c = makeCanvas(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k))), x = c.getContext("2d");
+    for (const l of state.doc.layers) if (!l.hidden && l.opacity > 0) { x.globalAlpha = l.opacity; x.drawImage(l.canvas, 0, 0, c.width, c.height); }
+    const cols = drawingColors(x.getImageData(0, 0, c.width, c.height), { paper: state.doc.background });
+    renderSwatches($("#docColors"), cols, "Colour in this drawing");
+    $("#docColorsLbl").hidden = !cols.length;
+  };
+  if (now) run(); else docColorTimer = setTimeout(run, 600);
+}
 colorInput.addEventListener("input", () => setColor(colorInput.value));
 colorInput.addEventListener("change", () => addRecent(colorInput.value));
 colorHex.addEventListener("input", () => { const v = colorHex.value.trim(); if (/^#?[0-9a-f]{6}$/i.test(v)) setColor(v.startsWith("#") ? v : "#" + v); });
@@ -740,11 +867,13 @@ function setDoc(d) {
   d._savedBg = d.background;
   history.clear(); maskBuf = null;
   $("#docName").value = d.name;
+  try { shell?.setTitle?.(d.name); shell?.setProjectId?.(d.id); shell?.setDesignId?.(d.id); } catch {}
   $("#bgColor").value = d.background;
   $("#sizeInfo").textContent = `${d.w} × ${d.h} px`;
   renderLayerList(); updateHistoryButtons();
   state.cam.fitted = true;
   fit();
+  refreshDocColors();
 }
 function newDoc({ w = 1080, h = 1080, background = "#ffffff", name } = {}, { save = true } = {}) {
   const [W, H] = clampSize(w, h);
@@ -818,9 +947,91 @@ window.addEventListener("paste", (e) => {
   if (f) { e.preventDefault(); importImage(f); }
 });
 
+/* ---------- resize the canvas ---------- */
+// mode "scale": every layer is stretched to the new size; mode "canvas": the pixels keep their size and sit at the
+// anchor (tl, t, tr, l, c, r, bl, b, br); new space is clear (the paper shows) or filled on the bottom layer.
+function sizeChanged() {
+  $("#sizeInfo").textContent = `${state.doc.w} × ${state.doc.h} px`;
+  state.cam.fitted = true;
+  fit();
+}
+function resizeCanvas(w, h, { mode = "scale", anchor = "c", fill = null } = {}) {
+  const d = state.doc;
+  if (!d) return false;
+  [w, h] = clampSize(w, h);
+  if (w === d.w && h === d.h) return false;
+  abortStroke(); if (textEdit) commitText(); shapeDraft = null;
+  const ow = d.w, oh = d.h, [dx, dy] = mode === "canvas" ? anchorOffset(anchor, w - ow, h - oh) : [0, 0];
+  const before = { w: ow, h: oh, layers: d.layers.map((l) => ({ l, img: l.ctx.getImageData(0, 0, ow, oh) })) };
+  d.layers.forEach((l, i) => {
+    const old = makeCanvas(ow, oh);
+    old.getContext("2d").putImageData(before.layers[i].img, 0, 0);
+    l.canvas.width = w; l.canvas.height = h;
+    const x = l.ctx;
+    if (mode === "scale") { x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high"; x.drawImage(old, 0, 0, w, h); }
+    else {
+      if (i === 0 && fill && normHex(fill)) {
+        // fill only the new strips around the old picture
+        x.save(); x.fillStyle = normHex(fill); x.beginPath(); x.rect(0, 0, w, h); x.rect(dx, dy, ow, oh); x.fill("evenodd"); x.restore();
+      }
+      x.drawImage(old, dx, dy);
+    }
+    l.version++; l._src = null; queueThumb(l);
+  });
+  d.w = w; d.h = h; maskBuf = null;
+  const after = { w, h, layers: d.layers.map((l) => ({ l, img: l.ctx.getImageData(0, 0, w, h) })) };
+  pushHistory({ kind: "resize", before, after, bytes: (ow * oh + w * h) * 4 * d.layers.length + 64 });
+  renderLayerList(); sizeChanged(); scheduleSave(); requestRender();
+  return true;
+}
+const RESIZE_PRESETS = [
+  { id: "square", label: "Square", w: 1080, h: 1080 }, { id: "story", label: "Story", w: 1080, h: 1920 },
+  { id: "a4", label: "A4 portrait", w: 1240, h: 1754 }, { id: "a4-landscape", label: "A4 landscape", w: 1754, h: 1240 },
+  { id: "hd", label: "Wide HD", w: 1920, h: 1080 },
+];
+const rs = { mode: "scale", anchor: "c", ratio: 1 };
+const rsW = $("#resizeW"), rsH = $("#resizeH");
+function syncResizeUi() {
+  for (const b of $$("#resizeMode [data-mode]")) { const on = b.dataset.mode === rs.mode; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); }
+  for (const b of $$("#resizeAnchor [data-anchor]")) { const on = b.dataset.anchor === rs.anchor; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); }
+  $("#resizeCanvasOpts").hidden = rs.mode !== "canvas";
+  for (const b of $$("#resizePresets [data-preset]")) b.classList.toggle("on", +b.dataset.w === +rsW.value && +b.dataset.h === +rsH.value);
+  $("#resizeNote").textContent = rs.mode === "scale" ? "Every layer is stretched to the new size. Undo puts it back." : "The drawing keeps its size; the canvas grows or is cut at the edges. Undo puts it back.";
+}
+for (const p of RESIZE_PRESETS) {
+  const k = 34 / Math.max(p.w, p.h), b = document.createElement("button");
+  b.type = "button"; b.className = "preset"; b.dataset.preset = p.id; b.dataset.w = p.w; b.dataset.h = p.h;
+  b.innerHTML = `<span class="pv" style="width:${Math.round(p.w * k)}px;height:${Math.round(p.h * k)}px"></span><b></b><small></small>`;
+  b.querySelector("b").textContent = p.label; b.querySelector("small").textContent = `${p.w} × ${p.h}`;
+  b.addEventListener("click", () => { rsW.value = p.w; rsH.value = p.h; rs.ratio = p.h / p.w; syncResizeUi(); });
+  $("#resizePresets").append(b);
+}
+function openResize() {
+  if (!state.doc) return;
+  closeMenus();
+  rsW.value = state.doc.w; rsH.value = state.doc.h; rs.ratio = state.doc.h / state.doc.w;
+  syncResizeUi();
+  openDialog($("#resizeDialog"));
+}
+rsW.addEventListener("input", () => { if ($("#resizeLock").checked && +rsW.value > 0) rsH.value = Math.round(+rsW.value * rs.ratio); syncResizeUi(); });
+rsH.addEventListener("input", () => { if ($("#resizeLock").checked && +rsH.value > 0) rsW.value = Math.round(+rsH.value / rs.ratio); syncResizeUi(); });
+$("#resizeLock").addEventListener("change", (e) => { if (e.target.checked && +rsW.value > 0) rs.ratio = +rsH.value / +rsW.value; });
+$("#resizeMode").addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (b) { rs.mode = b.dataset.mode; syncResizeUi(); } });
+$("#resizeAnchor").addEventListener("click", (e) => { const b = e.target.closest("[data-anchor]"); if (b) { rs.anchor = b.dataset.anchor; syncResizeUi(); } });
+$("#resizeCancel").addEventListener("click", () => closeDialog($("#resizeDialog")));
+$("#resizeApply").addEventListener("click", () => {
+  const [w, h] = clampSize(rsW.value, rsH.value);
+  const pick = document.querySelector('input[name="resizeFill"]:checked')?.value || "";
+  const fill = pick === "color" ? $("#resizeFillColor").value : pick || null;
+  closeDialog($("#resizeDialog"));
+  if (resizeCanvas(w, h, { mode: rs.mode, anchor: rs.anchor, fill })) toast(`Canvas is now ${w} × ${h} px`);
+  else toast("The canvas already has that size.");
+});
+$("#resizeBtn").addEventListener("click", openResize);
+
 /* ---------- saving ---------- */
 const STATUS_TEXT = { saved: "Saved", saving: "Saving…", unsaved: "Not saved yet", error: "Could not save" };
-function setStatus(s) { state.saveStatus = s; const el = $("#saveStatus"); el.dataset.state = s; el.querySelector("span").textContent = STATUS_TEXT[s]; el.title = STATUS_TEXT[s] + " (in this browser)"; }
+function setStatus(s) { try { shell?.setSaved?.(s === "saved" ? "saved" : s === "saving" ? "saving" : "unsaved"); } catch {} state.saveStatus = s; const el = $("#saveStatus"); el.dataset.state = s; el.querySelector("span").textContent = STATUS_TEXT[s]; el.title = STATUS_TEXT[s] + " (in this browser)"; }
 function canvasDataUrl(c) {
   return new Promise((res) => {
     const fallback = () => res(c.toDataURL("image/png"));
@@ -924,6 +1135,11 @@ $("#exportBtn").addEventListener("click", (e) => {
   const m = $("#exportMenu"), open = m.hidden;
   closeMenus();
   m.hidden = !open; $("#exportBtn").setAttribute("aria-expanded", String(open));
+  if (open && shell) {
+    // The toolbar pill scrolls sideways, so the menu is placed on the page under the button.
+    const r = $("#exportBtn").getBoundingClientRect();
+    Object.assign(m.style, { top: Math.round(r.bottom + 6) + "px", right: Math.max(8, Math.round(innerWidth - r.right)) + "px", left: "auto" });
+  }
   if (open) m.querySelector("button")?.focus();
 });
 $("#exportMenu").addEventListener("keydown", (e) => {
@@ -937,8 +1153,14 @@ $("#moreBtn").addEventListener("click", (e) => {
   $("#topBar").classList.toggle("menu-open", open); $("#moreBtn").setAttribute("aria-expanded", String(open));
 });
 document.addEventListener("click", (e) => { if (!e.target.closest(".export-wrap, #fileGroup, #moreBtn")) closeMenus(); });
+const SHEET_PANEL = { brush: "tools", layers: "layers" };
 function toggleSheet(name) {
   const b = document.body;
+  if (shell) {
+    // In the editor frame the brush settings and layers live in the side panel (a bottom sheet on phones).
+    if (!name || framePanel === SHEET_PANEL[name]) shell.closePanel(); else shell.openPanel(SHEET_PANEL[name]);
+    return;
+  }
   if (!name || b.dataset.sheet === name) delete b.dataset.sheet; else b.dataset.sheet = name;
   $("#brushSheetBtn").setAttribute("aria-expanded", String(b.dataset.sheet === "brush"));
   $("#layersSheetBtn").setAttribute("aria-expanded", String(b.dataset.sheet === "layers"));
@@ -1002,7 +1224,7 @@ async function showDrawings() {
 }
 
 /* ---------- keyboard ---------- */
-const KEYS = { p: "pencil", m: "marker", a: "airbrush", k: "calligraphy", s: "smudge", e: "eraser", g: "fill", u: "shape", t: "text", i: "picker", h: "hand" };
+const KEYS = { p: "pencil", m: "marker", w: "glow", l: "highlighter", a: "airbrush", k: "calligraphy", s: "smudge", e: "eraser", g: "fill", u: "shape", t: "text", i: "picker", v: "move", h: "hand" };
 $("#undoBtn").addEventListener("click", undo);
 $("#redoBtn").addEventListener("click", redo);
 $("#zoomIn").addEventListener("click", () => zoomTo(state.cam.zoom * 1.25));
@@ -1042,6 +1264,274 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("keyup", (e) => { if (e.key === " ") { spaceDown = false; stage.classList.remove("grab"); } });
 window.addEventListener("blur", () => { spaceDown = false; stage.classList.remove("grab"); });
 
+/* ---------- editor frame: toolbar pill, templates, elements, text, panels ---------- */
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "text") e.textContent = v; else if (k === "html") e.innerHTML = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()) if (c != null) e.append(c);
+  return e;
+}
+const TOOL_ICON = (t) => document.querySelector(`.tool[data-tool="${t}"] svg`)?.outerHTML || "";
+// Context toolbar (the floating pill over the canvas): brush, colour, size, opacity, eraser, undo/redo, zoom, export.
+const pillBrush = el("button", { type: "button", class: "btn pill-brush", id: "pillBrush", title: "Brushes and tools", "aria-label": "Brushes and tools" });
+pillColor = el("input", { type: "color", id: "pillColor", value: "#1f2937", "aria-label": "Colour" });
+const pillSize = el("input", { type: "range", id: "pillSize", min: "1", max: "200", value: "8", "aria-label": "Brush size" });
+const pillSizeVal = el("output", { class: "pill-val", id: "pillSizeVal", text: "8" });
+const pillOpacity = el("input", { type: "range", id: "pillOpacity", min: "1", max: "100", value: "100", "aria-label": "Opacity" });
+const pillOpacityVal = el("output", { class: "pill-val", id: "pillOpacityVal", text: "100%" });
+const pillEraser = el("button", { type: "button", class: "btn sq pill-eraser", id: "pillEraser", title: "Eraser (E)", "aria-label": "Eraser", "aria-pressed": "false" });
+const ASSIST_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15c2-6 5-9 8-7s1 7 4 7 3-3 4-5"/><circle cx="17" cy="6" r="3" stroke-dasharray="2 2"/></svg>';
+const pillAssist = el("button", { type: "button", class: "btn pill-assist", id: "shapeAssist", title: "Shape assist: rough lines, arrows, boxes, circles, stars and hearts become clean shapes", "aria-label": "Shape assist", "aria-pressed": String(state.shapeAssist), html: ASSIST_ICON + "<span>Shape assist</span>", onclick: () => { setShapeAssist(!state.shapeAssist); toast(state.shapeAssist ? "Shape assist on: draw a rough line, arrow, box, circle, triangle, diamond, star or heart." : "Shape assist off. Hold still at the end of a stroke to snap one shape."); } });
+const pillStudio = el("button", { type: "button", class: "btn pill-studio", id: "drawStudio", title: "Open this drawing in Studio to add text, shapes and pages", "aria-label": "Open in Studio", text: "Open in Studio", onclick: () => openInStudio() });
+const pill = el("div", { class: "draw-pill", id: "drawPill", role: "toolbar", "aria-label": "Brush settings" },
+  pillBrush, el("span", { class: "pill-sep", "aria-hidden": "true" }),
+  el("label", { class: "pill-color", title: "Colour" }, pillColor, el("span", { class: "chip", "aria-hidden": "true" })),
+  el("label", { class: "pill-range", title: "Size" }, el("span", { class: "pill-lbl", text: "Size" }), pillSize, pillSizeVal),
+  el("label", { class: "pill-range", title: "Opacity" }, el("span", { class: "pill-lbl", text: "Opacity" }), pillOpacity, pillOpacityVal),
+  pillEraser, pillAssist, el("span", { class: "pill-sep", "aria-hidden": "true" }));
+let paintTool = "pen";
+function syncPill() {
+  const t = state.tool, s = state.settings[t] || {};
+  if (t !== "eraser" && BRUSHES[t]) paintTool = t;
+  pillBrush.innerHTML = TOOL_ICON(t) + `<span>${LABEL[t] || "Brush"}</span>`;
+  pillEraser.innerHTML = TOOL_ICON("eraser");
+  pillEraser.setAttribute("aria-pressed", String(t === "eraser")); pillEraser.classList.toggle("on", t === "eraser");
+  pillSize.min = sizeRange.min; pillSize.max = sizeRange.max;
+  pillSize.disabled = s.size == null; pillOpacity.disabled = s.opacity == null;
+  if (s.size != null) { pillSize.value = s.size; pillSizeVal.textContent = Math.round(s.size); }
+  if (s.opacity != null) { pillOpacity.value = Math.round(s.opacity * 100); pillOpacityVal.textContent = Math.round(s.opacity * 100) + "%"; }
+  for (const b of document.querySelectorAll("[data-brush]")) { const on = b.dataset.brush === t; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
+}
+pillBrush.addEventListener("click", () => { if (shell) shell.openPanel("tools"); });
+pillColor.addEventListener("input", () => setColor(pillColor.value));
+pillColor.addEventListener("change", () => addRecent(pillColor.value));
+pillSize.addEventListener("input", () => {
+  const s = cur(); if (s.size == null) return;
+  s.size = +pillSize.value; sizeRange.value = pillSize.value; $("#sizeVal").textContent = pillSize.value + " px"; pillSizeVal.textContent = pillSize.value;
+  saveSettings(); requestRender(); positionTextInput();
+});
+pillOpacity.addEventListener("input", () => {
+  const s = cur(); if (s.opacity == null) return;
+  s.opacity = +pillOpacity.value / 100; opacityRange.value = pillOpacity.value; $("#opacityVal").textContent = pillOpacity.value + "%"; pillOpacityVal.textContent = pillOpacity.value + "%";
+  saveSettings(); positionTextInput();
+});
+pillEraser.addEventListener("click", () => setTool(state.tool === "eraser" ? paintTool : "eraser"));
+
+/* Templates: our own vector artwork (gallery.js) painted onto layers of a new drawing. */
+async function svgImage(text) {
+  const url = URL.createObjectURL(new Blob([text], { type: "image/svg+xml" }));
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error("The template picture could not be drawn.")); img.src = url; });
+    return { img, done: () => URL.revokeObjectURL(url) };
+  } catch (e) { URL.revokeObjectURL(url); throw e; }
+}
+async function applyTemplate(id, { fresh = false } = {}) {
+  const t = templateById(id);
+  if (!t) { toast("That template was not found."); return false; }
+  if (!fresh && state.saveStatus !== "saved") await saveNow();
+  const { img, done } = await svgImage(templateSvg(id));
+  newDoc({ w: t.w, h: t.h, background: t.bg, name: t.name }, { save: false });
+  const d = state.doc, base = d.layers[0];
+  base.name = t.full ? t.name : t.colouring ? "Lines" : "Template";
+  base.ctx.drawImage(img, 0, 0, d.w, d.h);
+  done();
+  if (t.colouring) {
+    // Colour goes on a layer under the lines, so the lines stay sharp; the bucket looks at all layers.
+    const c = makeLayer("Colours"); d.layers = [c, base]; d.active = c;
+    state.settings.fill.sampleAll = true; saveSettings();
+  } else if (!t.full) { const top = makeLayer("Layer 2"); d.layers = [base, top]; d.active = top; }
+  renderLayerList(); syncOptions();
+  markChanged(base);
+  if (t.colouring) setTool("fill");
+  toast(t.colouring ? "Colouring page ready: pick a colour and tap inside a shape." : `Template "${t.name}" opened. Your last drawing is in My drawings.`);
+  try { shell?.pushRecent?.(id); if (!fresh && matchMedia("(max-width: 759.98px)").matches) shell?.closePanel?.(); } catch {}
+  return true;
+}
+
+/* Elements: shapes stamped onto the selected layer in the current colour. Paths use a 100 × 100 box. */
+const STAMPS = [
+  ["square", "Square", "M10 10H90V90H10Z"], ["circle", "Circle", "M8 50a42 42 0 1 0 84 0a42 42 0 1 0 -84 0Z"], ["triangle", "Triangle", "M50 8L92 90H8Z"],
+  ["star", "Star", "M50 6l12.4 27.6 30 3.2-22.5 20.2 6.4 29.6L50 71.4 23.7 86.6l6.4-29.6L7.6 36.8l30-3.2Z"],
+  ["heart", "Heart", "M50 88C20 66 6 50 6 32 6 18 17 8 30 8c9 0 16 5 20 12 4-7 11-12 20-12 13 0 24 10 24 24 0 18-14 34-44 56Z"],
+  ["arrow", "Arrow", "M6 40H60V18L94 50 60 82V60H6Z"], ["speech", "Speech bubble", "M14 12H86a8 8 0 0 1 8 8V62a8 8 0 0 1-8 8H44L24 90l4-20H14a8 8 0 0 1-8-8V20a8 8 0 0 1 8-8Z"],
+  ["cloud", "Cloud", "M28 78C14 78 6 68 6 57c0-11 9-20 20-20 2-15 14-25 28-25 13 0 24 8 27 20 9 1 16 9 16 19 0 15-11 27-26 27Z"],
+  ["hexagon", "Hexagon", "M28 8H72L94 50 72 92H28L6 50Z"], ["moon", "Moon", "M62 8A42 42 0 1 0 92 66 34 34 0 1 1 62 8Z"],
+  ["bolt", "Lightning", "M58 4L18 56H46L38 96 82 40H54Z"], ["diamond", "Diamond", "M50 4L94 50 50 96 6 50Z"],
+];
+let stampOutline = false;
+function stampShape(id, { outline = stampOutline } = {}) {
+  const sh = STAMPS.find((s) => s[0] === id), layer = activeLayer();
+  if (!sh || !canDraw(layer) || typeof Path2D !== "function") return false;
+  const d = state.doc, size = Math.round(Math.min(d.w, d.h) * 0.36), x = Math.round((d.w - size) / 2), y = Math.round((d.h - size) / 2), k = size / 100;
+  const lw = Math.max(2, state.settings.shape.size || 6);
+  editRegion(layer, [x - lw, y - lw, x + size + lw, y + size + lw], (ctx) => {
+    ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+    const path = new Path2D(sh[2]);
+    if (outline) { ctx.lineWidth = lw / k; ctx.lineJoin = "round"; ctx.strokeStyle = state.color; ctx.stroke(path); } else { ctx.fillStyle = state.color; ctx.fill(path); }
+    ctx.restore();
+  });
+  addRecent(state.color);
+  return true;
+}
+function renderElementsPanel(box) {
+  const svgOf = (d) => `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${d}"/></svg>`;
+  const outline = el("label", { class: "check" }, el("input", { type: "checkbox", id: "stampOutline", onchange: (e) => { stampOutline = e.target.checked; grid.classList.toggle("outline", stampOutline); } }), " Outline only");
+  const grid = el("div", { class: "stamp-grid" }, STAMPS.map(([id, label, d]) => el("button", { type: "button", class: "stamp", "data-stamp": id, title: `Add a ${label.toLowerCase()}`, "aria-label": `Add a ${label.toLowerCase()}`, html: svgOf(d), onclick: () => { if (stampShape(id)) toast(`${label} added in the current colour`); } })));
+  const draw = (kind, label) => el("button", { type: "button", class: "btn sm", "data-draw-shape": kind, text: label, onclick: () => { state.settings.shape.kind = kind; setTool("shape"); toast("Drag on the canvas to draw it."); } });
+  box.append(
+    el("p", { class: "muted small", text: "Shapes go in the middle of the selected layer, in the colour you picked." }), outline, grid,
+    el("h3", { class: "panel-h3", text: "Draw your own" }), el("div", { class: "row wrap" }, draw("line", "Line"), draw("rect", "Box"), draw("ellipse", "Circle")));
+}
+
+/* Text: ready-made text styles written in the middle of the canvas, or the Text tool to place it yourself. */
+async function insertText(str, { size = 64, bold = false, font = state.settings.text.font } = {}) {
+  const layer = activeLayer(), text = String(str || "").trim();
+  if (!text || !canDraw(layer)) return false;
+  const d = state.doc, px = Math.max(8, Math.round(size * Math.max(d.w, d.h) / 1080));
+  await ensureFont(font, bold).catch(() => null);
+  const f = `${bold ? 700 : 400} ${px}px ${fontCss(font)}`, lines = text.split("\n"), lh = px * 1.25;
+  layer.ctx.save(); layer.ctx.font = f;
+  const wmax = Math.min(d.w, Math.max(...lines.map((l) => layer.ctx.measureText(l).width)));
+  layer.ctx.restore();
+  const x = Math.round((d.w - wmax) / 2), y = Math.round((d.h - lh * lines.length) / 2), color = state.color;
+  editRegion(layer, [x - 8, y - 8, x + wmax + px * 0.5 + 8, y + lh * lines.length + px * 0.5], (ctx) => {
+    ctx.save(); ctx.font = f; ctx.textBaseline = "top"; ctx.fillStyle = color;
+    lines.forEach((l, i) => ctx.fillText(l, x, y + i * lh + (lh - px) / 2));
+    ctx.restore();
+  });
+  addRecent(color);
+  return true;
+}
+function renderTextPanel(box) {
+  const styles = [["Add a heading", 120, true, "heading"], ["Add a subheading", 72, true, "subheading"], ["Add a little body text", 44, false, "body"]];
+  box.append(
+    el("button", { type: "button", class: "btn primary block", "data-text-tool": "1", text: "Type on the canvas", onclick: () => { setTool("text"); toast("Tap the canvas where the text should go, type, then press Enter."); } }),
+    el("h3", { class: "panel-h3", text: "Default text styles" }),
+    ...styles.map(([label, size, bold, kind]) => el("button", { type: "button", class: `text-style ${kind}`, "data-text-style": kind, text: label, onclick: async () => { if (await insertText(label.replace(/^Add an? (little )?/, "").replace(/^./, (c) => c.toUpperCase()), { size, bold })) toast("Text added. Undo removes it."); } })),
+    el("h3", { class: "panel-h3", text: "Fonts" }),
+    el("div", { class: "font-list" }, Object.entries(FONT_FAMILIES).map(([k, f]) => el("button", { type: "button", class: "font-pick", "data-font": k, style: `font-family:${f.css}`, text: f.label, onclick: () => { state.settings.text.font = k; fontSel.value = k; saveSettings(); ensureFont(k, false).catch(() => {}); toast(`Font: ${f.label}`); } }))));
+}
+function renderBrushesPanel(box) {
+  const ids = [...Object.keys(BRUSHES), "fill", "shape", "text", "picker", "move"];
+  box.append(el("div", { class: "brush-grid" }, ids.map((t) => el("button", { type: "button", class: "brush-pick", "data-brush": t, "aria-pressed": "false", title: LABEL[t], html: TOOL_ICON(t) + `<span>${LABEL[t]}</span>`, onclick: () => setTool(t) }))));
+  box.append(el("div", { class: "assist-row" },
+    el("button", { type: "button", class: "btn sm assist-toggle" + (state.shapeAssist ? " on" : ""), id: "shapeAssistToggle", "aria-pressed": String(state.shapeAssist), html: ASSIST_ICON + "<span>Shape assist</span>", onclick: () => setShapeAssist(!state.shapeAssist) }),
+    el("p", { class: "muted small", text: "Draw a rough line, arrow, box, circle, triangle, diamond, star or heart with the pen, pencil, marker or highlighter: it becomes a clean shape. Or hold still for a moment at the end of a stroke." })));
+  box.append($("#brushPanel"));
+  syncPill();
+}
+function renderLayersPanel(box) { box.append($("#layersPanel")); }
+
+async function insertPicture(src, name) {
+  const blob = typeof src === "string" ? dataUrlToBlob(src) : src;
+  const f = typeof File === "function" ? new File([blob], name || "Picture", { type: blob.type || "image/png" }) : Object.assign(blob, { name: name || "Picture" });
+  await importImage(f);
+}
+
+async function mountFrame() {
+  let mod = null;
+  try { mod = await import("../shared/editor-shell.js"); } catch (e) { console.warn("The editor frame could not load", e); return null; }
+  if (typeof mod?.mountShell !== "function") return null;
+  const stageWrap = document.querySelector("main.work");
+  pill.append($(".grp.hist"), el("span", { class: "pill-sep", "aria-hidden": "true" }), $(".grp.zoom"), $(".export-wrap"), pillStudio);
+  try {
+    shell = mod.mountShell({
+      app: "draw", kind: "Drawing", title: state.doc?.name || "My drawing", home: "/tools/draw",
+      onTitle: (t) => { if (!state.doc) return; state.doc.name = String(t || "").trim().slice(0, 80) || "My drawing"; $("#docName").value = state.doc.name; scheduleSave(); },
+      stage: stageWrap, toolbar: pill, formulaBar: null, resize: { label: "Resize", open: () => openResize() },
+      file: [
+        { label: "New drawing…", act: () => $("#newBtn").click(), hint: "Pick a canvas size" },
+        { label: "Resize canvas…", act: () => openResize(), hint: "Scale the drawing or change the canvas" },
+        { label: "New blank square drawing", act: async () => { if (state.saveStatus !== "saved") await saveNow(); newDoc({}); toast("New 1080 × 1080 drawing"); } },
+        { label: "My drawings…", act: () => $("#drawingsBtn").click() },
+        { label: "Add an image as a layer…", act: () => $("#importInput").click() },
+        { label: "Open a drawing file…", act: () => $("#openFile").click() },
+        { label: "Download PNG", group: "Download", act: () => doExport("png") },
+        { label: "Download PNG (transparent)", group: "Download", act: () => doExport("png-clear") },
+        { label: "Download JPG", group: "Download", act: () => doExport("jpg") },
+        { label: "Save drawing file (keeps layers)", group: "Download", act: () => doExport("json") },
+        { label: "Open in Studio", group: "Download", act: () => openInStudio(), hint: "Add text, shapes and pages" },
+        { label: "Undo", group: "Edit", act: undo },
+        { label: "Redo", group: "Edit", act: redo },
+        { label: "Add a layer", group: "Edit", act: addLayer },
+        { label: "Fit the drawing on screen", group: "View", act: fit },
+      ],
+      share: { download: [{ label: "PNG", act: () => doExport("png") }, { label: "PNG (transparent)", act: () => doExport("png-clear") }, { label: "JPG", act: () => doExport("jpg") }, { label: "Drawing file", act: () => doExport("json") }], link: () => location.origin + "/tools/draw" },
+      templates: { gallery: { TEMPLATES: GALLERY, thumb: templateThumb }, tool: "draw", apply: (id) => applyTemplate(id), placeholder: "Search Draw templates" },
+      panels: {
+        tools: { label: "Brushes", icon: "tools", render: (b) => renderBrushesPanel(b) },
+        elements: (b) => renderElementsPanel(b),
+        text: (b) => renderTextPanel(b),
+        layers: { label: "Layers", icon: "pages", render: (b) => renderLayersPanel(b) },
+      },
+      rail: ["templates", "tools", "elements", "text", "layers", "brand", "uploads", "projects", "apps"],
+      insert: {
+        image: (src, name) => insertPicture(src, name),
+        text: (str, style) => insertText(str, style === "heading" || style === "h1" ? { size: 120, bold: true } : style === "subheading" || style === "h2" ? { size: 72, bold: true } : { size: 44 }),
+        color: (hex) => { setColor(hex); addRecent(state.color); },
+        font: (key) => { if (FONT_FAMILIES[key]) { state.settings.text.font = key; fontSel.value = key; saveSettings(); toast(`Text font: ${FONT_FAMILIES[key].label}. Pick Text and tap the canvas.`); } },
+      },
+      projects: {
+        save: async () => { await saveNow(); return { name: state.doc.name, data: await drawingJson(), thumb: thumbDataUrl() }; },
+        open: async (rec) => { const p = rec?.data ? rec : await getProject(rec?.id); if (state.saveStatus !== "saved") await saveNow(); await loadDrawing(p.data, { id: p.id }); },
+      },
+      bottom: {
+        notes: true, outline: null, timer: true, fullscreen: true, help: true, pages: null,
+        zoom: { get: () => Math.round(state.cam.zoom * 100), set: (pct) => zoomTo(clamp(pct, 5, 800) / 100), min: 5, max: 800 },
+      },
+      shortcuts: [["B", "Brush"], ["W", "Glow pen"], ["L", "Highlighter"], ["E", "Eraser"], ["G", "Paint bucket"], ["U", "Shapes"], ["T", "Text"], ["I", "Colour picker"], ["H / Space", "Move the view"], ["[ and ]", "Brush size"], ["+ / - / 0", "Zoom in, out, fit"]],
+      onPanel: (id) => {
+        framePanel = id;
+        const sheet = id === "tools" ? "brush" : id === "layers" ? "layers" : null;
+        if (sheet) document.body.dataset.sheet = sheet; else delete document.body.dataset.sheet;
+        $("#brushSheetBtn").setAttribute("aria-expanded", String(sheet === "brush"));
+        $("#layersSheetBtn").setAttribute("aria-expanded", String(sheet === "layers"));
+      },
+      setMode: (mode) => { state.mode = mode; if (mode !== "edit") { abortStroke(); cancelText(); } },
+    });
+    // Render the brush and layer panels now, so their controls exist in the frame before the first open.
+    shell.panel?.("tools"); shell.panel?.("layers");
+    document.body.classList.add("has-shell");
+    if (state.doc) { shell.setTitle?.(state.doc.name); shell.setProjectId?.(state.doc.id); }
+    return shell;
+  } catch (e) {
+    console.warn("The editor frame could not start", e);
+    shell = null;
+    const bar = $("#topBar"), st = $("#saveStatus");
+    for (const g of [pill.querySelector(".grp.hist"), pill.querySelector(".grp.zoom")]) if (g) bar.insertBefore(g, st);
+    const ex = pill.querySelector(".export-wrap"); if (ex) bar.append(ex);
+    return null;
+  }
+}
+
+/* ---------- Open in Studio: the flattened drawing as one picture on a page of the same size ---------- */
+const STUDIO_FILTERS = { brightness: 1, contrast: 1, saturate: 1, blur: 0, grayscale: 0, sepia: 0, hue: 0 };
+function designForStudio() {
+  const d = state.doc, c = bufferToCanvas(flatten(false));
+  const src = c.toDataURL("image/png");
+  return {
+    version: 1, name: d.name || "My drawing",
+    preset: { id: "custom", label: "Custom size", w: d.w, h: d.h, unit: "px", dpi: 96, bleed: 0 },
+    pages: [{ id: "p" + uid(), background: { color: d.background || "#ffffff" }, layers: [{
+      id: "l" + uid(), type: "image", name: "Drawing", x: 0, y: 0, w: d.w, h: d.h, rotation: 0, opacity: 1, locked: false, hidden: false, animation: null,
+      image: { src, crop: { x: 0, y: 0, w: 1, h: 1 }, filters: { ...STUDIO_FILTERS }, radius: 0, flipX: false, flipY: false, nw: d.w, nh: d.h },
+    }] }],
+  };
+}
+async function openInStudio() {
+  if (!state.doc) return;
+  try {
+    if (state.saveStatus !== "saved") await saveNow();
+    const id = await putHandoff({ type: "design", design: designForStudio() });
+    location.href = "/design/studio/?handoff=" + id;
+  } catch (e) { toast(e.message || "Could not open Studio."); }
+}
+
 /* ---------- start ---------- */
 if (typeof ResizeObserver === "function") new ResizeObserver(() => resizeView()).observe(stage);
 window.addEventListener("resize", resizeView);
@@ -1058,17 +1548,26 @@ window.adApp = {
   },
   layers: () => state.doc.layers.map((l) => ({ name: l.name, opacity: l.opacity, hidden: l.hidden, active: l === state.doc.active })),
   docToScreen, screenToDoc,
+  applyTemplate, templates: () => GALLERY.map((t) => t.id), templateInfo: (id) => templateById(id), stampShape, insertText, zoomTo: (pct) => zoomTo(pct / 100),
+  resizeCanvas, openResize,
+  recogniseShape: (points, o) => recognise(points, o), setShapeAssist, designForStudio, openInStudio,
+  /** the colours shown under "In this drawing", worked out now */
+  docColors: () => { refreshDocColors(true); return [...document.querySelectorAll("#docColors .swatch")].map((b) => b.dataset.color); },
+  setSize,
+  get shell() { return shell; },
 };
 
 async function start() {
+  await mountFrame();
   renderBrandSwatches();
   renderSwatches($("#recentColors"), state.recent, "Recent colour");
   setColor(state.recent[0] || state.color);
   setTool("pen");
   resizeView();
   const params = new URLSearchParams(location.search);
+  const tplId = params.get("template");
   let restored = false;
-  if (!params.has("new")) {
+  if (!params.has("new") && !tplId) {
     try {
       const id = params.get("id");
       const p = id ? await getProject(id) : (await listProjects("draw"))[0];
@@ -1076,6 +1575,10 @@ async function start() {
     } catch (e) { console.warn("Could not restore the last drawing", e); }
   }
   if (!restored) newDoc({}, { save: false });
+  if (tplId) {
+    if (templateById(tplId)) { try { await applyTemplate(tplId, { fresh: true }); } catch (e) { console.warn(e); toast(e.message || "That template could not open."); } }
+    else toast("That template was not found. Here is a blank drawing.");
+  }
   state.ready = true;
   document.body.classList.add("ready");
 }

@@ -4,15 +4,22 @@ import { S, on, emit, commit, curPage, pageSize, layerById, selLayers, single, t
 import { layerContent, backgroundMarkup, esc } from "./svg.js";
 import { cssFilter, coverCrop } from "./shapes.js";
 import { textHeight, CSS_FAMILY, textPad } from "./textlayout.js";
+import { fitTextBox } from "./textfx.js";
 import { aabb, unionBox, intersects, snapTargets, snapBox, snapValue, snapAngle, resizeBox, scaleLayer, makeGroup, ungroup, alignLayers, distributeLayers, rotate, HANDLES, refitGroup, fitView, viewAfterResize } from "./geometry.js";
 import { bleedPx, toPx } from "./presets.js";
 import { withNewIds, newId, imageLayer, newPage, duplicatePage, clone } from "./model.js";
 import { swapFrames } from "./collage.js";
 import { ensureFont } from "../shared/brand.js";
-import { animState } from "./animate.js";
+import { animState, pageDuration as animEnd, withClicks } from "./animate.js";
 
 let viewport, world, pageEl, guidesEl, overlay, bgEl;
 const els = new Map(); // layer id -> { el, sig }
+// Locks (Canva): a locked page fixes everything on it; "Lock position only" still lets the text or photo change.
+const pageLocked = () => !!(S.design && curPage()?.locked);
+export const fixed = (l) => !!l?.locked || pageLocked();
+export const canType = (l) => !pageLocked() && (!l.locked || l.lockMode === "position");
+/** Curved text gets the arc box, other text the height its lines need. */
+export const fitText = (l) => fitTextBox(l);
 
 /* ---------------- image display URLs (blob: links, so big photos are not copied into the DOM) ---------------- */
 const blobUrls = new Map();
@@ -49,8 +56,11 @@ export function initStage(root) {
   overlay = h("div.st-overlay");
   viewport.append(world, overlay);
   viewport.addEventListener("pointerdown", onDown);
+  guidesEl.addEventListener("pointerdown", onGuideDown);
   viewport.addEventListener("pointermove", onHover);
   viewport.addEventListener("dblclick", onDbl);
+  // Right-click menu (Canva: copy, paste, lock, layers, link, download selection …).
+  viewport.addEventListener("contextmenu", (e) => { if (!S.design || typing()) return; e.preventDefault(); const l = topLayerAt(e.target); if (l && !S.sel.includes(l.id)) select([l.id]); else if (!l) select([]); emit("context-menu", e.clientX, e.clientY); });
   viewport.addEventListener("wheel", onWheel, { passive: false });
   viewport.addEventListener("dragover", (e) => { e.preventDefault(); viewport.classList.add("drop"); });
   viewport.addEventListener("dragleave", () => viewport.classList.remove("drop"));
@@ -69,6 +79,7 @@ export function initStage(root) {
   document.addEventListener("copy", onCopy);
   document.addEventListener("cut", (e) => { if (!typing() && S.sel.length) { onCopy(e); deleteSel(); } });
   on("render", () => {});
+  on("renumbered", (ids) => { if (!S.design) return; for (const l of curPage().layers) if (ids.includes(l.id)) { const rec = els.get(l.id); if (rec) { rec.sig = null; layerEl(l); } } renderOverlay(); });
 }
 
 /* ---------------- rendering ---------------- */
@@ -129,7 +140,52 @@ function renderGuides() {
       if (g.type === "safe" && g.w) m += `<rect x="${(w - g.w) / 2}" y="${(H - g.h) / 2}" width="${g.w}" height="${g.h}" fill="none" stroke="#2f80ff" stroke-width="${1 / S.zoom}" stroke-dasharray="${6 / S.zoom} ${4 / S.zoom}"/>`;
     }
   }
+  // Rulers and guides (File › Rulers and guides): margins, danger zone, rulers and the person's own guide lines.
+  const v = S.design.view;
+  if (v) {
+    const sm = P.unit === "px" ? Math.round(Math.min(w, H) * 0.03) : toPx(0.125, "in"), z = S.zoom;
+    if (v.danger) m += `<path data-guide="danger" d="M0 0H${w}V${H}H0Z M${sm} ${sm}V${H - sm}H${w - sm}V${sm}Z" fill="#f43f5e" fill-opacity=".14" fill-rule="evenodd"/>`;
+    if (v.margins) m += `<rect data-guide="margins" x="${sm}" y="${sm}" width="${w - 2 * sm}" height="${H - 2 * sm}" fill="none" stroke="#a64bf4" stroke-width="${1 / z}" stroke-dasharray="${3 / z} ${3 / z}"/>`;
+    for (const g of v.lines || []) m += g.axis === "x" ? `<line data-guide="line" x1="${g.at}" y1="${-20 / z}" x2="${g.at}" y2="${H + 20 / z}" stroke="#ec4899" stroke-width="${1 / z}"/>` : `<line data-guide="line" x1="${-20 / z}" y1="${g.at}" x2="${w + 20 / z}" y2="${g.at}" stroke="#ec4899" stroke-width="${1 / z}"/>`;
+    // Unlocked guides can be dragged (a wide invisible line catches the pointer); locked ones can't.
+    if (!v.lockGuides) (v.lines || []).forEach((g, i) => { m += g.axis === "x" ? `<line data-guide-hit="${i}" x1="${g.at}" y1="${-20 / z}" x2="${g.at}" y2="${H + 20 / z}" stroke="transparent" stroke-width="${10 / z}" style="pointer-events:stroke;cursor:ew-resize"/>` : `<line data-guide-hit="${i}" x1="${-20 / z}" y1="${g.at}" x2="${w + 20 / z}" y2="${g.at}" stroke="transparent" stroke-width="${10 / z}" style="pointer-events:stroke;cursor:ns-resize"/>`; });
+    if (v.rulers) {
+      const unit = P.unit === "in" ? 96 : P.unit === "mm" ? 96 / 2.54 : 100, lab = P.unit === "in" ? "in" : P.unit === "mm" ? "cm" : "px";
+      const t = 18 / z, fs = 10 / z;
+      m += `<g data-guide="rulers" font-family="system-ui, sans-serif" font-size="${fs}" fill="#657089"><rect x="0" y="${-t - 2 / z}" width="${w}" height="${t}" fill="#ffffff" fill-opacity=".92" stroke="#d9dcea" stroke-width="${0.5 / z}"/><rect x="${-t - 2 / z}" y="0" width="${t}" height="${H}" fill="#ffffff" fill-opacity=".92" stroke="#d9dcea" stroke-width="${0.5 / z}"/>`;
+      const step = unit / (unit * z < 40 ? 1 : unit * z < 80 ? 2 : 4);
+      for (let x = 0, i = 0; x <= w + 0.1; x += step, i++) { const major = Math.abs(x / unit - Math.round(x / unit)) < 1e-6; m += `<line x1="${x}" y1="${-2 / z - (major ? t : t / 2)}" x2="${x}" y2="${-2 / z}" stroke="#94a3b8" stroke-width="${0.6 / z}"/>` + (major && x > 0 ? `<text x="${x + 2 / z}" y="${-t + fs - 1 / z}">${Math.round(x / unit)}${x === unit ? " " + lab : ""}</text>` : ""); }
+      for (let y = 0; y <= H + 0.1; y += step) { const major = Math.abs(y / unit - Math.round(y / unit)) < 1e-6; m += `<line x1="${-2 / z - (major ? t : t / 2)}" y1="${y}" x2="${-2 / z}" y2="${y}" stroke="#94a3b8" stroke-width="${0.6 / z}"/>` + (major && y > 0 ? `<text x="${-t + 1 / z}" y="${y - 2 / z}">${Math.round(y / unit)}</text>` : ""); }
+      m += `</g>`;
+    }
+  }
+  // Motion paths (Animate panel): a dashed line from each moving item's centre.
+  if (S.panel === "animate") for (const l of curPage().layers) {
+    const pts = l.animation?.path?.pts;
+    if (!(pts?.length >= 2) || l.hidden) continue;
+    const cx = l.x + l.w / 2, cy = l.y + l.h / 2, z = S.zoom, last = pts[pts.length - 1];
+    m += `<polyline data-guide="path" points="${pts.map(([x, y]) => `${cx + x},${cy + y}`).join(" ")}" fill="none" stroke="#7c3aed" stroke-width="${2 / z}" stroke-dasharray="${6 / z} ${4 / z}"/><circle cx="${cx + last[0]}" cy="${cy + last[1]}" r="${5 / z}" fill="#7c3aed"/>`;
+  }
+  pageEl.classList.toggle("rounded-corners", S.design.print?.corners === "rounded");
+  pageEl.classList.toggle("finish-gloss", S.design.print?.paper === "gloss");
+  pageEl.classList.toggle("fx-foil", S.design.print?.effect === "foil");
+  pageEl.classList.toggle("fx-raised", S.design.print?.effect === "raised");
   guidesEl.innerHTML = m ? `<svg width="${w}" height="${H}" overflow="visible">${m}</svg>` : "";
+}
+function onGuideDown(e) {
+  const i = e.target?.dataset?.guideHit, v = S.design?.view;
+  if (i == null || !v || v.lockGuides) return;
+  e.stopPropagation(); e.preventDefault();
+  const g = v.lines[+i];
+  if (!g) return;
+  const move = (ev) => { const [x, y] = toPage(ev.clientX, ev.clientY); g.at = Math.round(g.axis === "x" ? x : y); renderGuides(); };
+  const up = () => {
+    window.removeEventListener("pointermove", move, true); window.removeEventListener("pointerup", up, true);
+    const { w, h: H } = pageSize(), max = g.axis === "x" ? w : H;
+    if (g.at < -12 || g.at > max + 12) { v.lines.splice(+i, 1); toast("Guide removed."); }
+    renderGuides(); commit("guide-move");
+  };
+  window.addEventListener("pointermove", move, true); window.addEventListener("pointerup", up, true);
 }
 export function renderAll() {
   if (!S.design) return;
@@ -200,12 +256,14 @@ export function renderOverlay() {
     if (l) parts.push(box(l, "st-selbox st-cropbox") + "</div>");
   } else if (sel.length === 1 && !S.playing) {
     const l = sel[0];
-    const hs = l.locked ? [] : l.type === "text" ? ["nw", "ne", "se", "sw", "e", "w"] : Object.keys(HANDLES);
-    parts.push(box(l, "st-selbox" + (l.locked ? " locked" : "") + (S.editing === l.id ? " editing" : "")) + hs.map((k) => `<span class="st-handle h-${k}" data-handle="${k}" role="button" aria-label="Resize ${k}"></span>`).join("") + (l.locked ? `<span class="st-lockbadge" title="Locked">🔒</span>` : `<span class="st-rot" data-handle="rot" role="button" aria-label="Rotate"></span>`) + "</div>");
+    const hs = fixed(l) ? [] : l.type === "text" ? ["nw", "ne", "se", "sw", "e", "w"] : Object.keys(HANDLES);
+    // A locked item or any item on a locked page: no resize or rotate handles, only the lock badge.
+    parts.push(box(l, "st-selbox" + (fixed(l) ? " locked" : "") + (S.editing === l.id ? " editing" : "")) + hs.map((k) => `<span class="st-handle h-${k}" data-handle="${k}" role="button" aria-label="Resize ${k}"></span>`).join("") + (fixed(l) ? `<span class="st-lockbadge" title="${l.locked ? "Locked" : "Page locked"}">🔒</span>` : `<span class="st-rot" data-handle="rot" role="button" aria-label="Rotate"></span>`) + "</div>");
   } else if (sel.length > 1 && !S.playing) {
     for (const l of sel) parts.push(box(l, "st-hover st-multi") + "</div>");
     const u = unionBox(sel.map(aabb));
-    parts.push(box({ ...u, rotation: 0 }, "st-selbox st-groupbox") + ["nw", "ne", "se", "sw"].map((k) => `<span class="st-handle h-${k}" data-handle="${k}"></span>`).join("") + `<span class="st-rot" data-handle="rot" role="button" aria-label="Rotate"></span></div>`);
+    const still = sel.every(fixed);
+    parts.push(box({ ...u, rotation: 0 }, "st-selbox st-groupbox" + (still ? " locked" : "")) + (still ? "" : ["nw", "ne", "se", "sw"].map((k) => `<span class="st-handle h-${k}" data-handle="${k}"></span>`).join("") + `<span class="st-rot" data-handle="rot" role="button" aria-label="Rotate"></span>`) + "</div>");
   }
   for (const g of guides) {
     if (g.axis === "x") { const [x, y1] = toScreen(g.v, g.from), [, y2] = toScreen(g.v, g.to); parts.push(`<div class="st-guide v ${g.kind}" style="left:${x}px;top:${y1}px;height:${y2 - y1}px"></div>`); }
@@ -245,6 +303,7 @@ function onDown(e) {
   if (handle) { e.preventDefault(); handle === "rot" ? startRotate(e, p) : startResize(e, p, handle); return; }
   if (e.target.closest?.(".st-edit")) return; // typing / placing the caret
   const l = topLayerAt(e.target);
+  if (S.paintStyle) { e.preventDefault(); emit("paste-style", l ? l.id : null); return; }
   if (S.cropping) {
     const c = layerById(S.cropping);
     if (l && l.id === S.cropping) { startCropPan(e, p, c); return; }
@@ -263,7 +322,7 @@ function onDown(e) {
   if (e.shiftKey) { select(S.sel.includes(l.id) ? S.sel.filter((x) => x !== l.id) : [...S.sel, l.id]); if (!S.sel.includes(l.id)) return; }
   else if (!S.sel.includes(l.id)) select([l.id]);
   if (l.type === "frame" && l.collage && l.frame.image && S.sel.length === 1) { drag = { kind: "swap", id: e.pointerId, from: l, start: p, moved: false, cx: e.clientX, cy: e.clientY }; return; }
-  const moving = selLayers().filter((x) => !x.locked);
+  const moving = selLayers().filter((x) => !fixed(x));
   drag = { kind: "move", id: e.pointerId, start: p, cx: e.clientX, cy: e.clientY, clicked: l, shift: e.shiftKey, moved: false, wasSelected,
     items: moving.map((x) => ({ l: x, x: x.x, y: x.y })), box: moving.length ? unionBox(moving.map(aabb)) : null,
     targets: snapTargets(pageSize(), curPage().layers.filter((x) => !S.sel.includes(x.id) && !x.hidden)) };
@@ -275,7 +334,7 @@ function startPinch() {
   drag = { kind: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: S.zoom, mx: (a.x + b.x) / 2 - r.left, my: (a.y + b.y) / 2 - r.top, px: S.panX, py: S.panY };
 }
 function startResize(e, p, handle) {
-  const sel = selLayers().filter((l) => !l.locked);
+  const sel = selLayers().filter((l) => !fixed(l));
   if (!sel.length) return;
   if (sel.length === 1) {
     const l = sel[0];
@@ -286,7 +345,7 @@ function startResize(e, p, handle) {
   }
 }
 function startRotate(e, p) {
-  const sel = selLayers().filter((l) => !l.locked);
+  const sel = selLayers().filter((l) => !fixed(l));
   if (!sel.length) return;
   const u = sel.length === 1 ? { x: sel[0].x, y: sel[0].y, w: sel[0].w, h: sel[0].h } : unionBox(sel.map(aabb));
   const c = [u.x + u.w / 2, u.y + u.h / 2];
@@ -473,6 +532,9 @@ function onUp(e) {
   viewport.classList.remove("panning");
   if (vpPending) { vpPending = false; syncViewport(); }
   if (d.kind === "move") {
+    // Dropped on a page thumbnail (Canva: drag items to another page): they move to that page, same place.
+    const th = d.moved && document.elementsFromPoint ? document.elementsFromPoint(e.clientX, e.clientY).map((el) => el.closest?.(".st-pthumb[data-page], .ads-scard[data-page]")).find(Boolean) : null;
+    if (th && +th.dataset.page !== S.page && d.items.length) { for (const it of d.items) { it.l.x = it.x; it.l.y = it.y; } moveSelToPage(+th.dataset.page); return; }
     if (d.moved && d.items.length) commit("move");
     else if (!d.moved && !d.shift && S.sel.length > 1) select([d.clicked.id]);
     else if (!d.moved && d.clicked?.type === "text" && S.sel.length === 1 && d.wasSelected) startEdit(d.clicked.id);
@@ -495,7 +557,7 @@ function onHover(e) {
 }
 function onDbl(e) {
   const l = topLayerAt(e.target);
-  if (!l || l.locked) return;
+  if (!l || (l.type === "text" ? !canType(l) : fixed(l))) return;
   if (l.type === "text") startEdit(l.id);
   else if (l.type === "image" || (l.type === "frame" && l.frame.image)) toggleCrop(l.id);
 }
@@ -503,7 +565,8 @@ function onDbl(e) {
 /* ---------------- text editing ---------------- */
 export function startEdit(id, { selectAll = false } = {}) {
   const l = layerById(id);
-  if (!l || l.type !== "text" || l.locked) return;
+  if (!l || l.type !== "text" || !canType(l)) return;
+  if (l.text.dynamic) { toast("Page numbers update by themselves. Change their format in Text > Page numbers."); return; }
   if (S.editing === id) return;
   if (S.editing) endEdit();
   S.editing = id;
@@ -516,7 +579,7 @@ export function startEdit(id, { selectAll = false } = {}) {
   Object.assign(ed.style, {
     fontFamily: CSS_FAMILY[t.family] || CSS_FAMILY.sans, fontSize: t.size + "px", fontWeight: t.bold ? "700" : "400", fontStyle: t.italic ? "italic" : "normal",
     color: t.color, textAlign: t.align === "justify" ? "justify" : t.align, lineHeight: t.size * (t.lineHeight || 1.2) + "px",
-    letterSpacing: (t.letterSpacing || 0) + "px", padding: pad + "px", textDecoration: t.underline ? "underline" : "none",
+    letterSpacing: (t.letterSpacing || 0) + "px", padding: pad + "px", textDecoration: [t.underline && "underline", t.strike && "line-through"].filter(Boolean).join(" ") || "none", textTransform: t.upper ? "uppercase" : "none",
     caretColor: t.color === "#ffffff" ? "#5b4cf0" : t.color,
   });
   ed.textContent = t.content;
@@ -558,7 +621,7 @@ export function endEdit() {
   rec?.el.classList.remove("editing");
   const l = layerById(id);
   if (l && !l.text.content.trim()) { removeLayers([id]); commit("delete"); toast("Empty text removed"); }
-  else if (l) { l.name = l.text.content.split("\n")[0].slice(0, 24) || "Text"; renderLayer(l); commit("type:" + id); }
+  else if (l) { fitTextBox(l); l.name = l.text.content.split("\n")[0].slice(0, 24) || "Text"; renderLayer(l); commit("type:" + id); }
   renderOverlay();
   emit("selection");
   emit("layers");
@@ -568,7 +631,7 @@ export function endEdit() {
 export function toggleCrop(id) { if (S.cropping === id) endCrop(); else startCrop(id); }
 export function startCrop(id) {
   const l = layerById(id);
-  if (!l || l.locked) return;
+  if (!l || fixed(l)) return;
   if (S.editing) endEdit();
   S.cropping = id; S.sel = [id];
   els.get(id)?.el.classList.add("cropping");
@@ -618,7 +681,7 @@ function removeLayers(ids) {
   renderOverlay();
 }
 export function deleteSel() {
-  const ids = selLayers().filter((l) => !l.locked).map((l) => l.id);
+  const ids = selLayers().filter((l) => !fixed(l)).map((l) => l.id);
   if (!ids.length) { if (S.sel.length) toast("Unlock it first to delete it."); return; }
   if (S.editing) { S.editing = null; }
   removeLayers(ids);
@@ -680,14 +743,14 @@ export function moveLayerTo(id, index) {
   commit("arrange"); emit("layers");
 }
 export function alignSel(mode) {
-  const sel = selLayers().filter((l) => !l.locked);
+  const sel = selLayers().filter((l) => !fixed(l));
   if (!sel.length) return;
   const pos = alignLayers(sel, mode, pageSize());
   for (const l of sel) Object.assign(l, pos[l.id]);
   renderPage(); renderOverlay(); commit("align"); emit("geometry");
 }
 export function distributeSel(axis) {
-  const sel = selLayers().filter((l) => !l.locked);
+  const sel = selLayers().filter((l) => !fixed(l));
   if (sel.length < 3) { toast("Select three or more things to space them evenly."); return; }
   const pos = distributeLayers(sel, axis);
   for (const l of sel) Object.assign(l, pos[l.id]);
@@ -709,7 +772,7 @@ export function toggleHidden(id) {
   renderPage(); renderOverlay(); commit("hide"); emit("layers"); emit("selection");
 }
 export function nudge(dx, dy) {
-  const sel = selLayers().filter((l) => !l.locked);
+  const sel = selLayers().filter((l) => !fixed(l));
   if (!sel.length) return;
   for (const l of sel) { l.x += dx; l.y += dy; const rec = els.get(l.id); if (rec) place(rec.el, l); }
   renderOverlay(); commit("nudge"); emit("geometry");
@@ -718,7 +781,7 @@ export function selectAll() { select(curPage().layers.filter((l) => !l.hidden).m
 /** Updates the selected layers with fn(layer) and records one undo step (merging with `key`). */
 export function updateSel(fn, key = null, { silent = false } = {}) {
   const sel = selLayers();
-  for (const l of sel) { fn(l); if (l.type === "text") l.h = textHeight(l.text, l.w); if (l.type === "group") refitGroup(l); renderLayer(l); }
+  for (const l of sel) { fn(l); if (l.type === "text") fitTextBox(l); if (l.type === "group") refitGroup(l); renderLayer(l); }
   if (S.editing) { const ed = els.get(S.editing)?.el.querySelector(".st-edit"); if (ed) { const t = layerById(S.editing).text; Object.assign(ed.style, { fontFamily: CSS_FAMILY[t.family], fontSize: t.size + "px", fontWeight: t.bold ? "700" : "400", fontStyle: t.italic ? "italic" : "normal", color: t.color, textAlign: t.align, lineHeight: t.size * t.lineHeight + "px", letterSpacing: t.letterSpacing + "px", textDecoration: t.underline ? "underline" : "none", padding: textPad(t) + "px" }); } }
   renderOverlay();
   commit(key);
@@ -736,6 +799,24 @@ export function goPage(i) {
 }
 export function addPage() { if (S.editing) endEdit(); const bg = clone(curPage().background); S.design.pages.splice(S.page + 1, 0, newPage(bg.image ? { color: "#ffffff" } : bg)); commit("page"); goPage(S.page + 1); }
 export function dupPage() { if (S.editing) endEdit(); S.design.pages.splice(S.page + 1, 0, duplicatePage(curPage())); commit("page"); goPage(S.page + 1); }
+/** Duplicates several pages (each copy right after the last picked page, in order). */
+export function dupPages(list) { if (S.editing) endEdit(); const copies = list.map((i) => duplicatePage(S.design.pages[i])); const at = Math.max(...list) + 1; S.design.pages.splice(at, 0, ...copies); commit("page"); goPage(at); toast(`${copies.length} pages duplicated.`); }
+/** Deletes several pages (at least one stays). */
+export function deletePages(list) { if (S.editing) endEdit(); const set = new Set(list); if (set.size >= S.design.pages.length) { toast("A design needs at least one page."); return; } S.design.pages = S.design.pages.filter((_, i) => !set.has(i)); commit("page"); goPage(Math.min(S.page, S.design.pages.length - 1)); toast(`${set.size} pages deleted.`); }
+/** Moves the selected items to page i (same place on the page) and shows that page. */
+export function moveSelToPage(i) {
+  if (!S.design || i < 0 || i >= S.design.pages.length || i === S.page) return 0;
+  if (S.editing) endEdit();
+  const moving = selLayers().filter((l) => !fixed(l));
+  if (!moving.length) return 0;
+  const ids = moving.map((l) => l.id);
+  curPage().layers = curPage().layers.filter((l) => !ids.includes(l.id));
+  S.design.pages[i].layers.push(...moving);
+  commit("move-to-page");
+  goPage(i); select(ids);
+  toast(`Moved to page ${i + 1}.`);
+  return moving.length;
+}
 export function deletePage() {
   if (S.design.pages.length < 2) { toast("A design needs at least one page."); return; }
   S.design.pages.splice(S.page, 1); commit("page"); goPage(Math.min(S.page, S.design.pages.length - 1));
@@ -791,6 +872,11 @@ function onKey(e) {
   if (mod && k === "-") { e.preventDefault(); setZoom(S.zoom / 1.2); return; }
   if (mod && k === "0") { e.preventDefault(); fit(); return; }
   if (mod && (k === "a" || k === "A")) { e.preventDefault(); selectAll(); return; }
+  if (mod && e.altKey && (k === "g" || k === "G" || e.code === "KeyG")) { e.preventDefault(); emit("goto-page"); return; }
+  if (mod && e.altKey && (k === "c" || k === "C" || e.code === "KeyC")) { e.preventDefault(); emit("copy-style"); return; }
+  if (mod && e.altKey && (k === "v" || k === "V" || e.code === "KeyV")) { e.preventDefault(); emit("paste-style-sel"); return; }
+  if (e.altKey && e.shiftKey && !mod && (k === "l" || k === "L" || e.code === "KeyL")) { e.preventDefault(); emit("lock-cycle"); return; }
+  if (mod && (k === "k" || k === "K")) { e.preventDefault(); emit("link"); return; }
   if (mod && (k === "c" || k === "C")) { copySel(); return; }
   if (mod && (k === "x" || k === "X")) { copySel(); deleteSel(); return; }
   if (mod && (k === "v" || k === "V")) { const t = Date.now(); setTimeout(() => { if (pasteHandled < t) pasteClip(); }, 60); return; }
@@ -801,7 +887,7 @@ function onKey(e) {
   if (k === "]") { arrange("forward"); return; }
   if (k === "[") { arrange("backward"); return; }
   if (k === "Delete" || k === "Backspace") { if (S.sel.length) { e.preventDefault(); deleteSel(); } return; }
-  if (k === "Escape") { if (S.cropping) endCrop(); else select([]); return; }
+  if (k === "Escape") { if (S.paintStyle) emit("paste-style", null); else if (S.cropping) endCrop(); else select([]); return; }
   if (k === "Enter") { const l = single(); if (l?.type === "text") { e.preventDefault(); startEdit(l.id, { selectAll: true }); } else if (l && (l.type === "image" || l.type === "frame")) toggleCrop(l.id); return; }
   const step = e.shiftKey ? 10 : 1;
   const arrows = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
@@ -900,10 +986,12 @@ export function playPreview(duration, onEnd) {
   const page = pageSize();
   const step = () => {
     const t = (performance.now() - t0) / 1000;
-    for (const l of curPage().layers) {
+    const timed = withClicks(curPage()), end = animEnd(timed);
+    for (const l of timed.layers) {
       const rec = els.get(l.id);
       if (!rec) continue;
-      const st = animState(l.animation, t, page);
+      const st = animState(l.animation, t, page, end);
+      if (l.timing && (t < (+l.timing.start || 0) || (l.timing.end != null && t > +l.timing.end))) st.opacity = 0;
       rec.el.style.opacity = String((l.opacity ?? 1) * st.opacity);
       rec.el.style.transform = `translate(${st.dx}px, ${st.dy}px)${l.rotation ? ` rotate(${l.rotation}deg)` : ""}${st.scale !== 1 ? ` scale(${st.scale})` : ""}`;
       rec.el.style.clipPath = st.clip < 1 ? `inset(-50% ${(1 - st.clip) * 100}% -50% -50%)` : "";

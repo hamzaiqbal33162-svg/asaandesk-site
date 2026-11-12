@@ -72,7 +72,7 @@ export function layoutText(t, w) {
   const inner = Math.max(1, w - pad * 2);
   const m = fontMetrics(t.family, t.bold, t.italic);
   const measure = (s) => textWidth(s, t.family, t.bold, t.italic, size) + ls * [...s].length;
-  const raw = wrapText(t.content, inner, measure);
+  const raw = wrapText(t.upper ? String(t.content ?? "").toUpperCase() : t.content, inner, measure);
   const lineH = size * (+t.lineHeight || 1.2);
   const baseOff = (lineH - (m.asc + m.desc) * size) / 2 + m.asc * size;
   const lines = raw.map((l, i) => {
@@ -92,8 +92,48 @@ export function layoutText(t, w) {
   return { lines, lineH, height: Math.max(lineH, lines.length * lineH) + pad * 2, pad, asc: m.asc, desc: m.desc, inner };
 }
 
-/** Height a text layer needs at its width (auto-fit: width fixed, height grows). */
-export const textHeight = (t, w) => layoutText(t, w).height;
+/** Height a text layer needs at its width (auto-fit: width fixed, height grows). Curved text: the arc's height. */
+export const textHeight = (t, w) => (t && +t.curve ? curveLayout(t).h : layoutText(t, w).height);
+
+/** The one line a curved text shows (line breaks become spaces, Uppercase applied). */
+export const curveText = (t) => { const s = String(t.content ?? "").replace(/\s*\n\s*/g, " "); return t.upper ? s.toUpperCase() : s; };
+/**
+ * Canva's Effects > Curve: lays a text out along an arc. t.curve: -100..100 (positive: arch, negative: smile;
+ * 100 = almost a full circle). Returns { glyphs: [{ ch, x, y, rot, w }] (baseline centre of each letter, rotation in
+ * degrees), w, h, r } with x, y inside a w × h box, or null when the text is not curved.
+ */
+export function curveLayout(t) {
+  const c = Math.max(-100, Math.min(100, +t.curve || 0));
+  if (!c) return null;
+  const size = +t.size || 16, ls = +t.letterSpacing || 0;
+  const m = fontMetrics(t.family, t.bold, t.italic);
+  const chars = [...curveText(t)];
+  const ws = chars.map((ch) => textWidth(ch, t.family, t.bold, t.italic, size) + ls);
+  const L = Math.max(1, ws.reduce((a, b) => a + b, 0));
+  const theta = (Math.abs(c) / 100) * Math.PI * 1.9;
+  const R = Math.max(size * 0.6, L / theta);
+  const arch = c > 0;
+  const asc = m.asc * size, desc = m.desc * size;
+  let s = -L / 2;
+  const raw = chars.map((ch, i) => {
+    const mid = s + ws[i] / 2; s += ws[i];
+    const phi = mid / R;
+    // Arch: letters stand on the outside of the circle; smile: on the inside, along the bottom.
+    return { ch, x: R * Math.sin(phi), y: arch ? -R * Math.cos(phi) : R * Math.cos(phi), rot: arch ? phi : -phi, w: ws[i] };
+  });
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const g of raw) {
+    const ca = Math.cos(g.rot), sa = Math.sin(g.rot);
+    for (const [px, py] of [[-g.w / 2, -asc], [g.w / 2, -asc], [-g.w / 2, desc], [g.w / 2, desc]]) {
+      const X = g.x + px * ca - py * sa, Y = g.y + px * sa + py * ca;
+      x0 = Math.min(x0, X); x1 = Math.max(x1, X); y0 = Math.min(y0, Y); y1 = Math.max(y1, Y);
+    }
+  }
+  if (!raw.length) { x0 = y0 = 0; x1 = y1 = size; }
+  const pad = size * 0.05;
+  const glyphs = raw.map((g) => ({ ch: g.ch, x: g.x - x0 + pad, y: g.y - y0 + pad, rot: (g.rot * 180) / Math.PI, w: g.w }));
+  return { glyphs, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, r: R };
+}
 
 /**
  * Largest font size <= t.size (down to min) that keeps the text inside maxH at width w
@@ -121,3 +161,5 @@ export const cssFont = (t, size = t.size) => `${t.italic ? "italic " : ""}${t.bo
 
 /** Underline geometry for a line (offset below baseline and thickness, in px). */
 export const underlineMetrics = (size) => ({ offset: size * 0.12, thickness: Math.max(1, size * 0.06) });
+/** Strikethrough line (offset above the baseline, so y = baseline - offset). */
+export const strikeMetrics = (size) => ({ offset: size * 0.3, thickness: Math.max(1, size * 0.06) });

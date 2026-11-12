@@ -1,6 +1,7 @@
 // SVG rendering of layers and pages. Pure (string output, no DOM), so the same code draws:
 // the editor canvas (one inline <svg> per layer), template thumbnails (Templates Marketplace) and the SVG export.
-import { layoutText, underlineMetrics, CSS_FAMILY } from "./textlayout.js";
+import { layoutText, underlineMetrics, strikeMetrics, CSS_FAMILY } from "./textlayout.js";
+import { textPaint, curveLayout, curveOffset, hasGradient, gradientOk } from "./textfx.js";
 import { shapePrims, elementPrims, framePath, rectPath, gradientLine } from "./shapes.js";
 
 export const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -17,6 +18,7 @@ export function primsMarkup(prims) {
     const a = [`d="${p.d}"`, `fill="${p.fill && p.fill !== "none" ? p.fill : "none"}"`];
     if (p.stroke && p.stroke !== "none") a.push(`stroke="${p.stroke}"`, `stroke-width="${n(p.sw ?? 1)}"`, `stroke-linecap="${p.cap || "round"}"`, `stroke-linejoin="${p.join || "round"}"`);
     if (p.op != null && p.op < 1) a.push(`opacity="${p.op}"`);
+    if (p.dash && p.stroke && p.stroke !== "none") a.push(`stroke-dasharray="${p.dash.map(n).join(" ")}"`);
     return `<path ${a.join(" ")}/>`;
   }).join("");
 }
@@ -44,24 +46,57 @@ export function revealRuns(lines, reveal) {
   return lines.map((l) => ({ ...l, runs: l.runs.map((r) => { const ch = [...r.t]; const take = Math.max(0, Math.min(ch.length, left)); left -= take; return { ...r, t: ch.slice(0, take).join("") }; }) }));
 }
 
+/** A linear gradient (userSpaceOnUse over a w × h box) for gradient fills. g = { stops: [#hex…], angle }. */
+export function gradientDef(id, g, w, h) {
+  const L = gradientLine(g.angle ?? 90, w, h), stops = g.stops || [];
+  return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${n(L.x1)}" y1="${n(L.y1)}" x2="${n(L.x2)}" y2="${n(L.y2)}">${stops.map((c, i) => `<stop offset="${n(i / Math.max(1, stops.length - 1))}" stop-color="${c}"/>`).join("")}</linearGradient>`;
+}
+
 function textContent(l, env, ids) {
   const t = l.text;
-  const L = layoutText(t, l.w);
-  const lines = revealRuns(L.lines, env.reveal?.[l.id]);
   const out = [];
   const defs = [];
   if (t.bg && t.bg.color && t.bg.color !== "none") out.push(`<path d="${rectPath(0, 0, l.w, l.h, (t.bg.radius ?? 0.25) * t.size)}" fill="${t.bg.color}"${t.bg.opacity != null && t.bg.opacity < 1 ? ` opacity="${t.bg.opacity}"` : ""}/>`);
   const font = `font-family="${attrFamily(t.family)}" font-size="${n(t.size)}" font-weight="${t.bold ? 700 : 400}" font-style="${t.italic ? "italic" : "normal"}"`;
-  const ol = t.outline && t.outline.width > 0 ? ` stroke="${t.outline.color || "#000000"}" stroke-width="${n(t.outline.width * 2)}" stroke-linejoin="round" paint-order="stroke"` : "";
-  let body = "";
-  const um = underlineMetrics(t.size);
-  for (const line of lines) {
-    for (const r of line.runs) if (r.t) body += `<text x="${n(r.x)}" y="${n(line.baseline)}" ${font} fill="${t.color}"${t.letterSpacing ? ` letter-spacing="${n(t.letterSpacing)}"` : ""}${ol} xml:space="preserve" style="white-space:pre;font-kerning:none;font-variant-ligatures:none">${esc(r.t)}</text>`;
-    if (t.underline && line.text.trim() && line.runs.some((r) => r.t)) {
-      const shown = line.runs.filter((r) => r.t), x0 = shown[0].x, x1 = shown.length === line.runs.length ? line.x + line.width : shown[shown.length - 1].x + shown[shown.length - 1].w;
-      body += `<rect x="${n(x0)}" y="${n(line.baseline + um.offset - um.thickness / 2)}" width="${n(Math.max(0, x1 - x0))}" height="${n(um.thickness)}" fill="${t.color}"/>`;
+  const ls = t.letterSpacing ? ` letter-spacing="${n(t.letterSpacing)}"` : "";
+  const st = ` xml:space="preserve" style="white-space:pre;font-kerning:none;font-variant-ligatures:none"`;
+  const paint = textPaint(t);
+  let gradFill = null;
+  if (hasGradient(t.gradient)) { const gid = ids("tg"); defs.push(gradientDef(gid, t.gradient, l.w, l.h)); gradFill = `url(#${gid})`; }
+  const cl = curveLayout(t);
+  const um = underlineMetrics(t.size), sm = strikeMetrics(t.size);
+  // The letters with one paint: fill colour (or none) and an optional stroke.
+  const letters = (fill, stroke) => {
+    const pa = ` fill="${fill || "none"}"${stroke ? ` stroke="${stroke.color}" stroke-width="${n(stroke.width)}" stroke-linejoin="round"${fill ? ` paint-order="stroke"` : ""}` : ""}`;
+    let s = "";
+    if (cl) {
+      const [ox, oy] = curveOffset(cl, l.w, l.h);
+      const reveal = env.reveal?.[l.id], shown = reveal == null || reveal >= 1 ? cl.glyphs.length : Math.floor(cl.glyphs.length * Math.max(0, reveal));
+      cl.glyphs.slice(0, shown).forEach((g) => { if (g.ch.trim()) s += `<text transform="translate(${n(g.x + ox)} ${n(g.y + oy)}) rotate(${n(g.rot)})" x="0" y="0" text-anchor="middle" ${font}${pa}${st}>${esc(g.ch)}</text>`; });
+      return s;
     }
+    for (const line of lines) {
+      for (const r of line.runs) if (r.t) s += `<text x="${n(r.x)}" y="${n(line.baseline)}" ${font}${pa}${ls}${st}>${esc(r.t)}</text>`;
+      const shown = line.runs.filter((r) => r.t);
+      if ((t.underline || t.strike) && line.text.trim() && shown.length) {
+        const x0 = shown[0].x, x1 = shown.length === line.runs.length ? line.x + line.width : shown[shown.length - 1].x + shown[shown.length - 1].w;
+        const bar = (y, th) => `<rect x="${n(x0)}" y="${n(y)}" width="${n(Math.max(0, x1 - x0))}" height="${n(th)}" fill="${fill || stroke?.color || t.color}"/>`;
+        if (t.underline) s += bar(line.baseline + um.offset - um.thickness / 2, um.thickness);
+        if (t.strike) s += bar(line.baseline - sm.offset - sm.thickness / 2, sm.thickness);
+      }
+    }
+    return s;
+  };
+  const lines = cl ? [] : revealRuns(layoutText(t, l.w).lines, env.reveal?.[l.id]);
+  let body = "";
+  for (const p of paint.passes) {
+    let f = "";
+    if (p.blur > 0) { const fid = ids("bl"); defs.push(`<filter id="${fid}" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="${n(p.blur / 2)}"/></filter>`); f = ` filter="url(#${fid})"`; }
+    body += `<g${p.dx || p.dy ? ` transform="translate(${n(p.dx)} ${n(p.dy)})"` : ""}${p.opacity < 1 ? ` opacity="${n(p.opacity)}"` : ""}${f}>${letters(p.fill, p.stroke)}</g>`;
   }
+  // Canva: Shadow, Lift, Glow, Echo and Curve show the whole gradient; Neon, Hollow, Glitch and Splice the first colour.
+  const mainFill = paint.main.fill ? (gradFill && gradientOk(t) ? gradFill : paint.main.fill) : null;
+  body += letters(mainFill, paint.main.stroke);
   if (t.shadow && (t.shadow.x || t.shadow.y || t.shadow.blur)) {
     const id = ids("sh");
     defs.push(`<filter id="${id}" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="${n(t.shadow.x || 0)}" dy="${n(t.shadow.y || 0)}" stdDeviation="${n((t.shadow.blur || 0) / 2)}" flood-color="${t.shadow.color || "#000000"}" flood-opacity="${t.shadow.opacity ?? 0.5}"/></filter>`);
@@ -95,16 +130,23 @@ export function layerContent(l, env = {}) {
   const ids = (what) => `${idp}-${what}${k++}`;
   switch (l.type) {
     case "text": return textContent(l, env, ids);
-    case "shape": return primsMarkup(shapePrims(l.shape, l.w, l.h));
+    case "shape": {
+      const pr = shapePrims(l.shape, l.w, l.h);
+      if (!hasGradient(l.shape.gradient)) return primsMarkup(pr);
+      const gid = ids("g");
+      return `<defs>${gradientDef(gid, l.shape.gradient, l.w, l.h)}</defs>` + primsMarkup(pr.map((p) => (p.fill && p.fill !== "none" ? { ...p, fill: `url(#${gid})` } : p)));
+    }
     case "element": {
       const [vw, vh] = l.element.vb;
-      return `<svg x="0" y="0" width="${n(l.w)}" height="${n(l.h)}" viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="none" overflow="visible">${primsMarkup(elementPrims(l.element))}</svg>`;
+      const fl = l.element.flipX || l.element.flipY ? ` transform="translate(${l.element.flipX ? n(l.w) : 0} ${l.element.flipY ? n(l.h) : 0}) scale(${l.element.flipX ? -1 : 1} ${l.element.flipY ? -1 : 1})"` : "";
+      const inner = `<svg x="0" y="0" width="${n(l.w)}" height="${n(l.h)}" viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="none" overflow="visible">${primsMarkup(elementPrims(l.element))}</svg>`;
+      return fl ? `<g${fl}>${inner}</g>` : inner;
     }
     case "image": {
       const im = l.image, cid = ids("c");
       const fid = env.cssFilters ? null : ids("f");
       const fdef = fid ? svgImageFilter(fid, im.filters || {}) : "";
-      return `<defs><clipPath id="${cid}"><path d="${rectPath(0, 0, l.w, l.h, im.radius || 0)}"/></clipPath>${fdef}</defs><g clip-path="url(#${cid})">${imageMarkup(im.src, im.crop, l.w, l.h, { flipX: im.flipX, flipY: im.flipY, filterId: fdef ? fid : null, urlOf: env.urlOf })}</g>`;
+      return `<defs><clipPath id="${cid}"><path d="${rectPath(0, 0, l.w, l.h, im.radius || 0)}"/></clipPath>${fdef}</defs><g clip-path="url(#${cid})">${imageMarkup(im.src, im.crop, l.w, l.h, { flipX: im.flipX, flipY: im.flipY, filterId: fdef ? fid : null, urlOf: env.urlOf })}</g>${im.border && im.border.width > 0 ? `<path d="${rectPath(0, 0, l.w, l.h, im.radius || 0)}" fill="none" stroke="${im.border.color || "#ffffff"}" stroke-width="${n(im.border.width * 2)}" clip-path="url(#${cid})"/>` : ""}`;
     }
     case "frame": {
       const f = l.frame, cid = ids("c");
@@ -129,7 +171,9 @@ export function layerContent(l, env = {}) {
 export function layerMarkup(l, env = {}) {
   if (l.hidden) return "";
   const tr = `translate(${n(l.x)} ${n(l.y)})${l.rotation ? ` rotate(${n(l.rotation)} ${n(l.w / 2)} ${n(l.h / 2)})` : ""}`;
-  return `<g transform="${tr}"${l.opacity < 1 ? ` opacity="${n(l.opacity)}"` : ""}>${layerContent(l, env)}</g>`;
+  const g = `<g transform="${tr}"${l.opacity < 1 ? ` opacity="${n(l.opacity)}"` : ""}>${layerContent(l, env)}</g>`;
+  // SVG downloads keep links (Canva: links on text and elements).
+  return env.links && l.link ? `<a href="${esc(l.link)}" target="_blank">${g}</a>` : g;
 }
 
 /** Background markup covering x, y, w, h (the page plus bleed). */
@@ -155,6 +199,6 @@ export function pageSvg(design, pageIndex, page, opts = {}) {
   const W = page.w, H = page.h, b = opts.bleed || 0;
   const outW = opts.width || W + 2 * b, outH = (outW * (H + 2 * b)) / (W + 2 * b);
   const env = { idp: opts.idp || "p" + pageIndex, ...opts };
-  const body = backgroundMarkup(pg.background, W, H, env, b) + pg.layers.map((l) => layerMarkup(l, env)).join("");
+  const body = (opts.transparent ? "" : backgroundMarkup(pg.background, W, H, env, b)) + pg.layers.map((l) => layerMarkup(l, env)).join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${n(outW)}" height="${n(outH)}" viewBox="${n(-b)} ${n(-b)} ${n(W + 2 * b)} ${n(H + 2 * b)}">${body}</svg>`;
 }

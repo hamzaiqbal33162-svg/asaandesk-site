@@ -50,10 +50,12 @@ function parseToUnicode(text) {
 export function loadPdfFont(libPage, baseFont, resources = null) {
   const dict = (resources || libPage.node.Resources())?.lookup(PDFName.of("Font"));
   if (!(dict instanceof PDFDict)) return null;
-  for (const [key, ref] of dict.entries()) {
-    const f = libPage.doc.context.lookup(ref);
-    if (!(f instanceof PDFDict)) continue;
-    const bf = f.lookup(PDFName.of("BaseFont"))?.toString().slice(1);
+  // The exact subset first (ABCDEF+Name): a page can hold several subsets of one font, each with its own letters.
+  const entries = [...dict.entries()].map(([key, ref]) => [key, ref, libPage.doc.context.lookup(ref)]).filter(([, , f]) => f instanceof PDFDict);
+  const bfOf = (f) => f.lookup(PDFName.of("BaseFont"))?.toString().slice(1);
+  entries.sort((a, b) => (bfOf(b[2]) === baseFont) - (bfOf(a[2]) === baseFont));
+  for (const [key, ref, f] of entries) {
+    const bf = bfOf(f);
     if (stripSubset(bf) !== stripSubset(baseFont)) continue;
 
     const info = fontInfo(f);
@@ -225,6 +227,65 @@ export function heightMatchByClass(pdfFont, openFont) {
 // One factor for the whole font (median over all shared letters).
 export function heightMatch(pdfFont, openFont) { return heightMatchByClass(pdfFont, openFont).all; }
 
+/**
+ * Letter weight: the thickness of vertical stems, measured on the outlines of the letters both fonts have (at 30%
+ * of each letter's height, where l, i, n, m, h, u, H, E … have only their stems). Returns how much thicker (in em)
+ * the document's letters are than the open font's as it is drawn (horizontal scale hs): the open font is then
+ * drawn with a stroke of that width in the text colour, so new letters are as heavy as the old ones.
+ */
+const STEM_CHARS = "lIi1nmhuHEFLTdbpqrk";
+function flatten(path, steps = 10) {
+  const polys = [];
+  let cur = null, x = 0, y = 0;
+  for (const { command, args } of path.commands) {
+    if (command === "moveTo") { cur = [[args[0], args[1]]]; polys.push(cur); [x, y] = args; }
+    else if (command === "lineTo") { cur?.push([args[0], args[1]]); [x, y] = args; }
+    else if (command === "quadraticCurveTo" || command === "bezierCurveTo") {
+      const pts = command === "quadraticCurveTo" ? [[x, y], [args[0], args[1]], [args[2], args[3]]] : [[x, y], [args[0], args[1]], [args[2], args[3]], [args[4], args[5]]];
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        let q = pts;
+        while (q.length > 1) q = q.slice(1).map((p, j) => [q[j][0] + (p[0] - q[j][0]) * t, q[j][1] + (p[1] - q[j][1]) * t]);
+        cur?.push(q[0]);
+      }
+      [x, y] = pts[pts.length - 1];
+    }
+  }
+  return polys;
+}
+function stemOf(glyph) {
+  const cmds = glyph?.path?.commands;
+  if (!cmds?.length) return null;
+  const b = glyph.bbox, yy = b.minY + (b.maxY - b.minY) * 0.3, xs = [];
+  for (const poly of flatten(glyph.path)) {
+    for (let i = 0; i < poly.length; i++) {
+      const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % poly.length];
+      if ((y1 <= yy && y2 > yy) || (y2 <= yy && y1 > yy)) xs.push(x1 + ((yy - y1) * (x2 - x1)) / (y2 - y1));
+    }
+  }
+  xs.sort((a, c) => a - c);
+  let best = null;
+  for (let i = 0; i + 1 < xs.length; i += 2) { const w = xs[i + 1] - xs[i]; if (w > 0 && (best === null || w < best)) best = w; }
+  return best;
+}
+export function weightMatch(pdfFont, openFont, hs = 1) {
+  if (!pdfFont?.fk || !pdfFont.gidOf || !openFont) return 0;
+  const d = [];
+  for (const ch of STEM_CHARS) {
+    const code = pdfFont.uniToCode.get(ch);
+    if (code === undefined) continue;
+    let g = null;
+    try { g = pdfFont.fk.getGlyph(pdfFont.gidOf(code, ch)); } catch {}
+    const o = openFont.glyphForCodePoint(ch.codePointAt(0));
+    const a = stemOf(g), b = o?.id ? stemOf(o) : null;
+    if (a && b) d.push(a / (pdfFont.fk.unitsPerEm || 1000) - (b / (openFont.unitsPerEm || 1000)) * hs);
+  }
+  if (!d.length) return 0;
+  const m = [...d].sort((x, y) => x - y)[d.length >> 1];
+  // Under 0.002 em (a fraction of a pixel at text sizes) is noise; never more than a bold step (0.06 em).
+  return m < 0.002 ? 0 : +Math.min(m, 0.06).toFixed(4);
+}
+
 // Splits text into runs drawn with one height factor each; spaces and punctuation join the run they are in.
 export function heightRuns(text, ks) {
   const runs = [];
@@ -277,11 +338,18 @@ export const METRIC_FAMILIES = {
   mono: { label: "Mono (Courier New)", file: "LiberationMono", css: '"AD Mono"' },
   calibri: { label: "Calibri style (Carlito)", file: "Carlito", css: '"AD Calibri"' },
   cambria: { label: "Cambria style (Caladea)", file: "Caladea", css: '"AD Cambria"' },
+  // Roboto is open (Apache-2.0): text in Roboto gets the real Roboto, in its own weight (Light/Regular/Medium/Bold).
+  roboto: { label: "Roboto", file: "Roboto", css: '"AD Roboto"', weights: [300, 400, 500, 700] },
 };
+const WEIGHT_NAME = { 300: "Light", 400: "Regular", 500: "Medium", 700: "Bold" };
 
-export function metricFile(family, bold, italic) {
+// weight: 100-900 when known; the nearest weight the family has (a tie goes to the heavier one).
+export function metricFile(family, bold, italic, weight = null) {
   const f = METRIC_FAMILIES[family] || METRIC_FAMILIES.sans;
-  const style = bold && italic ? "BoldItalic" : bold ? "Bold" : italic ? "Italic" : "Regular";
+  const ws = f.weights || [400, 700], want = weight ?? (bold ? 700 : 400);
+  const w = ws.reduce((b, x) => (Math.abs(x - want) < Math.abs(b - want) || (Math.abs(x - want) === Math.abs(b - want) && x > b) ? x : b), ws[0]);
+  const name = WEIGHT_NAME[w];
+  const style = italic ? (w === 400 ? "Italic" : name + "Italic") : name;
   return `${f.file}-${style}.ttf`;
 }
 
@@ -293,25 +361,31 @@ export function fontTraits(baseFont, descriptor = null) {
   const name = stripSubset(baseFont).replace(/[\s_]/g, "");
   const num = (k) => { const v = descriptor?.lookup?.(PDFName.of(k)); return v && typeof v.asNumber === "function" ? v.asNumber() : null; };
   const flags = num("Flags") ?? 0, weight = num("FontWeight"), angle = num("ItalicAngle");
-  const bold = /bold|black|heavy|semibold|demi|w[6-9]$/i.test(name) || !!(flags & 262144) || (weight ?? 0) >= 600;
+  // Weight 100-900: from the name (Roboto-Medium, Arial-BoldMT, …), else the descriptor, else the force-bold flag.
+  const style = name.replace(/^[^-,]*[-,]?/, "") || name;
+  const named = [[/thin|hairline/i, 100], [/(extra|ultra)light/i, 200], [/light/i, 300], [/medium/i, 500], [/(semi|demi)bold|demi/i, 600], [/(extra|ultra)bold/i, 800], [/black|heavy/i, 900], [/bold|w[6-9]$/i, 700]].find(([re]) => re.test(style))?.[1];
+  const wt = named ?? (weight && weight >= 100 && weight <= 900 ? weight : flags & 262144 ? 700 : 400);
+  const bold = wt >= 600;
   const italic = /italic|oblique|slanted/i.test(name) || !!(flags & 64) || (angle !== null && Math.abs(angle) > 0.5);
   let family = "sans";
-  if (/calibri|carlito/i.test(name)) family = "calibri";
+  if (/roboto/i.test(name) && !/mono|slab|condensed/i.test(name)) family = "roboto";
+  else if (/calibri|carlito/i.test(name)) family = "calibri";
   else if (/cambria|caladea/i.test(name)) family = "cambria";
   else if (/courier|mono|consol|cousine|menlo|typewriter/i.test(name) || flags & 1) family = "mono";
   else if (/sans|arial|helvetica|arimo|verdana|tahoma|segoe|roboto|open ?sans|calibri|lato|swiss/i.test(name)) family = "sans";
   else if (/times|tinos|roman|serif|georgia|garamond|book|minion|palatino|century|baskerville|cambria/i.test(name) || flags & 2) family = "serif";
-  return { family, bold, italic, exact: /arial|helvetica|arimo|liberation|times|tinos|courier|cousine|calibri|carlito|cambria|caladea/i.test(name) };
+  return { family, bold, italic, weight: wt, exact: /arial|helvetica|arimo|liberation|times|tinos|courier|cousine|calibri|carlito|cambria|caladea|roboto/i.test(name) };
 }
 
 // The FontDescriptor of a font on a pdf-lib page (Type0 fonts keep it on the descendant).
 export function fontDescriptor(libPage, baseFont, resources = null) {
   const dict = (resources || libPage.node.Resources())?.lookup(PDFName.of("Font"));
   if (!(dict instanceof PDFDict)) return null;
-  for (const [, ref] of dict.entries()) {
-    const f = libPage.doc.context.lookup(ref);
-    if (!(f instanceof PDFDict)) continue;
-    if (stripSubset(f.lookup(PDFName.of("BaseFont"))?.toString().slice(1)) !== stripSubset(baseFont)) continue;
+  const all = [...dict.entries()].map(([, ref]) => libPage.doc.context.lookup(ref)).filter((f) => f instanceof PDFDict);
+  const bfOf = (f) => f.lookup(PDFName.of("BaseFont"))?.toString().slice(1);
+  all.sort((a, b) => (bfOf(b) === baseFont) - (bfOf(a) === baseFont));
+  for (const f of all) {
+    if (stripSubset(bfOf(f)) !== stripSubset(baseFont)) continue;
     const holder = f.lookup(PDFName.of("DescendantFonts"))?.lookup(0) || f;
     return holder.lookup(PDFName.of("FontDescriptor")) || null;
   }
@@ -397,7 +471,7 @@ export function loadFontFile(file) {
  * Returns { used, widthOf(text) (unspaced, in points), draw(text, x, y, opts) }.
  */
 // heightFrom: the document's font to match letter heights against when the open font is used (defaults to pdfFont).
-export async function pickWriter(out, p, { size, pdfFont = null, heightFrom = null, family = "sans", bold = false, italic = false, embedded = new Map() }, text) {
+export async function pickWriter(out, p, { size, pdfFont = null, heightFrom = null, family = "sans", bold = false, italic = false, weight = null, embedded = new Map() }, text) {
   if (pdfFont && pdfFont.canWrite(text)) {
     return {
       used: "document",
@@ -405,7 +479,7 @@ export async function pickWriter(out, p, { size, pdfFont = null, heightFrom = nu
       draw: (t, x, y, o) => drawWithPdfFont(p, pdfFont, t, { ...o, x, y, size }),
     };
   }
-  const file = metricFile(family, bold, italic);
+  const file = metricFile(family, bold, italic, weight);
   let font = embedded.get(file);
   if (font === undefined) {
     try {
@@ -429,14 +503,18 @@ export async function pickWriter(out, p, { size, pdfFont = null, heightFrom = nu
     // the open font's own advance widths (no kerning), so a line is exactly as wide as without the height match.
     const upm = fk?.unitsPerEm || 1000, ks = heightMatchByClass(heightFrom || pdfFont, fk);
     const adv = (ch) => ((fk?.glyphForCodePoint(ch.codePointAt(0))?.advanceWidth ?? upm / 2) / upm) * size;
+    // As heavy as the document's letters: the missing stem thickness is added as a stroke in the text colour.
+    const embolden = weightMatch(heightFrom || pdfFont, fk, 1 / ks.all) * size;
     return {
       used: file.replace(/\.ttf$/, ""),
+      embolden,
       widthOf: (t) => [...t].reduce((w, ch) => w + adv(ch), 0),
       draw: (t, x, y, o) => {
         const r = ((o.rotationDeg || 0) * Math.PI) / 180, d = [Math.cos(r), Math.sin(r)], sp = o.spacing || {};
+        const heavy = embolden > 0 ? (o.render === 2 && o.stroke ? { render: 2, stroke: { ...o.stroke, width: o.stroke.width + embolden } } : !o.render ? { render: 2, stroke: { color: o.color, width: embolden } } : {}) : {};
         let off = 0;
         for (const run of heightRuns(t, ks)) {
-          pushText(p, key, font.encodeText(run.text).asString(), { ...o, x: x + d[0] * off, y: y + d[1] * off, size: size * run.k, spacing: scaledSpacing(o.spacing, run.k) });
+          pushText(p, key, font.encodeText(run.text).asString(), { ...o, ...heavy, x: x + d[0] * off, y: y + d[1] * off, size: size * run.k, spacing: scaledSpacing(o.spacing, run.k) });
           for (const ch of run.text) off += (adv(ch) + (sp.charSpacing || 0)) * (sp.hScale || 1);
         }
       },
@@ -490,10 +568,10 @@ export function layoutLine(text, widthOf, { x, y, dir = [1, 0], boxW = null, ali
  * 1 outline only, 2 fill + outline) with stroke { color, width }, and opacity. If `extents` is an array,
  * each written line's { start, width } is pushed to it. Returns the name of the font used.
  */
-export async function writeLines(out, p, { lines, size, color, rotationDeg = 0, pdfFont = null, heightFrom = null, family = "sans", bold = false, italic = false, underline = false, spacing = null, embedded = new Map(), render = 0, stroke = null, opacity = 1, extents = null }) {
+export async function writeLines(out, p, { lines, size, color, rotationDeg = 0, pdfFont = null, heightFrom = null, family = "sans", bold = false, italic = false, weight = null, underline = false, spacing = null, embedded = new Map(), render = 0, stroke = null, opacity = 1, extents = null }) {
   const r = (rotationDeg * Math.PI) / 180, dir = [Math.cos(r), Math.sin(r)];
   const all = lines.map((l) => l.text).join("");
-  const w = await pickWriter(out, p, { size, pdfFont, heightFrom, family, bold, italic, embedded }, all);
+  const w = await pickWriter(out, p, { size, pdfFont, heightFrom, family, bold, italic, weight, embedded }, all);
   const { rgb } = window.PDFLib;
   for (const l of lines) {
     if (!l.text) continue;

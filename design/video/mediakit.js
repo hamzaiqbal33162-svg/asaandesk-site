@@ -1,6 +1,6 @@
 // Browser media helpers shared by the video editor, trimmer and recorder. Nothing here touches the DOM at import
 // time, so the pure parts (keptSegments, pickType, evenSize) are unit tested in Node.
-import { fixWebmDuration } from "./webm.js";
+import { fixWebmDuration, webmEnd } from "./webm.js";
 
 /** Parts of a video to keep. mode 'keep' = start..end, 'cut' = everything except start..end. */
 export function keptSegments(duration, start, end, mode = "keep") {
@@ -85,6 +85,36 @@ export async function finishRecording(rec, { settleMs = 700, maxMs = 8000, poll 
   await stopped;
 }
 
+/**
+ * Ends a canvas-video WebM recording only when the file really holds the picture up to `until` (seconds of file time):
+ * keeps the recorder running, calls redraw() for the first redrawMs (the canvas stream only sends frames when it is
+ * drawn), asks for the data written so far and reads the last video block with webmEnd(), at most capMs. Only the
+ * picture counts. Note: Chrome's muxer holds video blocks back until the sound track catches up, so the recording's
+ * sound must keep flowing to the end (exportWebM keeps a silent source playing). Then finishRecording (pause, drain,
+ * stop). Returns webmEnd() of the finished file, or null when it is not WebM (Safari records MP4).
+ */
+export async function finishPicture(rec, chunks, { until = 0, redraw = null, redrawMs = 150, capMs = 3000, poll = 100, read = webmEnd } = {}) {
+  if (!rec || rec.state === "inactive") return null;
+  const webm = /webm/i.test(rec.mimeType || "");
+  const bytes = async () => new Uint8Array(await new Blob(chunks).arrayBuffer());
+  if (webm && rec.state === "recording") {
+    const t0 = performance.now();
+    while (rec.state === "recording" && performance.now() - t0 < capMs) {
+      // redraw the last frame only at first (so the stream surely sends it), not the whole wait: every redraw is one
+      // more frame of the still picture in the file
+      if (performance.now() - t0 < redrawMs) { try { redraw?.(); } catch {} }
+      const got = once(rec, "dataavailable", "error", 1000).catch(() => null);
+      try { rec.requestData(); } catch { break; }
+      await got;
+      const end = read(await bytes());
+      if (!end || (end.video != null && end.video >= until)) break;
+      await new Promise((r) => setTimeout(r, poll));
+    }
+  }
+  await finishRecording(rec);
+  return webm ? read(await bytes()) : null;
+}
+
 /** Hidden holder so media elements keep decoding in every browser. */
 export function mediaHolder() {
   let h = document.getElementById("mx-media-holder");
@@ -137,7 +167,7 @@ export function drawContain(ctx, src, W, H, bg = "#000") {
  * Pauses by itself while the tab is hidden (browsers stop drawing in hidden tabs).
  * Returns { blob, duration, width, height }.
  */
-export async function exportTrimmedWebM({ blob, segments, maxShort = 1080, fps = 30, signal, onProgress, onStatus }) {
+export async function exportTrimmedWebM({ blob, segments, maxShort = 1080, fps = 30, signal, onProgress, onStatus, mute = false }) {
   if (!globalThis.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) throw new Error("This browser can't record video. Try Chrome, Edge or Firefox.");
   if (!segments?.length) throw new Error("Nothing is left to export.");
   // The AudioContext is made before the first await, so it still counts as started by the user's click (Safari).
@@ -161,7 +191,8 @@ export async function exportTrimmedWebM({ blob, segments, maxShort = 1080, fps =
     // Chrome's recorder writes nothing until the sound track gives data, so a stopped AudioContext would hang it.
     if (ac.state !== "running") throw new Error("The browser blocked sound for this page. Press the button again.");
     const dest = ac.createMediaStreamDestination();
-    try { ac.createMediaElementSource(v).connect(dest); } catch {}
+    // mute: the sound track stays (silent) so the recorder keeps writing, but nothing of the video's sound is in it
+    try { const g = ac.createGain(); g.gain.value = mute ? 0 : 1; ac.createMediaElementSource(v).connect(g); g.connect(dest); } catch {}
     tracks = [...canvas.captureStream(fps).getVideoTracks(), ...dest.stream.getAudioTracks()];
     const mimeType = pickType(WEBM_VIDEO_TYPES);
     rec = new MediaRecorder(new MediaStream(tracks), { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: bitrateFor(W, H, fps), audioBitsPerSecond: 128000 });

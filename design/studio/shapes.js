@@ -38,7 +38,9 @@ export function shapePrims(s, w, h) {
   const sw = s.stroke && s.stroke !== "none" ? Math.max(0, +s.strokeWidth || 0) : 0;
   const i = sw / 2; // keep the stroke inside the box
   const iw = Math.max(0.5, w - sw), ih = Math.max(0.5, h - sw);
-  const style = { fill: s.fill || "none", stroke: sw ? s.stroke : "none", sw, join: "round", cap: "round" };
+  // Border style (Canva: solid, dashed, dotted).
+  const dashOf = (w) => (s.dash === "dashed" ? [w * 3, w * 2] : s.dash === "dotted" ? [0.01, w * 2] : null);
+  const style = { fill: s.fill || "none", stroke: sw ? s.stroke : "none", sw, join: "round", cap: "round", ...(sw && dashOf(sw) ? { dash: dashOf(sw) } : {}) };
   switch (s.kind) {
     case "ellipse": return [{ d: ellipsePath(w / 2, h / 2, iw / 2, ih / 2), ...style }];
     case "triangle": return [{ d: polyPath([[w / 2, i], [w - i, h - i], [i, h - i]]), ...style }];
@@ -47,7 +49,7 @@ export function shapePrims(s, w, h) {
     case "heart": return [{ d: heartPath(i, i, iw, ih), ...style }];
     case "line": {
       const lw = Math.max(1, +s.strokeWidth || 4), col = s.stroke !== "none" ? s.stroke : s.fill;
-      return [{ d: `M${n(lw / 2)} ${n(h / 2)}L${n(w - lw / 2)} ${n(h / 2)}`, fill: "none", stroke: col, sw: lw, cap: "round" }];
+      return [{ d: `M${n(lw / 2)} ${n(h / 2)}L${n(w - lw / 2)} ${n(h / 2)}`, fill: "none", stroke: col, sw: lw, cap: "round", ...(dashOf(lw) ? { dash: dashOf(lw) } : {}) }];
     }
     case "arrow": {
       const lw = Math.max(1, +s.strokeWidth || 4), col = s.stroke !== "none" ? s.stroke : s.fill;
@@ -81,7 +83,23 @@ export function elementTokens(e) {
 }
 
 /** Clip outline of a photo frame / rounded image in its w × h box. */
+/** Photo frame shapes (Canva's Frames: basic shapes, hearts, stars, arches, blobs …). */
+export const FRAME_SHAPES = [["rect", "Square"], ["rounded", "Rounded"], ["circle", "Circle"], ["heart", "Heart"], ["star", "Star"], ["hexagon", "Hexagon"], ["triangle", "Triangle"], ["diamond", "Diamond"], ["arch", "Arch"], ["blob", "Blob"]];
+/** Outline points of the shaped frames in a w × h box (null for rect / rounded / circle). */
+export function frameOutline(shape, w, h) {
+  const N = 96;
+  if (shape === "star") return starPoints(5, 0, 0, w, h, 0.5);
+  if (shape === "hexagon") return polygonPoints(6, 0, 0, w, h);
+  if (shape === "triangle") return [[w / 2, 0], [w, h], [0, h]];
+  if (shape === "diamond") return [[w / 2, 0], [w, h / 2], [w / 2, h], [0, h / 2]];
+  if (shape === "heart") return fitPoints(Array.from({ length: N }, (_, i) => { const t = (i / N) * Math.PI * 2; return [16 * Math.sin(t) ** 3, -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t))]; }), 0, 0, w, h);
+  if (shape === "blob") return fitPoints(Array.from({ length: N }, (_, i) => { const t = (i / N) * Math.PI * 2, r = 1 + 0.09 * Math.sin(3 * t + 0.6) + 0.06 * Math.cos(5 * t); return [r * Math.cos(t), r * Math.sin(t)]; }), 0, 0, w, h);
+  if (shape === "arch") { const r = w / 2, top = Math.min(r, h); const arc = Array.from({ length: 33 }, (_, i) => { const a = Math.PI + (i / 32) * Math.PI; return [r + r * Math.cos(a), top + top * Math.sin(a)]; }); return [[0, h], ...arc, [w, h]]; }
+  return null;
+}
 export function framePath(shape, w, h, radius = 0) {
+  const pts = frameOutline(shape, w, h);
+  if (pts) return polyPath(pts);
   if (shape === "circle") return ellipsePath(w / 2, h / 2, w / 2, h / 2);
   if (shape === "rounded") return rectPath(0, 0, w, h, radius || Math.min(w, h) * 0.12);
   return rectPath(0, 0, w, h, radius || 0);
