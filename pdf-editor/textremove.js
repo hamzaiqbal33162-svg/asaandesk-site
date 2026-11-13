@@ -372,7 +372,7 @@ function interpret(result, streamIndex, resources, ctm0, ctx, depth, widget, gs0
       fill: toRgb(gs.fill.space, gs.fill.comps),
       // How the letters are painted besides their fill: stroke colour and width (render modes 1/2 draw an outline,
       // often used to make text heavier), and see-through fill/stroke from the graphics state (gs ca/CA).
-      stroke: toRgb(gs.stroke.space, gs.stroke.comps), lineWidth: gs.lw * (Math.sqrt(Math.abs(gs.ctm[0] * gs.ctm[3] - gs.ctm[1] * gs.ctm[2])) || 1),
+      stroke: toRgb(gs.stroke.space, gs.stroke.comps), lineWidth: gs.lw * (Math.sqrt(Math.abs(gs.ctm[0] * gs.ctm[3] - gs.ctm[1] * gs.ctm[2])) || 1), lineJoin: gs.lj ?? 0,
       fillAlpha: gs.ca ?? 1, strokeAlpha: gs.CA ?? 1,
       upright: Math.abs(m0[1]) < 1e-3 * Math.max(sx, 1e-6) && m0[0] > 0 && m0[3] > 0,
       glyphs: [], unknown: !f?.known, text: "",
@@ -445,15 +445,17 @@ function interpret(result, streamIndex, resources, ctm0, ctx, depth, widget, gs0
       case "Q": if (stack.length) gs = stack.pop(); break;
       case "cm": if (a.length === 6) gs.ctm = mul(a, gs.ctm); break;
       case "w": gs.lw = a[0] ?? gs.lw; break;
+      case "j": gs.lj = a[0] ?? gs.lj; break;
       case "gs": {
         const eg = resources?.lookup?.(PDFName.of("ExtGState"));
         const d = eg instanceof PDFDict ? eg.lookup(PDFName.of(a[0])) : null;
         if (d instanceof PDFDict) {
           const num = (k) => { const v = d.lookup(PDFName.of(k)); return v instanceof PDFNumber ? v.asNumber() : undefined; };
-          const ca = num("ca"), CA = num("CA"), LW = num("LW");
+          const ca = num("ca"), CA = num("CA"), LW = num("LW"), LJ = num("LJ");
           if (ca !== undefined) gs.ca = ca;
           if (CA !== undefined) gs.CA = CA;
           if (LW !== undefined) gs.lw = LW;
+          if (LJ !== undefined) gs.lj = LJ;
         }
         break;
       }
@@ -533,7 +535,7 @@ export function runStyle(scan, run) {
     if (!s.glyphs.some((g) => inRun(g, run))) continue;
     return {
       fontRes: s.fontRes, baseFont: s.baseFont, size: s.size, fill: s.fill, render: s.render,
-      stroke: s.stroke, lineWidth: s.lineWidth, fillAlpha: s.fillAlpha, strokeAlpha: s.strokeAlpha,
+      stroke: s.stroke, lineWidth: s.lineWidth, lineJoin: s.lineJoin ?? 0, fillAlpha: s.fillAlpha, strokeAlpha: s.strokeAlpha,
       charSpacing: s.charSpacing, wordSpacing: s.wordSpacing, hScale: s.hScale, leading: s.leading,
       invisible: s.render === 3 || s.render === 7,
       // Where the text lives: the page itself, a form XObject, or a form field's appearance (widget).

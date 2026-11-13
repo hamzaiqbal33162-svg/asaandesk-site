@@ -3,10 +3,11 @@
 // the font's own codes through its ToUnicode table.
 import { fontInfo } from "./textremove.js";
 
-const { PDFName, PDFDict, PDFArray, PDFRawStream, PDFHexString, decodePDFRawStream,
+const { PDFName, PDFDict, PDFRawStream, PDFHexString, decodePDFRawStream,
   pushGraphicsState, popGraphicsState, beginText, endText, setFontAndSize, setTextMatrix,
   setFillingRgbColor, showText, setCharacterSpacing, setWordSpacing, setCharacterSqueeze,
-  setTextRenderingMode, setStrokingRgbColor, setLineWidth, setGraphicsState, setLineJoin } = window.PDFLib;
+  setTextRenderingMode, setStrokingRgbColor, setLineWidth, setGraphicsState, setLineJoin,
+  moveTo, lineTo, appendBezierCurve, closePath, fill, fillAndStroke } = window.PDFLib;
 
 const stripSubset = (n) => (n || "").replace(/^[A-Z]{6}\+/, "");
 const streamBytes = (s) => (s instanceof PDFRawStream ? decodePDFRawStream(s).decode() : s.getContents());
@@ -118,8 +119,14 @@ export function loadPdfFont(libPage, baseFont, resources = null) {
       uniToCode,
       fk,
       gidOf,
+      // jsHas(code): set by the editor from pdf.js's font object when the font program can't be read here (CFF/Type1
+      // subsets): a code pdf.js has no glyph for prints nothing, so it doesn't count as present either.
+      jsHas: null,
       canWrite(text) {
-        for (const ch of text) if (!uniToCode.has(ch) || !hasGlyph(ch)) return false;
+        for (const ch of text) {
+          if (!uniToCode.has(ch) || !hasGlyph(ch)) return false;
+          if (!fk && this.jsHas && !/\s/.test(ch) && !this.jsHas(uniToCode.get(ch))) return false;
+        }
         return true;
       },
       codes(text) { return [...text].map((ch) => uniToCode.get(ch)); },
@@ -141,10 +148,12 @@ export function previewSvg(font, text, size, color, spacing = null, stroke = nul
     const code = font.uniToCode.get(ch);
     let gid;
     try { gid = font.gidOf(code, ch); } catch { return null; }
-    const glyph = font.fk.getGlyph(gid);
-    const d = glyph?.path?.toSVG();
+    let glyph = null, d = null;
+    try { glyph = font.fk.getGlyph(gid); d = glyph?.path?.toSVG(); } catch { glyph = null; d = null; }
     if (d) paths.push(`<path transform="translate(${(x * hs).toFixed(2)} 0) scale(${k * hs} ${-k})"${stroke ? ' vector-effect="non-scaling-stroke"' : ""} d="${d}"/>`);
-    const w = font.info.known ? font.info.width(code) : (glyph?.advanceWidth ?? upm / 2) * (1000 / upm);
+    let adv = upm / 2;
+    try { adv = glyph?.advanceWidth ?? upm / 2; } catch {}
+    const w = font.info.known ? font.info.width(code) : adv * (1000 / upm);
     x += (w / 1000) * size + (sp.charSpacing || 0) + (ch === " " ? sp.wordSpacing || 0 : 0);
   }
   const width = x * hs;
@@ -163,8 +172,9 @@ export function drawWithPdfFont(page, font, text, opts) {
 }
 
 // Low-level text writer: font resource + hex glyph codes, with the original spacing and scale.
-// render: 0 fill, 1 outline only, 2 fill + outline (stroke = { color, width }); opacity 0..1.
-export function pushText(page, resName, hex, { x, y, size, color, rotationDeg = 0, spacing, render = 0, stroke = null, opacity = 1 }) {
+// render: 0 fill, 1 outline only, 2 fill + outline (stroke = { color, width }); opacity 0..1; join: line join of the
+// outline (0 miter, 1 round, 2 bevel; the original letters' own join when their outline is copied).
+export function pushText(page, resName, hex, { x, y, size, color, rotationDeg = 0, spacing, render = 0, stroke = null, opacity = 1, join = 1 }) {
   const r = (rotationDeg * Math.PI) / 180;
   const cos = Math.cos(r), sin = Math.sin(r);
   const sp = spacing || {};
@@ -174,12 +184,53 @@ export function pushText(page, resName, hex, { x, y, size, color, rotationDeg = 
     if (gs) ops.push(setGraphicsState(gs));
   }
   ops.push(beginText(), setFontAndSize(resName, size), setFillingRgbColor(color[0] / 255, color[1] / 255, color[2] / 255));
-  if (render && stroke) ops.push(setTextRenderingMode(render), setStrokingRgbColor(stroke.color[0] / 255, stroke.color[1] / 255, stroke.color[2] / 255), setLineWidth(stroke.width), setLineJoin(1));
+  if (render === 3) ops.push(setTextRenderingMode(3)); // invisible (the visible letters are an outline path)
+  else if (render && stroke) ops.push(setTextRenderingMode(render), setStrokingRgbColor(stroke.color[0] / 255, stroke.color[1] / 255, stroke.color[2] / 255), setLineWidth(stroke.width), setLineJoin([0, 1, 2].includes(join) ? join : 1));
   if (sp.charSpacing) ops.push(setCharacterSpacing(sp.charSpacing));
   if (sp.wordSpacing) ops.push(setWordSpacing(sp.wordSpacing));
   if (sp.hScale && Math.abs(sp.hScale - 1) > 0.005) ops.push(setCharacterSqueeze(sp.hScale * 100));
   ops.push(setTextMatrix(cos, sin, -sin, cos, x, y), showText(PDFHexString.of(hex)), endText(), popGraphicsState());
   page.pushOperators(...ops);
+}
+
+/**
+ * Extra weight as one outline path (see textpaint.js paintUnion, same geometry): operators that draw the glyph
+ * outlines of `text` (fontkit font fk) united with copies shifted by +-smear/2 in x and y, in user space, filled once
+ * (nonzero = the union) and, with `stroke` ({ color, width }, the original letters' own outline), stroked once.
+ * Pen positions as pushText writes them: size, horizontal scale, character spacing, rotation; baseline start (x, y).
+ */
+const SMEAR_OFFSETS = [[0, 0], [-0.5, 0], [0.5, 0], [0, -0.5], [0, 0.5]];
+export function smearOps(fk, text, { x, y, size, hScale = 1, charSpacing = 0, rotationDeg = 0, color, smear, stroke = null, join = 0 }) {
+  const upm = fk.unitsPerEm || 1000, k = size / upm, r = (rotationDeg * Math.PI) / 180, cos = Math.cos(r), sin = Math.sin(r);
+  const ops = [pushGraphicsState(), setFillingRgbColor(color[0] / 255, color[1] / 255, color[2] / 255)];
+  if (stroke) ops.push(setStrokingRgbColor(stroke.color[0] / 255, stroke.color[1] / 255, stroke.color[2] / 255), setLineWidth(stroke.width), setLineJoin([0, 1, 2].includes(join) ? join : 0));
+  let any = false;
+  for (const [ux, uy] of SMEAR_OFFSETS) {
+    const dx = ux * smear, dy = uy * smear;
+    let pen = 0;
+    for (const ch of text) {
+      let g = null;
+      try { g = fk.glyphForCodePoint(ch.codePointAt(0)); } catch { g = null; }
+      const P = (gx, gy) => { const tx = (pen + gx * k) * hScale, ty = gy * k; return [x + cos * tx - sin * ty + dx, y + sin * tx + cos * ty + dy]; };
+      let cmds = [];
+      try { cmds = /\s/.test(ch) ? [] : g?.path?.commands || []; } catch { cmds = []; }
+      let cur = [0, 0];
+      for (const { command, args } of cmds) {
+        if (command === "moveTo") { cur = [args[0], args[1]]; ops.push(moveTo(...P(...cur))); any = true; }
+        else if (command === "lineTo") { cur = [args[0], args[1]]; ops.push(lineTo(...P(...cur))); }
+        else if (command === "quadraticCurveTo") {
+          const [qx, qy, ex, ey] = args;
+          const c1 = [cur[0] + (2 / 3) * (qx - cur[0]), cur[1] + (2 / 3) * (qy - cur[1])], c2 = [ex + (2 / 3) * (qx - ex), ey + (2 / 3) * (qy - ey)];
+          ops.push(appendBezierCurve(...P(...c1), ...P(...c2), ...P(ex, ey))); cur = [ex, ey];
+        } else if (command === "bezierCurveTo") { ops.push(appendBezierCurve(...P(args[0], args[1]), ...P(args[2], args[3]), ...P(args[4], args[5]))); cur = [args[4], args[5]]; }
+        else if (command === "closePath") ops.push(closePath());
+      }
+      pen += ((g?.advanceWidth ?? upm / 2) / upm) * size + charSpacing;
+    }
+  }
+  if (any) ops.push(stroke ? fillAndStroke() : fill());
+  ops.push(popGraphicsState());
+  return ops;
 }
 
 /* ---------- closest font when the document's own font can't be used ---------- */
@@ -205,11 +256,15 @@ export function heightMatchByClass(pdfFont, openFont) {
   if (pdfFont?.fk && pdfFont.gidOf && openFont) {
     for (const [ch, code] of pdfFont.uniToCode) {
       if (!/^[A-Za-z0-9]$/.test(ch)) continue;
-      let g = null;
-      try { g = pdfFont.fk.getGlyph(pdfFont.gidOf(code, ch)); } catch {}
-      const o = openFont.glyphForCodePoint(ch.codePointAt(0));
-      if (!g?.path?.commands?.length || !o?.id) continue;
-      const a = g.bbox.maxY / (pdfFont.fk.unitsPerEm || 1000), b = o.bbox.maxY / (openFont.unitsPerEm || 1000);
+      // Glyph data is read lazily: a broken subset (seen: pdf-lib subsets of fonts with odd glyph lengths) throws
+      // here, and that letter just doesn't count.
+      let a = 0, b = 0;
+      try {
+        const g = pdfFont.fk.getGlyph(pdfFont.gidOf(code, ch));
+        const o = openFont.glyphForCodePoint(ch.codePointAt(0));
+        if (!g?.path?.commands?.length || !o?.id) continue;
+        a = g.bbox.maxY / (pdfFont.fk.unitsPerEm || 1000); b = o.bbox.maxY / (openFont.unitsPerEm || 1000);
+      } catch { continue; }
       if (!(a > 0.3 && b > 0.3)) continue;
       lists.all.push(a / b);
       for (const c of ["cap", "asc", "x"]) if (MEASURE[c].test(ch)) lists[c].push(a / b);
@@ -274,10 +329,12 @@ export function weightMatch(pdfFont, openFont, hs = 1) {
   for (const ch of STEM_CHARS) {
     const code = pdfFont.uniToCode.get(ch);
     if (code === undefined) continue;
-    let g = null;
-    try { g = pdfFont.fk.getGlyph(pdfFont.gidOf(code, ch)); } catch {}
-    const o = openFont.glyphForCodePoint(ch.codePointAt(0));
-    const a = stemOf(g), b = o?.id ? stemOf(o) : null;
+    let a = null, b = null;
+    try {
+      const g = pdfFont.fk.getGlyph(pdfFont.gidOf(code, ch));
+      const o = openFont.glyphForCodePoint(ch.codePointAt(0));
+      a = stemOf(g); b = o?.id ? stemOf(o) : null;
+    } catch { continue; } // broken glyph data in a subset: skip the letter
     if (a && b) d.push(a / (pdfFont.fk.unitsPerEm || 1000) - (b / (openFont.unitsPerEm || 1000)) * hs);
   }
   if (!d.length) return 0;
@@ -471,7 +528,11 @@ export function loadFontFile(file) {
  * Returns { used, widthOf(text) (unspaced, in points), draw(text, x, y, opts) }.
  */
 // heightFrom: the document's font to match letter heights against when the open font is used (defaults to pdfFont).
-export async function pickWriter(out, p, { size, pdfFont = null, heightFrom = null, family = "sans", bold = false, italic = false, weight = null, embedded = new Map() }, text) {
+// emboldenEm: extra stroke (em) for the open font, measured on the rendered page (see textpaint.js pickWeight); when
+// null it is estimated from the two fonts' outlines (weightMatch).
+// outlinePath: draw the look-alike as its united outline (with the text invisible on top) even without a make-up,
+// when that measured closer to the original (see the editor's measureFit).
+export async function pickWriter(out, p, { size, pdfFont = null, heightFrom = null, family = "sans", bold = false, italic = false, weight = null, embedded = new Map(), emboldenEm = null, outlinePath = false }, text) {
   if (pdfFont && pdfFont.canWrite(text)) {
     return {
       used: "document",
@@ -504,17 +565,25 @@ export async function pickWriter(out, p, { size, pdfFont = null, heightFrom = nu
     const upm = fk?.unitsPerEm || 1000, ks = heightMatchByClass(heightFrom || pdfFont, fk);
     const adv = (ch) => ((fk?.glyphForCodePoint(ch.codePointAt(0))?.advanceWidth ?? upm / 2) / upm) * size;
     // As heavy as the document's letters: the missing stem thickness is added as a stroke in the text colour.
-    const embolden = weightMatch(heightFrom || pdfFont, fk, 1 / ks.all) * size;
+    const embolden = (emboldenEm != null ? emboldenEm : weightMatch(heightFrom || pdfFont, fk, 1 / ks.all)) * size;
     return {
       used: file.replace(/\.ttf$/, ""),
       embolden,
       widthOf: (t) => [...t].reduce((w, ch) => w + adv(ch), 0),
       draw: (t, x, y, o) => {
         const r = ((o.rotationDeg || 0) * Math.PI) / 180, d = [Math.cos(r), Math.sin(r)], sp = o.spacing || {};
-        const heavy = embolden > 0 ? (o.render === 2 && o.stroke ? { render: 2, stroke: { ...o.stroke, width: o.stroke.width + embolden } } : !o.render ? { render: 2, stroke: { color: o.color, width: embolden } } : {}) : {};
+        // Weight make-up (see textpaint.js paintUnion): the visible letters become one outline path united with
+        // copies shifted by +-embolden/2 (filled once; stroked once with the original's own outline width when it
+        // had one), and the text itself is written invisibly on top so it can still be copied and searched.
+        // See-through letters and outline-only letters keep the make-up as extra outline width.
+        const united = (embolden > 0 || outlinePath) && fk && !((o.opacity ?? 1) < 1) && (!o.render || (o.render === 2 && o.stroke));
+        const smear = united ? Math.max(0, embolden) : 0;
+        const heavy = embolden > 0 && !united ? (o.render === 2 && o.stroke ? { render: 2, stroke: { ...o.stroke, width: o.stroke.width + embolden } } : !o.render ? { render: 2, stroke: { color: o.color, width: embolden }, join: 1 } : {}) : {};
         let off = 0;
         for (const run of heightRuns(t, ks)) {
-          pushText(p, key, font.encodeText(run.text).asString(), { ...o, ...heavy, x: x + d[0] * off, y: y + d[1] * off, size: size * run.k, spacing: scaledSpacing(o.spacing, run.k) });
+          const rx = x + d[0] * off, ry = y + d[1] * off, rsp = scaledSpacing(o.spacing, run.k) || {};
+          if (united) p.pushOperators(...smearOps(fk, run.text, { x: rx, y: ry, size: size * run.k, hScale: rsp.hScale || 1, charSpacing: rsp.charSpacing || 0, rotationDeg: o.rotationDeg || 0, color: o.color, smear, stroke: o.render === 2 ? o.stroke : null, join: o.join ?? 0 }));
+          pushText(p, key, font.encodeText(run.text).asString(), { ...o, ...heavy, ...(united ? { render: 3, stroke: null } : {}), x: rx, y: ry, size: size * run.k, spacing: rsp });
           for (const ch of run.text) off += (adv(ch) + (sp.charSpacing || 0)) * (sp.hScale || 1);
         }
       },

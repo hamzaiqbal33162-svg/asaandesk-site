@@ -1,6 +1,7 @@
 import * as pdfjsLib from "./lib/pdf.min.mjs";
 import { removeTextRuns, scanPage, runStyle, inkFromStrokes, initMetrics, appendToStream, invert, applyMatrix } from "./textremove.js";
-import { loadPdfFont, previewSvg, openPreviewSvg, pickWriter, layoutLine, spacedWidth, fontTraits, fontDescriptor, METRIC_FAMILIES, metricFile, heightMatchByClass, weightMatch, loadFontFile } from "./fontmatch.js";
+import { loadPdfFont, previewSvg, openPreviewSvg, pickWriter, layoutLine, spacedWidth, fontTraits, fontDescriptor, METRIC_FAMILIES, metricFile, heightMatchByClass, weightMatch, loadFontFile, heightRuns, scaledSpacing } from "./fontmatch.js";
+import { jsFontFamily, jsFontUsable, docGlyphs, openGlyphs, glyphsAdvance, paintGlyphs, paintUnion, inkMetrics, pickWeight } from "./textpaint.js";
 import { primsToSvg, drawPrims, rectPath } from "./vector.js";
 import { chartPrims, parseChartData, PALETTE } from "./charts.js";
 import { newTable, tablePrims, wrapText } from "./tables.js";
@@ -40,6 +41,9 @@ const state = {
   pen: { kind: "pen", color: [16, 32, 74], width: 2 * SCALE, userSet: false, source: null },
 };
 const fonts = new Map(); // "pageId:baseFont" -> reusable font from the PDF itself (see fontmatch.js)
+// "source:loadedName" -> the font object pdf.js drew a text run with (its loaded face and code -> character map), so
+// edited text is painted by the very same text rasteriser call as the page's own text (see textpaint.js).
+const jsFonts = new Map();
 let nextId = 1;
 // Items get random ids so edits from several people (live collaboration) never clash.
 const uid = () => (crypto.randomUUID?.() || Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/-/g, "").slice(0, 12);
@@ -152,26 +156,224 @@ function openFontOf(fam, bold, italic, weight = null) {
 const heightCache = new Map();
 const NO_SCALE = { all: 1, cap: 1, asc: 1, x: 1 };
 function heightKs(item) {
-  const o = item.font.orig;
+  const o = item.font.orig, sp = openSpec(item);
   const docFont = o && item.font.useOrig && o.pageId === item.pageId ? fonts.get(o.key) : null;
-  const fam = famOf(item.font), open = openFontOf(fam, item.font.bold, item.font.italic, item.font.weight);
+  const fam = famOf(item.font), open = openFontOf(fam, sp.bold, sp.italic, sp.weight);
   if (!docFont?.fk || !open) return NO_SCALE;
-  const key = `${o.key}|${metricFile(fam, item.font.bold, item.font.italic, item.font.weight)}`;
+  const key = `${o.key}|${metricFile(fam, sp.bold, sp.italic, sp.weight)}`;
   if (!heightCache.has(key)) heightCache.set(key, heightMatchByClass(docFont, open));
   return heightCache.get(key);
 }
 // How much heavier (em) the document's letters are than the open look-alike as drawn (see weightMatch): that much
-// stroke is added to the look-alike, on screen and in the saved PDF alike.
+// stroke is added to the look-alike, on screen and in the saved PDF alike. Only used until (or when) the weight
+// could not be measured on the rendered page (fallbackFit).
 const weightCache = new Map();
 function weightEm(item) {
-  const o = item.font.orig;
+  const o = item.font.orig, sp = openSpec(item);
   const docFont = o && item.font.useOrig && o.pageId === item.pageId ? fonts.get(o.key) : null;
-  const fam = famOf(item.font), open = openFontOf(fam, item.font.bold, item.font.italic, item.font.weight);
+  const fam = famOf(item.font), open = openFontOf(fam, sp.bold, sp.italic, sp.weight);
   if (!docFont?.fk || !open) return 0;
-  const key = `${o.key}|${metricFile(fam, item.font.bold, item.font.italic, item.font.weight)}`;
+  const key = `${o.key}|${metricFile(fam, sp.bold, sp.italic, sp.weight)}`;
   if (!weightCache.has(key)) weightCache.set(key, weightMatch(docFont, open, 1 / heightKs(item).all));
   return weightCache.get(key);
 }
+
+/* ---------- edited text painted like the page's own text (see textpaint.js) ----------
+ * pdf.js draws the page's letters with the browser's text rasteriser; edited lines are painted on a canvas with the
+ * same calls (same face, font string, size clamp, advances, spacing, render mode), on the same device pixel grid as
+ * the page picture under them. Lines the document's font can't write use the look-alike font, loaded the way pdf.js
+ * loads the font it will find in the saved PDF, at a weight measured on the rendered page (fallbackFit).
+ */
+// Device pixels per page pixel of the page picture on show (its sharp copy, or the 1x canvas).
+const paintRatio = (page) => (page?.sharp ? page.sharpR || 1 : 1);
+
+// A look-alike font file as a canvas face: plain family, no weight/style descriptors (like pdf.js's FontFace for an
+// embedded font), so the browser never adds synthetic bold or slant on top.
+const paintFaces = new Map();
+function paintFace(file) {
+  if (!paintFaces.has(file) && typeof FontFace === "function") {
+    const name = "ADP " + file.replace(/\.ttf$/, "");
+    const e = { family: `"${name}", sans-serif`, ready: false, promise: null };
+    e.promise = loadFontFile(file)
+      .then((b) => { const f = new FontFace(name, b.slice()); document.fonts.add(f); return f.load(); })
+      .then(() => { e.ready = true; state.items.forEach((i) => i.type === "text" && i.el && i.el.dataset.paintWait && layoutItem(i)); })
+      .catch(() => { e.failed = true; });
+    paintFaces.set(file, e);
+  }
+  return paintFaces.get(file) || null;
+}
+// fontkit object of a look-alike font file, as a promise (openFontOf is the synchronous, cached view of it).
+const openJobs = new Map();
+function openFontAsync(file) {
+  if (!openJobs.has(file)) {
+    openJobs.set(file, fontkitReady().then(() => loadFontFile(file)).then((b) => {
+      if (!openFonts.get(file)) openFonts.set(file, window.fontkit.create(b));
+      return openFonts.get(file);
+    }).catch(() => null));
+  }
+  return openJobs.get(file);
+}
+
+// The original letters' own outline (render mode 1/2 with a stroke): copied to new letters with its width and join.
+function ownOutline(item) {
+  const ink = item.ink || {};
+  return ink.lineWidth > 0 && (ink.render === 1 || ink.render === 2) ? { render: ink.render, color: ink.stroke || item.color, width: ink.lineWidth * SCALE, join: ink.join ?? 0 } : null;
+}
+// Render mode, outline colour/width (page px) and join for painting: a text effect outline, else the original's own
+// outline, plus `extra` thickness (the measured weight make-up of the look-alike font): added to the original's own
+// outline when it has one, else as filled outline copies (smear, see textpaint.js paintSmear; an outline only for
+// see-through text), exactly as fontmatch.js pickWriter writes it into the PDF.
+// path: draw the look-alike as its united outline even without a make-up (when that matched the original better).
+function inkSpec(item, fxOutline, extra = 0, path = false) {
+  if (fxOutline) return { render: fxOutline.hollow ? 1 : 2, stroke: fxOutline.color, lineWidth: fxOutline.width, join: 1, smear: 0, path: false };
+  const own = ownOutline(item), clear = item.ink?.fillAlpha < 1;
+  if (own) {
+    if (own.render === 2 && (extra > 0 || path) && !clear) return { render: 2, stroke: own.color, lineWidth: own.width, join: own.join, smear: extra, path: true };
+    return { render: own.render, stroke: own.color, lineWidth: own.width + extra, join: own.join, smear: 0, path: false };
+  }
+  if (!(extra > 0) && !path) return { render: 0, stroke: null, lineWidth: 0, join: 0, smear: 0, path: false };
+  return clear ? { render: 2, stroke: item.color, lineWidth: extra, join: 1, smear: 0, path: false } : { render: 0, stroke: null, lineWidth: 0, join: 0, smear: extra, path: true };
+}
+
+// Look-alike text, run by run with its per-letter-class height factors (as fontmatch.js pickWriter writes it): text,
+// or with a weight make-up the united outline path (textpaint.js paintUnion), as the saved PDF draws it.
+function paintOpen(ctx, o) {
+  let off = 0;
+  for (const run of heightRuns(o.text, o.ks)) {
+    const sp = scaledSpacing({ charSpacing: o.spPx.charSpacing, wordSpacing: 0, hScale: o.spPx.hScale }, run.k);
+    const at = o.x + off, hs = sp.hScale || 1, cs = sp.charSpacing || 0, size = o.S * run.k;
+    if (o.smear > 0 || o.path) {
+      paintUnion(ctx, { fk: o.fk, text: run.text, x: at, y: o.base, size, hScale: hs, charSpacing: cs, color: o.color, smear: o.smear, alpha: o.alpha ?? 1, stroke: o.stroke, lineWidth: o.render === 2 ? o.lineWidth : 0, join: o.join });
+      off += glyphsAdvance(openGlyphs(o.fk, run.text), size, cs) * hs;
+    } else {
+      off += paintGlyphs(ctx, { family: o.face.family, glyphs: openGlyphs(o.fk, run.text), x: at, y: o.base, size, hScale: hs, charSpacing: cs, color: o.color, render: o.render, stroke: o.stroke, lineWidth: o.lineWidth, join: o.join, alpha: o.alpha ?? 1, onePx: o.onePx });
+    }
+  }
+  return off;
+}
+
+/**
+ * The look-alike font's weight for a document font, measured on pixels (requirement: never by font name): the
+ * original line as pdf.js renders it against each weight of the look-alike family drawn with the same text, size,
+ * spacing, outline and pixel grid (textpaint.js inkMetrics / pickWeight). The weight that is not heavier than the
+ * original is used, plus a make-up of the missing thickness. Measured at two resolutions R (device px per page px):
+ *  - on screen: the resolution the page is shown at, so the browser's own rendering is matched (font hinting rounds
+ *    stems to whole pixels: on Linux Chrome draws Arial up to 10% heavier than Liberation Sans, at 1x Carlito crisper
+ *    than Calibri);
+ *  - for the saved PDF: PDF_R, where hinting no longer matters, i.e. the outlines' own thickness that every viewer
+ *    draws (poppler and macOS draw outlines as designed; a screen-matched make-up was +11% heavy in pdftoppm).
+ * One measurement per document font, family, slant and R: { weight, strokeEm } or null.
+ */
+const PDF_R = 12;
+const fitCache = new Map();
+const screenR = (item) => Math.round(paintRatio(pageOf(item)) * 100) / 100;
+// Per box: measured on the box's own original letters (at 1x hinting treats "Male" and "0300…" differently).
+const fitKey = (item, R) => (item.font.orig ? `${item.id}|${item.font.orig.key}|${famOf(item.font)}|${!!item.font.italic}|${R}` : null);
+// Only while the box keeps the document's style (a font, weight or slant picked by hand is used as picked).
+const useFit = (item) => !!(item.font.orig && item.font.useOrig && item.base && fontSig(item.font) === item.base.font);
+function fallbackFit(item, R = PDF_R) {
+  const key = fitKey(item, R);
+  if (!key || !useFit(item)) return Promise.resolve(null);
+  if (!fitCache.has(key)) {
+    const e = { value: undefined, promise: null };
+    e.promise = measureFit(item, R).catch((err) => { console.warn("Weight measurement failed", err); return null; }).then((v) => {
+      e.value = v;
+      state.items.forEach((i) => i.type === "text" && i.el && fitKey(i, screenR(i)) === key && layoutItem(i));
+      return v;
+    });
+    fitCache.set(key, e);
+  }
+  return fitCache.get(key).promise;
+}
+// The measured fit for an item right now: undefined while it is being measured, null when there is none.
+function fitNow(item, R) {
+  if (!useFit(item)) return null;
+  const e = fitCache.get(fitKey(item, R));
+  if (!e) { fallbackFit(item, R); return undefined; }
+  return e.value;
+}
+// Weight and slant of the look-alike font file for an item (at resolution R: the screen's by default).
+function openSpec(item, R = screenR(item)) {
+  const fit = useFit(item) ? fitCache.get(fitKey(item, R))?.value : null;
+  return fit ? { bold: fit.weight >= 600, italic: !!item.font.italic, weight: fit.weight } : { bold: !!item.font.bold, italic: !!item.font.italic, weight: item.font.weight ?? null };
+}
+async function measureFit(item, key) {
+  const page = pageOf(item), docFont = itemDocFont(item);
+  // the line that was clicked (the one being edited), else the longest
+  const l = item.lines0?.[item.fitLine ?? -1]?.text.trim() ? item.lines0[item.fitLine] : (item.lines0 || []).reduce((a, b) => (!a || b.text.trim().length > a.text.trim().length ? b : a), null);
+  if (!page || !docFont || !l || !l.box) return null;
+  const text = l.text.replace(/\s+$/, "");
+  if (!/\S/.test(text)) return null;
+  const S = item.size0 || item.size, fam = famOf(item.font), italic = !!item.font.italic;
+  // For the saved PDF: letters over ~256 device px are drawn by the browser as plain outlines (no hinting, which still
+  // rounds 12 px stems by up to a pixel), i.e. the outline geometry every PDF viewer draws.
+  let R = key;
+  if (key === PDF_R) { R = Math.max(PDF_R, Math.ceil(320 / S)); while (R > PDF_R && l.box.w * l.box.h * R * R > 16e6) R--; }
+  // whole device pixels from the page's corner, as on screen (same sub-pixel position of every letter)
+  const box = l.box, bx = Math.floor(box.x * R) / R, by = Math.floor(box.y * R) / R;
+  const W = Math.ceil((box.x + box.w - bx) * R), H = Math.ceil((box.y + box.h - by) * R);
+  if (W < 4 || H < 4 || W * H > 16e6) return null;
+  const paper = box.color || [255, 255, 255], color = item.color, spPx = spacingPx(item);
+  // 1. the original line exactly as pdf.js renders it
+  const pdfPage = await state.sources[page.src].doc.getPage(page.index + 1);
+  const viewport = pdfPage.getViewport({ scale: SCALE * R, rotation: (page.baseRotate + page.extraRotate) % 360 });
+  const tc = document.createElement("canvas");
+  tc.width = W; tc.height = H;
+  const tctx = tc.getContext("2d", { willReadFrequently: true });
+  await pdfPage.render({ canvasContext: tctx, viewport, transform: [1, 0, 0, 1, -bx * R, -by * R] }).promise;
+  const target = inkMetrics(tctx.getImageData(0, 0, W, H), paper, color);
+  // 2. the look-alike family's weights, painted the same way on the same pixel grid
+  const draw = async (weight, extra, path = false) => {
+    const file = metricFile(fam, weight >= 600, italic, weight);
+    const fk = await openFontAsync(file), face = paintFace(file);
+    await face?.promise;
+    if (!fk || !face?.ready) return null;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.fillStyle = css(paper); ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(R, 0, 0, R, -bx * R, -by * R);
+    const keep = [...text].filter((ch) => /\s/.test(ch) || fk.hasGlyphForCodePoint(ch.codePointAt(0))).join("");
+    paintOpen(ctx, { fk, face, ks: heightMatchByClass(docFont, fk), text: keep, x: l.left, base: l.baseline, S, spPx, color, ...inkSpec(item, null, extra, path), alpha: item.ink?.fillAlpha < 1 ? item.ink.fillAlpha : 1, onePx: 1 / R });
+    return inkMetrics(ctx.getImageData(0, 0, W, H), paper, color);
+  };
+  const cands = [];
+  for (const weight of METRIC_FAMILIES[fam]?.weights || [400, 700]) { const m = await draw(weight, 0); if (m) cands.push({ weight, m }); }
+  const pick = pickWeight(target, cands);
+  if (!pick) return null;
+  // How far off a rendering is: stroke width and darkness, relative. On screen the ink may also be drawn a little
+  // see-through (alpha 0.7..1): at 1x the original small letters can come out greyer than any look-alike weight
+  // (darkness scales with alpha, the stroke width does not). The saved PDF is always drawn opaque.
+  const screen = key !== PDF_R;
+  const fade = (m) => (screen ? Math.max(0.7, Math.min(1, target.dark / m.dark)) : 1);
+  const off = (m) => Math.abs(m.w / target.w - 1) + Math.abs((m.dark * fade(m)) / target.dark - 1);
+  let best = { path: false, extra: 0, m: pick.m, e: off(pick.m) };
+  // Plain text unless it is more than 3% off. Then the united outline (textpaint.js paintUnion) with a make-up that
+  // adds about its own width to every stem; a few steps on what it really adds here (the outline goes through the
+  // path rasteriser: no hinting, no text contrast), kept only when it comes closer than the plain text.
+  if (best.e > 0.03) {
+    let extra = Math.max(0, pick.stroke / R), top = best;
+    for (let i = 0; i < 4; i++) {
+      const m = await draw(pick.weight, extra, true);
+      if (!m) break;
+      if (off(m) < top.e) top = { path: true, extra, m, e: off(m) };
+      const miss = (target.w - m.w) / R;
+      if (Math.abs(miss) < (0.003 * target.w) / R) break;
+      const next = Math.max(0, extra + miss);
+      if (next === extra) break;
+      extra = next;
+    }
+    best = top;
+  }
+  // The saved PDF gets half of the make-up measured on outlines: viewers disagree on look-alike outlines (poppler draws
+  // Liberation Sans as heavy as Arial already, Chrome/pdf.js 6% lighter); half keeps both within about +-4%.
+  const extra = key === PDF_R ? best.extra / 2 : best.extra;
+  const fit = { weight: pick.weight, strokeEm: +Math.min(0.08, Math.max(0, extra / S)).toFixed(5), path: best.path, alpha: +fade(best.m).toFixed(3) };
+  fitLog.push({ font: item.font.origName, family: fam, R, target: { w: +(target.w / R).toFixed(3), dark: +target.dark.toFixed(3) }, cands: cands.map((c) => ({ weight: c.weight, w: +(c.m.w / R).toFixed(3), dark: +c.m.dark.toFixed(3) })), result: { w: +(best.m.w / R).toFixed(3), dark: +best.m.dark.toFixed(3) }, fit });
+  return fit;
+}
+const fitLog = [];
+
 
 function fillFontSelect() {
   const sel = $("propFont");
@@ -219,7 +421,8 @@ const fontkitReady = () => (window.fontkit ? Promise.resolve() : (fontkitLoading
 
 async function loadSource(bytes, image = null) {
   await fontkitReady().catch(() => console.warn("fontkit unavailable: document fonts will be replaced by open fonts"));
-  const doc = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
+  // fontExtraProperties keeps each font's code -> character map (toFontChar) for painting edited text like pdf.js.
+  const doc = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false, fontExtraProperties: true }).promise;
   const lib = await PDFDocument.load(bytes, { ignoreEncryption: true });
   return state.sources.push({ bytes, doc, lib, image }) - 1;
 }
@@ -236,6 +439,8 @@ async function addPdf(bytes, name, replace, image = null) {
     pageObserver?.disconnect();
     $("pages").replaceChildren();
     fonts.clear();
+    jsFonts.clear();
+    fitCache.clear();
     state.fileName = (name || "document").replace(/\.(pdf|png|jpe?g)$/i, "");
   }
   try {
@@ -335,8 +540,16 @@ function sharpRatio(page) {
 function dropSharp(page) {
   page.sharpTask?.cancel();
   page.sharpGen = (page.sharpGen || 0) + 1;
+  const had = !!page.sharp;
   if (page.sharp) { page.sharp.width = page.sharp.height = 0; page.sharp.remove(); page.sharp = null; }
   page.sharpR = 1;
+  if (had) refreshPaint(page); // painted text follows the page picture's resolution
+}
+// The page picture changed resolution: look-alike lines take that resolution's measured weight, then everything is
+// painted again on the new pixel grid.
+function refreshPaint(page) {
+  for (const [item, p] of painted) if (p.pageId === page.id && item.el?.isConnected && /open/.test(item.el.dataset.paint || "")) layoutItem(item);
+  repaintPage(page);
 }
 async function sharpen(page) {
   if (!page.rendered || page.visible === false || !page.cssW) return;
@@ -361,6 +574,7 @@ async function sharpen(page) {
     page.canvas.after(c);
     page.sharp = c;
     page.sharpR = r;
+    refreshPaint(page);
   } catch (e) {
     if (e?.name !== "RenderingCancelledException") console.warn("Sharp page render failed", e);
   }
@@ -405,8 +619,12 @@ async function renderPage(page) {
     const tx = pdfjsLib.Util.transform(viewport.transform, t.transform);
     const size = Math.hypot(tx[2], tx[3]);
     if (size < 2 || Math.abs(tx[1]) > 0.01 * size) continue; // rotated text runs are not editable
-    let baseFont = "";
-    try { baseFont = pdfPage.commonObjs.get(t.fontName)?.name || ""; } catch {}
+    let baseFont = "", js = null;
+    try {
+      const jf = pdfPage.commonObjs.get(t.fontName);
+      baseFont = jf?.name || "";
+      if (jsFontUsable(jf)) { js = `${page.src}:${t.fontName}`; jsFonts.set(js, jf); }
+    } catch {}
     const traits = fontTraits(baseFont);
     if (!baseFont && content.styles[t.fontName]?.fontFamily === "serif") traits.family = "serif";
     if (!baseFont && content.styles[t.fontName]?.fontFamily === "monospace") traits.family = "mono";
@@ -418,6 +636,7 @@ async function renderPage(page) {
       size,
       width: t.width * SCALE,
       baseFont,
+      js,
       font: traits,
       pdf: { x: t.transform[4], y: t.transform[5], width: t.width, size: Math.hypot(t.transform[2], t.transform[3]) },
     };
@@ -431,6 +650,7 @@ async function renderPage(page) {
   for (const run of widgetRuns(page)) { addHit(page, run); count++; }
   page.hasText = count > 0;
   page.rendered = true;
+  repaintPage(page);
   sharpen(page);
   // Ink that is already on the page sets the pen's default colour and width.
   try {
@@ -639,6 +859,10 @@ function paragraphOf(page, run) {
   const same = (o) => o.baseFont === run.baseFont && Math.abs(o.size - S) <= S * 0.03 && (o.widget ?? null) === (run.widget ?? null) &&
     runFill(page, o) === fill && (fill || Math.max(...ink(o).map((v, i) => Math.abs(v - ink(run)[i]))) < 40);
   const cache = new Map();
+  // A label and its value ("Contact Detail:" + "03004164269,") are two columns, not one line, even when the gap
+  // between them is under the joining distance: wider than a word space in running text (pdf.js itself starts a new
+  // run past 0.6 em) after a colon. Joined, an edited value was redrawn one space after its label, out of its column.
+  const columnGap = (l, r) => /:\s*$/.test(l.str) && r.left - (l.left + l.width) > S * 0.6;
   const lineOf = (r0) => {
     if (cache.has(r0)) return cache.get(r0);
     const line = [r0];
@@ -646,8 +870,8 @@ function paragraphOf(page, run) {
       let edge = r0;
       for (;;) {
         const next = free.filter((o) => !line.includes(o) && same(o) && Math.abs(o.baseline - r0.baseline) < S * 0.15 &&
-          (dir > 0 ? o.left >= edge.left + edge.width - S * 0.3 && o.left - (edge.left + edge.width) < S * 1.2
-                   : o.left + o.width <= edge.left + S * 0.3 && edge.left - (o.left + o.width) < S * 1.2))
+          (dir > 0 ? o.left >= edge.left + edge.width - S * 0.3 && o.left - (edge.left + edge.width) < S * 1.2 && !columnGap(edge, o)
+                   : o.left + o.width <= edge.left + S * 0.3 && edge.left - (o.left + o.width) < S * 1.2 && !columnGap(o, edge)))
           .sort((a, b) => (dir > 0 ? a.left - b.left : b.left - a.left))[0];
         if (!next) break;
         line.push(next);
@@ -679,6 +903,14 @@ function paragraphOf(page, run) {
   };
   const rowPartner = (L) => (L._partner ??= free.some((o) => !L.runs.includes(o) && Math.abs(o.baseline - L.baseline) < S * 0.2 &&
     (o.left > L.left + L.width + S * 1.5 || o.left + o.width < L.left - S * 1.5)));
+  // Another line of text between two lines (same column, normal size: not a superscript) means they are not
+  // consecutive lines of one paragraph. Without this a form's value column joined "Male" with the address two rows
+  // below, skipping the phone number between them, and that box then covered the phone number.
+  const between = (A, B) => {
+    const lo = Math.min(A.baseline, B.baseline) + S * 0.45, hi = Math.max(A.baseline, B.baseline) - S * 0.45;
+    const x0 = Math.min(A.left, B.left), x1 = Math.max(A.left + A.width, B.left + B.width);
+    return (page.runs || []).some(({ run: o }) => !A.runs.includes(o) && !B.runs.includes(o) && o.size >= S * 0.8 && o.baseline > lo && o.baseline < hi && o.left < x1 && o.left + o.width > x0);
+  };
   const anchor = { left: (l) => l.left, right: (l) => l.left + l.width, center: (l) => l.left + l.width / 2 };
   const tol = { left: S * 0.25, right: S * 0.3, center: S * 0.5 };
   let best = null;
@@ -691,7 +923,7 @@ function paragraphOf(page, run) {
       if (!same(o) || first.runs.includes(o)) continue;
       const d = Math.abs(o.baseline - first.baseline);
       if (d < S * 0.95 || d > S * 2.6 || (gap !== null && d >= gap)) continue;
-      if (fits(lineOf(o)) && !ruledBetween(first, lineOf(o))) gap = d;
+      if (fits(lineOf(o)) && !ruledBetween(first, lineOf(o)) && !between(first, lineOf(o))) gap = d;
     }
     const lines = [first], used = new Set([first]);
     if (gap) {
@@ -699,7 +931,8 @@ function paragraphOf(page, run) {
         for (let y = first.baseline + dir * gap; lines.length < 60; y += dir * gap) {
           const near = [...new Set(free.filter((o) => same(o) && Math.abs(o.baseline - y) < S * 0.12).map(lineOf))].filter((L) => !used.has(L) && fits(L));
           const L = near.sort((a, b) => Math.abs(anchor[mode](a) - a0) - Math.abs(anchor[mode](b) - a0))[0];
-          if (!L || ruledBetween(dir > 0 ? lines[lines.length - 1] : lines[0], L)) break;
+          const prev = dir > 0 ? lines[lines.length - 1] : lines[0];
+          if (!L || ruledBetween(prev, L) || between(prev, L)) break;
           used.add(L);
           if (dir > 0) lines.push(L); else lines.unshift(L);
         }
@@ -740,7 +973,7 @@ function editExistingText(page, run, hit, silent = false, point = null) {
     if (st) {
       if (st.fill && !st.invisible) color = st.fill;
       // How the original letters are painted besides their fill (outline modes, stroke, see-through), copied to new text.
-      paint = { render: st.render === 1 || st.render === 2 ? st.render : 0, stroke: st.stroke, lineWidth: st.lineWidth, fillAlpha: st.fillAlpha ?? 1, strokeAlpha: st.strokeAlpha ?? 1 };
+      paint = { render: st.render === 1 || st.render === 2 ? st.render : 0, stroke: st.stroke, lineWidth: st.lineWidth, join: st.lineJoin ?? 0, fillAlpha: st.fillAlpha ?? 1, strokeAlpha: st.strokeAlpha ?? 1 };
       if (st.size > 0) size = st.size * SCALE;
       spacing = { charSpacing: st.charSpacing, wordSpacing: st.wordSpacing, hScale: st.hScale };
       if (st.leading > 0.5) lineGap = st.leading * SCALE;
@@ -756,8 +989,11 @@ function editExistingText(page, run, hit, silent = false, point = null) {
     if (m) { font = { family: m.family, bold: m.bold, italic: false }; if (run.kind === "ocr") size = m.size; matched = true; }
   }
   const origKey = run.kind === "pdf" && run.baseFont ? pdfFont(page, run.baseFont, st?.resources) : null;
+  const jfRun = run.js ? jsFonts.get(run.js) : null, entry = origKey ? fonts.get(origKey) : null;
+  if (entry && jfRun && !entry.fk && !entry.jsHas) entry.jsHas = (code) => jfRun.toFontChar[code] !== undefined || !!jfRun.missingFile;
   ensureFace(famOf(font), font.bold, font.italic, font.weight);
-  const fontState = { ...font, underline: false, orig: origKey ? { key: origKey, pageId: page.id } : null, useOrig: !!origKey, origName: run.baseFont ? prettyFont(run.baseFont) : null, matched };
+  // js: the pdf.js font the run was drawn with (edited text is painted through it, see paintPlan)
+  const fontState = { ...font, underline: false, orig: origKey ? { key: origKey, pageId: page.id } : null, useOrig: !!origKey, origName: run.baseFont ? prettyFont(run.baseFont) : null, matched, js: run.kind === "pdf" ? run.js || null : null };
 
   // Picture (OCR) text: one line with a cover, as before.
   if (run.kind !== "pdf") {
@@ -790,10 +1026,14 @@ function editExistingText(page, run, hit, silent = false, point = null) {
   const data = {
     type: "text", pageId: page.id, x, baseline, size, font: fontState, color, text: lines0.map((l) => l.text).join("\n"),
     lines0, needsCover, spacing, lineGap, runs, align, boxW, wrap: multi, justifyHard: align === "justify", ink: paint,
-    widget: run.widget ?? null, fontStream: st?.stream ?? 0, cell, size0: size, lineGap0: lineGap,
+    widget: run.widget ?? null, fontStream: st?.stream ?? 0, cell, size0: size, lineGap0: lineGap, fitLine: para.index,
   };
   data.base = { x, baseline, size, lineGap, color: [...color], font: fontSig(fontState), style: styleSig(data) };
   const item = addItem(data, false);
+  // Measure the original letters' weight now (in the background), so a line that needs the look-alike font is
+  // already drawn at the right weight when the first missing letter is typed.
+  // (subset fonts, "ABCDEF+Name", are the ones that miss letters; others are measured when first needed)
+  if (origKey && /^[A-Z]{6}\+/.test(run.baseFont)) { fallbackFit(item, screenR(item)); fallbackFit(item, PDF_R); }
   if (!silent) { if (point) focusAt(item, point, para.index); else focusLine(item, para.index); }
   return item;
 }
@@ -1168,6 +1408,81 @@ function textWidth(text, fontCss) {
 
 const escHtml = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/**
+ * How one piece of an edited line is painted (see textpaint.js): { kind, w (page px), draw(ctx, x, baseline, onePx) },
+ * { wait: true } while a font or the weight measurement is still loading, or null (drawn the old way).
+ *  - "doc": the document's own font, through the very font object pdf.js drew the original letters with;
+ *  - "open-measured" / "open": the look-alike font (letters the document's font lacks), at the weight measured on the
+ *    rendered page (or, without a measurement, the outline-based estimate).
+ */
+function paintPlan(item, t, { docFont, spPx, fxOutline, S, fam, isPlan }) {
+  // Text over a picture (OCR, a patch the page layer can't be under), with a background box or a shadow: as before.
+  if (typeof document === "undefined" || item.needsCover || item.cover || item.fx?.bg || item.fx?.shadow) return null;
+  const alpha = item.ink?.fillAlpha < 1 ? item.ink.fillAlpha : 1;
+  if (docFont && docFont.canWrite(t)) {
+    const jf = item.font.js ? jsFonts.get(item.font.js) : null;
+    const glyphs = jf ? docGlyphs(docFont, jf, t) : null;
+    if (!glyphs) return null;
+    const ink = inkSpec(item, fxOutline);
+    const bold = jf.black ? "900" : jf.bold ? "bold" : "normal";
+    return {
+      kind: "doc",
+      w: glyphsAdvance(glyphs, S, spPx.charSpacing, spPx.wordSpacing) * spPx.hScale,
+      draw: (ctx, x, base, onePx) => paintGlyphs(ctx, { family: jsFontFamily(jf), bold, italic: !!jf.italic, glyphs, x, y: base, size: S, hScale: spPx.hScale, charSpacing: spPx.charSpacing, wordSpacing: spPx.wordSpacing, color: item.color, ...ink, alpha, remeasure: !!jf.remeasure, onePx }),
+    };
+  }
+  if (!isPlan && !docFont) return null;
+  const fit = fitNow(item, screenR(item));
+  if (fit === undefined) return { wait: true };
+  const sp = openSpec(item), file = metricFile(fam, sp.bold, sp.italic, sp.weight);
+  const face = paintFace(file), fk = openFontOf(fam, sp.bold, sp.italic, sp.weight);
+  if (!face || face.failed) return null;
+  if (!face.ready || !fk) return { wait: true };
+  if ([...t].some((ch) => !/\s/.test(ch) && !fk.hasGlyphForCodePoint(ch.codePointAt(0)))) return null;
+  const extra = fxOutline ? 0 : fit ? fit.strokeEm * S : weightEm(item) * S;
+  const ink = inkSpec(item, fxOutline, extra, !fxOutline && !!fit?.path), ks = heightKs(item), upm = fk.unitsPerEm || 1000;
+  const w = [...t].reduce((a, ch) => a + ((fk.glyphForCodePoint(ch.codePointAt(0))?.advanceWidth ?? upm / 2) / upm) * S + spPx.charSpacing, 0) * spPx.hScale;
+  const a2 = alpha * (fit?.alpha ?? 1); // the screen-measured ink alpha (see measureFit; the saved PDF stays opaque)
+  return { kind: fit ? "open-measured" : "open", file, w, draw: (ctx, x, base, onePx) => paintOpen(ctx, { fk, face, ks, text: t, x, base, S, spPx, color: item.color, ...ink, alpha: a2, onePx }) };
+}
+
+/*
+ * Painted text lives in ONE layer per page that has exactly the page picture's box and pixels (the sharp copy, or the
+ * 1x canvas): same CSS size and place, same device size, same scale, right above it. The browser then composites the
+ * new letters exactly like the page's own letters (a small canvas inside the text box was resampled by the
+ * compositor and came out softer: measured up to 8% lighter on VM115). The paper patches over the replaced lines are
+ * painted there too (their DOM covers stay, transparent, for clicking).
+ */
+const painted = new Map(); // item -> { pageId, patches: [box], pieces: [{ draw, x, base }] } (page px)
+function repaintPage(page) {
+  if (!page?.el) return;
+  const live = new Set(state.items), mine = [];
+  for (const [item, p] of painted) {
+    if (!live.has(item) || !item.el?.isConnected) { painted.delete(item); continue; }
+    if (p.pageId === page.id) mine.push([item, p]);
+  }
+  let c = page.paintLayer;
+  if (!mine.length || !page.cssW) {
+    if (c) { c.width = c.height = 0; c.remove(); page.paintLayer = null; }
+    return;
+  }
+  const base = page.sharp || page.canvas, r = paintRatio(page);
+  if (!c) { c = document.createElement("canvas"); c.className = "paint-layer"; page.paintLayer = c; }
+  if (c.width !== base.width || c.height !== base.height) { c.width = base.width; c.height = base.height; }
+  Object.assign(c.style, { width: page.cssW + "px", height: page.cssH + "px" });
+  if (c.parentNode !== page.el || c.nextSibling !== page.hits) page.el.insertBefore(c, page.hits);
+  const ctx = c.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, c.width, c.height);
+  // pdf.js drew the page at SCALE x r device px per point: page px x r, the same mapping here
+  ctx.setTransform(r, 0, 0, r, 0, 0);
+  mine.sort((a, b) => state.items.indexOf(a[0]) - state.items.indexOf(b[0]));
+  for (const [, p] of mine) {
+    for (const b of p.patches) { ctx.fillStyle = css(b.color); ctx.fillRect(b.x, b.y, b.w, b.h); }
+    for (const q of p.pieces) q.draw(ctx, q.x, q.base, 1 / r);
+  }
+}
+
 function layoutItem(item) {
   const s = item.el.style;
   if (item.type === "text") {
@@ -1193,7 +1508,15 @@ function layoutItem(item) {
     const own = !fxOutline && ink.lineWidth > 0 && (ink.render === 1 || ink.render === 2) ? { color: ink.stroke || item.color, width: ink.lineWidth * SCALE, hollow: ink.render === 1 } : null;
     const outline = fxOutline || own;
     const alpha = ink.fillAlpha < 1 ? `;opacity:${ink.fillAlpha}` : "";
+    // Painted like the page's own text (one canvas for the box, see paintPlan); SVG/HTML below only while a font is
+    // still loading or for fonts pdf.js itself draws as outlines.
+    const paints = [];
+    let waiting = false, drawn = 0;
     const piece = (t, x, top) => {
+      const pp = fx.curve ? null : paintPlan(item, t, { docFont, spPx, fxOutline, S, fam, isPlan: !!plan });
+      if (pp?.wait) waiting = true;
+      if (pp?.draw) { paints.push({ x, top, ...pp }); return ""; }
+      drawn++;
       const pv = docFont && docFont.canWrite(t) ? previewSvg(docFont, t, S, item.color, spPx, outline) : null;
       if (pv) return `<div style="position:absolute;left:${x}px;top:${top}px${alpha}">${pv.svg}</div>`;
       // The open look-alike drawn from its own outlines exactly as it is saved: same glyphs, widths, per-letter
@@ -1243,6 +1566,24 @@ function layoutItem(item) {
       for (const [x0, x1, b0, b1] of rects) bg += `<div style="position:absolute;left:${x0 - padX}px;top:${b0 - S * 0.8 - padY}px;width:${x1 - x0 + 2 * padX}px;height:${b1 - b0 + S * 1.02 + 2 * padY}px;border-radius:${r}px;background:${fx.bg.color}"></div>`;
     }
     item.previewEl.innerHTML = html;
+    // painted pieces and the patches over replaced lines go to the page's paint layer (see repaintPage)
+    const prevPaint = painted.get(item);
+    if (paints.length) {
+      const ox = item.x, oy = item.baseline - S * BASELINE;
+      painted.set(item, {
+        pageId: item.pageId,
+        patches: plan ? item.lines0.filter((_, i) => plan.gone[i]).map((l) => l.box) : [],
+        pieces: paints.map((p) => ({ draw: p.draw, x: ox + p.x, base: oy + p.top + S * BASELINE })),
+      });
+      item.coverEls?.forEach((c) => (c.style.background = "transparent"));
+    } else painted.delete(item);
+    if (paints.length || prevPaint) {
+      repaintPage(pageOf(item));
+      if (prevPaint && prevPaint.pageId !== item.pageId) repaintPage(state.pages.find((p) => p.id === prevPaint.pageId));
+    }
+    item.el.dataset.paint = [...new Set(paints.map((p) => p.kind))].concat(drawn ? ["svg"] : []).join(",");
+    item.el.dataset.paintFont = [...new Set(paints.map((p) => p.file).filter(Boolean))].join(",");
+    item.el.dataset.paintWait = waiting ? "1" : "";
     item.bgEl.innerHTML = bg;
     const sh = fx.shadow;
     if (sh) {
@@ -1382,6 +1723,7 @@ function removeItem(item, record = true) {
   item.coverEl?.remove();
   item.coverEls?.forEach((c) => c.remove());
   state.items = state.items.filter((i) => i !== item);
+  if (painted.has(item)) repaintPage(pageOf(item));
   if (state.selected === item) select(null);
   refreshChrome();
   if (item.type === "comment") refreshComments();
@@ -1495,6 +1837,7 @@ function restore(snap) {
   state.selected = null;
   state.items = snap.map((o) => { const c = {}; for (const [k, v] of Object.entries(o)) c[k] = k === "runs" ? [...v] : k === "lines0" ? v.map((l) => ({ ...l })) : k === "font" ? { ...v } : clone(v); return c; });
   for (const i of state.items) drawItem(i);
+  state.pages.forEach(repaintPage); // boxes that are gone leave the paint layers too
   // Original text comes back wherever no edit covers it any more.
   for (const page of state.pages) for (const { run, hit } of page.runs || []) {
     const edited = state.items.some((i) => i.runs?.includes(run));
@@ -2043,7 +2386,11 @@ async function exportText(out, p, page, item, { at, k, rot, embedded, notes, lin
   const own = !fx.outline && ink.lineWidth > 0 && (ink.render === 1 || ink.render === 2);
   const outline = fx.outline ? { color: unhex(fx.outline.color), width: Math.max(0.3, fx.outline.width * size) } : own ? { color: ink.stroke || item.color, width: ink.lineWidth / sc } : null;
   const render = fx.outline ? (fx.outline.hollow ? 1 : 2) : own ? ink.render : 0;
+  const join = fx.outline ? 1 : own ? ink.join ?? 0 : 1;
   const inkAlpha = ink.fillAlpha < 1 ? ink.fillAlpha : 1;
+  // Lines the document's font can't write: the look-alike at the weight measured on the page at PDF_R (the outlines'
+  // own thickness, which every viewer draws; see fallbackFit).
+  const fit = useFit(item) ? await fallbackFit(item, PDF_R) : null, spec = openSpec(item, PDF_R);
   let shadow = null;
   if (fx.shadow) {
     const ang = ((fx.shadow.angle ?? 45) * Math.PI) / 180, d = (fx.shadow.dist ?? 0.08) * size, dx = Math.cos(ang) * d, dy = Math.sin(ang) * d;
@@ -2054,7 +2401,7 @@ async function exportText(out, p, page, item, { at, k, rot, embedded, notes, lin
     const text = l.text.replace(/\s+$/, "");
     if (!text || (plan && !plan.changed[i])) continue;
     // Line by line: a line keeps the document's font whenever that font has all of its letters.
-    const w = await pickWriter(out, tp, { size, pdfFont: docFont, heightFrom, family: famOf(item.font), bold: item.font.bold, italic: item.font.italic, weight: item.font.weight ?? null, embedded }, text);
+    const w = await pickWriter(out, tp, { size, pdfFont: docFont, heightFrom, family: famOf(item.font), bold: spec.bold, italic: spec.italic, weight: spec.weight, embedded, emboldenEm: fx.outline ? 0 : fit ? fit.strokeEm : null, outlinePath: !fx.outline && !!fit?.path }, text);
     if (docFont && w.used !== "document") notes.add("some new letters were not in the document's font, so the closest matching font was used");
     const [x, y] = toT(...at(item.x, item.baseline + i * G));
     const lay = layoutLine(text, w.widthOf, { x, y, dir, boxW, align: item.align || "left", justify: l.justify, spacing });
@@ -2090,8 +2437,8 @@ async function exportText(out, p, page, item, { at, k, rot, embedded, notes, lin
   }
   const pass = (ink, off, opacity, stroke) => {
     for (const L of lines) {
-      if (L.glyphs) for (const g of L.glyphs) L.w.draw(g.ch, g.x + off[0], g.y + off[1], { color: ink, rotationDeg: g.deg, spacing: null, render, stroke, opacity });
-      else for (const seg of L.lay.segs) L.w.draw(seg.t, seg.x + off[0], seg.y + off[1], { color: ink, rotationDeg: rot, spacing, render, stroke, opacity });
+      if (L.glyphs) for (const g of L.glyphs) L.w.draw(g.ch, g.x + off[0], g.y + off[1], { color: ink, rotationDeg: g.deg, spacing: null, render, stroke, opacity, join });
+      else for (const seg of L.lay.segs) L.w.draw(seg.t, seg.x + off[0], seg.y + off[1], { color: ink, rotationDeg: rot, spacing, render, stroke, opacity, join });
     }
   };
   if (shadow) pass(shadow.color, shadow.off, shadow.op, outline ? { ...outline, color: shadow.color } : null);
@@ -3346,4 +3693,6 @@ refreshHistory();
 // A live-editing link (?room=…#k=…) opens the shared document.
 if (new URLSearchParams(location.search).get("room")) joinCollab(location.href);
 // Used by automated checks.
-window.pdfEditor = { addPdf, addFile, exportBytes, exportImages, runOcr, state, fonts, undo, redo, setZoom, startBlank, pdfjsLib, select, layoutItem, displayLines, collab, commit, history };
+// paintReady: resolves when every weight measurement and look-alike face started so far is done (tests wait on it).
+const paintReady = async () => { await Promise.all([...fitCache.values()].map((e) => e.promise)); await Promise.all([...paintFaces.values()].map((e) => e.promise)); };
+window.pdfEditor = { addPdf, addFile, exportBytes, exportImages, runOcr, state, fonts, undo, redo, setZoom, startBlank, pdfjsLib, select, layoutItem, displayLines, collab, commit, history, paintReady, fitLog };
