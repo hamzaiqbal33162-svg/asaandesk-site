@@ -1,6 +1,7 @@
 // Starter sheets for Magic Insights (data sets to explore) and Magic Formulas (formula practice), 24 each.
 // Pure module (no DOM). STARTERS = gallery entries; buildStarter(id) → workbook in the templates.js format.
 import { PALETTES, PEOPLE, CITIES, rng } from "./tpl-data.js";
+import { sheetKit, topicPhoto, chartColors } from "./sheet-kit.js";
 
 const colL = (c) => { let s = ""; for (let n = c + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
 const ref = (r, c) => colL(c) + (r + 1);
@@ -79,19 +80,14 @@ export const STARTERS = [
 ];
 
 function sheet(name, th) {
-  const s = { name, cells: {}, styles: {}, colW: {}, rowH: {}, charts: [] };
+  const k = sheetKit(name);
   const t = {
-    s,
-    put(r, c, v, st) { if (v !== null && v !== undefined && v !== "") s.cells[ref(r, c)] = String(v); if (st) t.style(r, c, st); return t; },
-    style(r, c, st) { const k = ref(r, c); s.styles[k] = { ...(s.styles[k] || {}), ...st }; return t; },
+    s: k.s, k,
+    put(r, c, v, st) { k.put(r, c, v, st); return t; },
+    style(r, c, st) { k.style(r, c, st); return t; },
     at(a1, v, st) { const m = /^([A-Z]+)(\d+)$/.exec(a1); let c = 0; for (const ch of m[1]) c = c * 26 + ch.charCodeAt(0) - 64; return t.put(+m[2] - 1, c - 1, v, st); },
-    title(text, c2, note) {
-      for (let c = 0; c <= c2; c++) t.style(0, c, { fill: th.band, color: "#ffffff" });
-      t.put(0, 0, text, { b: true, size: 22, valign: "middle" }); s.rowH[0] = 48;
-      if (note) t.put(1, 0, note, { i: true, color: "#5b6478" });
-      return t;
-    },
-    head(r, values) { values.forEach((v, c) => t.put(r, c, v, { b: true, fill: th.head, color: th.ink, bd: "b", bc: th.band })); s.rowH[r] = 30; return t; },
+    title(text, c2, note) { k.title(text, c2, th, note); return t; },
+    head(r, values) { k.head(r, values, th); return t; },
   };
   return t;
 }
@@ -100,13 +96,13 @@ function sheet(name, th) {
 export function buildStarter(id) {
   const meta = STARTERS.find((x) => x.id === id);
   if (!meta) return null;
-  const P = meta.look.p, th = { band: P.band, head: P.head, ink: P.ink, zebra: P.zebra }, rnd = rng(id);
+  const P = meta.look.p, th = { band: P.band, band2: P.band2, head: P.head, ink: P.ink, zebra: P.zebra, photo: topicPhoto(meta.tool === "magic-formulas" ? "school education class" : meta.name.replace(/categor\w*/gi, ""), id) }, rnd = rng(id);
   if (id.startsWith("ins-")) {
     const [, name, labelHead, labels0, vals, chart] = INS.find((x) => "ins-" + x[0] === id);
     const labels = Array.isArray(labels0) ? labels0 : LABELS[labels0], n = labels.length, nc = vals.length;
     const t = sheet("Data", th);
     t.s.colW = { 0: labels0 === "days" ? 120 : 190, ...Object.fromEntries(vals.map((_, j) => [j + 1, 140])) };
-    t.title(name, nc, "Sample data to explore: click inside the table, then press Magic Insights (✦) for totals, trends and chart ideas.");
+    t.title(name, nc + 6, "Sample data to explore: click inside the table, then press Magic Insights (✦) for totals, trends and chart ideas.");
     t.head(3, [labelHead, ...vals.map((v) => v[0])]);
     labels.forEach((lab, i) => {
       const r = 4 + i;
@@ -117,32 +113,57 @@ export function buildStarter(id) {
         v = dec ? Math.round(v * 10 ** dec) / 10 ** dec : hi > 5000 ? Math.round(v / 100) * 100 : Math.round(v);
         t.put(r, j + 1, v, hi >= 10000 ? { fmt: "thousands" } : null);
       });
-      if (i % 2) for (let c = 0; c <= nc; c++) t.style(r, c, { fill: th.zebra });
     });
+    t.k.zebra(4, 3 + n, nc, th);
     const e = 4 + n; // last data row (Excel row number)
     const sums = [["Total", "SUM"], ["Average", "AVERAGE"], ["Highest", "MAX"], ["Lowest", "MIN"]];
     sums.forEach(([lab, fn], k) => {
       const r = 5 + n + k;
-      t.put(r, 0, lab, { b: true, fill: th.head, color: th.ink });
-      vals.forEach(([, , hi, dec = 0], j) => t.put(r, j + 1, `=${fn}(${colL(j + 1)}5:${colL(j + 1)}${e})`, { b: true, fill: th.head, ...(dec ? { fmt: "fixed2" } : hi >= 1000 || fn === "AVERAGE" ? { fmt: "thousands" } : {}) }));
+      t.put(r, 0, lab, { b: true, fill: th.head, color: th.ink, ...(k ? {} : { bd: "t", bc: th.band, bs: "thick" }) });
+      vals.forEach(([, , hi, dec = 0], j) => t.put(r, j + 1, `=${fn}(${colL(j + 1)}5:${colL(j + 1)}${e})`, { b: true, fill: th.head, color: th.ink, ...(k ? {} : { bd: "t", bc: th.band, bs: "thick" }), ...(dec ? { fmt: "fixed2" } : hi >= 1000 || fn === "AVERAGE" ? { fmt: "thousands" } : {}) }));
     });
     const same = vals.every((v) => v[2] <= vals[0][2] * 3 && v[2] * 3 >= vals[0][2]);
-    t.s.charts.push({ kind: chart, cols: chart === "pie" || !same ? [0, 1] : [0, ...vals.map((_, j) => j + 1)], r1: 3, r2: 3 + n, title: name, at: ref(3, nc + 2), w: 460, h: 290 });
+    t.s.charts.push({ colors: chartColors(th), kind: chart, cols: chart === "pie" || !same ? [0, 1] : [0, ...vals.map((_, j) => j + 1)], r1: 3, r2: 3 + n, title: name, at: ref(3, nc + 2), w: 460, h: 290 });
     return { name, sheets: [t.s] };
   }
   const f = FX.find((x) => "fx-" + x.slug === id), nc = f.head.length, n = f.rows.length;
   const t = sheet("Practice", th);
   t.s.colW = Object.fromEntries(f.head.map((h, c) => [c, c ? Math.max(110, h.length * 9) : 190]));
-  t.title(f.name, Math.max(nc - 1, 3), "Formula used: " + f.how);
+  t.title(f.name, Math.max(nc + 1, 6), "Formula used: " + f.how);
   t.head(3, f.head);
   f.rows.forEach((row, i) => {
     const r = 4 + i, R = r + 1, sub = (v) => (typeof v === "string" ? v.replace(/\{R\}/g, R).replace(/\{P\}/g, R - 1) : v);
     const cells = [...row];
     for (const [c, tpl] of Object.entries(f.fcols || {})) cells[+c] = tpl;
-    cells.forEach((v, c) => t.put(r, c, sub(v), { ...(f.fmts?.[c] ? { fmt: f.fmts[c] } : {}), ...((f.dates || []).includes(c) ? { fmt: "date" } : {}), ...(f.fcols?.[c] ? { color: th.ink, b: true } : {}), ...(i % 2 ? { fill: th.zebra } : {}) }));
+    cells.forEach((v, c) => t.put(r, c, sub(v), { ...(f.fmts?.[c] ? { fmt: f.fmts[c] } : {}), ...((f.dates || []).includes(c) ? { fmt: "date" } : {}), ...(f.fcols?.[c] ? { color: th.band, b: true } : {}) }));
   });
+  t.k.zebra(4, 3 + n, nc - 1, th);
   for (const [a1, fmt] of Object.entries(f.cellFmts || {})) t.at(a1, f.rows[+a1.slice(1) - 5]?.[1], { fmt });
-  f.sum.forEach(([lab, v, fmt], k) => { const r = 5 + n + k; t.put(r, 0, lab, { b: true }).put(r, 1, v, { b: true, fill: th.head, color: th.ink, ...(fmt ? { fmt } : {}) }); });
+  f.sum.forEach(([lab, v, fmt], k) => { const r = 5 + n + k; t.put(r, 0, lab).put(r, 1, v, fmt ? { fmt } : null); t.k.pairCards(r, 0, 1, th); });
   for (const [a1, v, st] of f.extra || []) t.at(a1, v, st);
   return { name: f.name, sheets: [t.s] };
+}
+
+// Formula card for a Magic Formulas starter picture: the formula the starter teaches (as typed in the sheet), the cell
+// that holds it (its result is worked out by the picture), a short label and one plain-English line.
+const CARD_TEXT = { "loan-instalment": "The same instalment every month until the loan is paid.", "profit-margin": "Profit is the selling price minus the cost.", "compound-interest": "Each year the interest is added to the amount." };
+const firstFormula = (s) => { const t = String(s || ""); if (t[0] !== "=") return null; let d = 0, i = 1; for (; i < t.length; i++) { const ch = t[i]; if (ch === "\"") { const j = t.indexOf("\"", i + 1); i = j < 0 ? t.length : j; continue; } if (ch === "(") d++; else if (ch === ")") d--; else if (ch === " " && d <= 0) break; } return t.slice(0, i); };
+const fname = (f) => (/^=([A-Z]+)\(/.exec(f || "") || [])[1] || null;
+/** { formula, r, c, label, explain, tableCols, colors } for an "fx-…" starter (null for other ids). */
+export function formulaCard(id, book = null) {
+  const f = FX.find((x) => "fx-" + x.slug === id);
+  if (!f) return null;
+  const meta = STARTERS.find((x) => x.id === id), P = meta.look.p, s = (book || buildStarter(id)).sheets[0], n = f.rows.length;
+  const at = (r, c) => s.cells[String.fromCharCode(65 + c) + (r + 1)];
+  const norm = (x) => String(x || "").replace(/\s+/g, "").toUpperCase();
+  const taught = firstFormula(f.how);
+  let hit = null;
+  for (let r = 4; r < 5 + n + f.sum.length && !hit; r++) for (let c = 0; c < 8 && !hit; c++) { const v = at(r, c); if (taught && norm(v) === norm(taught)) hit = { r, c }; }
+  if (!hit && taught) for (let c = 0; c < 8 && !hit; c++) { const v = at(4, c); if (typeof v === "string" && v[0] === "=" && fname(v) === fname(taught)) hit = { r: 4, c }; }
+  if (!hit) for (let c = 1; c < 8 && !hit; c++) { const v = at(4, c); if (typeof v === "string" && v[0] === "=") hit = { r: 4, c }; }
+  if (!hit) hit = { r: 5 + n, c: 1 };
+  const label = hit.r >= 5 + n ? at(hit.r, 0) : f.head[hit.c];
+  let explain = CARD_TEXT[f.slug];
+  if (!explain) { let t = taught ? f.how.slice(f.how.indexOf(taught) + taught.length) : f.how; t = t.split(/;| and =|, =| =/)[0].trim().replace(/[.,]+$/, ""); explain = t ? t[0].toUpperCase() + t.slice(1) + "." : ""; }
+  return { formula: at(hit.r, hit.c) || taught || "", r: hit.r, c: hit.c, label: String(label || "Result"), explain, tableCols: f.head.length, colors: { band: P.band, band2: P.band2, head: P.head, ink: P.ink } };
 }

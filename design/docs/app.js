@@ -269,6 +269,19 @@ function setZoom(z) {
   positionImgHandle();
   return z;
 }
+// Canva: on a narrow canvas (small laptop, side panel open) the page shrinks to fit instead of running off the side,
+// until the user picks a zoom; it never grows past 100% by itself.
+let zoomPicked = false;
+function autoFitZoom() {
+  if (zoomPicked || $("#zoom").value === "fit" || isPhone()) return;
+  const avail = viewer.clientWidth - 32; if (avail < 120) return;
+  const rw = paper.getBoundingClientRect().width / (state.zoom || 1);
+  const w = rw > 50 ? rw : ((PAGE_SIZES[state.doc.page.size] || PAGE_SIZES.A4).w * 96) / 25.4;
+  const z = Math.max(0.3, Math.min(1, Math.floor((avail / w) * 100) / 100));
+  if (Math.abs(z - state.zoom) > 0.005) setZoom(z);
+}
+function pickZoom(z) { zoomPicked = true; return setZoom(z); }
+if (typeof ResizeObserver === "function") new ResizeObserver(() => autoFitZoom()).observe(viewer);
 function applyZoom() {
   let z = $("#zoom").value;
   if (z === "fit") { const avail = viewer.clientWidth - 40; z = Math.max(0.3, Math.min(2, avail / paper.offsetWidth)); }
@@ -655,7 +668,7 @@ $("#lineSpacing").addEventListener("change", (e) => setLineSpacing(e.target.valu
 $("#textColor").addEventListener("change", (e) => change(() => withCss(() => exec("foreColor", e.target.value))));
 $("#hiliteColor").addEventListener("change", (e) => change(() => withCss(() => exec("hiliteColor", e.target.value))));
 for (const el of ["#blockType", "#fontFamily", "#fontSize", "#lineSpacing", "#textColor", "#hiliteColor"]) $(el).addEventListener("pointerdown", rememberSelection);
-$("#zoom").addEventListener("change", applyZoom);
+$("#zoom").addEventListener("change", () => { zoomPicked = true; applyZoom(); });
 $("#tableTools").addEventListener("click", (e) => { const b = e.target.closest("[data-tbl]"); if (b) { restoreSelection(); tableOp(b.dataset.tbl); } });
 $("#imgTools").addEventListener("click", (e) => { const b = e.target.closest("[data-img]"); if (b) imgAction(b.dataset.img); });
 $("#imageInput").addEventListener("change", async (e) => { const files = [...e.target.files]; e.target.value = ""; await insertImageFiles(files); });
@@ -1395,6 +1408,7 @@ async function start() {
   if (!opened) setDoc(newDoc());
   if (isPhone()) $("#zoom").value = "1";
   applyZoom();
+  autoFitZoom();
   const mode = q.get("mode");
   if (mode === "write" || mode === "translate") { openPanel("magic"); setMagicTab(mode); if (mode === "write") $("#aiPrompt").focus(); else placeCaret(editor.firstElementChild, true); }
   else if (q.get("panel") && ["find", "outline", "page", "recent"].includes(q.get("panel"))) openPanel(q.get("panel"));
@@ -1420,7 +1434,7 @@ function setTitle(t) { $("#docTitle").value = String(t || "").slice(0, 200); sta
 function setDocFont(key) { if (!FONT_FAMILIES[key]) return; $("#docFont").value = key; pageChanged(); }
 const ui = initUi({
   editor, viewer, paper, state, CMDS, change, exec, toast, placeCaret, rememberSelection, restoreSelection, selectedBlocks, syncModel, markDirty,
-  savedRange: () => savedRange, openPanel, closePanel, doExport, downloadPdfOf, newDocument, openTemplate, flushSave, setDoc, setZoom, setTitle, setDocFont,
+  savedRange: () => savedRange, openPanel, closePanel, doExport, downloadPdfOf, newDocument, openTemplate, flushSave, setDoc, setZoom, pickZoom, setTitle, setDocFont,
   onSave: (f) => hooks.save.push(f), onRender: (f) => hooks.render.push(f), onPanel: (name, f) => { hooks.panel[name] = f; },
 });
 

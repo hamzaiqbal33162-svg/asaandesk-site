@@ -210,7 +210,7 @@ function cellHtml(r, c, top, w, h, extra = "") {
     if (opt && text) inner = `<span class="pill" style="background:${esc(opt.color)}">${esc(text)}</span>`;
   }
   const img = m.images.get(key(r, c));
-  if (img) { cls += " ci"; inner = `<img class="cimg" alt="" src="${esc(img)}">` + (text ? `<span>${esc(text)}</span>` : ""); }
+  if (img) { cls += " ci" + (stl?.fit === "cover" ? " cover" : ""); inner = `<img class="cimg" alt="" src="${esc(img)}">` + (text ? `<span>${esc(text)}</span>` : ""); }
   return `<div class="${cls}" data-ref="${colName(c)}${r + 1}"${title} style="left:${left}px;top:${top}px;width:${w}px;height:${h}px;${css}">${inner ?? `<span>${esc(text)}</span>`}</div>`;
 }
 function render() {
@@ -1536,6 +1536,8 @@ async function showInsights(fixed = null) {
     if (r1 === r2 && c1 === c2) {
       ({ r1, c1, r2, c2 } = currentRegion(r1, c1));
       if (r1 === r2 && c1 === c2 && S.wb.getValue(s, r1, c1) === null) ({ r1, c1, r2, c2 } = { r1: 0, c1: 0, r2: used.rows - 1, c2: used.cols - 1 });
+      // a banner or KPI cards (1-2 rows): use the first real table below instead
+      if (r2 - r1 < 2) for (let rr = 0; rr < Math.min(used.rows, 80); rr++) { let cc = -1, n = 0; for (let k = 0; k < used.cols; k++) if (S.wb.getValue(s, rr, k) !== null) { if (cc < 0) cc = k; n++; } if (n < 2) continue; const g = currentRegion(rr, cc); if (g.r2 - g.r1 >= 2) { ({ r1, c1, r2, c2 } = g); break; } }
     }
     r2 = Math.min(r2, used.rows - 1); c2 = Math.min(c2, used.cols - 1);
     // Leave out a "Total" row at the bottom so it is not counted twice.
@@ -1786,13 +1788,13 @@ function chartSource(ch, s) {
 function chartSvg(lib, ch, s, w, h, withTitle) {
   const d = chartSource(ch, s);
   if (!d.labels.length || !d.series.length) return null;
-  const pal = CHART_PALETTES[ch.palette || 0] || CHART_PALETTES[0];
+  const pal = ch.colors?.length ? ch.colors : CHART_PALETTES[ch.palette || 0] || CHART_PALETTES[0];
   if (EXTRA_KINDS[ch.kind]) return extraChartSvg(d, ch, w, h, withTitle ? ch.title : "", pal);
   const values = ch.values ?? (ch.kind === "bar" && d.labels.length * d.series.length <= 14);
   const spec = { kind: ch.kind, title: withTitle ? ch.title : "", labels: d.labels, series: d.series, showValues: values ? true : undefined };
   let svg = lib.primsToSvg(lib.chartPrims(spec, w, h), w, h);
   // Colour themes: swap the engine's colours for the chosen palette.
-  if (ch.palette) (lib.PALETTE || []).forEach((c, i) => { if (pal[i]) svg = svg.split(c).join(pal[i]).split(c.toUpperCase()).join(pal[i]); });
+  if (ch.palette || ch.colors?.length) (lib.PALETTE || []).forEach((c, i) => { if (pal[i]) svg = svg.split(c).join(pal[i]).split(c.toUpperCase()).join(pal[i]); });
   if (ch.legend === false) svg = svg.replace(/<g[^>]*data-legend[^>]*>[\s\S]*?<\/g>/g, "");
   return svg;
 }
@@ -2169,7 +2171,10 @@ async function openGallery() {
   closeMenus();
   if (!els.galleryCards.dataset.ready) {
     const GL = await import("./gallery.js");
-    els.galleryCards.insertAdjacentHTML("beforeend", GL.TEMPLATES.map((t) => `<button type="button" class="card" data-template="${t.id}"><span class="mini-svg">${GL.thumb(t.id)}</span>${esc(t.name)}</button>`).join(""));
+    els.galleryCards.insertAdjacentHTML("beforeend", GL.TEMPLATES.map((t) => `<button type="button" class="card" data-template="${t.id}"><span class="mini-svg" data-th="${t.id}"></span>${esc(t.name)}</button>`).join(""));
+    // pictures are drawn only when their card comes into view (hundreds of templates)
+    const fillTh = (el) => { el.innerHTML = GL.thumb(el.dataset.th); delete el.dataset.th; }, pend = els.galleryCards.querySelectorAll("[data-th]");
+    if ("IntersectionObserver" in window) { const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { io.unobserve(e.target); fillTh(e.target); } }), { rootMargin: "300px" }); pend.forEach((el) => io.observe(el)); } else pend.forEach(fillTh);
     els.galleryCards.dataset.ready = "1";
   }
   if (typeof els.gallery.showModal === "function") els.gallery.showModal(); else els.gallery.setAttribute("open", "");
@@ -2561,7 +2566,7 @@ function chartOptions(c, anchor) {
     { id: "legend", label: (legendOn ? "✓ " : "") + "Show legend", run: flip("legend", true) },
     { id: "values", label: (valuesOn ? "✓ " : "") + "Show values", run: () => { snapshot(); c.values = !valuesOn; renderCharts(); scheduleSave(); } },
     "-",
-    ...PALETTE_NAMES.map((n, i) => ({ id: "pal" + i, label: ((c.palette || 0) === i ? "✓ " : "") + n + " colours", run: () => { snapshot(); c.palette = i; renderCharts(); scheduleSave(); } })),
+    ...PALETTE_NAMES.map((n, i) => ({ id: "pal" + i, label: (!c.colors?.length && (c.palette || 0) === i ? "✓ " : "") + n + " colours", run: () => { snapshot(); c.palette = i; delete c.colors; renderCharts(); scheduleSave(); } })),
   ]);
 }
 function toggleFreezeCols() {
@@ -2921,7 +2926,8 @@ async function exportPdfBytes() {
           if (!m.noGrid) { g.strokeStyle = "#e5e7eb"; g.lineWidth = 0.5; g.strokeRect(x, y, w, h); }
           if (st.bd) { g.strokeStyle = st.bc || "#334155"; g.lineWidth = st.bs === "thick" ? 2 : 1; g.setLineDash(st.bs === "dashed" ? [5, 3] : st.bs === "dotted" ? [1.5, 2.5] : []); g.beginPath(); if (st.bd.includes("t")) { g.moveTo(x, y); g.lineTo(x + w, y); } if (st.bd.includes("b")) { g.moveTo(x, y + h); g.lineTo(x + w, y + h); } if (st.bd.includes("l")) { g.moveTo(x, y); g.lineTo(x, y + h); } if (st.bd.includes("r")) { g.moveTo(x + w, y); g.lineTo(x + w, y + h); } g.stroke(); g.setLineDash([]); }
           const pic = pics.get(key(r, c));
-          if (pic) { const k2 = Math.min((w - 4) / pic.width, (h - 4) / pic.height); g.drawImage(pic, x + (w - pic.width * k2) / 2, y + (h - pic.height * k2) / 2, pic.width * k2, pic.height * k2); }
+          if (pic && st.fit === "cover") { const k2 = Math.max(w / pic.width, h / pic.height), sw = w / k2, sh = h / k2; g.drawImage(pic, (pic.width - sw) / 2, (pic.height - sh) / 2, sw, sh, x, y, w, h); }
+          else if (pic) { const k2 = Math.min((w - 4) / pic.width, (h - 4) / pic.height); g.drawImage(pic, x + (w - pic.width * k2) / 2, y + (h - pic.height * k2) / 2, pic.width * k2, pic.height * k2); }
           if (v === null || v === undefined) continue;
           let text = displayText(v, st);
           if (st.list) text = text.split("\n").map((l) => "• " + l).join("\n");

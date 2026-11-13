@@ -136,7 +136,8 @@ export async function exportPptx(design, { onStatus = () => {} } = {}) {
         slide.addText(t.content, { ...box, fontFace: PPT_FONT[t.family] || "Arial", fontSize: Math.max(1, t.size * 0.75), color: hex(t.color) || "1B2133", bold: !!t.bold, italic: !!t.italic, underline: t.underline ? { style: "sng" } : undefined, align: t.align === "justify" ? "justify" : t.align || "left", valign: "top", margin: 0, lineSpacingMultiple: t.lineHeight || 1.2, charSpacing: (t.letterSpacing || 0) * 0.75, fill: t.bg ? { color: hex(t.bg.color) || "FDE68A" } : undefined, transparency: tr || undefined, fit: "none", wrap: true });
         continue;
       }
-      if (l.type === "shape" && ["rect", "ellipse", "triangle", "star", "heart"].includes(l.shape.kind) && !(l.shape.fill === "none" && !hex(l.shape.stroke))) {
+      // Gradient shapes (glossy cards, see-through photo shades) go in as pictures, so they keep their look.
+      if (l.type === "shape" && !(l.shape.gradient?.stops?.length >= 2) && ["rect", "ellipse", "triangle", "star", "heart"].includes(l.shape.kind) && !(l.shape.fill === "none" && !hex(l.shape.stroke))) {
         const s = l.shape;
         const type = s.kind === "rect" ? (s.radius ? "roundRect" : "rect") : s.kind === "ellipse" ? "ellipse" : s.kind === "triangle" ? "triangle" : s.kind === "star" ? "star5" : "heart";
         const opts = { ...box, fill: hex(s.fill) ? { color: hex(s.fill), transparency: tr } : { type: "none" }, line: hex(s.stroke) && s.strokeWidth ? { color: hex(s.stroke), width: s.strokeWidth * 0.75 } : { type: "none" } };

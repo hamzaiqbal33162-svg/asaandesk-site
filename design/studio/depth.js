@@ -39,6 +39,8 @@ function outlineOf(l) {
   if (l.type === "shape") {
     const s = l.shape;
     if (s.kind === "line" || s.kind === "arrow" || !hex6(s.fill)) return null;
+    // See-through gradients (photo shades, soft blobs, glows) cast no shadow.
+    if (s.gradient?.stops?.some((c) => /^#[0-9a-f]{8}$/i.test(c))) return null;
     return { kind: s.kind, radius: +s.radius || 0, sides: s.sides, points: s.points, inner: s.inner };
   }
   if (l.type === "frame") {
@@ -158,7 +160,7 @@ function deepenPage(page, W, H, links, { stack = false } = {}) {
       gradientFill(s, lightText);
       // Gloss on round shapes (pills, circles): a soft white highlight over the top part.
       const round = s.kind === "ellipse" || (s.kind === "rect" && (+s.radius || 0) >= Math.min(l.w, l.h) * 0.4);
-      if (round && !lightText && !l.rotation && Math.min(l.w, l.h) >= S * 0.06) {
+      if (round && !lightText && !l.rotation && Math.min(l.w, l.h) >= S * 0.06 && !/^(Colour disc|Ring inside|Logo dot)$/.test(l.name || "")) {
         const hw = l.w * 0.8, hh = l.h * 0.42;
         const hl = shapeLayer(nid(l.id + "-hl"), l.x + l.w * 0.1, l.y + l.h * 0.07, hw, hh, { kind: s.kind === "ellipse" ? "ellipse" : "rect", radius: s.kind === "ellipse" ? 0 : hh / 2 }, "#ffffff", 0.22, 0, "Highlight");
         links.set(hl.id, l.id); out.push(hl);

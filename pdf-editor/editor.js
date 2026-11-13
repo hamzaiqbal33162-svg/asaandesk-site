@@ -79,8 +79,16 @@ function sampleColors(canvas, x, y, w, h) {
   const W = x1 - x0, H = y1 - y0;
   for (let i = 0; i < W; i++) ring.push(i * 4, ((H - 1) * W + i) * 4);
   for (let j = 0; j < H; j++) ring.push(j * W * 4, (j * W + W - 1) * 4);
+  // Paper = the colour covering most of the box (letters and a cell's border lines are always the minority). The ring
+  // median used before turned grey when a table row's box touched both of its cell borders (FIX-4: grey band).
+  const buckets = new Map();
+  for (let i = 0; i < data.length; i += 4) {
+    const key = (data[i] >> 3) << 10 | (data[i + 1] >> 3) << 5 | (data[i + 2] >> 3);
+    const b = buckets.get(key); if (b) { b.n++; b.r += data[i]; b.g += data[i + 1]; b.b += data[i + 2]; } else buckets.set(key, { n: 1, r: data[i], g: data[i + 1], b: data[i + 2] });
+  }
+  let top = null; for (const b of buckets.values()) if (!top || b.n > top.n) top = b;
   const med = (k) => ring.map((o) => data[o + k]).sort((a, b) => a - b)[ring.length >> 1];
-  const paper = [med(0), med(1), med(2)];
+  const paper = top && top.n * 3 >= data.length / 4 ? [Math.round(top.r / top.n), Math.round(top.g / top.n), Math.round(top.b / top.n)] : [med(0), med(1), med(2)];
   return { ink: lum(paper) - lum(ink) < 40 ? [0, 0, 0] : ink, paper };
 }
 
@@ -495,7 +503,9 @@ function addHit(page, run) {
   hit.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
     e.preventDefault();
-    editExistingText(page, run, hit);
+    // Like a text box in Canva: the caret goes where you click (double-click selects a word, triple-click the line),
+    // so Delete/Backspace removes only what you mean, never the whole line.
+    editExistingText(page, run, hit, false, { x: e.clientX, y: e.clientY });
   });
   page.hits.append(hit);
 }
@@ -653,6 +663,22 @@ function paragraphOf(page, run) {
     return L;
   };
   const first = lineOf(run);
+  // Table rows are separate boxes: a border (any horizontal rule) between two lines puts them in different cells, so
+  // they never join into one paragraph (a column of 8 rows used to become one box; editing one cell re-flowed all).
+  const vpPt = (x, y) => page.viewport.convertToViewportPoint(x, y);
+  const hRules = (pageScan(page)?.rules || []).map((ru) => { const [ax, ay] = vpPt(ru.x1, ru.y1), [bx, by] = vpPt(ru.x2, ru.y2); return { x0: Math.min(ax, bx), x1: Math.max(ax, bx), y0: Math.min(ay, by), y1: Math.max(ay, by) }; })
+    .filter((r) => r.y1 - r.y0 < 1.5 && r.x1 - r.x0 >= 4);
+  const ruledBetween = (A, B) => {
+    const up = A.baseline <= B.baseline ? A : B, dn = up === A ? B : A;
+    const yTop = up.baseline + S * 0.3, yBot = dn.baseline - S * 0.75;
+    const lo = Math.min(up.left, dn.left), hi = Math.max(up.left + up.width, dn.left + dn.width);
+    if (hRules.some((r) => (r.y0 + r.y1) / 2 > yTop && (r.y0 + r.y1) / 2 < yBot && r.x0 < hi && r.x1 > lo)) return true;
+    // Table/form rows without borders: both lines have other text on their own baseline across a column gap (a label
+    // with its value, a description with its amount). Those are rows of a table, not lines of one paragraph.
+    return rowPartner(up) && rowPartner(dn);
+  };
+  const rowPartner = (L) => (L._partner ??= free.some((o) => !L.runs.includes(o) && Math.abs(o.baseline - L.baseline) < S * 0.2 &&
+    (o.left > L.left + L.width + S * 1.5 || o.left + o.width < L.left - S * 1.5)));
   const anchor = { left: (l) => l.left, right: (l) => l.left + l.width, center: (l) => l.left + l.width / 2 };
   const tol = { left: S * 0.25, right: S * 0.3, center: S * 0.5 };
   let best = null;
@@ -665,7 +691,7 @@ function paragraphOf(page, run) {
       if (!same(o) || first.runs.includes(o)) continue;
       const d = Math.abs(o.baseline - first.baseline);
       if (d < S * 0.95 || d > S * 2.6 || (gap !== null && d >= gap)) continue;
-      if (fits(lineOf(o))) gap = d;
+      if (fits(lineOf(o)) && !ruledBetween(first, lineOf(o))) gap = d;
     }
     const lines = [first], used = new Set([first]);
     if (gap) {
@@ -673,7 +699,7 @@ function paragraphOf(page, run) {
         for (let y = first.baseline + dir * gap; lines.length < 60; y += dir * gap) {
           const near = [...new Set(free.filter((o) => same(o) && Math.abs(o.baseline - y) < S * 0.12).map(lineOf))].filter((L) => !used.has(L) && fits(L));
           const L = near.sort((a, b) => Math.abs(anchor[mode](a) - a0) - Math.abs(anchor[mode](b) - a0))[0];
-          if (!L) break;
+          if (!L || ruledBetween(dir > 0 ? lines[lines.length - 1] : lines[0], L)) break;
           used.add(L);
           if (dir > 0) lines.push(L); else lines.unshift(L);
         }
@@ -699,7 +725,7 @@ function paragraphOf(page, run) {
   return { lines: best.lines, index: best.lines.indexOf(first), gap: best.gap, align };
 }
 
-function editExistingText(page, run, hit, silent = false) {
+function editExistingText(page, run, hit, silent = false, point = null) {
   const top = run.baseline - run.size * BASELINE;
   const box = run.box
     ? { x: run.box.x0 - 2, y: run.box.y0 - 2, w: run.box.x1 - run.box.x0 + 4, h: run.box.y1 - run.box.y0 + 4 }
@@ -768,8 +794,28 @@ function editExistingText(page, run, hit, silent = false) {
   };
   data.base = { x, baseline, size, lineGap, color: [...color], font: fontSig(fontState), style: styleSig(data) };
   const item = addItem(data, false);
-  if (!silent) focusLine(item, para.index);
+  if (!silent) { if (point) focusAt(item, point, para.index); else focusLine(item, para.index); }
   return item;
+}
+
+// Caret at a screen point inside an item's text (falls back to the end of the clicked line).
+function focusAt(item, point, index) {
+  item.editing = true;
+  layoutItem(item);
+  item.span.focus({ preventScroll: true });
+  let range = null;
+  try {
+    if (document.caretRangeFromPoint) range = document.caretRangeFromPoint(point.x, point.y);
+    else if (document.caretPositionFromPoint) { const p = document.caretPositionFromPoint(point.x, point.y); if (p) { range = document.createRange(); range.setStart(p.offsetNode, p.offset); } }
+  } catch { range = null; }
+  if (!range || !item.span.contains(range.startContainer)) {
+    const node = item.span.firstChild, lines = item.text.split("\n");
+    if (!node) return focusText(item, false);
+    const end = lines.slice(0, Math.max(0, index) + 1).reduce((n, l) => n + l.length + 1, 0) - 1;
+    range = document.createRange(); range.setStart(node, Math.max(0, Math.min(end, node.length)));
+  }
+  range.collapse(true);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
 }
 
 // The table cell (or form field) a run sits in, in page pixels: the nearest borders around it.
@@ -3243,6 +3289,48 @@ viewer.addEventListener("wheel", (e) => {
   e.preventDefault();
   setZoom(state.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
 }, { passive: false });
+
+// Tools row (desktop): every tool stays reachable; the ones that do not fit go into a "More" menu instead of being cut
+// off at the window edge (Canva keeps its toolbar whole).
+(function fitToolsRow() {
+  const row = document.querySelector(".bar > .tools");
+  if (!row) return;
+  const more = document.createElement("button");
+  more.type = "button"; more.className = "tool more-tools"; more.hidden = true;
+  more.setAttribute("aria-haspopup", "menu"); more.setAttribute("aria-expanded", "false"); more.title = "More tools";
+  more.textContent = "More ▾";
+  row.append(more);
+  let menu = null;
+  const close = () => { menu?.remove(); menu = null; more.setAttribute("aria-expanded", "false"); };
+  more.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu) return close();
+    menu = document.createElement("div"); menu.className = "more-tools-menu"; menu.setAttribute("role", "menu");
+    for (const t of row.querySelectorAll(".tool.folded")) {
+      const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "menuitem"); b.textContent = t.textContent.trim();
+      b.addEventListener("click", () => { close(); t.click(); requestAnimationFrame(fit); });
+      menu.append(b);
+    }
+    document.body.append(menu);
+    const r = more.getBoundingClientRect();
+    menu.style.top = r.bottom + 6 + "px"; menu.style.left = Math.max(8, Math.min(r.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 8)) + "px";
+    more.setAttribute("aria-expanded", "true");
+    menu.querySelector("button")?.focus();
+  });
+  document.addEventListener("pointerdown", (e) => { if (menu && !menu.contains(e.target) && e.target !== more) close(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && menu) { close(); more.focus(); } });
+  const fit = () => {
+    const kids = [...row.children].filter((el) => el !== more);
+    kids.forEach((el) => el.classList.remove("folded"));
+    more.hidden = true;
+    if (matchMedia("(max-width: 640px)").matches || row.scrollWidth <= row.clientWidth + 1) return;
+    more.hidden = false;
+    for (let i = kids.length - 1; i >= 0 && row.scrollWidth > row.clientWidth + 1; i--) if (!kids[i].classList.contains("active")) kids[i].classList.add("folded");
+  };
+  if (typeof ResizeObserver === "function") new ResizeObserver(() => requestAnimationFrame(fit)).observe(row);
+  addEventListener("resize", fit);
+  requestAnimationFrame(fit);
+})();
 
 setupSignPad();
 setTool("edit");

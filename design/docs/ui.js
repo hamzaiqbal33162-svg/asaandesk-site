@@ -799,7 +799,7 @@ export function initUi(A) {
         bottom: {
           notes: true, timer: true, fullscreen: true, help: true,
           outline: (el) => renderOutline(el),
-          zoom: { get: () => Math.round(A.state.zoom * 100), set: (pct) => A.setZoom(pct / 100), min: 25, max: 300 },
+          zoom: { get: () => Math.round(A.state.zoom * 100), set: (pct) => (A.pickZoom || A.setZoom)(pct / 100), min: 25, max: 300 },
           pages: { count: pageCount, current: pageCur, go: (i) => viewer.scrollTo({ top: i * pagePx(), behavior: "smooth" }), add: () => { A.change(() => { editor.append(Object.assign(document.createElement("div"), { className: "pb", contentEditable: "false" }), Object.assign(document.createElement("p"), { innerHTML: "<br>" })); editor.lastElementChild.previousElementSibling.dataset.pb = "1"; }); viewer.scrollTo({ top: viewer.scrollHeight, behavior: "smooth" }); } },
         },
         setMode: (mode) => { editor.contentEditable = mode === "edit" ? "true" : "false"; document.body.dataset.mode = mode; A.toast(mode === "edit" ? "Editing." : mode === "comment" ? "Commenting: click a block to comment on it." : "Viewing only."); },
@@ -821,6 +821,17 @@ export function initUi(A) {
     A.onRender(() => comments.redraw());
     A.onRender(() => shell?.setTitle?.(A.state.doc.title));
     shell?.setTitle?.(A.state.doc.title);
+    // Word count in the bottom bar (Canva Docs shows it with the zoom); click for characters and reading time.
+    const wc = document.getElementById("wordCount");
+    if (wc && shell?.slots?.bottom) {
+      const wb = document.createElement("button");
+      wb.type = "button"; wb.className = "ads-bb ads-words"; wb.dataset.ads = "words"; wb.title = "Word count";
+      const sync = () => { wb.textContent = wc.textContent || "0 words"; wb.setAttribute("aria-label", `Word count: ${wb.textContent}`); };
+      wb.addEventListener("click", () => { const c = (document.getElementById("charCount")?.textContent || "").trim(); const n = parseInt((wc.textContent || "0").replace(/[^\d]/g, ""), 10) || 0; shell.toast(`${wc.textContent}, ${c}, about ${Math.max(1, Math.round(n / 200))} min to read`); });
+      sync(); new MutationObserver(sync).observe(wc, { childList: true, characterData: true, subtree: true });
+      const grow = shell.slots.bottom.querySelector(".ads-grow");
+      shell.slots.bottom.insertBefore(wb, grow || null);
+    }
     window.adApp.shell = shell;
     Object.assign(window.adApp, { suggest, comments, versions });
     return shell;

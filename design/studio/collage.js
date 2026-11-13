@@ -50,12 +50,12 @@ export function applyCollage(page, id, W, H, opts = {}) {
   return page;
 }
 
-/** Puts photos into the empty frames of a page, in order. Returns how many were placed. */
+/** Puts photos into the empty frames of a page (and frames still showing a template's sample photo), in order. */
 export function fillFrames(page, photos) {
   let k = 0;
   for (const f of page.layers) {
     if (k >= photos.length) break;
-    if (f.type !== "frame" || f.frame.image) continue;
+    if (f.type !== "frame" || (f.frame.image && !f.frame.image.stock)) continue;
     const ph = photos[k++];
     f.frame.image = { src: ph.src, nw: ph.nw, nh: ph.nh, crop: coverCrop(ph.nw, ph.nh, f.w, f.h) };
   }

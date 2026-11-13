@@ -12,7 +12,7 @@ import { DEFAULTS as ENHANCE_DEFAULTS, enhance as enhanceInline, safeScale, unsh
 import { History, newState, cloneState, newOverlay, overlayBox, pickOverlay, framePad, FRAMES, SHAPES, TEXT_STYLES, uid, ensureFx,
   styleOf, pasteStyle, SHADOWS, shadowById, statePixelIds, SHAPE_FRAMES } from "./doc.js";
 import { makeCanvas, getData, fromData, scaleDown, resizeTo, toBlob, decodeFile, composeBackground, drawOverlay, prepareOverlays,
-  applyFrame, elementsLib, stickerImage, PIXEL_LIMIT, keystone, blurredCopy, setOverlayImages, checker } from "./draw.js";
+  applyFrame, elementsLib, stickerImage, PIXEL_LIMIT, keystone, blurredCopy, setOverlayImages, checker, measureText } from "./draw.js";
 import { pdfFromJpeg, zipFiles } from "./pdf.js";
 import { FONT_FAMILIES, loadBrand } from "../shared/brand.js";
 import { saveProject, listProjects, getProject, deleteProject, putHandoff, takeHandoff } from "../shared/store.js";
@@ -39,6 +39,7 @@ let tool = mode === "full" ? "adjust" : mode;
 let selId = null;
 let busy = false;
 let lastExport = null;
+let tplPhoto = null; // id of the library / sample photo a template opened (null: the user's own photo)
 const ui = { split: false, splitAt: 0.5, before: false, brush: 36, brushDirty: false, exportFmt: "jpg", exportQ: 90, exportSize: "original", customW: 1200,
   enhance: { ...ENHANCE_DEFAULTS }, stickerCat: "all", stickerQuery: "", lastEnhance: null, aiPrompt: "", zoom: 100, addFocus: "elements",
   brushFor: null, clickTol: 30, editTab: "adjust" };
@@ -185,6 +186,7 @@ async function openFile(file, opts = {}) {
     putPix("orig", r.canvas, r.blob);
     st = newState({ w: r.canvas.width, h: r.canvas.height });
     st.pixels = "orig";
+    tplPhoto = opts.tplPhoto || null; // a template's (or sample) photo: picking another template swaps it for its own
     hist.reset(cloneState(st));
     projectId = null;
     selId = null;
@@ -218,6 +220,7 @@ async function openProject(id) {
       putPix(pid, r.canvas, blob);
     }
     st = ensureFx(rec.data.state);
+    tplPhoto = null;
     if (!pix.has(st.pixels)) throw new Error("This saved photo is incomplete.");
     fileName = rec.name || "photo";
     projectId = rec.id;
@@ -2246,14 +2249,69 @@ async function openSample(name, title, opts = {}) {
   const s = GALLERY.SAMPLES[name] || GALLERY.SAMPLES.lake;
   const c = await svgToCanvas(GALLERY.sceneSvg(name, "sample"), s.w, s.h);
   const blob = await toBlob(c, "image/png");
-  await openFile(new File([blob], (title || s.name) + ".png", { type: "image/png" }), opts);
+  await openFile(new File([blob], (title || s.name) + ".png", { type: "image/png" }), { tplPhoto: "sample:" + name, ...opts });
+}
+/** A template's real photo from the shared library (full size); the drawn sample photo if it cannot load. */
+async function openTemplatePhoto(t, opts = {}) {
+  const url = GALLERY.photoOf(t, "full");
+  if (url) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const blob = await res.blob();
+      await openFile(new File([blob], (t.photo.title || t.name || "photo") + ".jpg", { type: blob.type || "image/jpeg" }), { ...opts, tplPhoto: t.photo.id });
+      if (st && tplPhoto === t.photo.id) return;
+    } catch (e) { console.warn("template photo kept as the drawn sample", e); }
+  }
+  await openSample(t.sample, t.name, opts);
+}
+/** The open photo's finished size (after its crop shape) in px, for placing template text. */
+function finishedSize() {
+  const src = sourceFor("prev", false), g = geometryMatrix(src.width, src.height, st.geom, 1);
+  return { W: Math.max(1, g.outW), H: Math.max(1, g.outH) };
+}
+/** Extra photos of a template (collages, photo stacks) as pixels cut to their boxes: { photoId: pixId }. */
+async function loadTemplateImages(t) {
+  const out = {}, list = (t.overlays || []).filter((o) => o.type === "image" && o.photo);
+  if (!list.length) return out;
+  const want = CROP_PRESETS.find((c) => c.id === t.aspect)?.aspect;
+  const f = frameDims(), R = typeof want === "number" ? want : f.w / f.h, longPx = Math.max(st.src.w, st.src.h);
+  await Promise.all(list.map(async (o) => {
+    try {
+      const blob = await (await fetch(GALLERY.photoOf({ photo: o.photo }, "full"))).blob();
+      const r = await decodeFile(blob, null, { maxSide: 2400 });
+      const ratio = (o.w * R) / o.h, pw = Math.max(16, Math.round(Math.min(1600, longPx * Math.max(o.w, o.h)))), ph = Math.max(16, Math.round(pw / ratio));
+      const c = makeCanvas(pw, ph), sw = r.canvas.width, sh = r.canvas.height, k = Math.max(pw / sw, ph / sh);
+      c.getContext("2d").drawImage(r.canvas, (pw - sw * k) / 2, (ph - sh * k) / 2, sw * k, sh * k);
+      out[o.photo.id] = newPix(c);
+    } catch (e) { console.warn("template photo skipped", e); }
+  }));
+  return out;
+}
+/** Overlays of a template (shapes, extra photos, text) for the open photo; text anchored by its left / right edge is
+ * measured and placed the way the thumbnail shows it. */
+function templateOverlays(t, imgs = {}) {
+  const list = t.overlays || [...(t.shapes || []).map((s) => ({ type: "shape", ...s })), ...(t.texts || []).map((x) => ({ type: "text", ...x }))];
+  const { W, H } = finishedSize(), x = makeCanvas(2, 2).getContext("2d"), out = [];
+  for (const d of list) {
+    const { type, left, right, photo, ...props } = d;
+    if (type === "image") { const pid = photo && imgs[photo.id]; if (pid) out.push(newOverlay("image", { ...props, pixId: pid, name: photo.title || "Photo", tpl: true })); continue; }
+    const o = newOverlay(type, { ...props, tpl: true });
+    if (type === "text" && (left != null || right != null)) {
+      let hw = 0;
+      try { const m = measureText(x, o, W, H); hw = m.w / W / 2; } catch { /* no canvas text here */ }
+      o.x = left != null ? left + hw : right - hw;
+    }
+    out.push(o);
+  }
+  return out;
 }
 function redrawTemplates() { try { shell?.panel("templates")?._redraw?.(); } catch {} }
 const galleryView = {
   get TEMPLATES() { const cur = GALLERY.MODE_TOOL[mode]; return [...GALLERY.TEMPLATES.filter((t) => t.tool === cur), ...GALLERY.TEMPLATES.filter((t) => t.tool !== cur)]; },
   thumb: GALLERY.thumb,
 };
-function applyLook(t) {
+function applyLook(t, imgs = {}) {
   st.adjust = { ...NEUTRAL, ...(t.adjust || {}) };
   st.filter = t.filter ? { id: t.filter[0], intensity: t.filter[1] } : { id: "none", intensity: 100 };
   if (t.frame) st.frame = { ...st.frame, ...t.frame };
@@ -2262,10 +2320,13 @@ function applyLook(t) {
   ensureFx(st);
   st.fx = { ...st.fx, area: "all", duotone: t.duotone ? { id: t.duotone, amount: t.duotoneAmount ?? 100 } : null, invert: !!t.invert, opacity: t.opacity ?? 100 };
   st.overlays = st.overlays.filter((o) => !o.tpl);
-  for (const sh of t.shapes || []) st.overlays.push(newOverlay("shape", { ...sh, tpl: true }));
-  for (const tx of t.texts || []) st.overlays.push(newOverlay("text", { ...tx, tpl: true }));
+  for (const o of templateOverlays(t, imgs)) st.overlays.push(o);
   selId = null;
 }
+/** Template text uses the editor's fonts: load them before the text is measured and placed. */
+const templateFonts = (t) => prepareOverlays((t.overlays || t.texts || []).filter((o) => (o.type || "text") === "text")).catch(() => {});
+/** Does the template open its own photo? Yes when nothing is open, or when the open photo came from another template. */
+const wantsOwnPhoto = (t) => !st || (!!tplPhoto && !!t.photo && tplPhoto !== t.photo.id);
 /** Apply a gallery template for real: a look or layout, a new background, enhancer settings (then Enhance), or an AI edit idea. */
 async function applyTemplate(id) {
   const t = GALLERY.templateById(id);
@@ -2273,15 +2334,16 @@ async function applyTemplate(id) {
   if (busy) throw new Error("Please wait: the photo is still being worked on.");
   const want = GALLERY.TOOL_MODE[t.tool] || "full";
   if (mode !== "full" && mode !== want) { mode = "full"; setModeUi(); syncUrl(); renderTools(); }
-  const fresh = !st;
-  // the background remover's model starts loading while the sample photo is drawn (faster first result)
-  if ((t.kind === "bg" || t.panel === "bg") && !(st?.bg.removed)) imagetools().then((T) => T.preload?.("bg")).catch(() => {});
-  if (!st) { await openSample(t.sample, t.name, { quiet: true, pause: 300 }); if (!st) throw new Error("The sample photo could not open."); }
+  const fresh = wantsOwnPhoto(t);
+  // the background remover's model starts loading while the template's photo loads (faster first result)
+  if ((t.kind === "bg" || t.panel === "bg") && (fresh || !st?.bg.removed)) imagetools().then((T) => T.preload?.("bg")).catch(() => {});
+  if (fresh) { await openTemplatePhoto(t, { quiet: true, pause: 300 }); if (!st) throw new Error("The template's photo could not open."); }
   // keep the Templates panel open (like picking one template after another); other panels follow the tool
   const setTool = (x) => setToolFn(x, { fromFrame: !!shell && framePanel === "templates" });
   if (t.kind === "look") {
-    applyLook(t); commit();
-    setTool(t.panel || (t.texts?.length ? "add" : "adjust"));
+    const [imgs] = await Promise.all([loadTemplateImages(t), templateFonts(t)]);
+    applyLook(t, imgs); commit();
+    setTool(t.panel || ((t.overlays || t.texts || []).some((o) => (o.type || "text") === "text") ? "add" : "adjust"));
     toast(`${t.name} applied. Change anything you like.`);
   } else if (t.kind === "bg") {
     if (!st.bg.removed || !st.cutout) { setTool("bg"); if (fresh) await sleep(400); await runRemoveBackground({ quiet: true }); }
@@ -2293,10 +2355,13 @@ async function applyTemplate(id) {
       st.bg.imageId = putPix("p" + uid(), c);
     }
     Object.assign(st.bg, { mode: b.mode }, b.color ? { color: b.color } : {}, b.blur ? { blur: b.blur } : {});
-    st.bg.shadow = b.shadow ? { on: true, blur: 20, dist: 12, angle: 60, color: "#000000", alpha: 40, ...b.shadow } : null;
-    st.bg.outline = b.outline ? { on: true, width: 8, color: "#ffffff", ...b.outline } : null;
+    st.bg.shadow = b.shadow || t.cutShadow ? { on: true, blur: 20, dist: 12, angle: 60, color: "#000000", alpha: 40, ...b.shadow } : null;
+    st.bg.outline = b.outline || t.cutOutline ? { on: true, width: 8, color: "#ffffff", ...b.outline } : null;
     if (t.frame) st.frame = { ...st.frame, ...t.frame };
     if (t.aspect) { const f = frameDims(); st.geom.aspect = t.aspect; st.geom.crop = aspectCrop(f.w, f.h, aspectValue()); }
+    await templateFonts(t);
+    st.overlays = st.overlays.filter((o) => !o.tpl);
+    for (const o of templateOverlays(t)) st.overlays.push(o);
     commit();
     setTool("bg");
     showSplit();

@@ -524,7 +524,7 @@ function renderInspector() {
       ${isImg ? field("Show for", range("dur", M.clipLen(c), 0.5, 30, 0.5, "Photo seconds"), `${M.clipLen(c).toFixed(1)} s`) : trimFields(c, m)}
       ${isImg ? "" : speedFields(c)}
       ${isImg ? "" : volumeFields(c, m?.hasAudio !== false)}
-      ${fades}${field("Fit", seg("fit", [["contain", "Fit (show all)"], ["cover", "Fill (crop)"]], c.fit, "Fit"))}${lookFields(c)}${trans}
+      ${fades}${field("Fit", seg("fit", [["contain", "Fit (show all)"], ["cover", "Fill (crop)"]], c.fit, "Fit"))}${isImg ? field("Motion", seg("kb", Object.entries(C2.KEN_BURNS), c.kb || "", "Photo motion")) : ""}${lookFields(c)}${trans}
       <div class="mx-row"><button class="btn sm" data-act="toOverlay" title="Plays on top of the main video, small in a corner (picture-in-picture)">Move to overlay track</button></div>${actions}`;
   }
   I.innerHTML = html;
@@ -1419,18 +1419,21 @@ async function applyTemplate(id) {
   S.presetChosen = true;
   busy(+1, "Opening the template…");
   try {
+    const blobs = await Promise.all(t.scenes.map((sc) => sceneBlob(sc, t.preset))); // scene pictures drawn side by side
     for (const [i, sc] of t.scenes.entries()) {
-      const blob = await sceneBlob(sc, t.preset);
-      const m = await importOne(new File([blob], `${t.name} scene ${i + 1}.png`, { type: "image/png" }), "image");
+      const blob = blobs[i];
+      const m = await importOne(new File([blob], `${t.name} scene ${i + 1}.${blob.type === "image/jpeg" ? "jpg" : "png"}`, { type: blob.type }), "image");
       const c = M.addVideoClip(S.p, m);
       M.setTrim(S.p, c.id, { dur: sc.dur || 3 });
       c.fit = "cover";
-      if (i > 0) c.transition = { type: "crossfade", dur: 0.5 };
+      if (sc.kb && sc.kb !== "none") c.kb = sc.kb; // photo scenes play with a slow zoom or pan
+      if (i > 0) c.transition = { type: sc.tr?.type || "crossfade", dur: sc.tr?.dur ?? 0.5, ...(sc.tr?.dir ? { dir: sc.tr.dir } : {}) };
     }
     const lay = M.layoutVideo(S.p.video);
     t.scenes.forEach((sc, i) => {
       const e = lay[i]; if (!e) return;
-      (sc.texts || []).forEach((x, j) => { const { style, ...rest } = x; M.addText(S.p, { style, ...rest, start: Math.round((e.start + 0.15 + j * 0.35) * 100) / 100, dur: Math.max(0.8, Math.round((e.len - 0.3 - j * 0.35) * 100) / 100) }); });
+      // words come in one after another (template delay `at`, else 0.35 s apart) and stay to the end of their scene
+      (sc.texts || []).forEach((x, j) => { const { style, at, ...rest } = x, d = at ?? j * 0.35; M.addText(S.p, { style, ...rest, start: Math.round((e.start + 0.15 + d) * 100) / 100, dur: Math.max(0.8, Math.round((e.len - 0.3 - d) * 100) / 100) }); });
     });
     if (t.chapters) S.p.chapters = t.chapters.map((title, i) => ({ t: lay[i] ? Math.max(0, Math.round(lay[i].start)) : i * 3, title }));
     if (t.music) {

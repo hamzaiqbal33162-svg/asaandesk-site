@@ -7,7 +7,7 @@ import { serializeDrawing, parseDrawing, PRESETS, clampSize, slugName, FILE_EXT 
 import { saveProject, listProjects, getProject, deleteProject, uid, putHandoff } from "../shared/store.js";
 import { recognise, shapeBounds, tracePath, SHAPE_NAMES } from "./shapes-assist.js";
 import { loadBrand, FONT_FAMILIES, ensureFont } from "../shared/brand.js";
-import { TEMPLATES as GALLERY, templateById, svg as templateSvg, thumb as templateThumb } from "./gallery.js";
+import { TEMPLATES as GALLERY, templateById, svg as templateSvg, parts as templateParts, thumb as templateThumb } from "./gallery.js";
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -1330,22 +1330,51 @@ async function svgImage(text) {
     return { img, done: () => URL.revokeObjectURL(url) };
   } catch (e) { URL.revokeObjectURL(url); throw e; }
 }
+// An SVG drawn as a picture cannot load other files, so the library photos in a template (same-origin
+// /pdf-editor/photos/…) are put inside it as data: URLs first. A photo that cannot be read is left out: the
+// template keeps its neutral photo frame colour and still opens.
+const photoData = new Map();
+async function inlinePhotos(text) {
+  const re = /href="(\/pdf-editor\/photos\/[^"]+)"/g;
+  const urls = [...new Set([...text.matchAll(re)].map((m) => m[1]))];
+  await Promise.all(urls.filter((u) => !photoData.has(u)).map(async (u) => {
+    try {
+      const r = await fetch(u);
+      if (!r.ok) return;
+      const blob = await r.blob();
+      const data = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result || "")); fr.onerror = () => res(""); fr.readAsDataURL(blob); });
+      if (/^data:image\//.test(data)) { if (photoData.size > 24) photoData.clear(); photoData.set(u, data); }
+    } catch {}
+  }));
+  return text.replace(re, (m, u) => `href="${photoData.get(u) || ""}"`);
+}
 async function applyTemplate(id, { fresh = false } = {}) {
   const t = templateById(id);
   if (!t) { toast("That template was not found."); return false; }
   if (!fresh && state.saveStatus !== "saved") await saveNow();
-  const { img, done } = await svgImage(templateSvg(id));
+  // One layer per part of the artwork (frame/background, photos, lines/guides, title), bottom to top.
+  const list = (typeof templateParts === "function" && templateParts(id)) || [];
+  const src = list.length ? list : [{ name: t.full ? t.name : t.colouring ? "Lines" : "Template", svg: templateSvg(id) }];
+  const imgs = [];
+  try { for (const p of src) imgs.push({ name: p.name, ...(await svgImage(await inlinePhotos(p.svg))) }); }
+  catch (e) { imgs.forEach((x) => x.done()); throw e; }
   newDoc({ w: t.w, h: t.h, background: t.bg, name: t.name }, { save: false });
   const d = state.doc, base = d.layers[0];
-  base.name = t.full ? t.name : t.colouring ? "Lines" : "Template";
-  base.ctx.drawImage(img, 0, 0, d.w, d.h);
-  done();
+  const layers = imgs.map((im, i) => {
+    const l = i ? makeLayer(String(im.name).slice(0, 60)) : base;
+    if (!i) base.name = String(im.name).slice(0, 60);
+    l.ctx.drawImage(im.img, 0, 0, d.w, d.h);
+    im.done();
+    return l;
+  });
   if (t.colouring) {
     // Colour goes on a layer under the lines, so the lines stay sharp; the bucket looks at all layers.
-    const c = makeLayer("Colours"); d.layers = [c, base]; d.active = c;
+    const c = makeLayer("Colours"); d.layers = [...layers.slice(0, -1), c, layers[layers.length - 1]]; d.active = c;
     state.settings.fill.sampleAll = true; saveSettings();
-  } else if (!t.full) { const top = makeLayer("Layer 2"); d.layers = [base, top]; d.active = top; }
+  } else if (!t.full) { const top = makeLayer("Drawing"); d.layers = [...layers, top]; d.active = top; }
+  else { d.layers = layers; d.active = layers[0]; }
   renderLayerList(); syncOptions();
+  layers.slice(1).forEach((l) => { l.version++; queueThumb(l); });
   markChanged(base);
   if (t.colouring) setTool("fill");
   toast(t.colouring ? "Colouring page ready: pick a colour and tap inside a shape." : `Template "${t.name}" opened. Your last drawing is in My drawings.`);

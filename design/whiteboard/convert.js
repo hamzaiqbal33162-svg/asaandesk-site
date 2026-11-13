@@ -20,7 +20,8 @@ export function boardSections(board) {
     for (const c of board.objects) if (c.type === "connector" && ids.has(c.from?.id) && ids.has(c.to?.id)) { items.push(c); used.add(c.id); }
     out.push({ title: f.name || "Section", frame: f, items, rect: { x: f.x, y: f.y, w: f.w, h: f.h } });
   }
-  const loose = board.objects.filter((o) => o.type !== "frame" && !used.has(o.id));
+  // A template's title block above its sections (role "title") is the board's title, not a section of its own.
+  const loose = board.objects.filter((o) => o.type !== "frame" && !used.has(o.id) && !(frames.length && o.role === "title"));
   if (loose.length) {
     const r = unionRect(loose.map((o) => objectBounds(o, byId)));
     out.push({ title: frames.length ? "More ideas" : board.name || "Whiteboard", frame: null, items: loose, rect: r });

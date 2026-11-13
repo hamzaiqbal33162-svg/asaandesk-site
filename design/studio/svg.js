@@ -46,10 +46,15 @@ export function revealRuns(lines, reveal) {
   return lines.map((l) => ({ ...l, runs: l.runs.map((r) => { const ch = [...r.t]; const take = Math.max(0, Math.min(ch.length, left)); left -= take; return { ...r, t: ch.slice(0, take).join("") }; }) }));
 }
 
+/** One gradient stop; #rrggbbaa colours (see-through photo shades in templates) become colour + stop-opacity. */
+const stopTag = (c, at) => {
+  const m = /^(#[0-9a-f]{6})([0-9a-f]{2})$/i.exec(c || "");
+  return m ? `<stop offset="${n(at)}" stop-color="${m[1]}" stop-opacity="${n(parseInt(m[2], 16) / 255)}"/>` : `<stop offset="${n(at)}" stop-color="${c}"/>`;
+};
 /** A linear gradient (userSpaceOnUse over a w × h box) for gradient fills. g = { stops: [#hex…], angle }. */
 export function gradientDef(id, g, w, h) {
   const L = gradientLine(g.angle ?? 90, w, h), stops = g.stops || [];
-  return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${n(L.x1)}" y1="${n(L.y1)}" x2="${n(L.x2)}" y2="${n(L.y2)}">${stops.map((c, i) => `<stop offset="${n(i / Math.max(1, stops.length - 1))}" stop-color="${c}"/>`).join("")}</linearGradient>`;
+  return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${n(L.x1)}" y1="${n(L.y1)}" x2="${n(L.x2)}" y2="${n(L.y2)}">${stops.map((c, i) => stopTag(c, i / Math.max(1, stops.length - 1))).join("")}</linearGradient>`;
 }
 
 function textContent(l, env, ids) {

@@ -150,7 +150,7 @@ export const BLOCK_TYPES = {
   testimonials: {
     label: "Testimonials", desc: "What your customers say.", anchor: "reviews",
     fields: [{ k: "title", t: "text", label: "Title" },
-      { k: "items", t: "list", label: "Reviews", itemLabel: "Review", item: [{ k: "quote", t: "area", label: "Quote" }, { k: "name", t: "text", label: "Name" }, { k: "role", t: "text", label: "Role or city" }], add: () => ({ quote: "Great service!", name: "Customer name", role: "City" }) }],
+      { k: "items", t: "list", label: "Reviews", itemLabel: "Review", item: [{ k: "quote", t: "area", label: "Quote" }, { k: "name", t: "text", label: "Name" }, { k: "role", t: "text", label: "Role or city" }, { k: "photo", t: "image", label: "Photo (optional)", optional: true }], add: () => ({ quote: "Great service!", name: "Customer name", role: "City" }) }],
     make: () => ({ title: "What our customers say", items: [{ quote: "Quick, friendly and honest. Highly recommended.", name: "Hina A.", role: "Lahore" }, { quote: "They explained everything and the price was fair.", name: "Bilal K.", role: "Karachi" }] }),
   },
   faq: {
@@ -461,7 +461,7 @@ p{margin:0 0 1em}.wrap{width:min(1140px,100% - 40px);margin-inline:auto}
 .menu-btn .bars,.menu-btn .bars::before,.menu-btn .bars::after{display:block;width:18px;height:2px;background:currentColor;border-radius:2px;position:relative}.menu-btn .bars::before,.menu-btn .bars::after{content:"";position:absolute;left:0}.menu-btn .bars::before{top:-6px}.menu-btn .bars::after{top:6px}
 @media (max-width:780px){.menu-btn{display:inline-flex}.nav{display:none;position:absolute;left:0;right:0;top:100%;flex-direction:column;align-items:stretch;gap:12px;padding:12px 20px 22px;background:var(--bg);border-bottom:1px solid var(--ln);box-shadow:0 18px 30px rgba(0,0,0,.12)}.nav.open{display:flex}.nav ul{flex-direction:column;gap:0}.nav ul a{display:block;padding:12px 4px;border-bottom:1px solid var(--ln)}}
 .hero-grid{display:grid;grid-template-columns:1.05fr 1fr;gap:56px;align-items:center}.hero-media img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:var(--r);box-shadow:0 30px 60px rgba(0,0,0,.14)}
-.blk-hero .lead{font-size:1.22rem}.hero-c{max-width:820px}.blk-hero.has-img{padding:clamp(96px,14vw,180px) 0}
+.blk-hero .lead{font-size:1.22rem}.blk-hero h1{font-size:clamp(2.4rem,6.2vw,4.6rem);line-height:1.04;letter-spacing:-.035em}.hero-card h1{font-size:clamp(2.1rem,4.6vw,3.5rem)}.hero-c{max-width:820px}.blk-hero.has-img{padding:clamp(96px,14vw,180px) 0}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}.split.rev .split-media{order:2}.split-media img{width:100%;border-radius:var(--r);aspect-ratio:4/3;object-fit:cover}
 .text-block p:last-child{margin-bottom:0}
 .feat .ic{width:52px;height:52px;border-radius:calc(var(--r)*.8);display:grid;place-items:center;background:var(--pt);color:var(--pl);margin-bottom:16px}.ic svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.feat p{color:var(--mu);margin:0}
@@ -470,7 +470,7 @@ p{margin:0 0 1em}.wrap{width:min(1140px,100% - 40px);margin-inline:auto}
 .price{font:800 2.1rem/1.1 var(--hf);color:var(--hd);margin:4px 0 8px}.price small{font-size:.95rem;color:var(--mu);font-weight:600}.plan p{color:var(--mu)}
 .plan ul{list-style:none;padding:0;margin:6px 0 24px;flex:1}.plan li{padding:7px 0 7px 28px;position:relative;border-top:1px solid var(--ln)}.plan li::before{content:"";position:absolute;left:5px;top:15px;width:11px;height:6px;border:solid var(--pl);border-width:0 0 2.5px 2.5px;transform:rotate(-45deg)}
 .prod{display:flex;flex-direction:column;padding:16px}.prod img{width:100%;aspect-ratio:5/4;object-fit:cover;border-radius:calc(var(--r)*.8);margin-bottom:14px}.prod .price{font-size:1.35rem}.prod p{color:var(--mu);flex:1}.prod .btn{margin-top:6px}
-.quote{margin:0;display:flex;flex-direction:column}.quote blockquote{margin:0 0 16px;font-size:1.08rem;flex:1}.quote blockquote::before{content:"\\201C";display:block;font:800 3rem/1 var(--hf);color:var(--pl);height:.6em}.quote figcaption{color:var(--mu)}.quote strong{display:block;color:var(--hd)}
+.quote{margin:0;display:flex;flex-direction:column}.quote blockquote{margin:0 0 16px;font-size:1.08rem;flex:1}.quote blockquote::before{content:"\\201C";display:block;font:800 3rem/1 var(--hf);color:var(--pl);height:.6em}.quote figcaption{color:var(--mu)}.quote figcaption.has-av{display:flex;align-items:center;gap:12px}.quote .av{width:48px;height:48px;border-radius:50%;object-fit:cover;flex:none}.quote.big figcaption.has-av{justify-content:center;text-align:left}.quote strong{display:block;color:var(--hd)}
 .faq{max-width:820px;margin-inline:auto}.faq details{border:1px solid var(--ln);border-radius:var(--r);background:var(--card);margin-bottom:12px}
 .faq summary{cursor:pointer;padding:18px 22px;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:14px;color:var(--hd)}.faq summary::-webkit-details-marker{display:none}
 .faq summary::after{content:"+";font-size:1.6rem;line-height:1;color:var(--pl);transition:transform .2s}.faq details[open] summary::after{transform:rotate(45deg)}.faq .ans{padding:0 22px 20px;color:var(--mu)}.faq .ans p{margin:0}
@@ -670,9 +670,12 @@ export function renderSite(input, { mode = "export", imageMode = "inline", asset
           return `<article class="card prod">${I(`items.${i}.image`, p.name)}${T("h3", `items.${i}.name`, { ph: "Product name" })}<p class="price">${T("span", `items.${i}.price`, { ph: "Price" })}</p>${T("p", `items.${i}.text`, { multi: true, ph: "Short text" })}<a class="btn wa" href="${esc(waLink(d.whatsapp, msg))}" target="_blank" rel="noopener"${edit ? ' data-order="1"' : ""}>${iconSvg("chat")}<span>${esc(label)}</span></a></article>`;
         }).join("")}</div></div>`);
       }
-      case "testimonials":
-        if (variant === "single") return section(`<div class="wrap">${head(true, "")}<div class="quotes-big">${items("items").map((q, i) => `<figure class="quote big"><blockquote>${T("p", `items.${i}.quote`, { multi: true, ph: "What they said" })}</blockquote><figcaption>${T("strong", `items.${i}.name`, { ph: "Name" })}${T("span", `items.${i}.role`, { ph: "Role or city" })}</figcaption></figure>`).join("")}</div></div>`);
-        return section(`<div class="wrap">${head(true, "")}<div class="grid">${items("items").map((q, i) => `<figure class="card quote"><blockquote>${T("p", `items.${i}.quote`, { multi: true, ph: "What they said" })}</blockquote><figcaption>${T("strong", `items.${i}.name`, { ph: "Name" })}${T("span", `items.${i}.role`, { ph: "Role or city" })}</figcaption></figure>`).join("")}</div></div>`);
+      case "testimonials": {
+        // Reviewer name + role, with a small round photo when the review has one.
+        const who = (q, i) => { const n = T("strong", `items.${i}.name`, { ph: "Name" }) + T("span", `items.${i}.role`, { ph: "Role or city" }); return q.photo ? `<figcaption class="has-av">${I(`items.${i}.photo`, "", { cls: "av" })}<span>${n}</span></figcaption>` : `<figcaption>${n}</figcaption>`; };
+        if (variant === "single") return section(`<div class="wrap">${head(true, "")}<div class="quotes-big">${items("items").map((q, i) => `<figure class="quote big"><blockquote>${T("p", `items.${i}.quote`, { multi: true, ph: "What they said" })}</blockquote>${who(q, i)}</figure>`).join("")}</div></div>`);
+        return section(`<div class="wrap">${head(true, "")}<div class="grid">${items("items").map((q, i) => `<figure class="card quote"><blockquote>${T("p", `items.${i}.quote`, { multi: true, ph: "What they said" })}</blockquote>${who(q, i)}</figure>`).join("")}</div></div>`);
+      }
       case "faq":
         return section(`<div class="wrap">${head(true, "")}<div class="faq">${items("items").map((q, i) => `<details${edit ? " open" : ""}><summary>${T("span", `items.${i}.q`, { ph: "Question" })}</summary><div class="ans">${T("p", `items.${i}.a`, { multi: true, ph: "Answer" })}</div></details>`).join("")}</div></div>`);
       case "team":

@@ -7,6 +7,8 @@ export const BASE_COLORS = {
   accents: ["#5b4cf0", "#2f80ff", "#14b8a6", "#f59e0b", "#f43f5e", "#22c55e"],
   tints: ["#e8e5fe", "#dbeafe", "#ccfbf1", "#fef3c7", "#ffe4e6", "#dcfce7"],
   dark: "#1b2133", title: "#0f766e",
+  // Board backgrounds (very light), one per tint: a palette uses its own tints mixed with white.
+  paper: ["#f8f7ff", "#f4f8ff", "#f2fbf9", "#fffaf0", "#fff7f8", "#f4fbf6"],
   extra: { "#16a34a": ["accents", 5], "#e11d48": ["accents", 4], "#3b2fd0": ["accents", 0], "#b45309": ["accents", 3], "#0ea5e9": ["accents", 1], "#ec4899": ["accents", 4] },
 };
 
@@ -39,7 +41,7 @@ export const THEMES = [
   { id: "fitness", label: "Fitness", topic: "30-day challenge", items: ["Set the goals", "Weekly workouts", "Meal ideas", "Track progress", "Group classes", "Rest days", "Stretching guide", "Step challenge", "Water reminders", "Before and after photos", "Coach check-ins", "Prize for the winner"], people: ["Coach Sami", "Areeba, Yoga", "Kashif, Strength", "Fatima, Nutrition", "Jawad, Front desk", "Nida, Social"] },
   { id: "startup", label: "Tech startup", topic: "App launch", items: ["User interviews", "Landing page", "Beta testers", "Fix sign-up bugs", "Pricing plans", "App store page", "Onboarding emails", "Analytics events", "Press kit", "Support inbox", "Weekly demo", "Investor update"], people: ["Raza, CEO", "Komal, Product", "Hamza, Engineering", "Sobia, Design", "Waqas, Growth", "Anum, Support"] },
   { id: "ngo", label: "Nonprofit", topic: "Charity drive", items: ["Volunteer sign-up", "Donation boxes", "Partner schools", "Story videos", "Thank our donors", "Food packs", "Delivery routes", "Social posts", "Bank details page", "Monthly report", "Community meeting", "Next year's plan"], people: ["Shazia, Director", "Babar, Volunteers", "Uzma, Fundraising", "Naveed, Logistics", "Saima, Outreach", "Ehsan, Finance"] },
-  { id: "travel", label: "Travel", topic: "Family trip", items: ["Pick the dates", "Book flights", "Hotel shortlist", "Packing list", "Day trips", "Local food to try", "Travel insurance", "Currency and cards", "Photo spots", "Rainy-day plan", "Souvenirs", "Share the album"], people: ["Ammi, Plans", "Abbu, Budget", "Ayaan, Maps", "Mahnoor, Photos", "Daadi, Food", "Rayan, Games"] },
+  { id: "travel", label: "Travel", topic: "Family trip", items: ["Pick the dates", "Book flights", "Hotel shortlist", "Packing list", "Day trips", "Local food to try", "Travel insurance", "Currency and cards", "Photo spots", "Rainy-day plan", "Souvenirs", "Share the album"], people: ["Mum, Plans", "Dad, Budget", "Ayaan, Maps", "Mahnoor, Photos", "Grandma, Food", "Rayan, Games"] },
   { id: "marketing", label: "Marketing", topic: "Brand campaign", items: ["Campaign goal", "Target audience", "Key message", "Video ad", "Influencer list", "Email series", "Landing page", "Ad budget", "Posting calendar", "Giveaway", "Track the clicks", "Final report"], people: ["Mariam, Lead", "Junaid, Content", "Alina, Design", "Hammad, Ads", "Sadia, Social", "Fahad, Data"] },
 ];
 
@@ -54,13 +56,23 @@ export function paletteMap(pal) {
   for (const k of ["notes", "accents", "tints"]) B[k].forEach((c, i) => m.set(c, pal[k][i % pal[k].length]));
   m.set(B.dark, pal.dark); m.set(B.title, pal.title);
   for (const [c, [k, i]] of Object.entries(B.extra)) m.set(c, pal[k][i]);
+  B.paper.forEach((c, i) => m.set(c, mixWhite(pal.tints[i % pal.tints.length], 0.55)));
   return m;
 }
-/** Recolours built objects in place for a palette. */
+/** A colour mixed with white (t = share of white). */
+export function mixWhite(hex, t) {
+  const n = parseInt(String(hex).slice(1), 16), ch = (s) => Math.round(((n >> s) & 255) * (1 - t) + 255 * t);
+  return "#" + [16, 8, 0].map((s) => ch(s).toString(16).padStart(2, "0")).join("");
+}
+/** Recolours built objects in place for a palette (also the colour slots of icon stickers). */
 export function recolor(objects, pal) {
   const m = paletteMap(pal);
   if (!m.size) return objects;
-  for (const o of objects) for (const k of ["fill", "stroke", "color", "textColor"]) { const v = typeof o[k] === "string" ? o[k].toLowerCase() : null; if (v && m.has(v)) o[k] = m.get(v); }
+  const map = (v) => (typeof v === "string" && m.has(v.toLowerCase()) ? m.get(v.toLowerCase()) : v);
+  for (const o of objects) {
+    for (const k of ["fill", "stroke", "color", "textColor"]) if (typeof o[k] === "string") o[k] = map(o[k]);
+    if (o.type === "sticker" && o.element?.colors) o.element.colors = Object.fromEntries(Object.entries(o.element.colors).map(([k, v]) => [k, map(v)]));
+  }
   return objects;
 }
 /** Splits "layout~p03~school" into its parts (missing parts = defaults). */

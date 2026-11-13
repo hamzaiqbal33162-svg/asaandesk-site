@@ -1,5 +1,50 @@
-// Our own placeholder artwork for the website templates: simple generated SVG illustrations (no stock photos,
-// no third-party images) plus a small stroke icon set for feature cards. Everything here is pure (no DOM).
+// Pictures for the website templates: real photos from the shared library (CC0 / public domain, same origin, credits
+// in /pdf-editor/photos/CREDITS.md) for heroes, about, gallery, team, products and testimonials; our own simple SVG
+// drawings (kept for block defaults and saved sites) plus a small stroke icon set for feature cards. Pure (no DOM).
+import { photoUrl, themesFor, PHOTOS, PHOTO_BASE } from "../shared/photo-library.js";
+
+/* ------------------------------------------------------------------ library photos */
+export { PHOTO_BASE };
+const THUMB_OF = new Map(PHOTOS.map((p) => [PHOTO_BASE + p.file, PHOTO_BASE + p.thumb]));
+/** True for a same-origin library photo URL ("/pdf-editor/photos/…"). */
+export const isLibraryPhoto = (u) => typeof u === "string" && u.startsWith(PHOTO_BASE) && /^\/pdf-editor\/photos\/[\w.-]+\.(jpe?g|png|webp)$/i.test(u);
+/** The small (360 px) file of a full-size library photo URL; other URLs are returned unchanged. */
+export const thumbOf = (u) => THUMB_OF.get(u) || u;
+// Close matches for a topic: photos whose library theme or one of whose tags IS one of the topic's words (or a
+// multi-word tag like "living room" found in the topic), best first (more matching words, then the library's own theme
+// order for the topic). The picker stays inside them, so a travel hero never gets a circuit board. Only when fewer than
+// 3 photos match, the library's own theme guess for the topic is added. Ranked once per topic (thumbnails stay fast).
+const CLOSE = new Map();
+function close(topic) {
+  if (!CLOSE.has(topic)) {
+    const t = ` ${String(topic).toLowerCase()} `, words = t.split(/[^a-z]+/).filter((w) => w.length > 2), th = themesFor(topic);
+    const hits = (p) => (words.includes(p.theme) ? 1 : 0) + (p.tags || []).filter((g) => (g.includes(" ") ? t.includes(` ${g} `) : words.includes(g))).length;
+    let list = PHOTOS.map((p, i) => [hits(p), p, i]).filter(([h]) => h > 0);
+    if (list.length < 3) list = list.concat(PHOTOS.map((p, i) => [0, p, i]).filter(([h, p]) => p.theme === th[0] && !list.some(([, q]) => q === p)));
+    if (!list.length) list = PHOTOS.map((p, i) => [0, p, i]);
+    const bonus = (p) => { const k = th.indexOf(p.theme); return k < 0 ? 0 : 1 - k * 0.1; };
+    CLOSE.set(topic, list.sort((a, b) => b[0] + bonus(b[1]) - (a[0] + bonus(a[1])) || a[2] - b[2]).map(([, p]) => p));
+  }
+  return CLOSE.get(topic);
+}
+const fnv = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+/**
+ * A photo picker for one design: pick(topic, slot) -> full-size URL. The same seed always gives the same photos (one
+ * of the topic's best 4 to 12 matches, like the library's pickPhoto); one picker never repeats a photo while the topic
+ * still has unused close matches (then a repeat beats an unrelated photo).
+ */
+export function photoPicker(seed) {
+  const used = new Set();
+  const pick = (topic, slot = used.size) => {
+    const list = close(topic), fresh = list.filter((p) => !used.has(p.id)), src = fresh.length ? fresh : list;
+    const top = src.slice(0, Math.max(4, Math.min(12, src.length)));
+    const p = top[fnv(`${seed}:${slot}|${topic}`) % top.length];
+    if (p) used.add(p.id);
+    return photoUrl(p, "full");
+  };
+  pick.many = (topic, count, slot = "m") => Array.from({ length: count }, (_, i) => pick(topic, `${slot}${i}`));
+  return pick;
+}
 
 const n = (v) => String(Math.round(v * 10) / 10);
 /** SVG markup -> data: URL (percent-encoded, so quotes never break an HTML attribute or CSS url("…")). */

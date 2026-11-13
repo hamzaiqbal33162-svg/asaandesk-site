@@ -1,7 +1,8 @@
-// Website templates: our own sample content and generated illustrations (names, numbers and addresses are made up;
-// phone numbers are placeholders and emails use example.com). Pure: Node tests import this file.
+// Website templates: our own sample content with real library photos (CC0 / public domain, same origin) in the hero,
+// about, gallery, team, products and reviews, and section entrance animations (names, numbers and addresses are made
+// up; phone numbers are placeholders and emails use example.com). Pure: Node tests import this file.
 import { newBlock, normalizeSite, DEFAULT_THEME } from "./blocks.js";
-import { art, productArt } from "./art.js";
+import { art, photoPicker, thumbOf } from "./art.js";
 
 const L = (label, href) => ({ label, href });
 const WA = "923000000000";
@@ -9,11 +10,11 @@ const site = (name, description, theme, blocks, template) => normalizeSite({ ver
 
 const T = {
   business: {
-    label: "Small business", desc: "Home services, repairs, salons, clinics: services, prices, reviews and contact.", palette: "ink", art: () => art("work", "ink"),
-    make: () => site("BrightFix Home Services", "Same-day AC service, plumbing and electrical repairs in Lahore with fixed prices and a 30-day warranty.",
+    label: "Small business", desc: "Home services, repairs, salons, clinics: services, prices, reviews and contact.", palette: "ink",
+    make: (ph = photoPicker("business")) => site("BrightFix Home Services", "Same-day AC service, plumbing and electrical repairs in Lahore with fixed prices and a 30-day warranty.",
       { primary: "#2563eb", accent: "#f59e0b", headingFont: "sans", bodyFont: "sans", corners: "soft" }, [
         newBlock("header", { brand: "BrightFix", links: [L("Services", "#features"), L("Prices", "#pricing"), L("Reviews", "#reviews"), L("FAQ", "#faq"), L("Contact", "#contact")], cta: L("Book a visit", "#contact") }),
-        newBlock("hero", { eyebrow: "Lahore · Same-day visits", title: "Home repairs done right, the same day", text: "Trained technicians for AC service, plumbing and electrical work. Fixed prices, no surprises, and a 30-day warranty on every job.", primary: L("Book a visit", "#contact"), secondary: L("See prices", "#pricing"), image: art("work", "ink"), layout: "split" }),
+        newBlock("hero", { eyebrow: "Lahore · Same-day visits", title: "Home repairs done right, the same day", text: "Trained technicians for AC service, plumbing and electrical work. Fixed prices, no surprises, and a 30-day warranty on every job.", primary: L("Book a visit", "#contact"), secondary: L("See prices", "#pricing"), image: ph("interior home house sofa living", "hero"), layout: "split" }, { bg: "tint" }),
         newBlock("features", { title: "Why families choose BrightFix", intro: "Small team, big care. We treat your home like our own.", items: [
           { icon: "shield", title: "Trained and verified", text: "Every technician is trained, verified and carries an ID card." },
           { icon: "clock", title: "On time, every time", text: "Pick a time slot and we arrive within it, or the visit is free." },
@@ -38,17 +39,17 @@ const T = {
       ], "business"),
   },
   restaurant: {
-    label: "Restaurant", desc: "Cafés and restaurants: menu deals, gallery, reviews, location and table booking.", palette: "saffron", art: () => art("food", "saffron"),
-    make: () => site("Spice Garden Kitchen", "Fresh desi food cooked slow over charcoal. Family deals, dine-in and table booking on WhatsApp.",
+    label: "Restaurant", desc: "Cafés and restaurants: menu deals, gallery, reviews, location and table booking.", palette: "saffron",
+    make: (ph = photoPicker("restaurant")) => site("Spice Garden Kitchen", "Fresh desi food cooked slow over charcoal. Family deals, dine-in and table booking on WhatsApp.",
       { primary: "#c2410c", accent: "#eab308", headingFont: "serif", bodyFont: "sans", corners: "round" }, [
         newBlock("header", { brand: "Spice Garden", links: [L("Menu", "#pricing"), L("Our story", "#about"), L("Gallery", "#gallery"), L("Reviews", "#reviews"), L("Visit", "#location")], cta: L("Book a table", "#contact") }),
-        newBlock("hero", { eyebrow: "Open daily · 12pm to midnight", title: "Fresh desi food, cooked slow", text: "Charcoal karahi, handmade naan and our grandmother's recipes, served warm in the heart of the city.", primary: L("Book a table", "#contact"), secondary: L("See the menu", "#pricing"), image: art("food", "saffron"), layout: "cover" }),
-        newBlock("about", { title: "Our story", text: "Spice Garden started as a small family kitchen in 2012. Today we still grind our own spices every morning and cook every karahi to order.\nNo shortcuts, no frozen food: just honest flavour.", image: art("food", "saffron"), button: L("Book a table", "#contact"), side: "left" }),
+        newBlock("hero", { eyebrow: "Open daily · 12pm to midnight", title: "Fresh desi food, cooked slow", text: "Charcoal karahi, handmade naan and our grandmother's recipes, served warm in the heart of the city.", primary: L("Book a table", "#contact"), secondary: L("See the menu", "#pricing"), image: ph("restaurant dining dinner banquet", "hero"), layout: "cover" }),
+        newBlock("about", { title: "Our story", text: "Spice Garden started as a small family kitchen in 2012. Today we still grind our own spices every morning and cook every karahi to order.\nNo shortcuts, no frozen food: just honest flavour.", image: ph("restaurant kitchen chef cooking", "about"), button: L("Book a table", "#contact"), side: "left" }),
         newBlock("pricing", { title: "Family deals", intro: "Every deal comes with fresh naan, raita and salad.", plans: [
           { name: "Dinner for two", price: "Rs 3,200", period: "", text: "Perfect for a quiet night out.", features: ["Half chicken karahi", "2 naan and raita", "2 soft drinks"], button: L("Order on WhatsApp", "https://wa.me/" + WA + "?text=Dinner%20for%20two%20please"), featured: false },
           { name: "Family feast", price: "Rs 7,900", period: "", text: "Feeds 4 to 5 people.", features: ["Full mutton karahi", "Chicken tikka (6 pieces)", "Biryani (family size)", "Kheer for everyone"], button: L("Order on WhatsApp", "https://wa.me/" + WA + "?text=Family%20feast%20please"), featured: true },
           { name: "BBQ platter", price: "Rs 4,500", period: "", text: "Straight from the coals.", features: ["Seekh kebab and tikka", "Malai boti", "Grilled vegetables"], button: L("Order on WhatsApp", "https://wa.me/" + WA + "?text=BBQ%20platter%20please"), featured: false }] }, { bg: "alt" }),
-        newBlock("gallery", { title: "From our kitchen", intro: "", images: [11, 12, 13, 14, 15, 16].map((i, k) => ({ src: art("abstract", "saffron", i), caption: ["Charcoal karahi", "Fresh naan", "Seekh kebab", "Family biryani", "Kheer", "Mint raita"][k] })) }),
+        newBlock("gallery", { title: "From our kitchen", intro: "", images: ph.many("food dish meal plate naan spices", 6, "g").map((src, k) => ({ src, caption: ["Charcoal karahi", "Fresh naan", "Seekh kebab", "Family biryani", "Kheer", "Mint raita"][k] })) }),
         newBlock("testimonials", { title: "Guests love us", items: [
           { quote: "The best karahi we have had in years. The naan was still puffing when it arrived!", name: "Ahmed and Sana", role: "Family dinner" },
           { quote: "Warm staff, quick service and great value family deals.", name: "Mariam T.", role: "Food blogger" }] }, { bg: "tint" }),
@@ -63,17 +64,17 @@ const T = {
       ], "restaurant"),
   },
   portfolio: {
-    label: "Portfolio", desc: "Designers, photographers and freelancers: work gallery, services and contact.", palette: "rose", art: () => art("portrait", "rose", 1),
-    make: () => site("Sana Malik · Designer", "Brand identities, social media designs and packaging for small businesses.",
+    label: "Portfolio", desc: "Designers, photographers and freelancers: work gallery, services and contact.", palette: "rose",
+    make: (ph = photoPicker("portfolio")) => site("Sana Malik · Designer", "Brand identities, social media designs and packaging for small businesses.",
       { primary: "#e11d48", accent: "#7c3aed", headingFont: "sans", bodyFont: "sans", corners: "round" }, [
         newBlock("header", { brand: "Sana Malik", links: [L("Work", "#gallery"), L("Services", "#features"), L("About", "#about"), L("Contact", "#contact")], cta: L("Hire me", "#contact") }),
-        newBlock("hero", { eyebrow: "Graphic designer · Islamabad", title: "I design brands people remember", text: "Logos, social media posts and packaging for small businesses that want to look as good as they are.", primary: L("See my work", "#gallery"), secondary: L("Get a quote", "#contact"), image: art("portrait", "rose", 1), layout: "split" }),
-        newBlock("gallery", { title: "Selected work", intro: "A few projects from the last two years.", images: [21, 22, 23, 24, 25, 26].map((i, k) => ({ src: art("abstract", "rose", i), caption: ["Café brand identity", "Clothing label", "Social media set", "Book cover", "Event poster", "Tea packaging"][k] })) }, { bg: "alt" }),
+        newBlock("hero", { eyebrow: "Graphic designer · Islamabad", title: "I design brands people remember", text: "Logos, social media posts and packaging for small businesses that want to look as good as they are.", primary: L("See my work", "#gallery"), secondary: L("Get a quote", "#contact"), image: ph("workspace creative design", "hero"), layout: "left" }),
+        newBlock("gallery", { title: "Selected work", intro: "A few projects from the last two years.", images: ph.many("abstract creative design pattern", 6, "g").map((src, k) => ({ src, caption: ["Café brand identity", "Clothing label", "Social media set", "Book cover", "Event poster", "Tea packaging"][k] })) }, { bg: "alt" }),
         newBlock("features", { title: "What I can do for you", intro: "", items: [
           { icon: "palette", title: "Brand identity", text: "Logo, colours and fonts that fit your story." },
           { icon: "camera", title: "Social media designs", text: "Ready-to-post templates for Instagram and Facebook." },
           { icon: "gift", title: "Packaging and labels", text: "Boxes, tags and labels that stand out on the shelf." }] }),
-        newBlock("about", { title: "Hello, I'm Sana", text: "I have spent 7 years helping shops, cafés and start-ups find their look. I keep the process simple: one call, three ideas, and changes until you love it.", image: art("work", "rose"), button: L("Download my CV", "#contact"), side: "right" }),
+        newBlock("about", { title: "Hello, I'm Sana", text: "I have spent 7 years helping shops, cafés and start-ups find their look. I keep the process simple: one call, three ideas, and changes until you love it.", image: ph("workspace laptop coworking", "about"), button: L("Download my CV", "#contact"), side: "right" }),
         newBlock("testimonials", { title: "Kind words", items: [
           { quote: "Sana understood our café in one meeting. Customers now take photos of our cups!", name: "Omar F.", role: "Owner, Brew Corner" },
           { quote: "Fast, creative and very easy to work with.", name: "Rabia N.", role: "Founder, Lawn Label" }] }, { bg: "tint" }),
@@ -82,11 +83,11 @@ const T = {
       ], "portfolio"),
   },
   event: {
-    label: "Event", desc: "Conferences, weddings, workshops: date, schedule, speakers, tickets and venue.", palette: "violet", art: () => art("event", "violet"),
-    make: () => site("Makers Fest 2027", "A one-day festival for makers, founders and students: talks, workshops and a maker market.",
+    label: "Event", desc: "Conferences, weddings, workshops: date, schedule, speakers, tickets and venue.", palette: "violet",
+    make: (ph = photoPicker("event")) => site("Makers Fest 2027", "A one-day festival for makers, founders and students: talks, workshops and a maker market.",
       { primary: "#6d28d9", accent: "#f97316", headingFont: "sans", bodyFont: "sans", corners: "soft" }, [
         newBlock("header", { brand: "Makers Fest", links: [L("Schedule", "#schedule"), L("Speakers", "#speakers"), L("Tickets", "#tickets"), L("FAQ", "#faq"), L("Venue", "#location")], cta: L("Get tickets", "#tickets") }),
-        newBlock("hero", { eyebrow: "Saturday 13 March 2027 · Expo Centre", title: "Makers Fest 2027", text: "One day of talks, hands-on workshops and a market full of local makers. Come to learn, build and meet your people.", primary: L("Get tickets", "#tickets"), secondary: L("See the schedule", "#schedule"), image: art("event", "violet", 9), layout: "cover" }),
+        newBlock("hero", { eyebrow: "Saturday 13 March 2027 · Expo Centre", title: "Makers Fest 2027", text: "One day of talks, hands-on workshops and a market full of local makers. Come to learn, build and meet your people.", primary: L("Get tickets", "#tickets"), secondary: L("See the schedule", "#schedule"), image: ph("festival event conference seminar", "hero"), layout: "banner" }, { bg: "dark" }),
         Object.assign(newBlock("timeline", { title: "Schedule", items: [
           { when: "9:00", title: "Doors open and breakfast", text: "Pick up your badge and meet other makers." },
           { when: "10:00", title: "Opening talk: Start small, ship often", text: "Main hall." },
@@ -94,10 +95,10 @@ const T = {
           { when: "14:00", title: "Maker market", text: "60 local makers selling and showing their work." },
           { when: "17:00", title: "Awards and closing", text: "Best stall, best project and best team." }] }), { anchor: "schedule" }),
         Object.assign(newBlock("team", { title: "Speakers", intro: "People who build things and love to share how.", members: [
-          { photo: art("portrait", "violet", 0), name: "Dr Kamran I.", role: "Robotics teacher" },
-          { photo: art("portrait", "violet", 1), name: "Zara H.", role: "Product designer" },
-          { photo: art("portrait", "violet", 2), name: "Faisal M.", role: "Hardware founder" },
-          { photo: art("portrait", "violet", 3), name: "Nida S.", role: "Craft business owner" }] }, { bg: "alt" }), { anchor: "speakers" }),
+          { photo: ph("event conference meeting", "t0"), name: "Dr Kamran I.", role: "Robotics teacher" },
+          { photo: ph("event conference meeting", "t1"), name: "Zara H.", role: "Product designer" },
+          { photo: ph("event conference meeting", "t2"), name: "Faisal M.", role: "Hardware founder" },
+          { photo: ph("event conference meeting", "t3"), name: "Nida S.", role: "Craft business owner" }] }, { bg: "alt" }), { anchor: "speakers" }),
         Object.assign(newBlock("pricing", { title: "Tickets", intro: "Tickets include lunch, tea and all workshops.", plans: [
           { name: "Student", price: "Rs 1,000", period: "", text: "Bring your student card.", features: ["All talks", "One workshop", "Lunch and tea"], button: L("Book student ticket", "#contact"), featured: false },
           { name: "Standard", price: "Rs 2,500", period: "", text: "Most people pick this.", features: ["All talks", "Two workshops", "Lunch and tea", "Festival T-shirt"], button: L("Book standard ticket", "#contact"), featured: true },
@@ -113,11 +114,11 @@ const T = {
       ], "event"),
   },
   academy: {
-    label: "Tuition / academy", desc: "Tuition centres, schools and courses: subjects, teachers, fees and admissions.", palette: "teal", art: () => art("study", "teal"),
-    make: () => site("Bright Minds Academy", "Small-group tuition for Matric, FSc and O/A Levels with experienced teachers and weekly tests.",
+    label: "Tuition / academy", desc: "Tuition centres, schools and courses: subjects, teachers, fees and admissions.", palette: "teal",
+    make: (ph = photoPicker("academy")) => site("Bright Minds Academy", "Small-group tuition for Matric, FSc and O/A Levels with experienced teachers and weekly tests.",
       { primary: "#0f766e", accent: "#f59e0b", headingFont: "cambria", bodyFont: "calibri", corners: "soft" }, [
         newBlock("header", { brand: "Bright Minds Academy", links: [L("Subjects", "#features"), L("Teachers", "#team"), L("Fees", "#pricing"), L("FAQ", "#faq"), L("Admissions", "#contact")], cta: L("Free trial class", "#contact") }),
-        newBlock("hero", { eyebrow: "Admissions open for 2026–27", title: "Better grades with small classes and caring teachers", text: "Matric, FSc and O/A Level tuition in groups of 12. Weekly tests, monthly parent reports and a free trial class.", primary: L("Book a free trial", "#contact"), secondary: L("See fees", "#pricing"), image: art("study", "teal"), layout: "split" }),
+        newBlock("hero", { eyebrow: "Admissions open for 2026–27", title: "Better grades with small classes and caring teachers", text: "Matric, FSc and O/A Level tuition in groups of 12. Weekly tests, monthly parent reports and a free trial class.", primary: L("Book a free trial", "#contact"), secondary: L("See fees", "#pricing"), image: ph("education classroom school", "hero"), layout: "split" }, { bg: "alt" }),
         newBlock("features", { title: "Subjects we teach", intro: "Every subject is taught by a specialist teacher.", items: [
           { icon: "spark", title: "Mathematics", text: "Concepts first, then lots of practice." },
           { icon: "bolt", title: "Physics", text: "Clear explanations with real-life examples." },
@@ -125,12 +126,12 @@ const T = {
           { icon: "chat", title: "English", text: "Grammar, essays and speaking confidence." },
           { icon: "code", title: "Computer Science", text: "Programming practice on real computers." },
           { icon: "book", title: "Exam preparation", text: "Past papers and timed mock exams." }] }, { bg: "alt" }),
-        newBlock("about", { title: "Why parents trust us", text: "We keep classes small so every student is noticed. Teachers track progress every week and parents get a short report every month.\nOver 90% of our students improved their grade in the first term.", image: art("study", "teal"), button: L("Visit the academy", "#location"), side: "right" }),
+        newBlock("about", { title: "Why parents trust us", text: "We keep classes small so every student is noticed. Teachers track progress every week and parents get a short report every month.\nOver 90% of our students improved their grade in the first term.", image: ph("library books education", "about"), button: L("Visit the academy", "#location"), side: "right" }),
         newBlock("team", { title: "Our teachers", intro: "", members: [
-          { photo: art("portrait", "teal", 2), name: "Mr Adeel R.", role: "Mathematics, 12 years" },
-          { photo: art("portrait", "teal", 1), name: "Ms Farah J.", role: "Chemistry and Biology" },
-          { photo: art("portrait", "teal", 0), name: "Mr Hamid Q.", role: "Physics" },
-          { photo: art("portrait", "teal", 3), name: "Ms Amna Z.", role: "English" }] }),
+          { photo: ph("education classroom study", "t2"), name: "Mr Adeel R.", role: "Mathematics, 12 years" },
+          { photo: ph("education classroom study", "t1"), name: "Ms Farah J.", role: "Chemistry and Biology" },
+          { photo: ph("education classroom study", "t0"), name: "Mr Hamid Q.", role: "Physics" },
+          { photo: ph("education classroom study", "t3"), name: "Ms Amna Z.", role: "English" }] }),
         newBlock("pricing", { title: "Monthly fees", intro: "No admission fee this month. Sibling discount 10%.", plans: [
           { name: "Matric", price: "Rs 6,000", period: "/ month", text: "Classes 9 and 10.", features: ["3 subjects", "5 days a week", "Weekly tests"], button: L("Apply now", "#contact"), featured: false },
           { name: "FSc", price: "Rs 9,000", period: "/ month", text: "Pre-medical and pre-engineering.", features: ["4 subjects", "6 days a week", "Weekly tests", "Mock exams"], button: L("Apply now", "#contact"), featured: true },
@@ -149,20 +150,20 @@ const T = {
       ], "academy"),
   },
   shop: {
-    label: "Online shop", desc: "Sell on WhatsApp: product catalogue with prices and a one-tap order button.", palette: "forest", art: () => productArt("scarf", "forest"),
-    make: () => site("Loom and Clay", "Handmade scarves, candles and home décor from local artisans. Order on WhatsApp, cash on delivery across Pakistan.",
+    label: "Online shop", desc: "Sell on WhatsApp: product catalogue with prices and a one-tap order button.", palette: "forest",
+    make: (ph = photoPicker("shop")) => site("Loom and Clay", "Handmade scarves, candles and home décor from local artisans. Order on WhatsApp, cash on delivery across Pakistan.",
       { primary: "#15803d", accent: "#ca8a04", headingFont: "serif", bodyFont: "sans", corners: "round" }, [
         newBlock("header", { brand: "Loom and Clay", links: [L("Shop", "#shop"), L("Why us", "#features"), L("Reviews", "#reviews"), L("FAQ", "#faq"), L("Contact", "#contact")], cta: L("Order on WhatsApp", "https://wa.me/" + WA) }),
-        newBlock("hero", { eyebrow: "Handmade in Pakistan", title: "Beautiful handmade things for your home", text: "Every piece is made by local artisans. Order in one tap on WhatsApp and pay cash on delivery.", primary: L("Shop now", "#shop"), secondary: L("How ordering works", "#faq"), image: productArt("scarf", "forest"), layout: "split" }),
+        newBlock("hero", { eyebrow: "Handmade in Pakistan", title: "Beautiful handmade things for your home", text: "Every piece is made by local artisans. Order in one tap on WhatsApp and pay cash on delivery.", primary: L("Shop now", "#shop"), secondary: L("How ordering works", "#faq"), image: ph("interior home decor sofa living", "hero"), layout: "split" }, { bg: "alt" }),
         newBlock("products", { title: "Shop the collection", intro: "Tap \"Order on WhatsApp\" and we confirm your order in minutes.", whatsapp: WA, orderLabel: "Order on WhatsApp", items: [
-          { image: productArt("scarf", "forest"), name: "Block-print scarf", price: "Rs 2,400", text: "Soft cotton, hand block-printed." },
-          { image: productArt("candle", "forest"), name: "Jasmine candle", price: "Rs 1,200", text: "Soy wax, 30 hours of burn time." },
-          { image: productArt("mug", "forest"), name: "Glazed clay mug", price: "Rs 950", text: "Hand-thrown and kiln-fired." },
-          { image: productArt("bag", "forest"), name: "Embroidered tote", price: "Rs 1,800", text: "Strong canvas with hand embroidery." },
-          { image: productArt("plant", "forest"), name: "Terracotta planter", price: "Rs 1,500", text: "Comes with a small money plant." },
-          { image: productArt("bottle", "forest"), name: "Rose attar", price: "Rs 1,100", text: "Alcohol-free, 12 ml." },
-          { image: productArt("book", "forest"), name: "Handmade journal", price: "Rs 850", text: "Recycled paper, 120 pages." },
-          { image: productArt("shirt", "forest"), name: "Kids' kurta", price: "Rs 2,100", text: "Pure cotton, ages 2 to 8." }] }),
+          { image: ph("fashion textiles clothes", "p-scarf"), name: "Block-print scarf", price: "Rs 2,400", text: "Soft cotton, hand block-printed." },
+          { image: ph("calm soft light minimal", "p-candle"), name: "Jasmine candle", price: "Rs 1,200", text: "Soy wax, 30 hours of burn time." },
+          { image: ph("coffee cup", "p-mug"), name: "Glazed clay mug", price: "Rs 950", text: "Hand-thrown and kiln-fired." },
+          { image: ph("fashion bag leather", "p-bag"), name: "Embroidered tote", price: "Rs 1,800", text: "Strong canvas with hand embroidery." },
+          { image: ph("flowers garden", "p-plant"), name: "Terracotta planter", price: "Rs 1,500", text: "Comes with a small money plant." },
+          { image: ph("perfume fragrance bottle", "p-bottle"), name: "Rose attar", price: "Rs 1,100", text: "Alcohol-free, 12 ml." },
+          { image: ph("books notebook paper", "p-book"), name: "Handmade journal", price: "Rs 850", text: "Recycled paper, 120 pages." },
+          { image: ph("fashion clothes dresses", "p-shirt"), name: "Kids' kurta", price: "Rs 2,100", text: "Pure cotton, ages 2 to 8." }] }),
         newBlock("features", { title: "Why shop with us", intro: "", items: [
           { icon: "truck", title: "Cash on delivery", text: "Delivery across Pakistan in 3 to 5 days." },
           { icon: "heart", title: "Truly handmade", text: "Fair pay for every artisan we work with." },
@@ -180,12 +181,12 @@ const T = {
       ], "shop"),
   },
   cv: {
-    label: "Personal CV", desc: "Your online CV: about, experience, skills and contact.", palette: "slate", art: () => art("portrait", "slate", 3),
-    make: () => site("Ayesha Raza · Data analyst", "Data analyst with 5 years of experience in SQL, Python and Power BI dashboards.",
+    label: "Personal CV", desc: "Your online CV: about, experience, skills and contact.", palette: "slate",
+    make: (ph = photoPicker("cv")) => site("Ayesha Raza · Data analyst", "Data analyst with 5 years of experience in SQL, Python and Power BI dashboards.",
       { primary: "#334155", accent: "#0ea5e9", headingFont: "serif", bodyFont: "sans", corners: "sharp" }, [
         newBlock("header", { brand: "Ayesha Raza", links: [L("About", "#about"), L("Experience", "#experience"), L("Skills", "#skills"), L("Contact", "#contact")], cta: L("Email me", "mailto:ayesha@example.com") }),
-        newBlock("hero", { eyebrow: "Data analyst · Lahore", title: "Hi, I'm Ayesha. I turn data into clear decisions.", text: "5 years of building dashboards, cleaning messy data and explaining numbers in plain words.", primary: L("Contact me", "#contact"), secondary: L("See experience", "#experience"), image: art("portrait", "slate", 3), layout: "split" }),
-        newBlock("about", { title: "About me", text: "I studied Statistics at university and have worked with retail, banking and health teams since 2021.\nI enjoy turning a messy spreadsheet into one simple chart that everyone understands.", image: "", button: L("", ""), side: "left" }, { bg: "alt" }),
+        newBlock("hero", { eyebrow: "Data analyst · Lahore", title: "Hi, I'm Ayesha. I turn data into clear decisions.", text: "5 years of building dashboards, cleaning messy data and explaining numbers in plain words.", primary: L("Contact me", "#contact"), secondary: L("See experience", "#experience"), image: ph("workspace laptop desk", "hero"), layout: "left" }, { bg: "alt" }),
+        newBlock("about", { title: "About me", text: "I studied Statistics at university and have worked with retail, banking and health teams since 2021.\nI enjoy turning a messy spreadsheet into one simple chart that everyone understands.", image: ph("notebook pen writing workspace", "about"), button: L("", ""), side: "left" }, { bg: "alt" }),
         Object.assign(newBlock("timeline", { title: "Experience and education", items: [
           { when: "2024 – now", title: "Senior data analyst, a retail chain", text: "Built the weekly sales dashboard used by 40 store managers." },
           { when: "2021 – 2024", title: "Data analyst, a microfinance bank", text: "Automated monthly reports and cut prep time from 3 days to 3 hours." },
@@ -203,10 +204,24 @@ const T = {
   },
 };
 
+// Section entrance animations (they play in Preview and on the published site as visitors scroll, like Canva websites).
+const ANIM = { hero: "fade", gallery: "zoom", pricing: "pop", products: "pop", about: "pan" };
+// Reviewers' photos (small round pictures next to each review): photo-library topic per template.
+const PEOPLE = { business: "interior home", restaurant: "restaurant food dining", portfolio: "workspace creative design", event: "conference event seminar", academy: "education study classroom", shop: "fashion shopping boutique", cv: "workspace coworking meeting" };
+/** Animations + review photos on a freshly built template site (blocks that already have them keep theirs). */
+export function finishSite(site, id) {
+  const ph = photoPicker(`${id}:people`);
+  for (const b of site.blocks) {
+    if (b.type !== "header" && b.type !== "footer" && !b.style.anim) b.style.anim = ANIM[b.type] || "rise";
+    if (b.type === "testimonials" && PEOPLE[id]) b.data.items.forEach((q, i) => { if (!q.photo) q.photo = ph(PEOPLE[id], "q" + i); });
+  }
+  return site;
+}
 export const TEMPLATES = Object.entries(T).map(([id, t]) => ({ id, label: t.label, desc: t.desc, palette: t.palette }));
-export const templateArt = (id) => (T[id] || T.business).art();
+/** A small picture for a template card: its hero photo (the small library file). */
+export const templateArt = (id) => { const h = makeTemplate(T[id] ? id : "business").blocks.find((b) => b.type === "hero"); return thumbOf(h?.data.image || h?.style.bgImage || ""); };
 /** A fresh site from a template (new block ids every time). */
-export function makeTemplate(id) { return (T[id] || T.business).make(); }
+export function makeTemplate(id) { const k = T[id] ? id : "business"; return finishSite(T[k].make(), k); }
 /** A nearly empty site: header, hero and footer. */
 export function blankSite() {
   return normalizeSite({ name: "My website", description: "", theme: { ...DEFAULT_THEME }, template: "blank", blocks: [

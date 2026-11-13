@@ -287,6 +287,11 @@ function initBar() {
   on("mockup-download", async (m) => { try { const b = await mockupPng(m); download(b, `${fileBase(S.design)}-${m.product}-mockup.png`); toast("Mockup saved."); } catch (e) { toast(e.message); } });
   const bar = $("#pagebar");
   bar.querySelector("[data-act=add]").addEventListener("click", () => E.addPage());
+  // Canva: a small ▾ next to "+" with the page options (add, add from another design, duplicate, delete, hide, lock…).
+  const addMenu = h("button.btn.small.st-addmenu", { type: "button", "data-act": "addmenu", "aria-label": "More page options", title: "More page options", "aria-haspopup": "menu",
+    html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>` });
+  addMenu.addEventListener("click", () => { E.select([]); const r = addMenu.getBoundingClientRect(); P3.contextMenu(Math.max(6, r.right - 240), Math.max(6, r.top - 330)); });
+  bar.querySelector("[data-act=add]").after(addMenu);
   // Several pages picked (Ctrl / Cmd + click on thumbnails): duplicate or delete them all.
   const picked = () => (S.pageSel?.size > 1 ? [...S.pageSel].filter((i) => i < S.design.pages.length).sort((a, b) => a - b) : null);
   bar.querySelector("[data-act=dup]").addEventListener("click", () => { const p = picked(); if (p) { E.dupPages(p); S.pageSel = null; } else E.dupPage(); });
@@ -643,7 +648,9 @@ function mountFrame() {
     bottom: {
       notes: true, timer: true, fullscreen: true, help: true,
       zoom: { get: () => Math.round(S.zoom * 100), set: (v) => E.setZoom(v / 100), min: 5, max: 400 },
-      pages: { count: () => S.design?.pages.length || 1, current: () => S.page, go: (i) => E.goPage(i), add: () => E.addPage(), thumb: (i) => pageThumb(i), name: (i) => S.design?.pages[i]?.title || "", duplicate: (i) => { E.goPage(i); E.dupPage(); }, remove: (i) => { if (S.design.pages.length < 2) return; E.goPage(i); E.deletePage(); }, move: (from, to) => E.movePage(from, to) },
+      pages: { count: () => S.design?.pages.length || 1, current: () => S.page, go: (i) => E.goPage(i), add: () => E.addPage(), thumb: (i) => pageThumb(i), name: (i) => S.design?.pages[i]?.title || "", duplicate: (i) => { E.goPage(i); E.dupPage(); }, remove: (i) => { if (S.design.pages.length < 2) return; E.goPage(i); E.deletePage(); }, move: (from, to) => E.movePage(from, to),
+        // "Pages" in the bottom bar shows/hides Studio's own page strip (Canva), remembered per browser.
+        strip: { shown: () => !$("#pagebar").hidden, toggle: (on) => { $("#pagebar").hidden = !on; try { localStorage.setItem("st-pagebar", on ? "1" : "0"); } catch {} } } },
     },
     setMode: (m) => { document.body.dataset.mode = m; if (m !== "edit") { if (S.editing) E.endEdit(); E.select([]); } },
     onPanel: (id) => { if (!id || !OWN_PANELS.includes(id)) UI.panelClosed(); },
@@ -664,6 +671,8 @@ function mountFrame() {
   const pmb = h("button.ads-tb.ads-sq.st-present-more", { type: "button", id: "presentMenuBtn", title: "More ways to present", "aria-label": "More ways to present", "aria-haspopup": "menu", html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`, on: { click: (e) => togglePresentMenu(e.currentTarget) } });
   top.insertBefore(pmb, shareB);
   UI.restoreProps();
+  try { if (localStorage.getItem("st-pagebar") === "0") $("#pagebar").hidden = true; } catch {}
+  shell.refresh();
   window.adShell = shell;
 }
 async function applyTemplateFromPanel(id) {

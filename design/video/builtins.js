@@ -4,18 +4,41 @@ import { sceneSvg } from "./gallery.js";
 import { encodeWav } from "./wav.js";
 import { PRESETS } from "./model.js";
 
-/** PNG blob of a colour scene in the project's size (long side 1280 px, enough for 1080p export of a flat picture). */
+/**
+ * Picture of a scene in the project's size. Colour scenes: PNG, long side 1280 px (a flat picture). Template scenes with
+ * library photos: JPEG, long side 1920 px (sharp at 1080p, with room for the slow zoom), the same-origin photos put into
+ * the SVG as data URLs first (an SVG drawn as an image can't load files) and fully loaded before the frame is drawn.
+ */
 export async function sceneBlob(scene, presetId) {
-  const pr = PRESETS[presetId] || PRESETS.youtube, k = 1280 / Math.max(pr.w, pr.h), w = Math.round(pr.w * k), h = Math.round(pr.h * k);
-  const svg = sceneSvg(scene, w, h);
+  const photo = !!scene?.look, L = photo ? 1920 : 1280;
+  const pr = PRESETS[presetId] || PRESETS.youtube, k = L / Math.max(pr.w, pr.h), w = Math.round(pr.w * k), h = Math.round(pr.h * k);
+  let svg = sceneSvg(scene, w, h);
+  if (photo) svg = await inlinePhotos(svg);
   const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
   try {
     const img = new Image(); img.decoding = "async"; img.src = url;
     await img.decode();
     const c = document.createElement("canvas"); c.width = w; c.height = h;
     c.getContext("2d").drawImage(img, 0, 0, w, h);
-    return await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("This browser could not draw the scene."))), "image/png"));
+    return await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("This browser could not draw the scene."))), photo ? "image/jpeg" : "image/png", 0.9));
   } finally { URL.revokeObjectURL(url); }
+}
+const photoData = new Map();
+/** Replaces /pdf-editor/photos/… hrefs with data URLs of the decoded photos (a missing photo leaves its colour box). */
+async function inlinePhotos(svg) {
+  const urls = [...new Set([...svg.matchAll(/href="(\/pdf-editor\/photos\/[^"]+)"/g)].map((m) => m[1]))];
+  await Promise.all(urls.filter((u) => !photoData.has(u)).map(async (u) => {
+    let d = "";
+    try {
+      const r = await fetch(u); if (!r.ok) throw new Error(r.status);
+      const b = await r.blob();
+      const img = new Image(); img.src = URL.createObjectURL(b);
+      try { await img.decode(); } finally { URL.revokeObjectURL(img.src); } // the photo is a picture this browser can draw
+      d = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result || "")); fr.onerror = () => res(""); fr.readAsDataURL(b); });
+    } catch { d = ""; }
+    if (d) photoData.set(u, d); // a failed photo is tried again next time
+  }));
+  return svg.replace(/href="(\/pdf-editor\/photos\/[^"]+)"/g, (m, u) => (photoData.get(u) ? `href="${photoData.get(u)}"` : 'href=""'));
 }
 
 // ---------- sounds (mono 22.05 kHz WAV) ----------

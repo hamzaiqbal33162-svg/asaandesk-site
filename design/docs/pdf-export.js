@@ -185,10 +185,10 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
 
   /** A coloured block: background rectangle (+ our decoration picture), text inside with padding. */
   async function bandParagraph(toks, blk, lh) {
-    const b = blk.band, pad = (b.pad ?? 14) * 0.75, deco = b.deco && DECOS[b.deco];
+    const b = blk.band, pad = (b.pad ?? 14) * 0.75, deco = !b.bgimg && b.deco && DECOS[b.deco];
     const decoLeft = deco && deco.pos === "left";
     const minH = (b.minh || 0) * 0.75;
-    const padL = decoLeft ? Math.max(82, minH * 0.95) : Math.max(pad, 13.5), padR = deco && !decoLeft ? Math.max(90, minH * 1.3) : Math.max(pad, 13.5);
+    const padL = decoLeft ? Math.max(82, minH * 0.95) : Math.max(pad, 13.5), padR = b.bgimg && (b.ov === "split" || b.ov === "soft") ? blk.width * 0.44 : deco && !decoLeft ? Math.max(90, minH * 1.3) : Math.max(pad, 13.5);
     const innerW = Math.max(40, blk.width - padL - padR);
     const lines = await wrap(toks, innerW, blk.size);
     const textH = lines.reduce((a, l) => a + l.size * lh, 0);
@@ -197,7 +197,21 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
     ensure(h);
     const top = y;
     if (b.bg) { const c = rgbOf(b.bg); page.drawRectangle({ x: blk.x, y: H - top - h, width: blk.width, height: h, color: rgb(c[0] / 255, c[1] / 255, c[2] / 255) }); }
-    if (deco && loadImage) {
+    if (b.bgimg && loadImage && PDFLib.pushGraphicsState && PDFLib.clip) {
+      // Photo band: the photo covers the block (cropped by a clip), then the overlay in the band colour keeps text readable.
+      try {
+        const got = await loadImage(b.bgimg);
+        const img = await out.embedPng(got.bytes);
+        const by = H - top - h, k = Math.max(blk.width / img.width, h / img.height), iw = img.width * k, ih = img.height * k;
+        page.pushOperators(PDFLib.pushGraphicsState(), PDFLib.rectangle(blk.x, by, blk.width, h), PDFLib.clip(), PDFLib.endPath());
+        page.drawImage(img, { x: blk.x + (blk.width - iw) / 2, y: by + (h - ih) / 2, width: iw, height: ih });
+        page.pushOperators(PDFLib.popGraphicsState());
+        const c = b.ov === "soft" ? [255, 255, 255] : rgbOf(b.bg || "#1b2133"), col = rgb(c[0] / 255, c[1] / 255, c[2] / 255);
+        if (b.ov === "tint") page.drawRectangle({ x: blk.x, y: by, width: blk.width, height: h, color: col, opacity: 0.66 });
+        else { const steps = 12; for (let i = 0; i < steps; i++) { const f = i / steps, a = b.ov === "split" || b.ov === "soft" ? (f < 0.44 ? 0.97 : Math.max(0, 0.97 - (f - 0.44) * 1.8)) : 0.94 - f * 0.74; page.drawRectangle({ x: blk.x + f * blk.width, y: by, width: blk.width / steps + 0.5, height: h, color: col, opacity: a }); } }
+      } catch { /* the band colour stays when the photo cannot be read */ }
+    }
+    if (deco && loadImage && !b.bgimg) {
       try {
         const got = await loadImage(svgDataUrl(decoSvg(b.deco, b.dc, b.dc2)));
         const img = await out.embedPng(got.bytes);

@@ -1,7 +1,7 @@
 // Draws the composition on a canvas, plays it with sound (WebAudio) and exports it:
 // WebM = canvas.captureStream + MediaStreamDestination + MediaRecorder (real time), MP4 = that WebM converted by ffmpeg.wasm.
 import { layoutVideo, projectDuration } from "./model.js";
-import { frameAt, fitRect, needsFill, audioSegments, scheduleFor, gainAt, safeAreas, endScreenLayout, exportSize, easeOut, overlayRect, transitionGeom, frameIndexAt, filterCss, cropSource } from "./compose.js";
+import { frameAt, fitRect, needsFill, audioSegments, scheduleFor, gainAt, safeAreas, endScreenLayout, exportSize, easeOut, overlayRect, transitionGeom, frameIndexAt, filterCss, cropSource, kenBurns } from "./compose.js";
 import { FONT_FAMILIES, ensureFont } from "../shared/brand.js";
 import { mediaHolder, seekTo, pickType, WEBM_VIDEO_TYPES, bitrateFor, startRecorder, finishPicture, NOTHING_RECORDED } from "./mediakit.js";
 import { fixWebmDuration } from "./webm.js";
@@ -247,7 +247,13 @@ export function drawFrame(ctx, W, H, p, plan, src, { guides = false, image = nul
           if (p.background?.mode === "blur") drawBlurFill(ctx, s, sw0, sh0, W, H);
           else { ctx.fillStyle = p.background?.color || "#000"; ctx.fillRect(0, 0, W, H); }
         }
-        drawMedia(ctx, s, cs, fitRect(sw, sh, W, H, c.fit), c);
+        const r = fitRect(sw, sh, W, H, c.fit);
+        if (c.kind === "image" && c.kb) {
+          // picture motion (slow zoom / pan over the clip's length), kept inside the frame (also during slide/push transitions)
+          ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+          drawMedia(ctx, s, cs, kenBurns(r, c.kb, v.entry.len > 0 ? v.src / v.entry.len : 0, W, H), c);
+          ctx.restore();
+        } else drawMedia(ctx, s, cs, r, c);
       }
     }
     if (g) ctx.restore();

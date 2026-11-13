@@ -923,7 +923,8 @@ export async function addImageFiles(files, { at = null, frameId = null } = {}) {
   emit("uploads");
   const out = [];
   const pg = curPage();
-  const frames = frameId ? [layerById(frameId)] : pg.layers.filter((l) => l.type === "frame" && !l.frame.image && !l.hidden);
+  // Empty frames take the uploaded photos; in the Collage panel also frames still showing a template's sample photo.
+  const frames = frameId ? [layerById(frameId)] : pg.layers.filter((l) => l.type === "frame" && (!l.frame.image || (S.panel === "collage" && l.frame.image.stock)) && !l.hidden);
   let k = 0;
   if (frameId || (frames.length && (S.panel === "collage" || pg.layers.every((l) => l.type === "frame" || l.type === "text" || l.type === "element" || l.type === "shape")))) {
     for (const f of frames) {

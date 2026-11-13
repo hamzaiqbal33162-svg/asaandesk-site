@@ -448,7 +448,25 @@ async function applyTemplate(id) {
   setScript(t.script, { title: t.name });
   state.rate = t.rate; state.pitch = t.pitch; showSettings(); saveSettings();
   shell?.toast(`"${t.name}" is in your script. Press Play to listen.`);
+  showTemplateCard(g, t);
   return t;
+}
+/** The opened template's voiceover card (same design as its thumbnail, full-size library photo) above the script. */
+function showTemplateCard(g, t) {
+  const svg = typeof g.design === "function" ? g.design(t.id, "full") : "";
+  if (!svg) return;
+  let box = $("#tplCard");
+  if (!box) {
+    box = document.createElement("figure"); box.id = "tplCard"; box.className = "vo-tplcard";
+    box.style.cssText = "margin:0 auto 14px;max-width:560px;background:#fff;border:1px solid #e5e7f0;border-radius:14px;padding:10px;box-shadow:0 8px 22px -14px rgba(15,23,42,.4)";
+    mainEl.insertBefore(box, mainEl.querySelector(".vo-grid"));
+  }
+  const art = document.createElement("div"); art.style.cssText = "border-radius:10px;overflow:hidden;aspect-ratio:16/10;background:#f3f4f8"; art.innerHTML = svg;
+  art.querySelector("svg")?.setAttribute("style", "display:block;width:100%;height:100%");
+  const cap = document.createElement("figcaption"); cap.style.cssText = "margin-top:8px;font-size:13px;line-height:1.4;color:#475569";
+  const b = document.createElement("b"); b.textContent = `Template: ${t.name}. `;
+  cap.append(b, "The script is filled in below. Press Play to hear it with your device's voice, or record your own.");
+  box.replaceChildren(art, cap);
 }
 function srtOf(lines) {
   const ts = (s) => { const ms = Math.round(s * 1000), hh = Math.floor(ms / 3600000), mm = Math.floor(ms / 60000) % 60, ss = Math.floor(ms / 1000) % 60; return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")},${String(ms % 1000).padStart(3, "0")}`; };

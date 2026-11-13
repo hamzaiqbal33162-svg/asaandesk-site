@@ -76,8 +76,12 @@ export async function exportPdf(board, { PDFLib, drawPrims }, opts = {}) {
       if (p.img == null) continue;
       let img = images.get(p.img);
       if (img === undefined) {
-        const d = dataUrlBytes(p.img);
+        let d = dataUrlBytes(p.img);
         img = null;
+        // Same-origin template photos (/pdf-editor/photos/…): read the file.
+        if (!d && /^\/pdf-editor\/photos\/[\w.-]+\.(jpe?g|png)$/i.test(p.img) && typeof fetch === "function") {
+          try { const r = await fetch(p.img); if (r.ok) d = { mime: /png$/i.test(p.img) ? "image/png" : "image/jpeg", bytes: new Uint8Array(await r.arrayBuffer()) }; } catch { d = null; }
+        }
         try { if (d && /png/.test(d.mime)) img = await out.embedPng(d.bytes); else if (d && /jpe?g/.test(d.mime)) img = await out.embedJpg(d.bytes); } catch { img = null; }
         images.set(p.img, img);
       }
@@ -85,6 +89,12 @@ export async function exportPdf(board, { PDFLib, drawPrims }, opts = {}) {
         // pdf-lib turns an image around its bottom-left corner: place that corner where the rotation puts it.
         const t = (rotationDeg * Math.PI) / 180, cos = Math.cos(t), sin = Math.sin(t), lx = p.x, ly = p.y + p.h;
         page.drawImage(img, { x: origin[0] + (cos * lx + sin * ly) * s, y: origin[1] + (sin * lx - cos * ly) * s, width: p.w * s, height: p.h * s, rotate: PDFLib.degrees(rotationDeg), opacity: p.op ?? 1 });
+      } else if (img && p.fit === "cover" && img.width && img.height && PDFLib.clip) {
+        // Fill the box and crop: draw the picture bigger, clipped to the box.
+        const bx = origin[0] + p.x * s, by = origin[1] - (p.y + p.h) * s, bw = p.w * s, bh = p.h * s, k = Math.max(bw / img.width, bh / img.height);
+        page.pushOperators(PDFLib.pushGraphicsState(), PDFLib.rectangle(bx, by, bw, bh), PDFLib.clip(), PDFLib.endPath());
+        page.drawImage(img, { x: bx + (bw - img.width * k) / 2, y: by + (bh - img.height * k) / 2, width: img.width * k, height: img.height * k, opacity: p.op ?? 1 });
+        page.pushOperators(PDFLib.popGraphicsState());
       } else if (img) page.drawImage(img, { x: origin[0] + p.x * s, y: origin[1] - (p.y + p.h) * s, width: p.w * s, height: p.h * s, opacity: p.op ?? 1 });
     }
     // Emoji reaction marks have no letters in the open PDF fonts: the badge and its count are kept, the emoji is left out quietly.

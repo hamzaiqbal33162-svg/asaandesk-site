@@ -225,8 +225,9 @@ function fitStage() {
   sheet.style.left = Math.max(0, (avail - page.w * k) / 2) + "px";
 }
 function setZoom(pct) {
-  if (!state.pages[state.current]) return;
+  // Kept even before a picture is open (the bottom-bar zoom always answers); used as soon as one is shown.
   state.zoom = pct == null ? null : Math.max(0.05, Math.min(4, pct / 100));
+  if (!state.pages[state.current]) return;
   fitStage();
 }
 function toggleLayer(id, on, { rec = true } = {}) {
@@ -868,12 +869,25 @@ async function rasterize(src, w, h) {
   c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
   return c.toDataURL("image/png");
 }
+/** A sample picture that shows real library photos (/pdf-editor/photos/…): the photos go inside the SVG as data, since a
+ * picture drawn from an SVG cannot load other files. */
+const photoData = new Map();
+async function inlinePhotos(src) {
+  let svg = decodeURIComponent(src.slice(src.indexOf(",") + 1));
+  const urls = [...new Set([...svg.matchAll(/href="(\/pdf-editor\/photos\/[^"]+)"/g)].map((m) => m[1]))];
+  if (!urls.length) return src;
+  for (const u of urls) {
+    if (!photoData.has(u)) photoData.set(u, fetch(u).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.blob(); }).then((b) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); })));
+    try { const data = await photoData.get(u); svg = svg.split(`"${u}"`).join(`"${data}"`); } catch (e) { photoData.delete(u); throw e; }
+  }
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+}
 async function openTemplate(id) {
   if (state.busy) { toast("Please wait, the last file is still being split."); return false; }
   const G = await gallery();
   const page = G.design(id);
   if (!page) { toast("That sample was not found. Pick another one or open your own picture."); return false; }
-  if (typeof Image === "function") for (const l of page.layers) if (l.type === "image" && /^data:image\/svg/.test(l.image.src)) { try { l.image.src = await rasterize(l.image.src, l.w, l.h); } catch (e) { console.warn("sample picture kept as SVG", e); } }
+  if (typeof Image === "function") await Promise.all(page.layers.map(async (l) => { if (l.type === "image" && /^data:image\/svg/.test(l.image.src)) { try { l.image.src = await rasterize(await inlinePhotos(l.image.src), l.w, l.h); } catch (e) { console.warn("sample picture kept as SVG", e); } } }));
   record(); // Undo goes back to what was open before (or the start screen)
   showDesign([page], { name: page.name || G.TEMPLATES.find((t) => t.id === id)?.name || "Sample design", kind: "template", template: page.id || id });
   return true;
@@ -1099,7 +1113,7 @@ async function mountFrame() {
       bottom: {
         notes: true, outline: null, timer: true, fullscreen: true, help: true,
         pages: { count: () => Math.max(1, state.pages.length), current: () => state.current, go: (i) => { if (state.pages[i]) { state.current = i; state.sel = null; renderResult(); } } },
-        zoom: { get: () => Math.round((state.scale || 1) * 100), set: (pct) => setZoom(pct), min: 5, max: 400 },
+        zoom: { get: () => Math.round((state.pages[state.current] ? state.scale || 1 : state.zoom || 1) * 100), set: (pct) => setZoom(pct), min: 5, max: 400 },
       },
       setMode: (m) => { state.mode = m; if (m !== "edit") select(null); },
       shortcuts: [["Drag", "Move a layer; drag a corner to resize (Shift: free resize for pictures)"], ["Arrow keys", "Nudge the selected layer 1 px (Shift: 10 px)"], ["Ctrl + D", "Duplicate the selected layer"], ["Delete", "Delete the selected layer"], ["Escape", "Clear the selection"]],

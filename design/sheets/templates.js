@@ -1,7 +1,8 @@
 // Ready-made sheets (all our own content, names and colours). buildTemplate(id) → { name, sheets: [{ name,
 // cells: { A1: input }, styles: { A1: style }, colW: { col: px }, rowH: { row: px }, charts: [] }] }.
 // Style keys: b, i, color, fill, fmt, align, wrap, size (px), font, valign, bd (borders "trbl"), bc (border colour).
-import { cellName } from "./formula.js";
+import { cellName, parseCellName, adjustFormula } from "./formula.js";
+import { sheetKit, shiftDown, themeOf, chartColors, mix, topicPhoto } from "./sheet-kit.js";
 import { buildGenerated } from "./layouts.js";
 import { buildStarter } from "./starters.js";
 
@@ -20,33 +21,75 @@ export const TEMPLATES = [
   { id: "kpi-dashboard", name: "Financial KPI dashboard", desc: "Revenue, costs, profit, margin and growth by month.", color: "#1e3a8a" },
   { id: "price-calculator", name: "Price calculator", desc: "Costs plus markup give the selling price, profit and tax.", color: "#7c3aed" },
   { id: "income-statement", name: "Income statement", desc: "Income, expenses, profit before tax and net profit.", color: "#0f766e" },
-  { id: "blank-table-rose", name: "Titled table (rose)", desc: "A blank table with a title band and a total row.", color: "#db2777" },
-  { id: "blank-table-sky", name: "Titled table (sky)", desc: "A blank table with a title band and a total row.", color: "#0284c7" },
+  { id: "blank-table-rose", name: "Simple list (rose)", desc: "A ready table with a title banner, sample rows to type over and a total row.", color: "#db2777" },
+  { id: "blank-table-sky", name: "Simple list (sky)", desc: "A ready table with a title banner, sample rows to type over and a total row.", color: "#0284c7" },
   { id: "marketing-budget", name: "Marketing budget tracker", desc: "Planned and actual spend per campaign and channel.", color: "#16a34a" },
 ];
 
+// Older builders below mark their header, title and total cells with these looks; finish() turns them into the
+// shared design (sheet-kit.js): merged title banner with a photo tile, solid header, zebra rows, ruled totals.
 const HEAD = { b: true, fill: "#ece9ff", color: "#2a2373" }, TITLE = { b: true, color: "#2a2373" }, NOTE = { i: true, color: "#6a7389" }, TOTAL = { b: true, fill: "#f3f4fb" };
+const THEMES_OF = new WeakMap(); // sheet → theme used by its title
+let current = null; // id of the hand-made template being built (its banner photo topic is in FINISH)
 function sheet(name) {
-  const s = { name, cells: {}, styles: {}, colW: {}, rowH: {}, charts: [] };
+  const k = sheetKit(name), s = k.s;
   const api = {
     s,
-    row(r, values, style) { values.forEach((v, c) => { if (v !== null && v !== undefined && v !== "") s.cells[cellName(r, c)] = String(v); if (style) api.style(r, c, style); }); return api; },
-    set(ref, v, style) { s.cells[ref] = String(v); if (style) s.styles[ref] = { ...(s.styles[ref] || {}), ...style }; return api; },
-    style(r, c, st) { const k = cellName(r, c); s.styles[k] = { ...(s.styles[k] || {}), ...st }; return api; },
-    styleRange(r1, c1, r2, c2, st) { for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) api.style(r, c, st); return api; },
-    widths(list) { list.forEach((w, c) => { if (w) s.colW[c] = w; }); return api; },
-    height(r, px) { s.rowH[r] = px; return api; },
-    /** Title band across columns 0..c2 of row 0 and a note in row 1. */
-    title(text, c2, theme, note) {
-      api.styleRange(0, 0, 0, c2, { fill: theme.band, color: theme.on || "#ffffff" }).set("A1", text, { b: true, size: 22, valign: "middle" }).height(0, 48);
-      if (note) api.set("A2", note, { i: true, color: "#5b6478" });
-      return api;
-    },
-    head(r, values, theme) { return api.row(r, values, { b: true, fill: theme.head, color: theme.ink, bd: "b", bc: theme.band }).height(r, 30); },
-    zebra(r1, r2, c2, theme) { for (let r = r1; r <= r2; r++) if ((r - r1) % 2) api.styleRange(r, 0, r, c2, { fill: theme.zebra }); return api; },
-    box(r1, c1, r2, c2, color = "#cbd5e1") { for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) api.style(r, c, { bd: "trbl", bc: color }); return api; },
+    row(r, values, style) { k.row(r, values, style); return api; },
+    set(ref, v, style) { const p = parseCellName(ref); k.put(p.row, p.col, v, style); return api; },
+    style(r, c, st) { k.style(r, c, st); return api; },
+    styleRange(r1, c1, r2, c2, st) { k.range(r1, c1, r2, c2, st); return api; },
+    widths(list) { k.widths(list); return api; },
+    height(r, px) { k.height(r, px); return api; },
+    /** Title banner (rows 0 and 1) across columns 0..c2, with a photo tile when the theme has one. */
+    title(text, c2, theme, note) { const tp = FINISH[current]?.topic, th = { band2: mix(theme.band, "#ffffff", 0.42), ...(tp ? { photo: photo(tp, current) } : {}), ...theme }; THEMES_OF.set(s, th); k.title(text, c2, th, note); return api; },
+    head(r, values, theme) { k.head(r, values, theme); return api; },
+    zebra(r1, r2, c2, theme) { k.zebra(r1, r2, c2, theme); return api; },
+    box(r1, c1, r2, c2, color = "#cbd5e1") { k.box(r1, c1, r2, c2, color); return api; },
   };
   return api;
+}
+const photo = (topic, seed) => topicPhoto(topic, seed);
+// Finishing for the hand-made templates: brand colour, banner photo topic, rows to move down for a banner, banner
+// text for sheets that had none, zebra ranges (row numbers before the move) and the last banner column.
+const FINISH = {
+  budget: { color: "#5b4cf0", topic: "home interior house", c2: 4, zebra: [[5, 6], [10, 18]] },
+  "invoice-list": { color: "#ff7a59", topic: "business office", shift: 3, title: "Invoice list", note: "Every bill with its due date; days overdue and the totals on the right work out by themselves.", c2: 9, zebra: [[1, 8]] },
+  attendance: { color: "#14b8a6", topic: "school education class", c2: 14, zebra: [[4, 11]] },
+  "sales-tracker": { color: "#f59e0b", topic: "business sales shop store", shift: 3, title: "Sales tracker", note: "Daily sales with totals per product, the best seller and a chart. Amounts in rupees.", c2: 8, zebra: [[1, 12]] },
+  "grade-sheet": { color: "#2f80ff", topic: "school education class", shift: 3, title: "Grade sheet", note: "Marks out of 100: totals, percentages, grades and rank work out by themselves.", c2: 8, zebra: [[1, 8]] },
+  inventory: { color: "#a64bf4", topic: "business sales shop store", shift: 3, title: "Inventory", note: "Stock, reorder alerts and stock value. Change the numbers in stock.", c2: 10, zebra: [[1, 10]] },
+  "inventory-tracker": { topic: "home interior house" }, "budget-tracker": { topic: "home interior house" }, "price-list": { topic: "business sales shop store" },
+  "monthly-budget": { topic: "home interior house" }, "balance-sheet": { topic: "business office finance" }, "kpi-dashboard": { topic: "business office finance" },
+  "price-calculator": { topic: "art craft creative design" }, "income-statement": { topic: "business office finance" }, "marketing-budget": { topic: "marketing business brand" },
+};
+function finish(id, book) {
+  const f = FINISH[id];
+  if (!f) return book;
+  const s = book.sheets[0];
+  if (f.color) {
+    // a sheet without the kit banner: restyle its header/total looks, add zebra rows, then the banner
+    const th = themeOf(f.color, photo(f.topic, id));
+    const t = sheetKit(s.name, s);
+    for (const [ref, st] of Object.entries(s.styles)) {
+      if (st.fill === HEAD.fill && st.b) s.styles[ref] = { ...st, fill: th.band, color: "#ffffff", valign: "middle", bd: "b", bc: th.ink };
+      else if (st.fill === TOTAL.fill && st.b) s.styles[ref] = { ...st, fill: th.head, color: st.color && st.color !== TOTAL.color ? st.color : th.ink, bd: "t", bc: th.band, bs: "thick", valign: "middle" };
+    }
+    for (const [r1, r2] of f.zebra || []) t.zebra(r1, r2, f.c2 - (id === "invoice-list" || id === "sales-tracker" || id === "inventory" ? 3 : 0), th);
+    for (const r of new Set(Object.keys(s.styles).filter((k) => s.styles[k].fill === th.band).map((k) => parseCellName(k).row))) if (!s.rowH[r]) s.rowH[r] = 32;
+    if (f.shift) shiftDown(s, f.shift, adjustFormula);
+    const a1 = s.cells.A1, a2 = s.cells.A2;
+    delete s.styles.A1; delete s.styles.A2;
+    t.title(f.title || a1 || book.name, f.c2, th, f.note || a2 || "");
+    THEMES_OF.set(s, th);
+  }
+  const th = THEMES_OF.get(s);
+  if (th) {
+    for (const ch of s.charts || []) if (!ch.colors) ch.colors = chartColors(th);
+    // literal total rows ({ b, fill: head, bd: "t" }) get the kit's ruled total look
+    for (const [ref, st] of Object.entries(s.styles)) if (st.b && st.fill === th.head && st.bd === "t" && !st.bs) s.styles[ref] = { ...st, bs: "thick", color: st.color || th.ink, valign: "middle" };
+  }
+  return book;
 }
 
 const BUILD = {
@@ -238,8 +281,8 @@ const BUILD = {
     t.s.charts.push({ kind: "bar", cols: [1, 2, 3], r1: 3, r2: 6, title: "Income: this year and last year", at: "H4", w: 440, h: 280 });
     return { name: "Income statement", sheets: [t.s] };
   },
-  "blank-table-rose"() { return blankTable("Titled table", { band: "#db2777", head: "#fce7f3", ink: "#831843", zebra: "#fff5fa" }); },
-  "blank-table-sky"() { return blankTable("Titled table", { band: "#0284c7", head: "#e0f2fe", ink: "#0c4a6e", zebra: "#f3faff" }); },
+  "blank-table-rose"() { return blankTable("Simple list", { band: "#db2777", head: "#fce7f3", ink: "#831843", zebra: "#fff5fa" }); },
+  "blank-table-sky"() { return blankTable("Simple list", { band: "#0284c7", head: "#e0f2fe", ink: "#0c4a6e", zebra: "#f3faff" }); },
   "marketing-budget"() {
     const th = { band: "#16a34a", head: "#dcfce7", ink: "#14532d", zebra: "#f0fdf4" };
     const t = sheet("Marketing").widths([100, 120, 170, 130, 110, 110, 120, 120, 30, 120, 110, 110]);
@@ -259,17 +302,21 @@ const BUILD = {
 };
 
 function blankTable(name, th) {
-  const t = sheet("Table").widths([150, 120, 120, 120, 120, 120, 120, 120]);
-  t.title("Title", 7, th);
-  t.head(1, ["Column 1", "Column 2", "Column 3", "Column 4", "Column 5", "Column 6", "Column 7", "Column 8"], th);
-  t.zebra(2, 16, 7, th).box(1, 0, 16, 7, th.head);
-  t.row(17, ["Total", "=SUM(B3:B17)", "=SUM(C3:C17)", "=SUM(D3:D17)", "=SUM(E3:E17)", "=SUM(F3:F17)", "=SUM(G3:G17)", "=SUM(H3:H17)"], { b: true, fill: th.head, color: th.ink, bd: "t", bc: th.band });
+  // A ready table to type over: title banner, header, six sample rows, room for more and a total row that adds up.
+  const t = sheet("Table").widths([190, 120, 130, 110, 90, 120, 110, 170]);
+  t.title("My list", 7, th);
+  t.head(1, ["Item", "Category", "Owner", "Date", "Quantity", "Amount (Rs)", "Status", "Notes"], th);
+  const rows = [["Office chairs", "Furniture", "Ayesha Khan", "2026-11-03", 6, 54000, "Ordered", "Two colours"], ["Printer paper", "Supplies", "Bilal Ahmed", "2026-11-05", 20, 27000, "Received", "A4, 80 gsm"], ["Laptop service", "Repairs", "Sana Tariq", "2026-11-08", 2, 9000, "Booked", "Friday morning"], ["Team lunch", "Events", "Hamza Ali", "2026-11-12", 14, 21000, "Paid", "Monthly lunch"], ["Website hosting", "Software", "Usman Raza", "2026-11-15", 1, 18000, "Paid", "One year"], ["Delivery boxes", "Supplies", "Zainab Iqbal", "2026-11-18", 200, 16000, "Ordered", "Medium size"]];
+  rows.forEach((v, i) => t.row(2 + i, v));
+  t.zebra(2, 16, 7, th).styleRange(2, 3, 16, 3, { fmt: "date" }).styleRange(2, 5, 17, 5, { fmt: "thousands" }).styleRange(2, 6, 16, 6, { align: "center" });
+  t.row(17, ["Total", "=SUM(B3:B17)", "", "", "=SUM(E3:E17)", "=SUM(F3:F17)", '=COUNTIF(G3:G17,"Paid")&" paid"', "=SUM(H3:H17)"], { b: true, fill: th.head, color: th.ink, bd: "t", bc: th.band, bs: "thick" });
+  t.s.dropdowns = [{ range: "G3:G17", options: [["Ordered", "#e0f2fe"], ["Received", "#dcfce7"], ["Booked", "#fef3c7"], ["Paid", "#ede9fe"]].map(([label, color]) => ({ label, color })) }];
   return { name, sheets: [t.s] };
 }
 
 export function buildTemplate(id) {
   const fn = BUILD[id];
-  if (fn) return fn();
+  if (fn) { current = id; try { return finish(id, fn()); } finally { current = null; } }
   const gen = buildGenerated(id) || buildStarter(id); // "<layout>~p<NN>~<theme>", "ins-…", "fx-…" (see gallery.js)
   if (!gen) throw new Error("Unknown template: " + id);
   return gen;

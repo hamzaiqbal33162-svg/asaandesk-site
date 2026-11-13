@@ -922,8 +922,16 @@ function applyTemplate(id) {
     hint.querySelector("small").textContent = setup.ring && L.MODES[mode].display && L.MODES[mode].camera ? `Camera bubble ring: ${setup.palette}` : "";
   }
   if (setup.title) shell?.setTitle?.(setup.title);
+  showTemplateArt(id);
   toast(`Template: ${setup.name}`);
   return true;
+}
+/** The template's picture (shared screen, camera bubble, title) on the stage until the camera or screen starts. */
+function showTemplateArt(id) {
+  const ph = $("#placeholder"); if (!ph || typeof gallery?.preview !== "function") return;
+  let art = ph.querySelector(".rec-tpl-art");
+  if (!art) { art = document.createElement("div"); art.className = "rec-tpl-art"; art.setAttribute("aria-hidden", "true"); ph.prepend(art); }
+  try { art.innerHTML = gallery.preview(id); ph.classList.add("has-art"); } catch { art.remove(); ph.classList.remove("has-art"); }
 }
 
 function seg(label, items, cur, onPick, attr) {

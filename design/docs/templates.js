@@ -2,8 +2,12 @@
 // Inline text uses Markdown marks (**bold**, *italic*, [link](url)).
 import { mdInline, cleanRuns, normalizeDoc, newDoc } from "./model.js";
 import { CHARTS, svgDataUrl } from "./decos.js";
-import { parseId, templateMeta, MAGIC_WRITE, PALETTES } from "./gallery.js";
+import { parseId, templateMeta, MAGIC_WRITE, PALETTES, docLook } from "./gallery.js";
 import { LAYOUT_BUILDERS } from "./layouts.js";
+import { proSkin } from "./pro.js";
+
+/** Round 5: every template opens in the same Canva-pattern look as its gallery card (photo header, bold type, cards). */
+const skinned = (id, build) => () => { const d = build(); const k = docLook(id); return k ? proSkin(d, k) : d; };
 
 const runs = (md) => cleanRuns(mdInline(md));
 const h = (level, md, props = {}) => ({ type: "h" + level, runs: runs(md), ...props });
@@ -352,6 +356,7 @@ export const DESIGNED = [
   },
 ];
 
+for (const t of [...DESIGNED, ...TEMPLATES]) t.build = skinned(t.id, t.build);
 export const ALL_TEMPLATES = [...DESIGNED, ...TEMPLATES];
 /** Any template: the hand-made ones above, or a generated "layout~palette~theme" id from gallery.js. */
 export function templateById(id) {
@@ -360,17 +365,17 @@ export function templateById(id) {
   const mw = MAGIC_WRITE.find((x) => x.id === id);
   if (mw) {
     const P = PALETTES.find((x) => x.id === mw.palette) || PALETTES[0];
-    return { id, name: mw.name, desc: "", build: () => doc(mw.name, [
+    return { id, name: mw.name, desc: "", build: skinned(id, () => doc(mw.name, [
       { type: "h1", pad: 22, minh: 110, bg: P.light, deco: "confetti", dc: P.dark, dc2: P.mid, runs: cleanRuns([{ text: mw.name, color: P.ink, size: 30 }, { text: "\n" }, { text: "Magic Write starter", color: P.dark, size: 12 }]) },
       h(2, "What to write"),
       p(`Write ${mw.prompt} …`),
       p("Finish the line above with your topic, then open ✦ Magic Write and choose **Write it** (or select any text and use Rewrite, Shorten or Fix grammar)."),
       h(2, "Draft"),
       p("Your draft appears here. Edit it like any other text: headings, lists, colours and more."),
-    ]) };
+    ])) };
   }
   const g = parseId(id);
   if (!g || !LAYOUT_BUILDERS[g.layout]) return null;
   const meta = templateMeta(id);
-  return { id, name: meta?.name || id, desc: "", build: () => LAYOUT_BUILDERS[g.layout](g.P, g.T) };
+  return { id, name: meta?.name || id, desc: "", build: skinned(id, () => LAYOUT_BUILDERS[g.layout](g.P, g.T)) };
 }

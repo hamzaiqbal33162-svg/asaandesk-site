@@ -389,6 +389,21 @@ function applyPreset(p) {
   box.value = p.prompt; box.dispatchEvent(new Event("input"));
   renderStyles(); renderAspects(); renderReady();
   toast(aiReady() ? `${p.name}: prompt, style and shape are filled in. Press Generate.` : `${p.name}: prompt, style and shape are filled in. AsaanDesk AI is coming soon, so Generate is off for now.`);
+  showExample(p);
+}
+/** The opened template's design (same as its thumbnail, full-size library photo), clearly labelled as a style example. */
+async function showExample(p) {
+  try {
+    const g = await import("./gallery.js");
+    const svg = typeof g.design === "function" ? g.design(p.id, "full") : "";
+    if (!svg) return;
+    let box = $("#tplExample");
+    if (!box) { box = h("figure", { id: "tplExample", class: "tpl-example", style: "margin:0 0 14px;background:#fff;border:1px solid #e5e7f0;border-radius:14px;padding:10px;box-shadow:0 8px 22px -14px rgba(15,23,42,.4)" }); $("section.out").prepend(box); }
+    const art = h("div", { style: "border-radius:10px;overflow:hidden;aspect-ratio:16/10;background:#f3f4f8", html: svg });
+    art.querySelector("svg")?.setAttribute("style", "display:block;width:100%;height:100%");
+    box.replaceChildren(art, h("figcaption", { style: "margin-top:8px;font-size:13px;line-height:1.4;color:#475569" }, h("b", {}, `Template: ${p.name}. `),
+      aiReady() ? "A style example made from a library photo. Your own picture comes from AsaanDesk AI when you press Generate." : "A style example made from a library photo, not a picture made by AsaanDesk AI. AsaanDesk AI is coming soon."));
+  } catch (e) { console.warn("Template example unavailable", e); }
 }
 async function mountFrame() {
   let mod = null, gallery = null;

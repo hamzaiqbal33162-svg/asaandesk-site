@@ -9,10 +9,10 @@
 //   "mockup-<layout>…", "print-<layout>…", "resize-|animate-|translate-<layout>…"  same design opened in a tool mode
 // thumb(id) and build(id) make the design from the id on demand (nothing is pre-built for templates not on screen).
 //   TEMPLATES: [{ id, name, tool, section, tags, preset, pages, href, mode? }]
-import { listTemplates, getTemplate, templateThumbSvg, makeDeck, DECK_PARTS } from "./templates.js";
+import { listTemplates, getTemplate, templateThumbSvg, makeDeck, DECK_PARTS, PRO_LOOKS } from "./templates.js";
 import { colorSlots } from "./brandkit.js";
 import { walk } from "./model.js";
-import { textHeight } from "./textlayout.js";
+import { textHeight, layoutText } from "./textlayout.js";
 import { presetPx } from "./presets.js";
 import { polish, hashKey } from "./depth.js";
 
@@ -30,6 +30,8 @@ const OWN_LOOK = /-(3d|motion)(-[a-z0-9]+)?$/; // the round-4 dedicated layouts 
 const layoutKey = (ref) => (ref.deck ? `deck.${ref.deck[0]}.${ref.deck[1]}.v${ref.deck[2]}` : ref.base);
 /** Which touches a layout gets: { extrude, stack, animate, own }. tool = the tool the template is listed under. */
 export function lookOf(key, tool) {
+  // Pro compositions (templates-pro.js, pro decks) carry their own type and photo treatment: soft shadows only.
+  if (PRO_LOOKS.has(key) || /^deck[.-]/.test(key) || key === "pitch-deck" || key === "lesson-slides") return { own: false, pro: true, extrude: false, stack: false, animate: ANIMATED_TOOLS.has(tool) };
   const own = OWN_LOOK.test(key), h = hashKey(key) % 3;
   return { own, extrude: own ? /-3d/.test(key) : h === 0, stack: !own && h === 1, animate: ANIMATED_TOOLS.has(tool) || /-motion/.test(key) };
 }
@@ -181,7 +183,7 @@ const SECTION_BY_TOOL = {
   "social-media-designs": (tags, preset) => ({ "instagram-post": "Instagram posts", "instagram-story": "Stories", "whatsapp-status": "Stories", "facebook-post": "Facebook", "facebook-cover": "Facebook", "youtube-thumbnail": "YouTube", "youtube-banner": "YouTube", "linkedin-post": "LinkedIn and X", "x-post": "LinkedIn and X", "pinterest-pin": "Pinterest" })[preset] || "More templates for you",
 };
 const tagsOf = (t) => t.tags.filter((w) => /^[a-z0-9%-]+$/.test(w)).slice(0, 8);
-const VARIANT_NAMES = ["classic", "centred", "photo", "bold", "framed", "banded"];
+const VARIANT_NAMES = DECK_PARTS.variantNames || ["classic", "centred", "photo", "bold", "framed", "banded"];
 const ALIAS_PREFIX = { print: null, mockup: "mockup", resize: "resize", animate: "animate", translate: "translate" };
 const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
 const low = (x) => x.charAt(0).toLowerCase() + x.slice(1);
@@ -208,7 +210,11 @@ function layoutsOf(tool) {
   else if (tool === "translate-design") out = mk(all.filter((t) => t.group === "social"), "translate", "translate");
   else out = mk(all.filter((t) => t.tool === tool));
   if (tool === "presentations") {
-    // The hand-made decks first, then every content × theme × layout variant in a mixed order.
+    // The pro decks first (the hand-made ones, then every content × style × layout variant in a mixed order),
+    // then the themed decks of earlier rounds.
+    const proOwn = (l) => l.id === "pitch-deck" || l.id === "lesson-slides" || /^deck-/.test(l.id);
+    const older = out.filter((l) => !proOwn(l));
+    out = out.filter(proOwn);
     const contents = DECK_PARTS.contents, combos = [];
     for (const th of DECK_PARTS.themes) for (let v = 0; v < DECK_PARTS.variants; v++) combos.push([th, v]);
     for (let r = 0; r < combos.length; r++) for (let i = 0; i < contents.length; i++) {
@@ -217,6 +223,7 @@ function layoutsOf(tool) {
       const tags = [...c.tags.split(/\s+/).slice(0, 6), DECK_PARTS.themeName(th).toLowerCase(), VARIANT_NAMES[v]];
       out.push({ id: `deck.${key}.${th}.v${v}`, title: `${DECK_PARTS.themeName(th)} ${VARIANT_NAMES[v]} ${low(c.title)}`, tags, presetId: "presentation-16x9", pages: 10, mode: null, section: SECTION_BY_TOOL.presentations(tags.join(" ")), look: DECK_PARTS.styleOf(th) + v });
     }
+    out.push(...older);
     // First one deck per distinct design (deck style × layout variant), so the first page shows different layouts.
     for (const l of out) if (!l.look) { const m = /^deck-(.+)$/.exec(l.id); const c = m && DECK_PARTS.content(m[1]); l.look = c ? DECK_PARTS.styleOf(c.theme) + 0 : "own-" + l.id; }
     const seen = new Set(), head = [], tail = [];
@@ -400,22 +407,116 @@ const GARMENT = {
     area: { x: 360, y: 280, w: 280, h: 327 },
   },
 };
-/** The print SVG placed on the garment's print area (contain), on a neutral card background. */
-export function thumbMockup(kind, printSvg, maxPx = 320) {
+// Garment colours for the product shots: light ones for dark prints, dark ones for light prints.
+const LIGHT_WEAR = [["#fbfbfd", "#c4c7d2", "#eef0f5"], ["#d5d7dc", "#a9adb6", "#e9ebf0"], ["#efe4d0", "#c9b89a", "#f6f0e6"], ["#cfe0f1", "#9fb8d3", "#ebf2f9"], ["#f6d9df", "#d9aab5", "#fbeef1"]];
+const DARK_WEAR = [["#1f2026", "#0d0d10", "#e9eaee"], ["#1f2b4d", "#121a33", "#e8ecf5"], ["#2f4a3a", "#1d3125", "#e9f0ea"], ["#6b2131", "#4a1220", "#f5e9eb"], ["#3a3d45", "#24262c", "#eceef1"]];
+/** Rough lightness of a print (texts, shapes, stickers weighted by size): decides the garment colour. */
+function printLight(design) {
+  let sum = 0, wt = 0;
+  const add = (c, w) => { const m = /^#([0-9a-f]{6})/i.exec(c || ""); if (!m) return; const v = parseInt(m[1], 16); sum += w * (0.299 * (v >> 16) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255)) / 255; wt += w; };
+  for (const pg of design.pages.slice(0, 1)) for (const [l] of walk(pg.layers)) {
+    if (l.hidden) continue;
+    if (l.type === "text") add(l.text.color, l.text.size * Math.min(40, String(l.text.content).length));
+    else if (l.type === "shape") add(l.shape.fill, Math.sqrt(l.w * l.h));
+    else if (l.type === "element") add(l.element.colors?.c1, Math.sqrt(l.w * l.h));
+  }
+  return wt ? sum / wt : 0.3;
+}
+/** Bounds of what a print shows (so a small print fills the chest in the thumbnail, like a product photo). */
+function printBox(design, W, H) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const l of design.pages[0].layers) {
+    if (l.hidden) continue;
+    const r = l.rotation ? Math.hypot(l.w, l.h) / 2 : 0, cx = l.x + l.w / 2, cy = l.y + l.h / 2;
+    let bx = r ? [cx - r, cy - r, cx + r, cy + r] : [l.x, l.y, l.x + l.w, l.y + l.h];
+    // Text: the letters, not the (often page-wide) box.
+    if (l.type === "text" && !r && !l.text.curve) { const ls = layoutText(l.text, l.w).lines.filter((x) => x.text.trim()); if (ls.length) bx = [l.x + Math.min(...ls.map((x) => x.x)), l.y, l.x + Math.max(...ls.map((x) => x.x + x.width)), l.y + l.h]; }
+    x0 = Math.min(x0, bx[0]); y0 = Math.min(y0, bx[1]); x1 = Math.max(x1, bx[2]); y1 = Math.max(y1, bx[3]);
+  }
+  if (!isFinite(x0)) return { x: 0, y: 0, w: W, h: H };
+  x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(W, x1); y1 = Math.min(H, y1);
+  const pad = Math.max(x1 - x0, y1 - y0) * 0.06;
+  return { x: x0 - pad, y: y0 - pad, w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad };
+}
+const bareSvg = (svg, x, y, w, h, vb, keep = "xMidYMid meet") => svg.replace(/^<svg\b([^>]*)>/, (m, attrs) => `<svg${attrs.replace(/\s(?:width|height|x|y|xmlns|viewBox)="[^"]*"/g, "")} x="${x}" y="${y}" width="${w}" height="${h}" viewBox="${vb}" preserveAspectRatio="${keep}">`);
+/**
+ * The print SVG on a garment (T-shirt / hoodie, coloured to suit the print, the artwork filling the chest) or on two
+ * mugs (front and back of the wrap), on a soft background: like the print-product template cards on Canva.
+ * design (optional) lets the shot pick the garment colour and crop to the artwork.
+ */
+export function thumbMockup(kind, printSvg, maxPx = 320, design = null, seed = "") {
+  if (!printSvg) return printSvg;
+  const { w: W, h: H } = design ? presetPx(design.preset) : { w: 0, h: 0 };
+  if (kind === "mug") {
+    if (!design) return printSvg;
+    // Front and back of the wrap on two mugs, split where no text or sticker crosses (near the middle); when the
+    // artwork runs across the middle, one mug shows that central part.
+    const items = design.pages[0].layers.filter((l) => !l.hidden && (l.type === "text" || l.type === "element" || l.type === "frame" || (l.type === "shape" && l.w < W * 0.6))).map((l) => {
+      if (l.type !== "text") return [l.x, l.x + l.w];
+      const ls = layoutText(l.text, l.w).lines.filter((x) => x.text.trim());
+      return ls.length ? [l.x + Math.min(...ls.map((x) => x.x)), l.x + Math.max(...ls.map((x) => x.x + x.width))] : [l.x, l.x];
+    });
+    let split = null;
+    for (let d = 0; d <= 0.12 && split == null; d += 0.01) for (const s of [0.5 - d, 0.5 + d]) if (split == null && !items.some(([a, b]) => a < W * s - 4 && b > W * s + 4)) split = W * s;
+    const bgc = design.pages[0].background?.color && design.pages[0].background.color !== "none" ? design.pages[0].background.color : design.pages[0].background?.gradient?.stops?.[0] || "#ffffff";
+    const body = (x, y, bw, bh, vb) => `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="26" fill="${bgc}"/>` + bareSvg(printSvg, x, y, bw, bh, vb, "xMidYMid meet");
+    // Nothing on one side of the split: one mug with the artwork.
+    if (split != null && (!items.some(([, b]) => b <= split + 4) || !items.some(([a]) => a >= split - 4))) split = null;
+    if (split == null) {
+      const all = items.reduce((r, [a, b]) => [Math.min(r[0], a), Math.max(r[1], b)], [W, 0]);
+      const span = all[1] > all[0] && all[1] - all[0] <= H * 1.7 ? all : items.filter(([a, b]) => a < W / 2 && b > W / 2).reduce((r, [a, b]) => [Math.min(r[0], a), Math.max(r[1], b)], [W / 2, W / 2]);
+      const w0 = Math.max(H * 1.2, span[1] - span[0] + H * 0.2), x0 = Math.max(0, Math.min(W - w0, (span[0] + span[1]) / 2 - w0 / 2));
+      const bh = Math.min(420, (560 * H) / w0), bw = (bh * w0) / H, x = 470 - bw / 2, top = (620 - bh) / 2 + 16;
+      const handle = `M${x + bw - 6} ${top + bh * 0.22}C${x + bw + 130} ${top + bh * 0.16} ${x + bw + 130} ${top + bh * 0.8} ${x + bw - 6} ${top + bh * 0.74}`;
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${maxPx}" height="${maxPx * 0.62}" viewBox="0 0 1000 620"><defs><linearGradient id="mg${seed}" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".16"/><stop offset=".18" stop-color="#fff" stop-opacity=".12"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".2"/></linearGradient></defs><rect width="1000" height="620" fill="#eef0f5"/>` +
+        `<path d="${handle}" fill="none" stroke="#e3e5ec" stroke-width="40" stroke-linecap="round"/>` + body(x, top, bw, bh, `${Math.round(x0)} 0 ${Math.round(w0)} ${H}`) +
+        `<rect x="${x}" y="${top}" width="${bw}" height="${bh}" rx="26" fill="url(#mg${seed})"/><ellipse cx="${x + bw / 2}" cy="${top + 2}" rx="${bw / 2}" ry="18" fill="#e6e8ee" stroke="#cfd2da" stroke-width="3"/><ellipse cx="${x + bw / 2}" cy="${top + bh + 24}" rx="${bw * 0.48}" ry="13" fill="#000" fill-opacity=".12"/></svg>`;
+    }
+    const parts = [[0, split], [split, W]];
+    // Each mug as wide as its part of the wrap (the photo of the print is never stretched or padded).
+    const bh = Math.min(400, (380 * H) / Math.max(split, W - split)), top = (620 - bh) / 2 + 20;
+    const mug = (x0, part, flip) => {
+      const bw = (bh * (parts[part][1] - parts[part][0])) / H, x = flip ? x0 - bw : x0;
+      const hx = flip ? x - 70 : x + bw;
+      const handle = flip ? `M${x + 6} ${top + bh * 0.22}C${hx - 30} ${top + bh * 0.18} ${hx - 30} ${top + bh * 0.78} ${x + 6} ${top + bh * 0.74}` : `M${x + bw - 6} ${top + bh * 0.22}C${hx + 100} ${top + bh * 0.18} ${hx + 100} ${top + bh * 0.78} ${x + bw - 6} ${top + bh * 0.74}`;
+      return `<path d="${handle}" fill="none" stroke="#e3e5ec" stroke-width="34" stroke-linecap="round"/><path d="${handle}" fill="none" stroke="#c7cad4" stroke-width="34" stroke-linecap="round" stroke-opacity=".35"/>` +
+        body(x, top, bw, bh, `${Math.round(parts[part][0])} 0 ${Math.round(parts[part][1] - parts[part][0])} ${H}`) +
+        `<rect x="${x}" y="${top}" width="${bw}" height="${bh}" rx="26" fill="url(#mg${seed})"/><ellipse cx="${x + bw / 2}" cy="${top + 2}" rx="${bw / 2}" ry="16" fill="#e6e8ee" stroke="#cfd2da" stroke-width="3"/>` +
+        `<ellipse cx="${x + bw / 2}" cy="${top + bh + 22}" rx="${bw * 0.48}" ry="12" fill="#000" fill-opacity=".12"/>`;
+    };
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${maxPx}" height="${maxPx * 0.62}" viewBox="0 0 1000 620"><defs><linearGradient id="mg${seed}" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".16"/><stop offset=".18" stop-color="#fff" stop-opacity=".12"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".2"/></linearGradient></defs>` +
+      `<rect width="1000" height="620" fill="#eef0f5"/>${mug(475, 0, true)}${mug(525, 1, false)}</svg>`;
+  }
   const g = GARMENT[kind];
-  if (!g || !printSvg) return printSvg;
+  if (!g) return printSvg;
   const a = g.area;
-  const inner = printSvg.replace(/^<svg\b([^>]*)>/, (m, attrs) => `<svg${attrs.replace(/\s(?:width|height|x|y|xmlns)="[^"]*"/g, "")} x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" preserveAspectRatio="xMidYMid meet">`);
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${maxPx}" height="${maxPx}" viewBox="0 0 1000 1000"><rect width="1000" height="1000" fill="#eef0f5"/>` +
-    `<path d="${g.body}" fill="#fbfbfd" stroke="#c4c7d2" stroke-width="5" stroke-linejoin="round"/>${g.extra}${inner}</svg>`;
+  let wear = LIGHT_WEAR[0], vb = W ? `0 0 ${W} ${H}` : null;
+  if (design) {
+    const list = printLight(design) > 0.62 ? DARK_WEAR : LIGHT_WEAR;
+    wear = list[hashKey(seed || design.name || "") % list.length];
+    const bx = printBox(design, W, H);
+    vb = `${Math.round(bx.x)} ${Math.round(bx.y)} ${Math.round(bx.w)} ${Math.round(bx.h)}`;
+  }
+  const inner = vb ? bareSvg(printSvg, a.x, a.y, a.w, a.h, vb) : printSvg.replace(/^<svg\b([^>]*)>/, (m, attrs) => `<svg${attrs.replace(/\s(?:width|height|x|y|xmlns)="[^"]*"/g, "")} x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" preserveAspectRatio="xMidYMid meet">`);
+  const extra = wear[0] === "#fbfbfd" ? g.extra : g.extra.replace(/#d9dbe3|#e9eaf0|#c9cbd5/g, wear[1]);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${maxPx}" height="${maxPx}" viewBox="0 0 1000 1000"><rect width="1000" height="1000" fill="${wear[2]}"/>` +
+    `<path d="${g.body}" fill="${wear[0]}" stroke="${wear[1]}" stroke-width="5" stroke-linejoin="round"/>${extra}${inner}</svg>`;
 }
 
-/** Small "Animated" pill (play triangle + word) in the bottom-left corner of a W × H page, for thumbnails. */
+/** A business card as a product shot: the printed card lying on a soft backdrop with a shadow (like Canva's cards). */
+export function cardShot(printSvg, W, H, maxPx = 320, seed = "") {
+  const bgs = ["#e6e4e0", "#e8eaee", "#efe9e2", "#e4e8e4"], bg = bgs[hashKey(seed) % bgs.length];
+  const BW = 1000, BH = 750, k = Math.min((BW * 0.74) / W, (BH * 0.74) / H), w = W * k, h = H * k, x = (BW - w) / 2, y = (BH - h) / 2 - 8;
+  const fid = "cs" + String(seed).replace(/[^a-z0-9]/gi, "").slice(-24);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${maxPx}" height="${Math.round((maxPx * BH) / BW)}" viewBox="0 0 ${BW} ${BH}"><defs><filter id="${fid}" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#000" flood-opacity=".22"/></filter></defs>` +
+    `<rect width="${BW}" height="${BH}" fill="${bg}"/><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#ffffff" filter="url(#${fid})"/>` +
+    bareSvg(printSvg, x, y, w, h, `0 0 ${W} ${H}`, "none") + `</svg>`;
+}
+/** Small round "play" badge in the bottom-right corner of a W × H page (Canva marks animated templates this way). */
 export function animatedBadge(W, H) {
-  const s = Math.min(W, H) * (W > H * 1.4 ? 0.075 : W * 1.4 < H ? 0.085 : 0.062), m = s * 0.4, w = s * 3.9;
-  return `<g data-badge="animated" aria-label="Animated"><rect x="${m}" y="${H - m - s}" width="${w}" height="${s}" rx="${s / 2}" fill="#1b2133" fill-opacity="0.82"/>` +
-    `<path d="M${m + s * 0.36} ${H - m - s * 0.74}L${m + s * 0.72} ${H - m - s / 2}L${m + s * 0.36} ${H - m - s * 0.26}Z" fill="#ffffff"/>` +
-    `<text x="${m + s * 0.9}" y="${H - m - s * 0.31}" font-family="Arial, Helvetica, sans-serif" font-size="${s * 0.52}" font-weight="700" fill="#ffffff">Animated</text></g>`;
+  const s = Math.min(W, H) * (W > H * 1.4 ? 0.085 : W * 1.4 < H ? 0.095 : 0.075), m = s * 0.35, x = W - m - s, y = H - m - s;
+  return `<g data-badge="animated" aria-label="Animated"><title>Animated</title><circle cx="${x + s / 2}" cy="${y + s / 2}" r="${s / 2}" fill="#1b2133" fill-opacity="0.72"/>` +
+    `<path d="M${x + s * 0.4} ${y + s * 0.3}L${x + s * 0.72} ${y + s / 2}L${x + s * 0.4} ${y + s * 0.7}Z" fill="#ffffff"/></g>`;
 }
 /** Self-contained SVG string (own artwork, generic fonts, no image files) of a template's first page. */
 export function thumb(id, maxPx = 320) {
@@ -424,5 +525,8 @@ export function thumb(id, maxPx = 320) {
   let svg = templateThumbSvg({ id: String(id).replace(/[^a-z0-9-]/gi, "-"), design: b.design }, maxPx);
   const pid = typeof b.design.preset === "string" ? b.design.preset : b.design.preset?.id;
   if (b.animated) { const { w, h } = presetPx(b.design.preset); svg = svg.replace(/<\/svg>$/, animatedBadge(w, h) + "</svg>"); }
-  return pid === "tshirt" || pid === "hoodie" ? thumbMockup(pid, svg, maxPx) : svg;
+  // Prints show on the product: a coloured T-shirt / hoodie, two mugs (front and back of the wrap), a printed card.
+  const seed = String(id).replace(/[^a-z0-9-]/gi, "-");
+  if (/^business-card/.test(pid || "")) { const { w, h } = presetPx(b.design.preset); return cardShot(svg, w, h, maxPx, seed); }
+  return pid === "tshirt" || pid === "hoodie" || pid === "mug" ? thumbMockup(pid, svg, maxPx, b.design, seed) : svg;
 }

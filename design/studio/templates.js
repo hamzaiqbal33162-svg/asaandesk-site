@@ -29,10 +29,12 @@ import addWb3 from "./templates-xtra-wb-3.js";
 import addWb4 from "./templates-xtra-wb-4.js";
 import addR4Depth from "./templates-r4-depth.js";
 import addR4Motion from "./templates-r4-motion.js";
-import { getPreset, presetPx, designPreset, PRESET_GROUPS } from "./presets.js";
+import { getPreset, presetPx, designPreset, PRESET_GROUPS, bleedPx } from "./presets.js";
+import { redesign as proRedesign, familyOf as proFamily } from "./templates-pro.js";
 import { textHeight } from "./textlayout.js";
 import { pageSvg } from "./svg.js";
 import { collageFrames } from "./collage.js";
+import { fillPhotos, thumbUrlOf } from "./templates-photos.js";
 
 const EL = new Map(ELEMENTS.map((e) => [e.id, e]));
 let seq = 0;
@@ -223,127 +225,10 @@ tpl("recipe-pin", "Recipe pin", "pinterest-pin", "recipe pinterest food cooking 
 ])]);
 
 /* ================= Presentations ================= */
-tpl("pitch-deck", "Startup pitch deck", "presentation-16x9", "presentation slides pitch deck startup business investors pesh kash slides", (W, H) => {
-  const head = (t, c = INK) => T(t, 140, 120, 1400, { size: 92, bold: true, color: c });
-  return [
-    page([ "#2f80ff", "#a64bf4", 135], [
-      E("deco-sparkles", 1500, 160, 240, { c1: GOLD, c2: WHITE }),
-      flow(380, T("Bright Ideas Co.", 140, 0, 1500, { size: 150, bold: true, color: WHITE }), 20, T("Investor presentation 2026", 140, 0, 1200, { size: 60, color: "#e0e7ff" })),
-      R(140, 760, 220, 10, GOLD, { radius: 5, name: "Accent line" }),
-      T("Your name · Founder", 140, 800, 1000, { size: 40, color: WHITE }),
-    ]),
-    page(WHITE, [
-      head("The problem"),
-      T("•  Small shops lose hours on paperwork\n•  Good tools are costly and hard to use\n•  Most apps ignore local languages", 140, 330, 1000, { size: 52, color: INK, lh: 1.7 }),
-      C(1300, 300, 460, 460, "#ffe5dc"),
-      E("icon-warning", 1400, 390, 260, { c1: COR }),
-    ]),
-    page("#efedff", [
-      head("Our solution"),
-      ...[["icon-check-circle", "Simple", "Works in a few taps"], ["icon-mobile", "Mobile first", "Made for phones"], ["icon-globe", "Local", "English and Urdu"]].flatMap(([ic, t1, t2], i) => [
-        R(140 + i * 560, 340, 500, 560, WHITE, { radius: 36, name: "Card" }),
-        E(ic, 140 + i * 560 + 180, 410, 140, { c1: IND }),
-        T(t1, 140 + i * 560 + 40, 600, 420, { size: 56, bold: true, color: INK, align: "center" }),
-        T(t2, 140 + i * 560 + 40, 690, 420, { size: 38, color: MUTED, align: "center" }),
-      ]),
-    ]),
-    page(WHITE, [
-      head("Our numbers"),
-      ...[["12k", "happy users"], ["98%", "would recommend us"], ["4.8", "average rating"]].flatMap(([big, small], i) => [
-        T(big, 140 + i * 560, 400, 500, { size: 190, bold: true, color: [IND, COR, TEA][i], align: "center", lh: 1 }),
-        T(small, 140 + i * 560, 620, 500, { size: 44, color: MUTED, align: "center" }),
-      ]),
-      E("icon-star", 1505, 700, 90, { c1: AMB }),
-    ]),
-    page("#fff7ed", [
-      head("The market"),
-      ...[["$4.2B", "Small-business software in the region", 760], ["1.8M", "Shops that still use paper", 560], ["12%", "Growth each year", 380]].flatMap(([big, small, d], i) => [
-        C(140 + i * 560 + (500 - d * 0.6) / 2, 300 + (460 - d * 0.6) / 2, d * 0.6, d * 0.6, ["#fed7aa", "#fdba74", "#fb923c"][i], { name: "Market circle" }),
-        T(big, 140 + i * 560, 470, 500, { size: 96, bold: true, color: "#7c2d12", align: "center", lh: 1 }),
-        T(small, 160 + i * 560, 800, 460, { size: 34, color: MUTED, align: "center" }),
-      ]),
-    ]),
-    page(WHITE, [
-      head("Business model"),
-      ...[["Free", "Rs 0", "Invoices and stock for one shop"], ["Pro", "Rs 999 / month", "Up to 5 users, reports, backups"], ["Business", "Rs 2,999 / month", "Many branches, staff roles, support"]].flatMap(([n, p, d], i) => [
-        R(140 + i * 560, 320, 500, 600, i === 1 ? IND : "#f3f4fb", { radius: 32, name: "Plan card" }),
-        T(n, 180 + i * 560, 380, 420, { size: 56, bold: true, color: i === 1 ? WHITE : INK }),
-        T(p, 180 + i * 560, 470, 420, { size: 44, color: i === 1 ? GOLD : IND, bold: true }),
-        T(d, 180 + i * 560, 580, 420, { size: 34, color: i === 1 ? "#e0e7ff" : MUTED, lh: 1.4 }),
-      ]),
-    ]),
-    page("#efedff", [
-      head("Roadmap"),
-      R(140, 560, 1640, 10, IND, { radius: 5, name: "Timeline" }),
-      ...[["Q1", "Launch in Lahore"], ["Q2", "1,000 paying shops"], ["Q3", "Karachi and Islamabad"], ["Q4", "Payments built in"]].flatMap(([q, t], i) => [
-        C(200 + i * 500, 520, 90, 90, [IND, COR, TEA, AMB][i], { name: "Milestone" }),
-        T(q, 140 + i * 500, 400, 210, { size: 52, bold: true, color: INK, align: "center" }),
-        T(t, 100 + i * 500, 650, 290, { size: 36, color: MUTED, align: "center", lh: 1.3 }),
-      ]),
-    ]),
-    page(WHITE, [
-      head("The team"),
-      ...[["Ayesha Malik", "CEO"], ["Bilal Ahmed", "CTO"], ["Sana Raza", "Sales"]].flatMap(([n, r], i) => [
-        F(300 + i * 480, 330, 320, 320, { shape: "circle", name: "Team photo" }),
-        T(n, 230 + i * 480, 690, 460, { size: 48, bold: true, color: INK, align: "center" }),
-        T(r, 230 + i * 480, 760, 460, { size: 36, color: MUTED, align: "center" }),
-      ]),
-    ]),
-    page(INK, [
-      E("deco-confetti", 1400, 120, 320, { c1: GOLD, c2: COR }),
-      flow(380, T("Thank you", 140, 0, 1400, { size: 170, bold: true, color: WHITE }), 30, T("hello@brightideas.pk · 0300 1234567", 140, 0, 1400, { size: 48, color: "#cbd5e1" })),
-    ]),
-  ];
-});
-tpl("lesson-slides", "Science lesson slides", "presentation-4x3", "presentation lesson class school science sabaq taleem slides", (W, H) => [
-  page(["#e0f2fe", "#ecfdf5", 180], [
-    E("icon-sun", 760, 60, 180, { c1: AMB }), E("icon-cloud", 620, 150, 200, { c1: "#0ea5e9" }),
-    flow(300, T("Science class", 80, 0, 860, { size: 44, color: "#0369a1", bold: true }), 10, T("The Water Cycle", 80, 0, 860, { size: 104, family: "serif", bold: true, color: "#0c4a6e", lh: 1 })),
-    T("Class 5 · Lesson 3", 80, 640, 860, { size: 32, color: "#0369a1" }),
-  ]),
-  page("#f0f9ff", [
-    T("Today we will…", 80, 60, 860, { size: 64, bold: true, color: "#0c4a6e" }),
-    ...["Name the three steps of the water cycle", "Explain where rain comes from", "Draw the cycle with arrows"].flatMap((s, i) => [
-      E("icon-check-circle", 80, 210 + i * 150, 70, { c1: TEA }),
-      T(s, 180, 222 + i * 150, 760, { size: 38, color: INK }),
-    ]),
-  ]),
-  page(WHITE, [
-    T("Three big steps", 80, 60, 860, { size: 64, bold: true, color: "#0c4a6e" }),
-    ...[["Evaporation", "Sun heats water and it rises"], ["Condensation", "Vapour cools into clouds"], ["Precipitation", "Water falls as rain"]].flatMap(([a, b], i) => [
-      C(80, 200 + i * 170, 110, 110, ["#e0f2fe", "#ccfbf1", "#ede9fe"][i]),
-      T(String(i + 1), 80, 226 + i * 170, 110, { size: 52, bold: true, color: "#0369a1", align: "center" }),
-      T(a, 230, 205 + i * 170, 700, { size: 44, bold: true, color: INK }),
-      T(b, 230, 262 + i * 170, 700, { size: 30, color: MUTED }),
-    ]),
-    E("arrow-circular", 800, 560, 150, { c1: TEA }),
-  ]),
-  page("#ecfeff", [
-    T("The cycle", 80, 50, 860, { size: 64, bold: true, color: "#0c4a6e" }),
-    C(362, 210, 300, 300, "none", { stroke: "#0ea5e9", sw: 10, name: "Cycle ring" }),
-    ...[["Sun heats the sea", 112, 180], ["Clouds form", 612, 180], ["Rain falls", 612, 520], ["Rivers return water", 112, 520]].flatMap(([t, x, y], i) => [
-      R(x, y, 300, 110, ["#fef3c7", "#e0f2fe", "#dbeafe", "#ccfbf1"][i], { radius: 20, name: "Step card" }),
-      T(t, x + 20, y + 32, 260, { size: 30, bold: true, color: INK, align: "center" }),
-    ]),
-  ]),
-  page(WHITE, [
-    T("Key words", 80, 60, 860, { size: 64, bold: true, color: "#0c4a6e" }),
-    ...[["Evaporate", "to turn from liquid into gas"], ["Condense", "to turn from gas into liquid"], ["Vapour", "water as an invisible gas"], ["Precipitation", "rain, snow or hail"]].flatMap(([w, d], i) => [
-      R(80 + (i % 2) * 440, 200 + Math.floor(i / 2) * 250, 410, 220, ["#e0f2fe", "#ccfbf1", "#ede9fe", "#fef3c7"][i], { radius: 24, name: "Word card" }),
-      T(w, 110 + (i % 2) * 440, 230 + Math.floor(i / 2) * 250, 350, { size: 40, bold: true, color: "#0c4a6e" }),
-      T(d, 110 + (i % 2) * 440, 300 + Math.floor(i / 2) * 250, 350, { size: 28, color: MUTED, lh: 1.3 }),
-    ]),
-  ]),
-  page("#f0fdf4", [
-    T("Try it at home", 80, 60, 860, { size: 64, bold: true, color: "#166534" }),
-    T("1.  Put a bowl of warm water in the sun.\n2.  Cover it with cling film and a cold cup on top.\n3.  Wait 30 minutes and look for drops.\n4.  Write down what you see.", 80, 200, 600, { size: 34, color: INK, lh: 1.6 }),
-    F(720, 200, 230, 300, { shape: "rounded", radius: 24, name: "Experiment photo" }),
-  ]),
-  page("#fef3c7", [
-    E("icon-question", 412, 120, 200, { c1: AMB }),
-    flow(360, T("Quiz time!", 80, 0, 864, { size: 96, bold: true, color: "#92400e", align: "center" }), 20, T("What makes water rise into the sky?", 80, 0, 864, { size: 44, color: "#78350f", align: "center" })),
-  ]),
-]);
+// The two hand-made decks use the pro deck engine (templates-decks.js) with their own slide order:
+// a 9-slide investor pitch and a 7-slide 4:3 lesson. DECKS is set further down; builds run later.
+tpl("pitch-deck", "Startup pitch deck", "presentation-16x9", "presentation slides pitch deck startup business investors pesh kash slides", (W, H) => DECKS.special("pitch", W, H));
+tpl("lesson-slides", "Science lesson slides", "presentation-4x3", "presentation lesson class school science sabaq taleem slides", (W, H) => DECKS.special("lesson", W, H));
 
 /* ================= Logos ================= */
 tpl("chai-badge-logo", "Chai cafe badge logo", "logo", "logo badge cafe tea chai dhaba nishan cafe", (W, H) => [page(WHITE, [
@@ -577,16 +462,30 @@ tpl("mosaic-collage", "Photo mosaic", "collage-square", "collage mosaic photos f
 tpl("nine-photo-grid", "9 photo grid", "collage-square", "collage grid nine photos instagram tasveerain", (W, H) => [collagePage(W, H, "nine", { gap: 8 })]);
 
 /* ================= Documents ================= */
-tpl("company-letterhead", "Company letterhead", "a4", "letterhead letter company document a4 khat letter pad", (W, H) => [page(WHITE, [
-  R(-12, -12, W + 24, 132, IND, { name: "Header band" }),
-  T("YOUR COMPANY", 60, 36, 360, { size: 32, bold: true, color: WHITE, ls: 2 }),
-  T("www.yourcompany.pk · 0300 1234567", 440, 48, W - 500, { size: 14, color: "#e0e7ff", align: "right" }),
-  flow(190, T("10 November 2026", 60, 0, W - 120, { size: 15, color: MUTED }), 30, T("Dear customer,", 60, 0, W - 120, { size: 16, color: INK }), 16,
-    T("Thank you for choosing us. Write your letter here. This page is A4 with a 3 mm bleed, so the coloured band prints right to the edge.", 60, 0, W - 120, { size: 16, color: INK, lh: 1.6 }), 40,
-    T("Kind regards,\nYour name", 60, 0, W - 120, { size: 16, color: INK, lh: 1.6 })),
-  R(60, H - 90, W - 120, 1.5, "#c7d2fe", { name: "Footer line" }),
-  T("Office 5, Blue Area, Islamabad", 60, H - 76, W - 120, { size: 12, color: MUTED, align: "center" }),
-])]);
+tpl("company-letterhead", "Company letterhead", "a4", "letterhead letter company document a4 khat letter pad corporate business", (W, H) => {
+  const NV = "#12224a", BL = "#2f6bff", SKY = "#dbe6ff";
+  return [page(WHITE, [
+    // Geometric corner: two overlapping turned squares in brand blues, into the bleed.
+    S("polygon", W - 210, -150, 300, 300, NV, { sides: 4, name: "Corner shape" }), S("polygon", W - 120, -60, 220, 220, BL, { sides: 4, name: "Corner shape" }),
+    C(56, 56, 56, 56, NV, { name: "Logo mark" }), T("N", 56, 66, 56, { size: 30, bold: true, color: WHITE, align: "center", name: "Logo letter" }),
+    T("Northbridge & Co.", 128, 58, 330, { size: 26, bold: true, color: NV, name: "Company name" }),
+    T("FINANCIAL ADVISORS", 128, 92, 330, { size: 11, bold: true, color: BL, ls: 2.4, name: "Tagline" }),
+    ...[["icon-call", "+1 555 0142 778"], ["icon-mail", "hello@northbridge.co"], ["icon-globe", "www.northbridge.co"]].flatMap(([ic, t], i) => [E(ic, 470, 150 + i * 24, 14, { c1: BL }), T(t, 492, 148 + i * 24, 240, { size: 12.5, color: INK, name: "Contact" })]),
+    R(56, 232, W - 112, 1.5, SKY, { name: "Rule" }),
+    T("12 November 2026", 56, 262, 300, { size: 13, color: MUTED, name: "Date" }),
+    T("Ms. Hina Malik\nGreen Basket Grocers\n14 Mall Road, Lahore", 56, 296, 360, { size: 13.5, color: INK, lh: 1.5, name: "Recipient" }),
+    T("Subject: Your financial plan for 2027", 56, 392, W - 112, { size: 15, bold: true, color: NV, name: "Subject" }),
+    flow(428, T("Dear Ms. Malik,", 56, 0, W - 112, { size: 13.5, color: INK }), 14,
+      T("Thank you for meeting our team last week. As promised, we have prepared a simple plan for the coming year: a monthly budget, a savings target for your second branch and a review of your current loans.", 56, 0, W - 112, { size: 13.5, color: INK, lh: 1.6 }), 12,
+      T("The full plan is attached. We suggest a short call next week to go through it together and answer any questions your team may have.", 56, 0, W - 112, { size: 13.5, color: INK, lh: 1.6 }), 24,
+      T("Kind regards,", 56, 0, 300, { size: 13.5, color: INK }), 30,
+      T("Daniel Carter", 56, 0, 300, { size: 16, bold: true, color: NV, name: "Signature name" }), 2,
+      T("Senior Advisor, Northbridge & Co.", 56, 0, 360, { size: 12, color: MUTED })),
+    // Footer band with a turned square accent.
+    R(-12, H - 64, W + 24, 76, NV, { name: "Footer band" }), S("polygon", 40, H - 104, 80, 80, BL, { sides: 4, name: "Footer accent" }),
+    T("200 Market Street, Suite 5 · Springfield · Registered in 2009", 150, H - 40, W - 200, { size: 11.5, color: SKY, align: "right", name: "Address" }),
+  ])];
+});
 tpl("achievement-certificate", "Certificate of achievement", "a4", "certificate award school achievement sanad inaam a4", (W, H) => [page("#fffbf5", [
   R(28, 28, W - 56, H - 56, "none", { stroke: "#b8860b", sw: 4, name: "Border" }),
   R(42, 42, W - 84, H - 84, "none", { stroke: "#b8860b", sw: 1, name: "Inner border" }),
@@ -608,27 +507,43 @@ for (const add of [addR2DeckA, addR2DeckB, addR2IgA, addR2IgB, addR2CardA, addR2
 /** The template helpers (for building and checking new template files in tests). */
 export const TEMPLATE_KIT = KIT;
 /** Presentation generator (gallery.js): content key × theme key × layout variant 0–3 -> { title, design } or null. */
-export const DECK_PARTS = { contents: DECKS.contents, themes: DECKS.themes, variants: DECKS.variants, themeName: DECKS.themeName, content: DECKS.content, styleOf: DECKS.styleOf };
+export const DECK_PARTS = { contents: DECKS.contents, themes: DECKS.themes, variants: DECKS.variants, variantNames: DECKS.variantNames, themeName: DECKS.themeName, content: DECKS.content, styleOf: DECKS.styleOf };
 export function makeDeck(contentKey, themeKey, variant = 0) {
   seq = 0;
   const pages = DECKS.pages(contentKey, themeKey, variant);
   if (!pages) return null;
   const p = getPreset("presentation-16x9");
-  return { title: DECKS.content(contentKey).title, design: { version: 1, name: DECKS.content(contentKey).title, preset: designPreset(p), pages: JSON.parse(JSON.stringify(pages)) } };
+  const c = DECKS.content(contentKey);
+  const design = { version: 1, name: c.title, preset: designPreset(p), pages: JSON.parse(JSON.stringify(pages)) };
+  fillPhotos(design, `${c.title} ${c.tags}`, `deck.${contentKey}.${themeKey}.${variant}`);
+  return { title: c.title, design };
 }
 
 /* ================= catalogue ================= */
 let built = null;
+/** Templates redone with a pro composition (templates-pro.js): id -> { look, pattern, style }. */
+export const PRO_LOOKS = new Map();
 function buildAll() {
   if (built) return built;
+  const famN = new Map();
   built = DEFS.map((d) => {
     const p = getPreset(d.presetId);
     if (!p) throw new Error(`Template ${d.id}: unknown preset ${d.presetId}`);
     const { w, h } = presetPx(p);
     seq = 0;
-    const pages = d.build(w, h);
+    let pages = d.build(w, h);
     const tags = [...new Set(d.tags.toLowerCase().split(/\s+/).filter(Boolean))];
-    return { id: d.id, title: d.title, presetId: p.id, group: p.group, tags, pages: pages.length, design: { version: 1, name: d.title, preset: designPreset(p), pages } };
+    // Single-page social / print / invitation templates: their own words in a pro photo-led composition.
+    const fam = proFamily(p.id);
+    if (fam) {
+      const n = famN.get(fam) || 0;
+      const r = proRedesign({ id: d.id, title: d.title, tags, presetId: p.id }, pages, w, h, KIT, n, p, bleedPx(p));
+      if (r) { pages = r.pages; famN.set(fam, n + 1); PRO_LOOKS.set(d.id, { look: r.look, pattern: r.pattern, style: r.style }); }
+    }
+    const design = { version: 1, name: d.title, preset: designPreset(p), pages };
+    // Every photo frame shows a real library photo (by topic; the template id as seed keeps it stable).
+    fillPhotos(design, `${d.title} ${tags.join(" ")}`, d.id);
+    return { id: d.id, title: d.title, presetId: p.id, group: p.group, tags, pages: pages.length, design };
   });
   return built;
 }
@@ -675,12 +590,13 @@ export function templateThumbSvg(t, maxPx = 320) {
   const size = presetPx(tt.design.preset);
   const width = size.w >= size.h ? maxPx : (maxPx * size.w) / size.h;
   // Unique ids per call, so the same template can be shown twice on one page.
-  return pageSvg(tt.design, 0, size, { width: Math.round(width * 100) / 100, idp: "tt" + (thumbSeq++).toString(36) + "-" + tt.id, editor: true });
+  // Library photos are drawn from their small copies (same origin, inline SVG, so they load in the gallery).
+  return pageSvg(tt.design, 0, size, { width: Math.round(width * 100) / 100, idp: "tt" + (thumbSeq++).toString(36) + "-" + tt.id, editor: true, urlOf: thumbUrlOf });
 }
-/** Live SVG thumbnail of a template's first page (or `pageIndex`), `width` px wide. No image files needed. */
+/** Live SVG thumbnail of a template's first page (or `pageIndex`), `width` px wide (library photos as thumbnails). */
 export function templateSvg(t, { width = 240, pageIndex = 0 } = {}) {
   const tt = typeof t === "string" ? buildAll().find((x) => x.id === t) : t;
   if (!tt) return "";
   const size = presetPx(tt.design.preset);
-  return pageSvg(tt.design, pageIndex, size, { width, idp: "tp" + (thumbSeq++).toString(36) + "-" + tt.id + "-" + pageIndex, editor: true });
+  return pageSvg(tt.design, pageIndex, size, { width, idp: "tp" + (thumbSeq++).toString(36) + "-" + tt.id + "-" + pageIndex, editor: true, urlOf: thumbUrlOf });
 }

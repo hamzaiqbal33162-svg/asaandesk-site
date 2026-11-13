@@ -301,9 +301,11 @@ export function drawOverlay(x, o, W, H) {
   } else if (o.type === "shape") {
     shapePath(x, o.shape, b.w, b.h);
     const sw = (o.strokeWidth || 0) * Math.min(W, H) * 0.01;
+    // template extras: soft = blurred edge (fraction of the short side), fade = see-through towards that side (scrims)
+    if (o.soft > 0 && "filter" in x) x.filter = `blur(${(o.soft * Math.min(W, H)).toFixed(1)}px)`;
     if (o.shape === "line") { x.lineWidth = Math.max(2, sw || Math.min(W, H) * 0.012); x.lineCap = "round"; x.strokeStyle = o.fill; x.stroke(); }
     else {
-      x.fillStyle = o.fill; x.fill();
+      x.fillStyle = o.fade ? fadeFill(x, o.fill, o.fade, b.w, b.h) : o.fill; x.fill();
       if (sw > 0) { x.lineWidth = sw; x.lineJoin = "round"; x.strokeStyle = o.stroke; x.stroke(); }
     }
   } else if (o.type === "sticker") {
@@ -319,6 +321,14 @@ export function drawOverlay(x, o, W, H) {
     }
   }
   x.restore();
+}
+/** A colour that fades to see-through towards one side of a w×h box drawn round 0,0 ("top", "bottom", "left", "right"). */
+function fadeFill(x, hex, side, w, h) {
+  const v = parseInt(String(hex).slice(1, 7), 16) || 0, rgb = `${(v >> 16) & 255},${(v >> 8) & 255},${v & 255}`;
+  const [x0, y0, x1, y1] = { top: [0, -h / 2, 0, h / 2], bottom: [0, h / 2, 0, -h / 2], left: [-w / 2, 0, w / 2, 0], right: [w / 2, 0, -w / 2, 0] }[side] || [0, -h / 2, 0, h / 2];
+  const g = x.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0, `rgba(${rgb},0)`); g.addColorStop(1, `rgba(${rgb},1)`);
+  return g;
 }
 // Pictures of "image" overlays (Magic Grab) live in the app's pixel store; the app tells us how to find them.
 let overlayImage = () => null;

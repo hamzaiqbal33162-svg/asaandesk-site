@@ -9,6 +9,7 @@ import { LAYOUT_BUILDERS_4 } from "./layouts4.js";
 import { LAYOUT_BUILDERS_5 } from "./layouts5.js";
 import { LAYOUT_BUILDERS_6 } from "./layouts6.js";
 import { LAYOUT_BUILDERS_7 } from "./layouts7.js";
+import { LAYOUT_BUILDERS_8 } from "./layouts8.js";
 
 const runs = (md) => cleanRuns(mdInline(md));
 const look = (md, st = {}) => runs(md).map((r) => ({ ...r, ...st }));
@@ -41,6 +42,7 @@ export const LAYOUT_BUILDERS = {
   ...LAYOUT_BUILDERS_5,
   ...LAYOUT_BUILDERS_6,
   ...LAYOUT_BUILDERS_7,
+  ...LAYOUT_BUILDERS_8,
   "one-pager": (P, T) => doc(`${T.short} one pager`, [
     hero({ bg: P.dark, deco: "petals", dc: P.light, dc2: P.cream, minh: 210 }, look(T.org, { color: P.cream, size: 15, font: "serif" }), look("One Pager", { color: P.cream, size: 46, font: "serif" })),
     band(P, "Overview", "diamonds", { font: "serif" }),

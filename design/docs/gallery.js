@@ -4,6 +4,8 @@
 // the id, so every one opens as a real, editable document. 13 hand-tuned originals and the 8 classic templates come first.
 // Own names, colours, text and artwork only.
 import { decoSvg } from "./decos.js";
+import { drawThumb, PAGE_W, PAGE_H } from "./thumbs.js";
+import { pickPhoto, photoUrl } from "../shared/photo-library.js";
 
 export const CANVA_COUNT = 3240; // Canva Docs templates (canva.com/docs/templates, 11 Nov 2026)
 const LONG = "Long docs", MORE = "More templates for you";
@@ -58,7 +60,7 @@ export const THEMES = TH.map(([key, label, org, short, person, role, city, audie
 
 /* ---------------- base layouts (built in layouts.js) ---------------- */
 // [id, name, section, tags, header kind, decoration, thumb title(T), thumb subtitle(T), options]
-const LY = [
+const LY0 = [
   ["one-pager", "One Pager", LONG, ["one pager", "summary", "overview", "brief"], "dark", "petals", () => "One Pager", (T) => T.org, { serif: true }],
   ["strategic-plan", "Strategic Plan", LONG, ["strategy", "plan", "pestle", "goals"], "dark", "circles", () => "Strategic Plan", (T) => T.org, { serif: true }],
   ["sustainability-report", "Sustainability Report", LONG, ["report", "sustainability", "green", "esg"], "dark", "leaves", () => "SUSTAINABILITY REPORT", (T) => T.org, { small: true }],
@@ -168,13 +170,59 @@ const LY = [
   ["daily-planner", "Daily Planner", MORE, ["planner", "daily", "to do", "schedule"], "light", "sun", () => "Today", (T) => T.person],
   ["trip-budget", "Trip Budget", MORE, ["budget", "travel", "trip", "expenses"], "dark", "waves", () => "Trip Budget", () => "5 days · 4 people"],
 ];
+// Round 5 (Canva's trending Docs kinds we did not have yet), each placed right after the layout named in [9].
+const LY_NEW = [
+  ["impact-report", "Impact Report", LONG, ["impact", "report", "results", "nonprofit"], "dark", "leaves", () => "Impact Report 2026", (T) => T.org, {}, "one-pager"],
+  ["project-plan", "Project Plan", LONG, ["project plan", "plan", "timeline", "tasks"], "dark", "steps", () => "Project Plan", (T) => cap(T.project), {}, "strategic-plan"],
+  ["brand-guidelines", "Brand Guidelines", LONG, ["brand", "guidelines", "logo", "colours", "style guide"], "dark", "circles", () => "Brand Guidelines", (T) => T.org, {}, "sustainability-report"],
+  ["employee-handbook", "Employee Handbook", LONG, ["handbook", "employee", "hr", "policies"], "light", "petals", () => "Employee Handbook", (T) => T.org, {}, "project-proposal"],
+  ["business-case", "Business Case", LONG, ["business case", "investment", "options", "return"], "dark", "diamonds", () => "Business Case", (T) => cap(T.product), {}, "newsletter"],
+  ["social-media-plan", "Social Media Plan", LONG, ["social media", "plan", "content", "marketing"], "dark", "confetti", () => "Social Media Plan", (T) => `${T.short} · 2027`, {}, "annual-report"],
+  ["project-scope", "Project Scope", LONG, ["scope", "project", "deliverables", "requirements"], "bar", "dots", () => "Project scope", (T) => cap(T.project), { barText: "PROJECT SCOPE" }, "case-study"],
+  ["content-strategy", "Content Strategy", LONG, ["content", "strategy", "marketing", "editorial"], "light", "waves", () => "Content Strategy", (T) => T.org, {}, "product-brief"],
+];
+const LY = LY0.flatMap((l) => [l, ...LY_NEW.filter((n) => n[9] === l[0]).map((n) => n.slice(0, 9))]);
 export const LAYOUT_IDS = LY.map((l) => l[0]);
 export const LAYOUTS = LY.length;
 const LMAP = Object.fromEntries(LY.map((l) => [l[0], l]));
 // What the page under the header looks like on the thumbnail.
 const BODY = { "property-listing": "chart", "meal-plan-nutrition": "table", "workshop-handout": "checks", "product-catalog": "table", "donation-receipt": "letter", "shift-schedule": "table", "pitch-one-sheet": "table", "release-notes": "checks", "daily-planner": "table", "trip-budget": "chart", "conference-agenda": "table", "launch-plan": "checks", timetable: "table", "shopping-list": "table", "parent-letter": "letter", "performance-review": "table", "project-charter": "table", "lab-report": "chart", "personal-budget": "table", "short-story": "letter", "meeting-agenda": "table", "volunteer-handbook": "checks", "budget-proposal": "chart", "grant-proposal": "table", questionnaire: "table", "team-directory": "table", "habit-tracker": "table", "about-me": "checks", postmortem: "table", "competitor-analysis": "table", "survey-results": "chart", worksheet: "letter", "event-flyer-doc": "table", "board-minutes": "letter", "magazine-article": "chart", "incident-report": "table", "fact-sheet": "table", speech: "letter", "wedding-program": "table", "report-card": "table", "creative-brief": "table", prd: "table", retrospective: "table", kanban: "table", "interview-notes": "sections", "city-guide": "checks", glossary: "table", "white-paper": "chart", "statement-of-work": "table", standup: "table", "timeline-grid": "table", comparison: "table", swot: "table", journal: "checks", contract: "letter", receipt: "table", "event-program": "table", "signup-sheet": "table", "book-report": "letter", "meal-planner": "table", "resume-sidebar": "table", "resume-minimal": "letter", "pricing-proposal": "table", "action-minutes": "table", "stats-case-study": "chart", brochure: "checks", "launch-checklist": "checks", letterhead: "letter", "award-letter": "letter", recipe: "checks", menu: "table", faq: "letter", "how-to-guide": "checks", policy: "sections", roadmap: "table", okrs: "table", syllabus: "table", "title-page-report": "chart", "two-column-newsletter": "sections", "price-list": "table", "thank-you-letter": "letter", "cover-letter": "letter", "recommendation-letter": "letter", "press-release": "letter", resume: "table", invoice: "table", "weekly-planner": "table", "annual-report": "chart", "sustainability-report": "chart", "business-plan": "chart", "marketing-plan": "chart", "research-report": "chart", "meeting-notes": "checks", "event-plan": "checks", "lesson-plan": "checks", "onboarding-guide": "checks", sop: "checks", "product-brief": "checks", brainstorm: "checks", "job-description": "checks" };
+Object.assign(BODY, { "impact-report": "kpi", "project-plan": "timeline", "brand-guidelines": "sections", "employee-handbook": "checks", "business-case": "kpi", "social-media-plan": "kpi", "project-scope": "table", "content-strategy": "chart",
+  // round 5: report-like layouts lead with KPI cards; plans with a timeline (as Canva's report / plan templates do)
+  "annual-report": "kpi", "sustainability-report": "kpi", "stats-case-study": "kpi", "fact-sheet": "kpi", "status-report": "kpi", "case-study": "kpi", "survey-results": "kpi", "pitch-one-sheet": "kpi", "one-pager": "kpi", okrs: "kpi",
+  "resume-minimal": "resume", "resume-timeline": "resume", "press-release": "news", "magazine-article": "news", "short-story": "prose", "book-report": "prose", "award-letter": "certificate", speech: "prose", worksheet: "checks", "board-minutes": "checks",
+  roadmap: "timeline", "timeline-grid": "timeline", "launch-plan": "timeline", "project-charter": "timeline", "travel-itinerary": "timeline", "event-plan": "timeline", newsletter: "sections", "strategic-plan": "sections", "project-proposal": "timeline" });
 const PMAP = Object.fromEntries(PALETTES.map((p) => [p.id, p]));
 const TMAP = Object.fromEntries(THEMES.map((t) => [t.key, t]));
+
+/* ---------------- round 5 look: Canva Docs pattern (photo header, big bold title, accent bars, cards) ---------------- */
+// Photo topics per content theme (words the shared photo library understands), so each theme gets fitting photos.
+export const THEME_PHOTO = { school: "school education class", clinic: "clinic medical care", restaurant: "restaurant food", shop: "shop store business", tech: "tech software office", ngo: "community nature green", travel: "travel trip", fitness: "fitness gym", realestate: "real estate interior home", agency: "creative design agency workspace", bakery: "bakery cafe food", construction: "construction architecture" };
+// Header style per layout: shade (photo with dark fade), split (colour panel + photo), tint (photo washed in colour),
+// soft (light page + photo), band (colour band + own decoration: letters, forms, receipts), avatar (résumé), bar, plain.
+const BAND_ONLY = new Set(["thank-you-letter", "cover-letter", "recommendation-letter", "award-letter", "receipt", "invoice", "donation-receipt", "parent-letter", "signup-sheet", "questionnaire", "glossary", "worksheet", "timetable", "shopping-list", "habit-tracker", "journal", "daily-planner", "weekly-planner", "personal-budget", "book-report", "faq", "meeting-agenda", "retrospective", "interview-notes", "brainstorm", "okrs", "comparison", "swot", "meal-planner", "trip-budget", "resume-timeline"]);
+const STYLE_OVERRIDE = { menu: "tint", "wedding-program": "tint", "short-story": "tint", speech: "soft", recipe: "split", "city-guide": "tint", brochure: "tint", "event-flyer-doc": "tint", "travel-itinerary": "split", "property-listing": "bar", "magazine-article": "bar", "press-release": "bar", "project-scope": "bar", "lab-report": "bar" };
+const BAR_PHOTO = new Set(["property-listing", "magazine-article", "press-release", "project-scope", "release-notes", "lab-report", "team-directory"]);
+const PHOTO_CYCLE = ["shade", "split", "tint"];
+export function styleOf(layout) {
+  const L = LMAP[layout];
+  if (!L) return "band";
+  if (STYLE_OVERRIDE[layout]) return STYLE_OVERRIDE[layout];
+  const kind = L[4];
+  if (kind === "avatar" || kind === "lavatar") return "avatar";
+  if (kind === "plain") return "plain";
+  if (kind === "bar") return "bar";
+  if (BAND_ONLY.has(layout)) return "band";
+  if (kind === "light") return "soft";
+  return PHOTO_CYCLE[LY.findIndex((l) => l[0] === layout) % 3];
+}
+const TABLE_KIND = Object.fromEntries([
+  ...["invoice", "receipt", "price-list", "budget-proposal", "pricing-proposal", "personal-budget", "trip-budget", "product-catalog", "menu", "donation-receipt", "grant-proposal", "statement-of-work", "shopping-list"].map((k) => [k, "money"]),
+  ...["timetable", "shift-schedule", "weekly-planner", "meal-planner", "daily-planner", "conference-agenda", "event-program", "wedding-program", "syllabus", "meeting-agenda", "meal-plan-nutrition", "action-minutes", "standup", "event-flyer-doc"].map((k) => [k, "schedule"]),
+  ...["team-directory", "signup-sheet", "resume-sidebar", "kanban", "interview-notes"].map((k) => [k, "people"]),
+]);
+const LABEL = { "wedding-program": "Order of the day", "conference-agenda": "Agenda", "event-program": "Programme", "meal-planner": "This week", "meal-plan-nutrition": "Daily plan", "habit-tracker": "This week", "report-card": "Results", timetable: "Timetable", glossary: "Terms", "shopping-list": "To buy", worksheet: "Exercises", "board-minutes": "Decisions", "event-flyer-doc": "Programme", invoice: "Invoice items", receipt: "Items paid", "price-list": "Our prices", menu: "Tonight's menu", "product-catalog": "Best sellers", "pricing-proposal": "Packages", "budget-proposal": "Budget", "personal-budget": "This month", "trip-budget": "Trip costs", "grant-proposal": "Funding asked", recipe: "Ingredients", "launch-checklist": "Launch checklist", "employee-handbook": "Your first week", "brand-guidelines": "Brand essentials", "content-strategy": "Content that works", "project-scope": "Deliverables", "status-report": "Project health", "event-plan": "Run of show", roadmap: "Roadmap", "project-plan": "Milestones", "timeline-grid": "Timeline", "travel-itinerary": "Day by day", "lesson-plan": "Lesson steps", sop: "Procedure", "meeting-notes": "Action items", "job-description": "What you will do", "onboarding-guide": "Your first week", "how-to-guide": "Steps", "marketing-plan": "Channel results", "business-plan": "Financial outlook", "research-report": "Key findings", "white-paper": "What we found", "lab-report": "Results", "property-listing": "Price history", "magazine-article": "By the numbers" };
+const DEF_LABEL = { table: "Key numbers", chart: "Highlights", checks: "Next steps", timeline: "Milestones", kpi: "At a glance" };
 
 /** "layout~p07~clinic" → { layout, P, T } (null when it is not a generated id). */
 export function parseId(id) {
@@ -184,13 +232,13 @@ export function parseId(id) {
 }
 // Template categories (filter chips in the Templates panel), like the kinds on a template site.
 const CAT = {
-  Reports: ["lab-report", "survey-results", "competitor-analysis", "postmortem", "white-paper", "incident-report", "fact-sheet", "magazine-article", "annual-report", "sustainability-report", "status-report", "research-report", "title-page-report", "case-study", "stats-case-study", "report", "essay"],
-  "Plans and proposals": ["pitch-one-sheet", "launch-plan", "project-charter", "budget-proposal", "grant-proposal", "creative-brief", "prd", "statement-of-work", "one-pager", "strategic-plan", "project-proposal", "pricing-proposal", "business-plan", "marketing-plan", "product-brief", "roadmap", "okrs", "timeline-grid", "comparison", "swot", "event-plan"],
+  Reports: ["impact-report", "lab-report", "survey-results", "competitor-analysis", "postmortem", "white-paper", "incident-report", "fact-sheet", "magazine-article", "annual-report", "sustainability-report", "status-report", "research-report", "title-page-report", "case-study", "stats-case-study", "report", "essay"],
+  "Plans and proposals": ["project-plan", "business-case", "project-scope", "social-media-plan", "content-strategy", "pitch-one-sheet", "launch-plan", "project-charter", "budget-proposal", "grant-proposal", "creative-brief", "prd", "statement-of-work", "one-pager", "strategic-plan", "project-proposal", "pricing-proposal", "business-plan", "marketing-plan", "product-brief", "roadmap", "okrs", "timeline-grid", "comparison", "swot", "event-plan"],
   "Resumes and letters": ["parent-letter", "about-me", "resume", "resume-sidebar", "resume-timeline", "resume-minimal", "cover-letter", "thank-you-letter", "recommendation-letter", "letterhead", "award-letter", "cv", "modern-cover-letter", "business-letter"],
   Newsletters: ["release-notes", "property-listing", "newsletter", "two-column-newsletter", "press-release", "brochure", "notice-bilingual"],
   "Meetings and planners": ["daily-planner", "trip-budget", "meal-plan-nutrition", "shift-schedule", "conference-agenda", "meeting-agenda", "shopping-list", "personal-budget", "habit-tracker", "board-minutes", "event-flyer-doc", "retrospective", "kanban", "standup", "interview-notes", "wedding-program", "meeting-notes", "team-meeting", "action-minutes", "weekly-planner", "brainstorm", "journal", "meal-planner", "launch-checklist", "signup-sheet", "travel-itinerary", "event-program"],
   Education: ["timetable", "short-story", "worksheet", "report-card", "glossary", "lesson-plan", "syllabus", "book-report"],
-  "Guides and policies": ["workshop-handout", "volunteer-handbook", "performance-review", "city-guide", "speech", "sop", "how-to-guide", "policy", "faq", "onboarding-guide", "job-description", "contract"],
+  "Guides and policies": ["brand-guidelines", "employee-handbook", "workshop-handout", "volunteer-handbook", "performance-review", "city-guide", "speech", "sop", "how-to-guide", "policy", "faq", "onboarding-guide", "job-description", "contract"],
   "Business forms": ["product-catalog", "donation-receipt", "questionnaire", "team-directory", "invoice", "price-list", "receipt", "menu", "recipe"],
 };
 const CAT_OF = Object.fromEntries(Object.entries(CAT).flatMap(([c, ids]) => ids.map((id) => [id, c])));
@@ -237,7 +285,7 @@ function generated(n) {
   // (gcd(nP + 1, nT) = 1 keeps every (palette, theme) pair of one layout distinct for r < nP * nT).
   for (let k = 0; out.length < n && k < nL * nP * nT; k++) {
     const l = k % nL, r = Math.floor(k / nL);
-    const P = PALETTES[(r + 3 * l) % nP], T = THEMES[(Math.floor(r / nP) + r + 5 * l) % nT];
+    const P = PALETTES[(r + 5 * l) % nP], T = THEMES[(Math.floor(r / nP) + r + 7 * l) % nT];
     out.push(genMeta(LY[l][0], P, T));
   }
   return out;
@@ -271,62 +319,57 @@ export const TOTALS = { docs: TOTAL, "magic-write": MAGIC_WRITE.length };
 let byId = null;
 export const templateMeta = (id) => { byId ||= new Map(TEMPLATES.map((t) => [t.id, t])); return byId.get(id) || (parseId(id) ? genMeta(parseId(id).layout, parseId(id).P, parseId(id).T) : null); };
 
-/* ---------------- thumbnails: a mini page drawn from the layout look + palette + theme ---------------- */
-function lookOf(id) {
-  if (ORIG_LOOK[id]) return ORIG_LOOK[id];
-  const mw = MAGIC_WRITE.find((t) => t.id === id);
-  if (mw) { const P = PMAP[mw.palette]; return { bg: P.light, fg: P.ink, accent: P.light, accentInk: P.dark, deco: "confetti", dc: P.dark, dc2: P.mid, title: mw.name, sub: "Magic Write starter" }; }
+/* ---------------- thumbnails: a finished mini page in Canva's Docs pattern (thumbs.js draws it) ---------------- */
+// Hand-made templates: palette, content theme (photo + sample text) and header style of each.
+const ORIG_SPEC = {
+  "one-pager": ["p01", "agency", "shade"], "strategic-plan": ["p06", "construction", "split"], "sustainability-report": ["p05", "ngo", "tint"],
+  "project-proposal": ["p03", "school", "shade"], newsletter: ["p04", "school", "split"], "annual-report": ["p08", "agency", "shade"],
+  "case-study": ["p07", "shop", "split"], "product-brief": ["p12", "tech", "tint"], resume: ["p02", "tech", "avatar"],
+  "thank-you-letter": ["p09", "bakery", "band"], "team-meeting": ["p04", "agency", "soft"], "modern-cover-letter": ["p11", "tech", "band"],
+  "lesson-plan": ["p10", "school", "soft"], cv: ["p12", "shop", "avatar"], "cover-letter": ["p11", "restaurant", "band"],
+  "business-letter": ["p02", "shop", "band"], report: ["p02", "shop", "shade"], "meeting-notes": ["p05", "shop", "soft"],
+  invoice: ["p04", "shop", "band"], essay: ["p11", "school", "plain"], "notice-bilingual": ["p03", "school", "band"],
+};
+// Kicker line (small caps above the title) for personal documents, where the organisation name would read oddly.
+const KICKER = { "wedding-program": "Together with their families", "short-story": "A short story", speech: "Remarks", "thank-you-letter": "With gratitude", recipe: "From our kitchen", menu: "Seasonal menu", journal: "Daily journal", "award-letter": "Certificate of appreciation", "habit-tracker": "Personal", "meal-planner": "Meal plan", "shopping-list": "This week", "about-me": "About me", "book-report": "Book report", "daily-planner": "Plan your day", "weekly-planner": "Plan your week", "personal-budget": "Personal finance", "trip-budget": "Trip planner", "city-guide": "City guide", "travel-itinerary": "Travel itinerary" };
+const photoTopic = (T, L) => `${THEME_PHOTO[T.key] || T.label} ${L ? L[1] : ""}`.trim();
+/** The look of any template id: { P, T, style, body, label, table, title, sub, kicker, serif, deco, barText, photo (record) }.
+ *  templates.js uses the same look for the opened document, so the card and the document match. */
+export function docLook(id) {
+  const o = ORIG_LOOK[id];
+  if (o) {
+    const [pid, tk, style] = ORIG_SPEC[id] || ["p02", "shop", "band"];
+    const P = PMAP[pid], T = TMAP[tk], l = ORIG_LAYOUT[id] || id, L = LMAP[l];
+    let body = BODY[l] || "sections";
+    if (body === "kpi") body = "chart";
+    const photo = ["band", "avatar", "plain"].includes(style) ? null : pickPhoto(photoTopic(T, L), id);
+    return { P, T, style, body, label: LABEL[l] || DEF_LABEL[body] || "Overview", table: TABLE_KIND[l] || "metrics", title: o.title, sub: o.sub, kicker: "", serif: !!o.serif, deco: o.deco || "diamonds", photo, layout: l, original: true, topic: photoTopic(T, L), id };
+  }
+  const mi = MAGIC_WRITE.findIndex((t) => t.id === id);
+  if (mi >= 0) {
+    const mw = MAGIC_WRITE[mi], P = PMAP[mw.palette], T = THEMES[mi % THEMES.length], style = ["tint", "soft", "split"][mi % 3];
+    return { P, T, style, body: mi % 2 ? "sections" : "letter", label: "Draft", table: "metrics", title: mw.name, sub: "AI writing starter", kicker: "Magic Write", serif: false, deco: "confetti", photo: pickPhoto(`${mw.name} ${THEME_PHOTO[T.key]}`, id), layout: mw.id, topic: `${mw.name} ${THEME_PHOTO[T.key]}`, id };
+  }
   const g = parseId(id);
   if (!g) return null;
-  const { L, P, T } = g, kind = L[4], o = L[8] || {};
-  const light = kind === "light" || kind === "lavatar";
-  if (kind === "plain") return { bg: "#ffffff", fg: P.dark, accent: P.mid, title: L[6](T), sub: L[7](T), plain: true, serif: !!(o.serif || P.font), center: !!o.center };
-  return {
-    bg: light ? P.light : P.dark, fg: light ? P.ink : P.cream, accent: P.light, accentInk: P.dark, deco: L[5], dc: light ? P.dark : P.light, dc2: light ? P.mid : P.cream,
-    serif: !!(o.serif || P.font), italic: !!o.italic, small: !!o.small, left: kind === "avatar" || kind === "lavatar", bar: kind === "bar", barText: o.barText, title: L[6](T), sub: L[7](T), body: BODY[g.layout] || "sections",
-    ...(kind === "avatar" ? { dc: P.mid, dc2: P.light } : kind === "lavatar" ? { dc: P.mid, dc2: P.cream } : {}),
-  };
+  const { L, P, T, layout } = g, opt = L[8] || {}, style = styleOf(layout), body = BODY[layout] || "sections";
+  const title = L[6](T), sub = L[7](T);
+  const kicker = style === "avatar" ? "" : KICKER[layout] || (sub === T.org || String(title).includes(T.short) ? `${T.label} · ${T.city}` : T.org);
+  const photo = style === "band" || style === "avatar" || style === "plain" || (style === "bar" && !BAR_PHOTO.has(layout)) ? null : pickPhoto(photoTopic(T, L), id);
+  return { P, T, style, body, label: LABEL[layout] || DEF_LABEL[body] || "Overview", table: TABLE_KIND[layout] || "metrics", title, sub, kicker, serif: !!(opt.serif || P.font === "serif"), deco: L[5] || "diamonds", barText: opt.barText, photo, layout, topic: photoTopic(T, L), id };
 }
-const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const inner = (s) => String(s || "").replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "");
-const vbOf = (s) => (String(s).match(/viewBox="([^"]+)"/) || [])[1] || "0 0 100 100";
-const lines = (x, y, n, w, col = "#d7dbe6", gap = 9) => Array.from({ length: n }, (_, i) => `<rect x="${x}" y="${y + i * gap}" width="${i === n - 1 ? w * 0.6 : w}" height="4" rx="2" fill="${col}"/>`).join("");
-const clip = (s, n) => (String(s).length > n ? String(s).slice(0, n - 1) + "…" : String(s));
-
-/** A mini page: coloured header block with our decoration, then section bars and text lines. Pure SVG string. */
+const cache = new Map();
+/** Aspect ratio of thumb(id): a portrait A4 page (Canva shows Docs templates as whole first pages). Template panels and
+ *  intro cards size their picture box with it (CSS aspect-ratio value). */
+export const THUMB_RATIO = `${PAGE_W} / ${PAGE_H}`;
+/** Finished-looking SVG of a template's whole first page, 320 × 452 (photo thumbnails only, never the full-size photo). */
 export function thumb(id) {
-  const L = lookOf(id) || { bg: "#ffffff", fg: "#1b2133", accent: "#5b4cf0", title: templateMeta(id)?.name || "Document", plain: true };
-  const ff = L.serif ? "Georgia, 'Times New Roman', serif" : "Arial, Helvetica, sans-serif";
-  const title = clip(L.title, 24);
-  const fs = L.small ? 17 : title.length > 18 ? 17 : title.length > 13 ? 21 : 26;
-  let b = `<rect width="320" height="200" fill="#ffffff"/>`;
-  if (L.plain || L.bar) {
-    if (L.bar) b += `<rect width="320" height="22" fill="${L.bg}"/><text x="20" y="15" font-family="Arial" font-size="9" font-weight="700" fill="${L.fg}">${esc(L.barText || "FOR IMMEDIATE RELEASE")}</text>`;
-    const y0 = L.bar ? 22 : 0;
-    const cx = L.center ? 'x="160" text-anchor="middle"' : 'x="26"';
-    b += `<text ${cx} y="${y0 + 40}" font-family="${ff}" font-size="20" font-weight="700" fill="${L.bar ? L.accentInk : L.fg}">${esc(title)}</text>`;
-    b += `<text ${cx} y="${y0 + 60}" font-family="Arial" font-size="10" fill="#64748b">${esc(clip(L.sub || "", 44))}</text>`;
-    b += `<rect x="26" y="${y0 + 70}" width="268" height="2" fill="${L.bar ? L.accentInk : L.accent}"/>` + lines(26, y0 + 84, 4, 268) + `<rect x="26" y="${y0 + 124}" width="90" height="7" rx="2" fill="${L.bar ? L.accentInk : L.accent}"/>` + lines(26, y0 + 140, 4, 268);
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">${b}</svg>`;
-  }
-  const hh = 92;
-  b += `<rect width="320" height="${hh}" fill="${L.bg}"/>`;
-  const d = L.deco ? decoSvg(L.deco, L.dc, L.dc2) : "";
-  if (d) b += L.left ? `<svg x="14" y="12" width="68" height="68" viewBox="${vbOf(d)}">${inner(d)}</svg>` : `<svg x="196" y="6" width="120" height="${hh - 12}" viewBox="${vbOf(d)}" preserveAspectRatio="xMaxYMid meet">${inner(d)}</svg>`;
-  const tx = L.left ? 94 : 20;
-  const words = String(title).split(" ");
-  const two = L.small && words.length > 1;
-  b += `<text x="${tx}" y="${two ? 38 : 50}" font-family="${ff}" font-size="${fs}" ${L.italic ? 'font-style="italic"' : ""} font-weight="${L.serif ? 400 : 700}" fill="${L.fg}">${two ? `<tspan x="${tx}">${esc(words[0])}</tspan><tspan x="${tx}" dy="20">${esc(words.slice(1).join(" "))}</tspan>` : esc(title)}</text>`;
-  if (L.sub) b += `<text x="${tx}" y="${two ? 80 : 72}" font-family="Arial" font-size="10" fill="${L.fg}" opacity=".85">${esc(clip(L.sub, L.left ? 34 : 40))}</text>`;
-  const barInk = L.accentInk || (/^#f/i.test(L.bg) ? L.fg : L.bg);
-  const body = L.body || "sections";
-  if (body === "letter") b += lines(20, 108, 2, 120, "#c9cede") + lines(20, 134, 6, 280);
-  else if (body === "table") b += `<rect x="20" y="104" width="280" height="14" fill="${L.accent}"/>` + [0, 1, 2, 3].map((i) => `<rect x="20" y="${126 + i * 17}" width="280" height="1" fill="#d7dbe6"/>`).join("") + [0, 1, 2].map((i) => lines(24, 131 + i * 17, 1, 60, "#e1e4ee") + lines(100, 131 + i * 17, 1, 190, "#e1e4ee")).join("");
-  else if (body === "chart") b += `<rect x="20" y="104" width="280" height="14" rx="2" fill="${L.accent}"/><rect x="28" y="108" width="70" height="6" rx="2" fill="${barInk}" opacity=".85"/>` + lines(20, 126, 2, 130) + [26, 40, 32, 50, 44].map((hgt, i) => `<rect x="${172 + i * 24}" y="${192 - hgt}" width="16" height="${hgt}" rx="2" fill="${barInk}" opacity="${0.45 + i * 0.1}"/>`).join("") + lines(20, 150, 4, 130);
-  else if (body === "checks") b += `<rect x="20" y="104" width="280" height="16" rx="2" fill="${L.accent}" opacity=".9"/><rect x="28" y="109" width="70" height="6" rx="2" fill="${barInk}" opacity=".85"/>` + [0, 1, 2, 3].map((i) => `<rect x="20" y="${130 + i * 16}" width="9" height="9" rx="2" fill="none" stroke="${barInk}" stroke-width="1.5"/>` + lines(36, 132 + i * 16, 1, 200 - i * 20)).join("");
-  else {
-    b += `<rect x="20" y="104" width="280" height="16" rx="2" fill="${L.accent}" opacity=".9"/><rect x="28" y="109" width="70" height="6" rx="2" fill="${barInk}" opacity=".85"/>`;
-    b += lines(20, 130, 3, 280) + `<rect x="20" y="162" width="130" height="30" rx="3" fill="none" stroke="#d7dbe6"/><rect x="160" y="162" width="140" height="30" rx="3" fill="none" stroke="#d7dbe6"/>` + lines(28, 170, 2, 110, "#e5e7ef", 8) + lines(168, 170, 2, 120, "#e5e7ef", 8);
-  }
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">${b}</svg>`;
+  if (cache.has(id)) return cache.get(id);
+  const k = docLook(id);
+  let svg;
+  if (!k) svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PAGE_W} ${PAGE_H}"><rect width="${PAGE_W}" height="${PAGE_H}" fill="#ffffff"/></svg>`;
+  else svg = drawThumb({ ...k, photo: k.photo ? photoUrl(k.photo, "thumb") : "" }, id, decoSvg);
+  cache.set(id, svg);
+  if (cache.size > 600) cache.delete(cache.keys().next().value);
+  return svg;
 }

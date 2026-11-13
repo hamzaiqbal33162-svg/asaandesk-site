@@ -174,6 +174,23 @@ export function transitionGeom(tr, W, H) {
   else if (tr.type === "zoom" && tr.role === "in") g.scale = 1.3 - 0.3 * e;
   return g;
 }
+/** Picture motion ("Ken Burns", Canva's photo zoom/pan) of a picture clip: none, slow zoom in or out, or a pan. */
+export const KEN_BURNS = { "": "None", in: "Zoom in", out: "Zoom out", left: "Pan left", right: "Pan right" };
+export const KB_ZOOM = 0.08;
+/**
+ * Where a picture's rect r goes at progress q (0..1 of the clip) in a W x H frame with motion kind: scaled around the
+ * frame centre (zoom from 1 to 1 + KB_ZOOM or back), or held at 1 + KB_ZOOM and moved sideways (never showing an edge).
+ */
+export function kenBurns(r, kind, q, W, H) {
+  if (!kind || !KEN_BURNS[kind] || kind === "") return r;
+  q = clamp(q, 0, 1);
+  let s = 1, dx = 0;
+  if (kind === "in") s = 1 + KB_ZOOM * q;
+  else if (kind === "out") s = 1 + KB_ZOOM * (1 - q);
+  else { s = 1 + KB_ZOOM; dx = (kind === "left" ? 1 : -1) * W * (KB_ZOOM / 2) * 0.9 * (1 - 2 * q); }
+  const cx = W / 2, cy = H / 2;
+  return { x: cx + (r.x - cx) * s + dx, y: cy + (r.y - cy) * s, w: r.w * s, h: r.h * s };
+}
 /** Gain of an audio-track clip at t. */
 export function audioGain(c, t) {
   if (c.muted) return 0;

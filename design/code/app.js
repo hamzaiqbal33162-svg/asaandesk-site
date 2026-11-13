@@ -1,6 +1,7 @@
 // AsaanDesk code generator: pick a widget, change its settings, see it live, copy or download the code.
 // Templates run fully in the browser (offline). "Describe with AI" uses AsaanDesk AI only when it is switched on.
-import { WIDGETS, widgetById, normalize, renderWidget, warnings } from "./widgets.js";
+import { WIDGETS, widgetById, normalize, renderWidget, warnings, PHOTO_SITE } from "./widgets.js";
+import { photoOf, photoUrl } from "./photos.js";
 import { loadBrand } from "../shared/brand.js";
 import { aiReady } from "../shared/config.js";
 import { onlineAi, comingSoon } from "../shared/ai.js";
@@ -81,9 +82,10 @@ function control(opt, value, key, i, f) {
         <span class="swatches">${sw.map((c) => `<button type="button" class="swatch" ${a} data-color="${c}" style="background:${c}" aria-label="Use brand colour ${c}" title="Brand colour ${c}"></button>`).join("")}</span></div>${help}</div>`;
     }
     case "image": {
-      const src = /^data:image\//.test(value || "") ? value : "";
+      const lib = photoOf(value);
+      const src = /^data:image\//.test(value || "") ? value : lib ? photoUrl(lib, "thumb") : "";
       return `<div class="field" role="group" aria-labelledby="${id}-l"><span id="${id}-l">${label}</span><div class="image-pick">
-        ${src ? `<img src="${escHtml(src)}" alt="">` : `<span class="noimg">${/^sample:/.test(value || "") || (i != null && !value) ? "Sample" : "None"}</span>`}
+        ${src ? `<img src="${escHtml(src)}" alt=""${lib ? ` title="${escHtml(lib.title)} (free photo, saved inside the code)"` : ""}>` : `<span class="noimg">${/^sample:/.test(value || "") || (key === "slides" && !value) ? "Sample" : "None"}</span>`}
         <input type="file" id="${id}" ${a} accept="image/*">
         <label class="btn" for="${id}">Choose picture</label>
         ${src ? `<button type="button" class="btn small" data-act="clear-image" ${a}>Remove</button>` : ""}</div>${help}</div>`;
@@ -177,7 +179,7 @@ function versionCode(v) {
   if (!v) return "";
   if (v.mode === "own") return wrapDoc(v.html || "", titleOf(v.html) || "My code");
   if (!widgetById(v.w)) return "";
-  return renderWidget(v.w, normalize(v.w, v.raw || {}, brand, Date.now(), { tz })).page;
+  return renderWidget(v.w, normalize(v.w, v.raw || {}, brand, Date.now(), { tz }), { photo: exportPhoto }).page;
 }
 async function copyVersion(id) {
   const text = versionCode(readVersions().find((x) => x.id === id));
@@ -289,6 +291,7 @@ function embedCode(c) {
 }
 const textFor = (c) => (!c ? "" : state.view === "snippet" ? c.snippet : state.view === "embed" ? embedCode(c) : c.page);
 async function toWebsite() {
+  await photosReady();
   const c = state.code;
   if (!c) { toast("Pick a widget first."); return null; }
   const id = await putHandoff({ type: "website-embed", name: c.title || "Widget", html: c.page, height: Math.round(frameH) });
@@ -297,6 +300,7 @@ async function toWebsite() {
 }
 /** "Publish as a website" (Canva Code): a new one-page site with this widget, opened in the Website builder to publish. */
 async function toNewWebsite() {
+  await photosReady();
   const c = state.code;
   if (!c) { toast("Pick a widget first."); return null; }
   saveVersion(`${c.title || "Widget"} (published as a website)`);
@@ -315,7 +319,7 @@ function openPreview(size = state.device) {
   d.className = "cg-preview"; d.id = "cgPreview"; d.setAttribute("aria-label", "Preview of the widget");
   d.innerHTML = `<div class="cg-pv-bar"><b>Preview</b><span class="ad-tabs" role="group" aria-label="Preview size">${["desktop", "tablet", "phone"].map((s) => `<button type="button" data-pv="${s}" aria-pressed="${s === size}">${s[0].toUpperCase() + s.slice(1)}</button>`).join("")}</span><button type="button" class="btn small" id="cgPvTab">Open in a new tab</button><button type="button" class="btn primary small" id="cgPvClose">Close preview</button></div><div class="cg-pv-stage" data-size="${size}"><iframe title="Widget preview" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer"></iframe></div>`;
   document.body.append(d);
-  d.querySelector("iframe").srcdoc = withHook(c.page);
+  d.querySelector("iframe").srcdoc = withHook(previewPage(c));
   d.addEventListener("click", (e) => {
     const b = e.target.closest("[data-pv]");
     if (b) { d.querySelector(".cg-pv-stage").dataset.size = b.dataset.pv; for (const x of d.querySelectorAll("[data-pv]")) x.setAttribute("aria-pressed", String(x === b)); }
@@ -435,7 +439,60 @@ function currentCode() {
     const title = titleOf(html) || "My code";
     return { page: wrapDoc(html, title), snippet: html, file: "my-code.html", title };
   }
-  return renderWidget(state.widget, state.opts);
+  return renderWidget(state.widget, state.opts, { photo: exportPhoto });
+}
+
+/* Library photos in picture fields ("photo:<id>", e.g. from a template) are embedded in the code as data: URLs, the same
+   way an uploaded picture is: fetched from this site once, scaled down (max 1400 px, JPEG) and kept for this session. Until
+   that is done the preview shows the photo from this site, and the code points at it on asaandesk.com. */
+const PHOTO_DATA = new Map(), PHOTO_WAIT = new Map();
+const exportPhoto = (p) => PHOTO_DATA.get(p.id) || PHOTO_SITE + photoUrl(p, "full");
+const previewPhoto = (p) => PHOTO_DATA.get(p.id) || photoUrl(p, "full");
+function photosIn(v, out = new Map()) {
+  if (typeof v === "string") { const p = photoOf(v); if (p) out.set(p.id, p); }
+  else if (Array.isArray(v)) v.forEach((x) => photosIn(x, out));
+  else if (v && typeof v === "object") Object.values(v).forEach((x) => photosIn(x, out));
+  return out;
+}
+const photosPending = () => state.mode === "templates" && [...photosIn(state.opts).keys()].some((id) => !PHOTO_DATA.has(id) && PHOTO_WAIT.get(id)?.state !== "failed");
+async function embedPhoto(p) {
+  const res = await fetch(photoUrl(p, "full"));
+  if (!res.ok) throw new Error("Photo " + res.status);
+  const blob = await res.blob();
+  try {
+    const bmp = await createImageBitmap(blob);
+    const k = Math.min(1, 1400 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    bmp.close?.();
+    const url = c.toDataURL("image/jpeg", 0.82);
+    if (/^data:image\/jpeg;base64,.{100,}/.test(url)) return url;
+  } catch {}
+  return new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => (/^data:image\//.test(String(r.result)) ? ok(r.result) : bad(new Error("Not a picture"))); r.onerror = () => bad(r.error); r.readAsDataURL(blob); });
+}
+const photoDone = debounce(() => { if (state.mode === "templates" && state.widget) update(); }, 60);
+/** Starts embedding every library photo the current widget uses; resolves when all are done (or failed). */
+function ensurePhotos() {
+  if (state.mode !== "templates") return Promise.resolve();
+  return Promise.all([...photosIn(state.opts).values()].filter((p) => !PHOTO_DATA.has(p.id)).map((p) => {
+    if (!PHOTO_WAIT.has(p.id)) {
+      const job = embedPhoto(p).then((url) => { PHOTO_DATA.set(p.id, url); job.state = "done"; photoDone(); }, () => { job.state = "failed"; });
+      PHOTO_WAIT.set(p.id, job);
+    }
+    return PHOTO_WAIT.get(p.id);
+  }));
+}
+/** Waits (up to ms) until the photos are inside the code, then refreshes state.code. */
+async function photosReady(ms = 6000) {
+  if (!photosPending()) return;
+  await Promise.race([ensurePhotos(), new Promise((r) => setTimeout(r, ms))]);
+  try { state.code = currentCode(); showCode(); } catch {}
+}
+/** The page shown in the preview: photos that are not embedded yet come straight from this site. */
+function previewPage(c) {
+  if (state.mode !== "templates" || !photosPending()) return c.page;
+  try { return renderWidget(state.widget, state.opts, { photo: previewPhoto }).page; } catch { return c.page; }
 }
 
 // Preview only (never in the exported code): report errors and the page height to this app,
@@ -449,7 +506,7 @@ function showPreview(force = false) {
   $("frameEmpty").hidden = !!c;
   frame.hidden = !c;
   if (!c) { lastSrcdoc = null; return; }
-  const doc = withHook(c.page);
+  const doc = withHook(previewPage(c));
   if (!force && doc === lastSrcdoc) return;
   lastSrcdoc = doc;
   frame.srcdoc = doc;
@@ -519,6 +576,7 @@ const saveOwnSoon = debounce(() => { try { localStorage.setItem(OWN_KEY, state.o
 /** Re-renders the code now; the preview follows after a short pause (or now when immediate). */
 function update({ immediate = false } = {}) {
   try { state.code = currentCode(); } catch (err) { state.code = null; toast(err.message); }
+  if (photosPending()) ensurePhotos();
   showCode();
   showWarnings();
   if (immediate) { previewSoon.cancel(); showPreview(); } else previewSoon();
@@ -563,7 +621,7 @@ function showSoon() {
   comingSoon($("aiSoon"), {
     title: "AI widgets are coming soon",
     what: "Soon you can describe a widget in your own words and AsaanDesk AI will write the code for you.",
-    offline: "The 16 widget templates work today, right in your browser, even without internet.",
+    offline: `The ${WIDGETS.length} widget templates work today, right in your browser, even without internet.`,
   });
   $("aiForm").hidden = true;
 }
@@ -611,6 +669,7 @@ async function generateAi(e) {
 
 /* ---------------------------------------------------------------- copy, download, open */
 async function copyCode() {
+  await photosReady();
   const c = state.code;
   if (!c) return false;
   const text = textFor(c);
@@ -631,6 +690,7 @@ async function copyCode() {
   return ok;
 }
 function download() {
+  if (photosPending()) return photosReady().then(() => download());
   const c = state.code;
   if (!c) return null;
   const url = URL.createObjectURL(new Blob([c.page], { type: "text/html;charset=utf-8" }));
@@ -735,7 +795,7 @@ function renderToolsPanel(box) {
   const p = (text) => { const e = document.createElement("p"); e.className = "cg-hint"; e.textContent = text; return e; };
   const b = (label, act, id) => { const e = document.createElement("button"); e.type = "button"; e.className = "cg-tool"; e.textContent = label; if (id) e.dataset.tool = id; e.addEventListener("click", act); return e; };
   const head = (text) => { const e = document.createElement("h3"); e.className = "cg-h3"; e.textContent = text; return e; };
-  box.append(head("Describe with AI"), p(aiReady() ? "AsaanDesk AI is on: describe a widget and it writes the code." : "Coming soon: AsaanDesk AI is not switched on yet, so no code is made up. The 16 widget templates work today."),
+  box.append(head("Describe with AI"), p(aiReady() ? "AsaanDesk AI is on: describe a widget and it writes the code." : `Coming soon: AsaanDesk AI is not switched on yet, so no code is made up. The ${WIDGETS.length} widget templates work today.`),
     b("Describe a widget with AI", () => { setMode("ai"); }, "ai"),
     head("Bring your own code"), p("Paste HTML, CSS and JavaScript, or open an .html file, and change it with a live preview."),
     b("My code", () => setMode("own"), "own"), b("Open an .html file", () => $("ownFile").click(), "ownfile"), b("Edit the template's code by hand", () => $("ownFromWidget").click(), "ownwidget"),
@@ -836,6 +896,8 @@ window.adApp = {
   setMode, copy: copyCode, download, openInTab, get shell() { return shell; }, undo: () => undoCode(), redo: () => redoCode(), saveVersion, restoreVersion, versions: readVersions,
   saveIdea, ideas: readIdeas, matchTemplates: async (t) => (await matchTemplates(t)).map((x) => x.id), embedCode: () => (state.code ? embedCode(state.code) : ""), toWebsite, applyTemplate: async (id) => applyStarter((await import("./gallery.js")).starter(id)),
   flush() { previewSoon.cancel(); showPreview(); return state.code?.page || ""; },
+  /** Waits until library photos are embedded in the code (data: URLs); returns the page code. */
+  photosReady: async () => { await photosReady(); return state.code?.page || ""; },
   aiReady,
   // Round 3 (Canva Code parity): My code, numbered versions with Copy code, Preview, Publish as a website.
   setOwn: (text) => setOwn(text), own: () => state.own.html, copyVersion, versionCode: (id) => versionCode(readVersions().find((x) => x.id === id)),

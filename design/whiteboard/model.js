@@ -270,7 +270,8 @@ export function parseBoard(input) {
   for (const raw of j.objects) {
     if (!raw || !TYPES.has(raw.type)) continue;
     const o = { ...raw, id: raw.id && !ids.has(String(raw.id)) ? String(raw.id) : newId(), x: finite(raw.x), y: finite(raw.y), w: finite(raw.w), h: finite(raw.h), locked: !!raw.locked, group: raw.group || null };
-    if (o.type === "image" && !/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);/i.test(String(o.src || ""))) continue;
+    // Pictures: data URLs, or the site's own template photo library (/pdf-editor/photos/<file>).
+    if (o.type === "image" && !/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);/i.test(String(o.src || "")) && !/^\/pdf-editor\/photos\/[\w.-]+\.(jpe?g|png|webp)$/i.test(String(o.src || ""))) continue;
     if (o.type === "stroke" && !Array.isArray(o.points)) continue;
     if (o.type === "connector" && (!o.from || !o.to)) continue;
     ids.add(o.id);

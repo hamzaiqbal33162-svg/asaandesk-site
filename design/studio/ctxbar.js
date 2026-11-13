@@ -12,7 +12,7 @@ import { listKind, cycleList } from "./textfx.js";
 
 let bar = null, pop = null, hooks = {};
 const I = {
-  minus: "M5 12h14", plus: "M12 5v14M5 12h14",
+  comment: "M4 5h16v11H9l-5 4zM12 8v5M9.5 10.5h5", minus: "M5 12h14", plus: "M12 5v14M5 12h14",
   left: "M4 6h16M4 10h10M4 14h16M4 18h10", center: "M4 6h16M7 10h10M4 14h16M7 18h10", right: "M4 6h16M10 10h10M4 14h16M10 18h10", justify: "M4 6h16M4 10h16M4 14h16M4 18h16",
   list: "M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01", spacing: "M4 4v16M20 4v16M8 12h8M10 9l-2 3 2 3M14 9l2 3-2 3",
   crop: "M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14", flip: "M12 3v18M8 7l-4 5 4 5M16 7l4 5-4 5",
@@ -106,9 +106,18 @@ function lockBtn(sel) {
   }, { class: "st-cx-btn" + (state !== "none" ? " on" : ""), "data-lockstate": state });
   return btn;
 }
+// Canva's photo toolbar: Edit (effects, filters, adjust), Replace, Crop, Flip, transparency.
+function replaceBtn(onFile) {
+  return b("ctxReplace", "Replace", "Replace with another photo", () => {
+    const inp = h("input", { type: "file", accept: "image/*", hidden: true });
+    inp.addEventListener("change", () => { const f = inp.files?.[0]; inp.remove(); if (f) onFile(f); });
+    document.body.append(inp); inp.click();
+  }, { class: "st-cx-btn st-cx-txt" });
+}
 function imageTools(l) {
-  return [b("cropBtnCx", svg("crop") + "<span>Crop</span>", "Crop", () => E.toggleCrop(l.id), { class: "st-cx-btn st-cx-txt" }),
-    b("ctxFilters", "Filters", "Filters", () => hooks.props?.("filters"), { class: "st-cx-btn st-cx-txt" }),
+  return [b("ctxFilters", "Edit", "Edit photo: effects, filters and adjust", () => hooks.props?.("filters"), { class: "st-cx-btn st-cx-txt" }),
+    replaceBtn((f) => E.replaceImage(l, f)),
+    b("cropBtnCx", svg("crop") + "<span>Crop</span>", "Crop", () => E.toggleCrop(l.id), { class: "st-cx-btn st-cx-txt" }),
     flipBtn("image"), transparency(l)];
 }
 function elementTools(l) {
@@ -176,12 +185,15 @@ export function renderCtx() {
   else if (l?.type === "chart" || l?.type === "table") items = [b("ctxData", "Edit data", "Edit data", () => hooks.props?.("data"), { class: "st-cx-btn st-cx-txt" }), transparency(l)];
   else if (sel.length > 1) items = [b("ctxGroup", "Group", "Group", () => E.groupSel(), { class: "st-cx-btn st-cx-txt" }), b("ctxTidy", svg("tidy") + "<span>Tidy up</span>", "Tidy up: equal gaps in a row, column or grid", () => P3.tidySelection(), { class: "st-cx-btn st-cx-txt" }), transparency(sel[0])];
   else if (l?.type === "group") items = [b("ctxUngroup", "Ungroup", "Ungroup", () => E.ungroupSel(), { class: "st-cx-btn st-cx-txt" }), transparency(l)];
+  if (l?.type === "frame" && l.frame?.image) items.splice(1, 0, replaceBtn((f) => E.addImageFiles([f], { frameId: l.id })));
   bar.append(...items);
   if (sel.length) {
     bar.append(sep(), b("ctxAnimate", "Animate", "Animate", () => hooks.panel?.("animate"), { class: "st-cx-btn st-cx-txt" }),
       b("ctxPosition", svg("position") + "<span>Position</span>", "Position", () => hooks.props?.("position"), { class: "st-cx-btn st-cx-txt" }), sep(),
       b("ctxDup", svg("copy"), "Duplicate", () => E.duplicateSel()), lockBtn(sel), b("ctxCopyStyle", svg("roller"), "Copy style (Ctrl+Alt+C, then click another item)", () => { if (P3.startCopyStyle()) bar.querySelector("#ctxCopyStyle")?.classList.add("on"); }, { class: "st-cx-btn" + (S.paintStyle ? " on" : "") }), b("ctxDelete", svg("trash"), "Delete", () => E.deleteSel()));
   }
+  // Canva: comment on the selected item (or the page) right from the toolbar.
+  bar.append(b("ctxComment", svg("comment"), "Comment", () => { const it = l || sel[0]; emit("comment", it ? { id: it.id, label: `Page ${S.page + 1}: ${it.name || it.type}` } : { id: curPage().id, label: `Page ${S.page + 1}` }); }));
   bar.append(b("ctxMore", svg("more"), "More options", () => hooks.props?.("all")));
 }
 /** Creates the toolbar element. hooks: { props(section), panel(name) }. */

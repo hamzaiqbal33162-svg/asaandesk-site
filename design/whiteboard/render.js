@@ -173,7 +173,8 @@ export function objectPrims(o, byId, opts = {}) {
       break;
     }
     case "image":
-      prims.push({ img: o.src, x: o.x, y: o.y, w: o.w, h: o.h });
+      // fit "cover": the picture fills its box and is cropped (template photos); default: stretched to the box.
+      prims.push({ img: o.src, x: o.x, y: o.y, w: o.w, h: o.h, ...(o.fit === "cover" ? { fit: "cover" } : {}) });
       break;
   }
   return prims;
@@ -232,7 +233,7 @@ const num = (v) => Math.round(v * 100) / 100;
 /** SVG elements (no wrapper) for a primitive list. */
 export function primsToSvg(prims) {
   return prims.map((p) => {
-    if (p.img != null) return `<image href="${esc(p.img)}" x="${num(p.x)}" y="${num(p.y)}" width="${num(p.w)}" height="${num(p.h)}" preserveAspectRatio="none"${p.op != null && p.op < 1 ? ` opacity="${p.op}"` : ""}/>`;
+    if (p.img != null) return `<image href="${esc(p.img)}" x="${num(p.x)}" y="${num(p.y)}" width="${num(p.w)}" height="${num(p.h)}" preserveAspectRatio="${p.fit === "cover" ? "xMidYMid slice" : "none"}"${p.op != null && p.op < 1 ? ` opacity="${p.op}"` : ""}/>`;
     if (p.t != null) {
       const anchor = p.anchor === "middle" ? "middle" : p.anchor === "end" ? "end" : "start";
       return `<text x="${num(p.x)}" y="${num(p.y)}" font-size="${num(p.size)}" font-family="${fontCss(p.font)}" font-weight="${p.bold ? 700 : 400}"${p.italic ? ' font-style="italic"' : ""} text-anchor="${anchor}" fill="${p.fill || "#000000"}"${p.op != null && p.op < 1 ? ` opacity="${p.op}"` : ""} style="white-space:pre">${esc(p.t)}</text>`;
@@ -254,7 +255,11 @@ export function drawPrimsCanvas(ctx, prims, { images = new Map(), Path2D: P2 = g
     if (p.blend) ctx.globalCompositeOperation = p.blend;
     if (p.img != null) {
       const im = images.get(p.img);
-      if (im) ctx.drawImage(im, p.x, p.y, p.w, p.h);
+      const iw = im?.naturalWidth || im?.width, ih = im?.naturalHeight || im?.height;
+      if (im && p.fit === "cover" && iw && ih && p.w > 0 && p.h > 0) {
+        const k = Math.max(p.w / iw, p.h / ih), sw = p.w / k, sh = p.h / k;
+        ctx.drawImage(im, (iw - sw) / 2, (ih - sh) / 2, sw, sh, p.x, p.y, p.w, p.h);
+      } else if (im) ctx.drawImage(im, p.x, p.y, p.w, p.h);
     } else if (p.t != null) {
       ctx.font = `${p.italic ? "italic " : ""}${p.bold ? 700 : 400} ${p.size}px ${fontCss(p.font).replace(/'/g, '"')}`;
       ctx.textAlign = p.anchor === "middle" ? "center" : p.anchor === "end" ? "right" : "left";

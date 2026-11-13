@@ -2,8 +2,10 @@
 // Every entry is a real, editable board built by templates.js; thumb(id) draws that same board as a small SVG.
 import { TEMPLATES as BOARDS, templateById, variantName, FONT_VARIANTS } from "./templates.js";
 import { PALETTES, THEMES } from "./variants.js";
-import { boardBounds, objectSvg } from "./render.js";
+import { objectBounds, objectPrims, primsToSvg, rotTransform } from "./render.js";
+import { unionRect } from "./geometry.js";
 import { byIdOf } from "./model.js";
+import { PHOTOS, photoUrl } from "../shared/photo-library.js";
 
 const SECTION = {
   brainstorm: "Brainstorm and ideas", mindmap: "Brainstorm and ideas", affinity: "Brainstorm and ideas", "empathy-map": "Brainstorm and ideas", venn: "Brainstorm and ideas",
@@ -125,17 +127,26 @@ export const TOTAL = TEMPLATES.length;
 
 // Thumbnails are built on demand from the id and a few hundred are kept.
 const cache = new Map();
-/** Self-contained 320 × 200 SVG preview of a template (the real board, on a dotted canvas). */
+// Template photos: the small file in thumbnails (never the full-size photo).
+const THUMB_OF = new Map(PHOTOS.map((p) => [photoUrl(p, "full"), photoUrl(p, "thumb")]));
+/** Self-contained 320 × 200 SVG preview of a template: the real board, frames without their name labels. */
 export function thumb(id) {
   if (cache.has(id)) return cache.get(id);
   const t = templateById(id);
   if (!t) return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"><rect width="320" height="200" rx="12" fill="#f4f5fa"/></svg>';
-  const objects = t.build(), byId = byIdOf({ objects }), b = boardBounds(objects, byId), pad = Math.max(b.w, b.h) * 0.06;
-  const body = objects.map((o) => objectSvg(o, byId)).join("");
+  const objects = t.build(), byId = byIdOf({ objects });
+  const b = unionRect(objects.map((o) => (o.type === "frame" ? { x: o.x, y: o.y, w: o.w, h: o.h } : objectBounds(o, byId))));
+  const pad = Math.max(b.w, b.h) * 0.012;
+  const body = objects.map((o) => {
+    let prims = objectPrims(o, byId);
+    if (o.type === "frame") prims = prims.filter((p) => p.t == null);
+    if (o.type === "image") prims = prims.map((p) => (p.img != null && THUMB_OF.has(p.img) ? { ...p, img: THUMB_OF.get(p.img) } : p));
+    const s = primsToSvg(prims), tr = rotTransform(o);
+    return tr ? `<g transform="${tr}">${s}</g>` : s;
+  }).join("");
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img" aria-label="${t.name.replace(/[<&"]/g, "")} template">` +
-    `<defs><pattern id="wbdots-${id}" width="12" height="12" patternUnits="userSpaceOnUse"><circle cx="6" cy="6" r="0.9" fill="#cfd3e3"/></pattern></defs>` +
-    `<rect width="320" height="200" fill="#f7f8fc"/><rect width="320" height="200" fill="url(#wbdots-${id})"/>` +
-    `<svg x="10" y="10" width="300" height="180" viewBox="${b.x - pad} ${b.y - pad} ${b.w + pad * 2} ${b.h + pad * 2}" preserveAspectRatio="xMidYMid meet">${body}</svg></svg>`;
+    `<rect width="320" height="200" fill="#eceef5"/>` +
+    `<svg x="4" y="4" width="312" height="192" viewBox="${b.x - pad} ${b.y - pad} ${b.w + pad * 2} ${b.h + pad * 2}" preserveAspectRatio="xMidYMid meet">${body}</svg></svg>`;
   cache.set(id, svg);
   if (cache.size > 400) cache.delete(cache.keys().next().value);
   return svg;

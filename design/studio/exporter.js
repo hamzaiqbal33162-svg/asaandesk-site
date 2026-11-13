@@ -129,6 +129,8 @@ export async function exportPdf(design, opts = {}) {
     async imageBytes(src) {
       const img0 = opts.compress ? images.get(src) : null;
       if (/^data:image\/(png|jpe?g);base64,/.test(src)) { const r = { bytes: dataUrlBytes(src), type: /png/.test(src.slice(0, 20)) ? "png" : "jpg" }; return img0 ? shrink(img0, r.bytes, r.type) : r; }
+      // Template photos (same-origin library JPGs): the file itself goes in, not a much bigger PNG copy.
+      if (/^\/pdf-editor\/photos\/[a-z0-9-]+\.jpe?g$/i.test(src)) { try { const res = await fetch(src); if (res.ok) { const r = { bytes: new Uint8Array(await res.arrayBuffer()), type: "jpg" }; return img0 ? shrink(img0, r.bytes, r.type) : r; } } catch {} }
       const img = images.get(src) || (await new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; }));
       if (!img) return null;
       const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
@@ -164,7 +166,9 @@ export async function exportPdf(design, opts = {}) {
 export async function exportSvg(design, index, { bleed = false, transparent = false } = {}) {
   const env = needsVector(design) ? await vectorEnv() : {};
   const size = presetPx(design.preset);
-  const svg = pageSvg(design, index, size, { bleed: bleed ? bleedPx(design.preset) : 0, idp: "x" + index, chartPrims: env.chartPrims, tablePrims: env.tablePrims, links: true, transparent });
+  // Template photos are site files: the saved SVG links them with the full address, so it still shows them elsewhere.
+  const abs = (s) => (typeof location !== "undefined" && /^\/[^/]/.test(s || "") ? location.origin + s : s);
+  const svg = pageSvg(design, index, size, { bleed: bleed ? bleedPx(design.preset) : 0, idp: "x" + index, chartPrims: env.chartPrims, tablePrims: env.tablePrims, links: true, transparent, urlOf: abs });
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!-- Made with AsaanDesk Studio -->\n` + svg.replace("<svg ", '<svg xmlns:xlink="http://www.w3.org/1999/xlink" ');
 }
 

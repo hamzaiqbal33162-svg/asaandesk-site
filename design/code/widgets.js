@@ -1,8 +1,10 @@
 // AsaanDesk code generator: widget templates. No DOM here, so Node tests can import it directly.
 // Each widget has an option schema (rendered as a settings form by app.js) and render(opts), which
 // returns clean, self-contained HTML: scoped CSS with variables, accessible markup and, only where it is
-// needed, a small vanilla script. Nothing is loaded from other websites.
+// needed, a small vanilla script. Nothing is loaded from other websites: pictures are data: URLs inside the code (the
+// app embeds library photos that way when it copies or downloads the code).
 import { qrSvg } from "./qr.js";
+import { photoOf, photoFor, photoUrl } from "./photos.js";
 
 /* ------------------------------------------------------------------ small helpers */
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -41,6 +43,17 @@ const initials = (name) => (String(name || "").trim().split(/\s+/).slice(0, 2).m
 const pad2 = (n) => String(n).padStart(2, "0");
 export const localDateTime = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 const isImageData = (v) => /^data:image\/(png|jpe?g|gif|webp|svg\+xml)[;,]/i.test(String(v || ""));
+
+/* ------------------------------------------------------------------ library photos in picture fields */
+// A picture field may hold "photo:<id>", a photo of our shared library (public/pdf-editor/photos, CC0). renderWidget()
+// turns it into a URL through env.photo(p); the app passes a data: URL there (the photo embedded in the code, so the
+// code stays self-contained and works anywhere). Without one it falls back to the photo on asaandesk.com.
+export const PHOTO_SITE = "https://asaandesk.com";
+export { photoOf, photoFor };
+let resolvePhoto = (p) => PHOTO_SITE + photoUrl(p, "full");
+/** src for a picture value: a data: URL as it is, a library photo through the resolver, anything else "". */
+const imgSrc = (v) => (isImageData(v) ? String(v) : photoOf(v) ? resolvePhoto(photoOf(v)) : "");
+const altOf = (v, alt) => String(alt || "").trim() || photoOf(v)?.title || "";
 
 export const FONT_CSS = {
   system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
@@ -196,12 +209,18 @@ const STYLE = (over = {}) => [
 
 function palette(o) {
   const accent = o.accent, bg = o.bg, text = o.text;
-  return { accent, bg, text, onAccent: onColor(accent), muted: mix(text, bg, 0.32), line: mix(text, bg, 0.86), soft: mix(accent, bg, 0.9), page: mix(bg, text, 0.04) };
+  const dark = contrast(bg, "#ffffff") > contrast(bg, "#111827");
+  return { accent, bg, text, onAccent: onColor(accent), muted: mix(text, bg, 0.32), line: mix(text, bg, 0.86), soft: mix(accent, bg, 0.9), page: mix(bg, text, 0.04),
+    accent2: mix(accent, dark ? "#ffffff" : "#0b1020", 0.3), glow: rgba(accent, 0.42), shadow: dark ? "rgba(0, 0, 0, .55)" : "rgba(15, 23, 42, .22)" };
 }
+const rgba = (h, a) => `rgba(${rgb(h).join(", ")}, ${a})`;
 function baseCss(p, o, body) {
   const c = palette(o);
   return `.${p} {
   --adw-accent: ${c.accent};
+  --adw-accent-2: ${c.accent2};
+  --adw-glow: ${c.glow};
+  --adw-shadow: ${c.shadow};
   --adw-on-accent: ${c.onAccent};
   --adw-bg: ${c.bg};
   --adw-text: ${c.text};
@@ -236,26 +255,47 @@ function baseCss(p, o, body) {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 10px 20px;
+  min-height: 46px;
+  padding: 11px 22px;
   border: 2px solid var(--adw-accent);
   border-radius: var(--adw-radius);
-  background: var(--adw-accent);
+  background: linear-gradient(135deg, var(--adw-accent), var(--adw-accent-2));
   color: var(--adw-on-accent);
   font: inherit;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: .01em;
   text-decoration: none;
   cursor: pointer;
+  box-shadow: 0 10px 22px -10px var(--adw-glow);
   transition: transform .15s ease, box-shadow .15s ease;
 }
 .${p} .adw-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .15);
+  transform: translateY(-2px);
+  box-shadow: 0 16px 30px -12px var(--adw-glow);
 }
 .${p} .adw-btn.adw-ghost {
   background: transparent;
   color: var(--adw-text);
   border-color: var(--adw-line);
+  box-shadow: none;
+}
+.${p} .adw-eyebrow {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--adw-soft);
+  color: var(--adw-accent);
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.${p} .adw-cover {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 ${body.trim()}
 @media (prefers-reduced-motion: reduce) {
@@ -268,24 +308,149 @@ ${body.trim()}
   }
 }`;
 }
+// A card: soft tinted top fading into the background, a gradient cap, big heavy heading and a deep soft shadow.
 const card = (p, max) => `.${p} {
   max-width: ${max}px;
   margin: 0 auto;
-  padding: clamp(18px, 4vw, 32px);
-  background: var(--adw-bg);
-  border: 1px solid var(--adw-line);
-  border-radius: calc(var(--adw-radius) * 1.6);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, .08);
+  padding: clamp(22px, 5vw, 38px);
+  background: linear-gradient(180deg, var(--adw-soft), var(--adw-bg) 160px) padding-box, linear-gradient(90deg, var(--adw-accent), var(--adw-accent-2)) border-box;
+  border: 1px solid transparent;
+  border-top-width: 6px;
+  border-radius: calc(var(--adw-radius) * 1.8);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 30px 60px -28px var(--adw-shadow);
 }
 .${p} h2 {
-  margin: 0 0 8px;
-  font-size: clamp(1.3rem, 3vw, 1.7rem);
-  line-height: 1.25;
+  margin: 0 0 10px;
+  font-size: clamp(1.55rem, 4.2vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: 1.12;
 }
 .${p} .adw-lead {
-  margin: 0 0 20px;
+  margin: 0 0 22px;
+  font-size: 1.04rem;
   color: var(--adw-muted);
 }`;
+// A photo behind the whole widget (an <img>, not a CSS url(), so it can be a data: URL) under a dark gradient.
+const photoBack = (p) => `.${p}.adw-photo {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: #ffffff;
+  background: #0b1020;
+  border-color: transparent;
+}
+.${p}.adw-photo > .adw-bgimg {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.${p}.adw-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(165deg, rgba(8, 10, 24, .42), rgba(8, 10, 24, .86));
+}
+.${p}.adw-photo .adw-lead,
+.${p}.adw-photo .adw-note,
+.${p}.adw-photo .adw-label {
+  color: rgba(255, 255, 255, .84);
+}
+.${p}.adw-photo .adw-eyebrow {
+  background: var(--adw-accent);
+  color: var(--adw-on-accent);
+}`;
+// Photo beside the content (stacks on phones): <section class="p adw-split"><div class="adw-media"><img></div><div class="adw-body">…
+const splitCss = (p, max = 1000) => `.${p}.adw-split {
+  display: grid;
+  grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+  max-width: ${max}px;
+  padding: 0;
+  overflow: hidden;
+}
+.${p}.adw-split .adw-media {
+  position: relative;
+  min-height: 280px;
+}
+.${p}.adw-split .adw-media img {
+  position: absolute;
+  inset: 0;
+}
+.${p}.adw-split .adw-body {
+  padding: clamp(22px, 5vw, 42px);
+}
+@media (max-width: 720px) {
+  .${p}.adw-split {
+    grid-template-columns: 1fr;
+  }
+  .${p}.adw-split .adw-media {
+    min-height: 210px;
+  }
+}`;
+// Form fields: labels above roomy inputs with a soft focus ring.
+const formCss = (p) => `.${p} form {
+  display: grid;
+  gap: 14px;
+}
+.${p} label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+  font-size: .92rem;
+}
+.${p} input,
+.${p} select,
+.${p} textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 14px;
+  border: 1px solid var(--adw-line);
+  border-radius: var(--adw-radius);
+  background: var(--adw-bg);
+  color: var(--adw-text);
+  font: inherit;
+  font-weight: 400;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.${p} input:focus,
+.${p} select:focus,
+.${p} textarea:focus {
+  border-color: var(--adw-accent);
+  box-shadow: 0 0 0 4px var(--adw-soft);
+}
+.${p} .adw-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+.${p} .adw-status {
+  margin: 0;
+  min-height: 1.5em;
+  font-size: .9rem;
+  color: var(--adw-muted);
+}`;
+const media = (v, alt, pad = "  ") => (imgSrc(v) ? `${pad}<div class="adw-media"><img class="adw-cover" src="${esc(imgSrc(v))}" alt="${esc(altOf(v, alt))}" width="1200" height="900"></div>\n` : "");
+// A photo band across the top of a card (bleeds to the card's edges).
+const topPhotoCss = (p) => `.${p} .adw-topphoto {
+  height: clamp(150px, 30vw, 210px);
+  margin: calc(-1 * clamp(22px, 5vw, 38px)) calc(-1 * clamp(22px, 5vw, 38px)) 22px;
+  overflow: hidden;
+  border-radius: calc(var(--adw-radius) * 1.6) calc(var(--adw-radius) * 1.6) 0 0;
+}
+.${p} .adw-topphoto img {
+  transition: transform .6s ease;
+}
+.${p}:hover .adw-topphoto img {
+  transform: scale(1.04);
+}`;
+const topPhoto = (v, alt = "", pad = "  ") => (imgSrc(v) ? `${pad}<div class="adw-topphoto"><img class="adw-cover" src="${esc(imgSrc(v))}" alt="${esc(altOf(v, alt))}" width="1200" height="600"></div>\n` : "");
+const bgImg = (v, pad = "  ") => (imgSrc(v) ? `${pad}<img class="adw-bgimg" src="${esc(imgSrc(v))}" alt="" width="1600" height="1000">\n` : "");
+const eyebrow = (s, pad = "  ") => (s ? `${pad}<p class="adw-eyebrow">${esc(s)}</p>\n` : "");
+const PHOTO_OPT = (label = "Background photo (optional)", def = "") => ({ key: "image", label, type: "image", default: def });
 
 /* ------------------------------------------------------------------ the widgets */
 const W = [];
@@ -301,6 +466,8 @@ def({
     { key: "note", label: "Small print (optional)", type: "text", default: "Prices go back to normal when the timer ends." },
     { key: "button", label: "Button text (optional)", type: "text", default: "Shop the sale" },
     { key: "link", label: "Button link", type: "url", default: "#shop", show: (o) => !!o.button },
+    { key: "eyebrow", label: "Small text above (optional)", type: "text", default: "" },
+    PHOTO_OPT(),
     ...STYLE(),
   ],
   check(o, now = Date.now()) { const t = new Date(o.target).getTime(); return isNaN(t) ? ["Pick a date and time to count down to."] : t <= now ? ["This date is in the past, so the timer shows the “time is up” text."] : []; },
@@ -318,23 +485,40 @@ def({
   margin: 18px 0;
 }
 .${p} .adw-unit {
-  padding: 14px 6px;
-  border-radius: var(--adw-radius);
-  background: var(--adw-soft);
+  padding: 16px 6px 12px;
+  border: 1px solid var(--adw-line);
+  border-radius: calc(var(--adw-radius) * 1.2);
+  background: var(--adw-bg);
+  box-shadow: 0 14px 28px -18px var(--adw-shadow);
 }
 .${p} .adw-num {
   display: block;
-  font-size: clamp(1.8rem, 7vw, 2.8rem);
-  font-weight: 800;
+  font-size: clamp(2rem, 8vw, 3.4rem);
+  font-weight: 900;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  letter-spacing: -.03em;
+  line-height: 1.05;
   color: var(--adw-accent);
 }
 .${p} .adw-label {
-  font-size: .8rem;
-  letter-spacing: .06em;
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: .1em;
   text-transform: uppercase;
   color: var(--adw-muted);
+}
+${photoBack(p)}
+.${p}.adw-photo {
+  padding-block: clamp(36px, 8vw, 64px);
+}
+.${p}.adw-photo .adw-unit {
+  border-color: rgba(255, 255, 255, .3);
+  background: rgba(255, 255, 255, .12);
+  backdrop-filter: blur(8px);
+}
+.${p}.adw-photo .adw-num,
+.${p}.adw-photo .adw-done {
+  color: #ffffff;
 }
 .${p} .adw-done {
   margin: 18px 0;
@@ -347,8 +531,8 @@ def({
   font-size: .9rem;
   color: var(--adw-muted);
 }`);
-    const html = `<section class="${p}" aria-labelledby="${u}-title">
-  <h2 id="${u}-title">${esc(o.title)}</h2>
+    const html = `<section class="${p}${imgSrc(o.image) ? " adw-photo" : ""}" aria-labelledby="${u}-title">
+${bgImg(o.image)}${eyebrow(o.eyebrow)}  <h2 id="${u}-title">${esc(o.title)}</h2>
   <div class="adw-clock" role="timer" aria-live="off" data-target="${esc(o.target)}">
 ${units.map(([k, l]) => `    <div class="adw-unit"><span class="adw-num" data-unit="${k}">00</span><span class="adw-label">${l}</span></div>`).join("\n")}
   </div>
@@ -418,12 +602,16 @@ def({
   text-align: center;
 }
 .${p} h2 {
-  margin: 0 0 8px;
-  font-size: clamp(1.5rem, 4vw, 2.1rem);
+  margin: 0 0 10px;
+  font-size: clamp(1.8rem, 5vw, 2.7rem);
+  font-weight: 800;
+  letter-spacing: -.025em;
+  line-height: 1.08;
 }
 .${p} .adw-lead {
-  margin: 0 auto 28px;
+  margin: 0 auto 34px;
   max-width: 560px;
+  font-size: 1.06rem;
   color: var(--adw-muted);
 }
 .${p} .adw-plans {
@@ -440,39 +628,62 @@ def({
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 26px 22px;
+  padding: 30px 24px 24px;
   text-align: left;
   background: var(--adw-bg);
   border: 1px solid var(--adw-line);
-  border-radius: calc(var(--adw-radius) * 1.6);
+  border-radius: calc(var(--adw-radius) * 1.8);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 24px 48px -30px var(--adw-shadow);
 }
 .${p} .adw-plan.adw-best {
-  border: 2px solid var(--adw-accent);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, .12);
+  border: 0;
+  background: linear-gradient(160deg, var(--adw-accent), var(--adw-accent-2));
+  color: var(--adw-on-accent);
+  box-shadow: 0 30px 60px -24px var(--adw-glow);
+  transform: translateY(-10px);
 }
 .${p} .adw-badge {
   position: absolute;
-  top: -13px;
-  left: 22px;
-  padding: 3px 12px;
+  top: -14px;
+  left: 24px;
+  padding: 4px 13px;
   border-radius: 999px;
-  background: var(--adw-accent);
-  color: var(--adw-on-accent);
-  font-size: .78rem;
-  font-weight: 700;
+  background: var(--adw-text);
+  color: var(--adw-bg);
+  font-size: .76rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  box-shadow: 0 8px 18px -8px var(--adw-shadow);
 }
 .${p} h3 {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
 }
 .${p} .adw-price {
   margin: 0;
   color: var(--adw-muted);
 }
 .${p} .adw-price strong {
-  font-size: 2.2rem;
-  line-height: 1.1;
+  font-size: clamp(2.4rem, 6vw, 3rem);
+  font-weight: 900;
+  letter-spacing: -.03em;
+  line-height: 1.05;
   color: var(--adw-text);
+}
+.${p} .adw-best .adw-price,
+.${p} .adw-best .adw-price strong {
+  color: inherit;
+}
+.${p} .adw-best .adw-features li::before {
+  border-color: currentColor;
+}
+.${p} .adw-best .adw-btn {
+  background: var(--adw-bg);
+  color: var(--adw-text);
+  border-color: var(--adw-bg);
 }
 .${p} .adw-features {
   flex: 1;
@@ -539,15 +750,24 @@ def({
     const p = "adw-faq";
     const css = baseCss(p, o, `${card(p, 720)}
 .${p} .adw-list {
-  margin-top: 16px;
-  border-top: 1px solid var(--adw-line);
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
 }
 .${p} .adw-item {
-  border-bottom: 1px solid var(--adw-line);
+  border: 1px solid var(--adw-line);
+  border-radius: calc(var(--adw-radius) * 1.2);
+  background: var(--adw-bg);
+  box-shadow: 0 12px 24px -20px var(--adw-shadow);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.${p} .adw-item:has(.adw-q[aria-expanded="true"]) {
+  border-color: var(--adw-accent);
+  box-shadow: 0 18px 34px -22px var(--adw-glow);
 }
 .${p} h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.04rem;
 }
 .${p} .adw-q {
   display: flex;
@@ -555,7 +775,7 @@ def({
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px 4px;
+  padding: 17px 18px;
   border: 0;
   background: none;
   color: inherit;
@@ -570,30 +790,39 @@ def({
 .${p} .adw-icon {
   position: relative;
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: var(--adw-soft);
+  transition: background .2s ease;
 }
 .${p} .adw-icon::before,
 .${p} .adw-icon::after {
   content: "";
   position: absolute;
-  left: 6px;
-  top: 10px;
-  width: 10px;
+  left: 9px;
+  top: 14px;
+  width: 12px;
   height: 2px;
+  border-radius: 2px;
   background: var(--adw-accent);
   transition: transform .2s ease;
 }
 .${p} .adw-icon::after {
   transform: rotate(90deg);
 }
+.${p} .adw-q[aria-expanded="true"] .adw-icon {
+  background: linear-gradient(135deg, var(--adw-accent), var(--adw-accent-2));
+}
+.${p} .adw-q[aria-expanded="true"] .adw-icon::before,
+.${p} .adw-q[aria-expanded="true"] .adw-icon::after {
+  background: var(--adw-on-accent);
+}
 .${p} .adw-q[aria-expanded="true"] .adw-icon::after {
   transform: rotate(0deg);
 }
 .${p} .adw-a {
-  padding: 0 4px 16px;
+  padding: 0 18px 16px;
   color: var(--adw-muted);
 }
 .${p} .adw-a p {
@@ -641,6 +870,7 @@ def({
     { key: "subject", label: "Email subject", type: "text", default: "New message from my website" },
     { key: "phone", label: "Ask for a phone number", type: "checkbox", default: true },
     { key: "button", label: "Button text", type: "text", default: "Send message" },
+    PHOTO_OPT("Photo beside the form (optional)"),
     ...STYLE(),
   ],
   check(o) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(o.to || "").trim()) ? [] : ["Add the email address that should receive the messages."]; },
@@ -648,55 +878,28 @@ def({
     const p = "adw-contact";
     const to = String(o.to || "").trim();
     const css = baseCss(p, o, `${card(p, 560)}
-.${p} form {
-  display: grid;
-  gap: 14px;
-}
-.${p} label {
-  display: grid;
-  gap: 6px;
-  font-weight: 600;
-  font-size: .95rem;
-}
-.${p} input,
-.${p} textarea {
-  width: 100%;
-  padding: 11px 13px;
-  border: 1px solid var(--adw-line);
-  border-radius: var(--adw-radius);
-  background: var(--adw-bg);
-  color: var(--adw-text);
-  font: inherit;
-  font-weight: 400;
-}
-.${p} input:focus,
-.${p} textarea:focus {
-  border-color: var(--adw-accent);
-}
-.${p} .adw-status {
-  margin: 0;
-  min-height: 1.5em;
-  font-size: .9rem;
-  color: var(--adw-muted);
-}`);
-    const html = `<section class="${p}" aria-labelledby="${u}-title">
-  <h2 id="${u}-title">${esc(o.title)}</h2>
-${o.lead ? `  <p class="adw-lead">${esc(o.lead)}</p>\n` : ""}  <form action="mailto:${esc(to)}?subject=${esc(encodeURIComponent(o.subject))}" method="post" enctype="text/plain" data-to="${esc(to)}" data-subject="${esc(o.subject)}">
-    <label>Your name
-      <input name="name" type="text" autocomplete="name" required>
-    </label>
-    <label>Your email
-      <input name="email" type="email" autocomplete="email" required>
-    </label>
-${o.phone ? `    <label>Phone (optional)
-      <input name="phone" type="tel" autocomplete="tel">
-    </label>
-` : ""}    <label>Message
-      <textarea name="message" rows="5" required></textarea>
-    </label>
-    <button class="adw-btn" type="submit">${esc(o.button)}</button>
-    <p class="adw-status" role="status" aria-live="polite"></p>
-  </form>
+${formCss(p)}
+${splitCss(p)}`);
+    const inner = `<h2 id="${u}-title">${esc(o.title)}</h2>
+${o.lead ? `<p class="adw-lead">${esc(o.lead)}</p>\n` : ""}<form action="mailto:${esc(to)}?subject=${esc(encodeURIComponent(o.subject))}" method="post" enctype="text/plain" data-to="${esc(to)}" data-subject="${esc(o.subject)}">
+  <label>Your name
+    <input name="name" type="text" autocomplete="name" required>
+  </label>
+  <label>Your email
+    <input name="email" type="email" autocomplete="email" required>
+  </label>
+${o.phone ? `  <label>Phone (optional)
+    <input name="phone" type="tel" autocomplete="tel">
+  </label>
+` : ""}  <label>Message
+    <textarea name="message" rows="5" required></textarea>
+  </label>
+  <button class="adw-btn" type="submit">${esc(o.button)}</button>
+  <p class="adw-status" role="status" aria-live="polite"></p>
+</form>`;
+    const pic = imgSrc(o.image);
+    const html = `<section class="${p}${pic ? " adw-split" : ""}" aria-labelledby="${u}-title">
+${pic ? `${media(o.image, "")}  <div class="adw-body">\n${ind(inner, 4)}\n  </div>` : ind(inner, 2)}
 </section>`;
     const js = `(function () {
   var root = document.currentScript.previousElementSibling;
@@ -854,7 +1057,7 @@ def({
   render(o, u) {
     const p = "adw-slider";
     const b = [o.accent, mix(o.accent, "#ff7a59", 0.75), mix(o.accent, "#14b8a6", 0.75)];
-    const src = (v, i) => (isImageData(v) ? v : sampleSlide(/^sample:(\d)$/.exec(v || "")?.[1] ?? i, b[0], b[1], b[2]));
+    const src = (v, i) => (imgSrc(v) || sampleSlide(/^sample:(\d)$/.exec(v || "")?.[1] ?? i, b[0], b[1], b[2]));
     const n = o.slides.length;
     const css = baseCss(p, o, `.${p} {
   position: relative;
@@ -1049,18 +1252,24 @@ def({
       { quote: "Clear prices and quick replies on WhatsApp. I recommend them to friends.", name: "Hina K.", role: "Islamabad", rating: 4 },
     ] },
     { key: "stars", label: "Show stars", type: "checkbox", default: true },
+    { key: "layout", label: "Layout", type: "select", choices: [["grid", "Cards side by side"], ["slider", "Slider with arrows"]], default: "grid" },
+    { key: "eyebrow", label: "Small text above (optional)", type: "text", default: "" },
     ...STYLE(),
   ],
   render(o, u) {
     const p = "adw-testimonials";
+    const slider = o.layout === "slider";
     const css = baseCss(p, o, `.${p} {
   max-width: 1080px;
   margin: 0 auto;
+  text-align: center;
 }
 .${p} h2 {
-  margin: 0 0 22px;
-  text-align: center;
-  font-size: clamp(1.4rem, 4vw, 2rem);
+  margin: 0 0 28px;
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  font-weight: 800;
+  letter-spacing: -.025em;
+  line-height: 1.1;
 }
 .${p} .adw-cards {
   display: grid;
@@ -1069,23 +1278,50 @@ def({
   margin: 0;
   padding: 0;
   list-style: none;
+  text-align: left;
+}
+.${p}.adw-slide-mode .adw-cards {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: min(86%, 340px);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  padding: 6px 4px 18px;
+  scrollbar-width: none;
+}
+.${p}.adw-slide-mode .adw-cards li {
+  scroll-snap-align: start;
 }
 .${p} figure {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 14px;
   height: 100%;
   margin: 0;
-  padding: 22px;
+  padding: 26px 24px 22px;
   background: var(--adw-bg);
   border: 1px solid var(--adw-line);
-  border-radius: calc(var(--adw-radius) * 1.6);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+  border-radius: calc(var(--adw-radius) * 1.8);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 26px 50px -30px var(--adw-shadow);
+}
+.${p} figure::before {
+  content: "\\201C";
+  position: absolute;
+  top: 6px;
+  right: 18px;
+  font-family: Georgia, serif;
+  font-size: 5rem;
+  line-height: 1;
+  color: var(--adw-accent);
+  opacity: .18;
 }
 .${p} .adw-stars {
   margin: 0;
   color: #f5a524;
-  letter-spacing: 2px;
+  font-size: 1.1rem;
+  letter-spacing: 3px;
 }
 .${p} .adw-stars .adw-off {
   color: var(--adw-line);
@@ -1093,7 +1329,9 @@ def({
 .${p} blockquote {
   flex: 1;
   margin: 0;
-  font-size: 1.02rem;
+  font-size: 1.08rem;
+  font-weight: 500;
+  line-height: 1.55;
 }
 .${p} blockquote p {
   margin: 0;
@@ -1102,21 +1340,50 @@ def({
   display: flex;
   align-items: center;
   gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--adw-line);
 }
 .${p} .adw-avatar {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  flex: none;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
-  background: var(--adw-accent);
+  background: linear-gradient(135deg, var(--adw-accent), var(--adw-accent-2));
   color: var(--adw-on-accent);
-  font-weight: 700;
+  font-weight: 800;
+  box-shadow: 0 8px 16px -8px var(--adw-glow);
 }
 .${p} figcaption span {
   display: block;
   font-size: .88rem;
   color: var(--adw-muted);
+}
+.${p} .adw-nav {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.${p} .adw-nav button {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--adw-line);
+  border-radius: 50%;
+  background: var(--adw-bg);
+  color: var(--adw-text);
+  font: inherit;
+  font-size: 1.3rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 10px 20px -14px var(--adw-shadow);
+}
+.${p} .adw-nav button:hover {
+  border-color: var(--adw-accent);
+  color: var(--adw-accent);
 }`);
     const cards = o.items.map((t) => {
       const r = Math.max(1, Math.min(5, Math.round(+t.rating || 5)));
@@ -1132,13 +1399,25 @@ ${o.stars ? `    <p class="adw-stars" role="img" aria-label="Rated ${r} out of 5
   </figure>
 </li>`;
     }).join("\n");
-    const html = `<section class="${p}" aria-labelledby="${u}-title">
-  <h2 id="${u}-title">${esc(o.title)}</h2>
-  <ul class="adw-cards">
+    const html = `<section class="${p}${slider ? " adw-slide-mode" : ""}" aria-labelledby="${u}-title">
+${eyebrow(o.eyebrow)}  <h2 id="${u}-title">${esc(o.title)}</h2>
+  <ul class="adw-cards"${slider ? ` id="${u}-list"` : ""}>
 ${ind(cards, 4)}
   </ul>
-</section>`;
-    return { title: o.title, css, html, js: "" };
+${slider ? `  <div class="adw-nav"><button type="button" class="adw-prev" aria-controls="${u}-list" aria-label="Previous reviews">&#8249;</button><button type="button" class="adw-next" aria-controls="${u}-list" aria-label="Next reviews">&#8250;</button></div>\n` : ""}</section>`;
+    const js = slider ? `(function () {
+  var root = document.currentScript.previousElementSibling;
+  var list = root.querySelector('.adw-cards');
+  function step(dir) {
+    var card = list.querySelector('li');
+    var w = card ? card.getBoundingClientRect().width + 18 : list.clientWidth;
+    if (list.scrollBy) list.scrollBy({ left: dir * w, behavior: 'smooth' });
+    else list.scrollLeft += dir * w;
+  }
+  root.querySelector('.adw-prev').addEventListener('click', function () { step(-1); });
+  root.querySelector('.adw-next').addEventListener('click', function () { step(1); });
+})();` : "";
+    return { title: o.title, css, html, js };
   },
 });
 
@@ -1232,6 +1511,7 @@ def({
     { key: "format", label: "Time format", type: "select", choices: [["12h", "12 hour (6:00 pm)"], ["24h", "24 hour (18:00)"]], default: "12h" },
     { key: "live", label: "Show “open now” and today", type: "checkbox", default: true },
     { key: "note", label: "Note (optional)", type: "text", default: "Hours may change on public holidays." },
+    PHOTO_OPT("Photo at the top (optional)"),
     ...STYLE(),
   ],
   render(o, u) {
@@ -1297,7 +1577,8 @@ def({
   margin: 12px 0 0;
   font-size: .88rem;
   color: var(--adw-muted);
-}`);
+}
+${topPhotoCss(p)}`);
     const body = o.days.map((d, i) => {
       const same = d.open === d.close;
       const time = d.closed ? '<span class="adw-closed">Closed</span>' : same ? "Open 24 hours" : `${esc(fmtTime(d.open, o.format))} &ndash; ${esc(fmtTime(d.close, o.format))}`;
@@ -1307,7 +1588,7 @@ def({
 </tr>`;
     }).join("\n");
     const html = `<section class="${p}" aria-labelledby="${u}-title" data-tz="${esc(o.tz)}">
-  <div class="adw-head">
+${topPhoto(o.image)}  <div class="adw-head">
     <h2 id="${u}-title">${esc(o.title)}</h2>
     <p class="adw-status" role="status"></p>
   </div>
@@ -1691,6 +1972,7 @@ def({
     { key: "name", label: "Name", type: "text", default: "Ayesha's Kitchen" },
     { key: "bio", label: "Short bio", type: "textarea", default: "Home-made meals in Lahore.\nOrder a day before, delivered warm." },
     { key: "avatar", label: "Photo or logo (optional)", type: "image", default: "" },
+    { key: "cover", label: "Cover photo at the top (optional)", type: "image", default: "" },
     { key: "links", label: "Links", type: "items", itemName: "Link", min: 1, max: 12, fields: [
       { key: "label", label: "Button text", type: "text" },
       { key: "url", label: "Link", type: "url" },
@@ -1739,9 +2021,21 @@ def({
   object-fit: cover;
   box-shadow: 0 8px 24px rgba(15, 23, 42, .15);
 }
+.${p} .adw-coverimg {
+  height: 190px;
+  margin: -24px 0 -58px;
+  overflow: hidden;
+  border-radius: calc(var(--adw-radius) * 1.6);
+  box-shadow: 0 24px 40px -26px rgba(15, 23, 42, .6);
+}
+.${p} .adw-coverimg + header .adw-avatar {
+  position: relative;
+}
 .${p} h1 {
   margin: 0 0 6px;
-  font-size: 1.6rem;
+  font-size: clamp(1.7rem, 6vw, 2.1rem);
+  font-weight: 800;
+  letter-spacing: -.02em;
 }
 .${p} .adw-bio {
   margin: 0 0 24px;
@@ -1774,10 +2068,10 @@ def({
   font-size: .86rem;
   color: var(--adw-muted);
 }`);
-    const avatar = isImageData(o.avatar) ? `<img class="adw-avatar" src="${esc(o.avatar)}" alt="${esc(o.name)}" width="96" height="96">` : `<div class="adw-avatar" aria-hidden="true">${esc(initials(o.name))}</div>`;
+    const avatar = imgSrc(o.avatar) ? `<img class="adw-avatar" src="${esc(imgSrc(o.avatar))}" alt="${esc(o.name)}" width="96" height="96">` : `<div class="adw-avatar" aria-hidden="true">${esc(initials(o.name))}</div>`;
     const html = `<main class="${p}">
   <div class="adw-inner">
-    <header>
+${imgSrc(o.cover) ? `    <div class="adw-coverimg"><img class="adw-cover" src="${esc(imgSrc(o.cover))}" alt="" width="920" height="380"></div>\n` : ""}    <header>
       ${avatar}
       <h1>${esc(o.name)}</h1>
 ${o.bio ? `      <p class="adw-bio">${lines(o.bio).map(esc).join("<br>")}</p>\n` : ""}    </header>
@@ -1811,32 +2105,41 @@ def({
     ] },
     { key: "button", label: "Button text", type: "text", default: "Check my answers" },
     { key: "result", label: "Score text ({score} and {total} are filled in)", type: "text", default: "You got {score} of {total} right." },
+    PHOTO_OPT("Photo at the top (optional)"),
     ...STYLE(),
   ],
   check(o) { return o.items.some((it) => !String(it[`a${it.correct || 1}`] || "").trim()) ? ["A question's right answer is empty. Pick an answer that has text."] : []; },
   render(o, u) {
     const p = "adw-quiz";
     const css = baseCss(p, o, `${card(p, 720)}
+${topPhotoCss(p)}
 .${p} fieldset {
   margin: 0 0 16px;
-  padding: 14px 16px;
+  padding: 16px 18px 12px;
   border: 1px solid var(--adw-line);
-  border-radius: var(--adw-radius);
+  border-radius: calc(var(--adw-radius) * 1.2);
+  background: var(--adw-bg);
+  box-shadow: 0 14px 28px -24px var(--adw-shadow);
 }
 .${p} legend {
   padding: 0 6px;
-  font-weight: 700;
+  font-size: 1.05rem;
+  font-weight: 800;
 }
 .${p} label {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  margin: 4px 0;
+  padding: 10px 12px;
+  margin: 6px 0;
+  border: 1px solid var(--adw-line);
   border-radius: var(--adw-radius);
+  font-weight: 600;
   cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
 }
 .${p} label:hover {
+  border-color: var(--adw-accent);
   background: var(--adw-soft);
 }
 .${p} input {
@@ -1866,7 +2169,7 @@ ${answers.map(([k, t]) => `  <label><input type="radio" name="${u}-q${i + 1}" va
 </fieldset>`;
     }).join("\n");
     const html = `<section class="${p}" aria-labelledby="${u}-title" data-result="${esc(o.result)}">
-  <h2 id="${u}-title">${esc(o.title)}</h2>
+${topPhoto(o.image)}  <h2 id="${u}-title">${esc(o.title)}</h2>
 ${o.lead ? `  <p class="adw-lead">${esc(o.lead)}</p>\n` : ""}${ind(qs, 2)}
   <button type="button" class="adw-btn adw-check">${esc(o.button || "Check my answers")}</button>
   <p class="adw-result" role="status" aria-live="polite"></p>
@@ -2180,6 +2483,893 @@ def({
   },
 });
 
+/* ------------------------------------------------------------------ website blocks with photos (round 4) */
+/** href (+ new tab for other sites) for a link value. */
+const aHref = (u) => { const h = safeUrl(u); return `href="${esc(h)}"${isExternal(h) ? ' target="_blank" rel="noopener"' : ""}`; };
+const EMAIL_OK = (o) => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(o.to || "").trim()) ? [] : ["Add the email address that should receive the messages."]);
+const H2 = (p, size = "clamp(1.8rem, 5vw, 2.7rem)") => `.${p} h2 {
+  margin: 0 0 12px;
+  font-size: ${size};
+  font-weight: 800;
+  letter-spacing: -.028em;
+  line-height: 1.08;
+}`;
+const mailScript = (fields) => `(function () {
+  var root = document.currentScript.previousElementSibling;
+  var form = root.querySelector('form');
+  var status = root.querySelector('.adw-status');
+  ${mailtoUrl.toString().replace(/\n/g, "\n  ")}
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    var f = form.elements;
+    var url = mailtoUrl(form.getAttribute('data-to'), form.getAttribute('data-subject'), [
+      ${fields.map(([label, name]) => `['${label}', f['${name}'] ? f['${name}'].value : '']`).join(",\n      ")}
+    ]);
+    root.setAttribute('data-mailto', url);
+    status.textContent = 'Your email app should open now. If it does not, write to ' + form.getAttribute('data-to') + '.';
+    window.location.href = url;
+  });
+})();`;
+
+def({
+  id: "hero", name: "Hero banner", blurb: "A big landing block with a photo, headline and buttons.", icon: "M3 4h18v16H3zM6 9h8M6 12h6M6 15.5h4",
+  options: [
+    { key: "eyebrow", label: "Small text above (optional)", type: "text", default: "Now open in Gulberg" },
+    { key: "title", label: "Headline", type: "text", default: "Fresh coffee, slow mornings" },
+    { key: "lead", label: "Text under the headline", type: "textarea", default: "Beans roasted every week, warm bread from 8 am and a quiet corner to work in." },
+    { key: "button", label: "Main button text", type: "text", default: "See the menu" },
+    { key: "link", label: "Main button link", type: "url", default: "#menu", show: (o) => !!o.button },
+    { key: "button2", label: "Second button text (optional)", type: "text", default: "Find us" },
+    { key: "link2", label: "Second button link", type: "url", default: "#visit", show: (o) => !!o.button2 },
+    { key: "facts", label: "Facts under the buttons (one per line, number first)", type: "textarea", default: "4.9 Google rating\n12k cups a month\n7 days a week" },
+    { key: "image", label: "Photo", type: "image", default: () => photoFor("coffee espresso cup", "hero") },
+    { key: "alt", label: "Describe the photo (for screen readers)", type: "text", default: "A cup of coffee seen from above" },
+    { key: "layout", label: "Layout", type: "select", choices: [["split", "Photo beside the text"], ["overlay", "Text on the photo"]], default: "split" },
+    ...STYLE(),
+  ],
+  render(o, u) {
+    const p = "adw-hero";
+    const pic = imgSrc(o.image), over = o.layout === "overlay" && !!pic;
+    const facts = lines(o.facts).slice(0, 4).map((l) => { const [n, ...r] = l.split(/\s+/); return `<li><strong>${esc(n)}</strong>${r.length ? ` ${esc(r.join(" "))}` : ""}</li>`; });
+    const css = baseCss(p, o, `.${p} {
+  position: relative;
+  display: grid;
+  grid-template-columns: ${pic && !over ? "minmax(0, 1.05fr) minmax(0, .95fr)" : "1fr"};
+  align-items: center;
+  gap: clamp(24px, 5vw, 60px);
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: clamp(26px, 6vw, 64px);
+  background: radial-gradient(120% 90% at 0% 0%, var(--adw-soft), transparent 62%), var(--adw-bg);
+  border-radius: calc(var(--adw-radius) * 2);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 40px 80px -44px var(--adw-shadow);
+}
+${H2(p, "clamp(2.4rem, 6.6vw, 4.3rem)")}
+.${p} h2 {
+  font-weight: 900;
+  letter-spacing: -.04em;
+  line-height: 1.01;
+}
+.${p} .adw-lead {
+  max-width: 34em;
+  margin: 0 0 28px;
+  font-size: clamp(1.02rem, 2.2vw, 1.2rem);
+  color: var(--adw-muted);
+}
+.${p} .adw-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.${p} .adw-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+  margin: 32px 0 0;
+  padding: 22px 0 0;
+  border-top: 1px solid var(--adw-line);
+  list-style: none;
+  color: var(--adw-muted);
+  font-size: .9rem;
+}
+.${p} .adw-facts strong {
+  display: block;
+  color: var(--adw-text);
+  font-size: 1.6rem;
+  font-weight: 900;
+  letter-spacing: -.02em;
+  line-height: 1.15;
+}
+.${p} .adw-art {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  max-height: 560px;
+}
+.${p} .adw-art::before {
+  content: "";
+  position: absolute;
+  inset: 9% -5% -5% 9%;
+  border-radius: calc(var(--adw-radius) * 2.4);
+  background: linear-gradient(135deg, var(--adw-accent), var(--adw-accent-2));
+}
+.${p} .adw-art img {
+  position: relative;
+  border-radius: calc(var(--adw-radius) * 2.4);
+  box-shadow: 0 30px 60px -30px rgba(15, 23, 42, .6);
+}
+${photoBack(p)}
+.${p}.adw-photo {
+  min-height: clamp(400px, 62vw, 580px);
+  align-items: end;
+}
+.${p}.adw-photo h2,
+.${p}.adw-photo .adw-facts strong {
+  color: #ffffff;
+}
+.${p}.adw-photo .adw-facts {
+  border-color: rgba(255, 255, 255, .3);
+  color: rgba(255, 255, 255, .8);
+}
+.${p}.adw-photo .adw-ghost {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, .6);
+}
+@media (max-width: 760px) {
+  .${p} {
+    grid-template-columns: 1fr;
+  }
+  .${p} .adw-art {
+    aspect-ratio: 4 / 3;
+    order: -1;
+  }
+}`);
+    const actions = o.button || o.button2 ? `  <div class="adw-actions">${o.button ? `<a class="adw-btn" ${aHref(o.link)}>${esc(o.button)}</a>` : ""}${o.button2 ? `<a class="adw-btn adw-ghost" ${aHref(o.link2)}>${esc(o.button2)}</a>` : ""}</div>\n` : "";
+    const copy = `<div class="adw-copy">
+${eyebrow(o.eyebrow)}  <h2 id="${u}-title">${esc(o.title)}</h2>
+${o.lead ? `  <p class="adw-lead">${esc(o.lead)}</p>\n` : ""}${actions}${facts.length ? `  <ul class="adw-facts">\n${facts.map((f) => "    " + f).join("\n")}\n  </ul>\n` : ""}</div>`;
+    const html = over
+      ? `<section class="${p} adw-photo" aria-labelledby="${u}-title">
+${bgImg(o.image)}${ind(copy, 2)}
+</section>`
+      : `<section class="${p}" aria-labelledby="${u}-title">
+${ind(copy, 2)}
+${pic ? `  <div class="adw-art"><img class="adw-cover" src="${esc(pic)}" alt="${esc(altOf(o.image, o.alt))}" width="900" height="1125"></div>\n` : ""}</section>`;
+    return { title: o.title, css, html, js: "" };
+  },
+});
+
+def({
+  id: "product", name: "Product card", blurb: "One product with a photo, price, rating and an order button.", icon: "M5 8h14l-1.4 12H6.4zM9 8a3 3 0 0 1 6 0",
+  options: [
+    { key: "badge", label: "Badge on the photo (optional)", type: "text", default: "Bestseller" },
+    { key: "category", label: "Small text above the name (optional)", type: "text", default: "Spices · 250 g pouch" },
+    { key: "name", label: "Product name", type: "text", default: "Green cardamom, hand-sorted" },
+    { key: "desc", label: "Description", type: "textarea", default: "Big, fragrant pods packed the week they arrive. Lovely in chai, biryani and kheer." },
+    { key: "currency", label: "Currency", type: "text", default: "Rs" },
+    { key: "price", label: "Price", type: "text", default: "1,450" },
+    { key: "was", label: "Old price (optional)", type: "text", default: "1,800" },
+    { key: "rating", label: "Stars (0 to 5; 0 hides them)", type: "number", min: 0, max: 5, step: 0.1, default: 4.8 },
+    { key: "reviews", label: "Reviews text (optional)", type: "text", default: "212 reviews" },
+    { key: "features", label: "Highlights (one per line)", type: "textarea", default: "Free delivery over Rs 3,000\nCash on delivery\nFresh stock every week" },
+    { key: "button", label: "Button text", type: "text", default: "Order on WhatsApp" },
+    { key: "link", label: "Button link", type: "url", default: "https://wa.me/?text=I%20would%20like%20to%20order%20green%20cardamom" },
+    { key: "image", label: "Photo", type: "image", default: () => photoFor("cardamom spice", "product") },
+    { key: "alt", label: "Describe the photo (for screen readers)", type: "text", default: "Green cardamom pods" },
+    ...STYLE(),
+  ],
+  render(o, u) {
+    const p = "adw-product";
+    const pic = imgSrc(o.image);
+    const num = (s) => { const v = parseFloat(String(s || "").replace(/,/g, "")); return isFinite(v) ? v : NaN; };
+    const save = num(o.was) > num(o.price) && num(o.price) > 0 ? Math.round((1 - num(o.price) / num(o.was)) * 100) : 0;
+    const cur = (s) => (/\d/.test(s) && o.currency ? `${esc(o.currency)} ` : "") + esc(s);
+    const r = Math.max(0, Math.min(5, +o.rating || 0)), full = Math.round(r);
+    const css = baseCss(p, o, `.${p} {
+  display: grid;
+  grid-template-columns: ${pic ? "minmax(0, 1fr) minmax(0, 1fr)" : "1fr"};
+  max-width: 920px;
+  margin: 0 auto;
+  overflow: hidden;
+  background: var(--adw-bg);
+  border: 1px solid var(--adw-line);
+  border-radius: calc(var(--adw-radius) * 2);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 40px 80px -46px var(--adw-shadow);
+}
+.${p} .adw-media {
+  position: relative;
+  min-height: 320px;
+  background: var(--adw-soft);
+}
+.${p} .adw-media img {
+  position: absolute;
+  inset: 0;
+}
+.${p} .adw-badge {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--adw-accent);
+  color: var(--adw-on-accent);
+  font-size: .8rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  box-shadow: 0 10px 20px -10px var(--adw-glow);
+}
+.${p} .adw-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(24px, 5vw, 40px);
+}
+.${p} .adw-cat {
+  margin: 0;
+  color: var(--adw-accent);
+  font-size: .8rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+${H2(p, "clamp(1.7rem, 4.4vw, 2.4rem)")}
+.${p} h2 {
+  margin: 0;
+}
+.${p} .adw-rating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--adw-muted);
+  font-size: .92rem;
+}
+.${p} .adw-stars {
+  color: #f5a524;
+  font-size: 1.05rem;
+  letter-spacing: 2px;
+}
+.${p} .adw-stars .adw-off {
+  color: var(--adw-line);
+}
+.${p} .adw-text {
+  margin: 0;
+  color: var(--adw-muted);
+}
+.${p} .adw-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin: 4px 0 0;
+}
+.${p} .adw-price strong {
+  font-size: clamp(2rem, 5vw, 2.6rem);
+  font-weight: 900;
+  letter-spacing: -.03em;
+}
+.${p} .adw-price s {
+  color: var(--adw-muted);
+}
+.${p} .adw-save {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: .82rem;
+  font-weight: 800;
+}
+.${p} .adw-features {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.${p} .adw-features li {
+  position: relative;
+  padding-left: 26px;
+}
+.${p} .adw-features li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 8px;
+  width: 11px;
+  height: 6px;
+  border-left: 3px solid var(--adw-accent);
+  border-bottom: 3px solid var(--adw-accent);
+  transform: rotate(-45deg);
+}
+.${p} .adw-btn {
+  margin-top: 6px;
+}
+@media (max-width: 720px) {
+  .${p} {
+    grid-template-columns: 1fr;
+  }
+  .${p} .adw-media {
+    min-height: 240px;
+  }
+}`);
+    const html = `<article class="${p}" aria-labelledby="${u}-title">
+${pic ? `  <div class="adw-media"><img class="adw-cover" src="${esc(pic)}" alt="${esc(altOf(o.image, o.alt))}" width="900" height="900">${o.badge ? `<span class="adw-badge">${esc(o.badge)}</span>` : ""}</div>\n` : ""}  <div class="adw-body">
+${o.category ? `    <p class="adw-cat">${esc(o.category)}</p>\n` : ""}    <h2 id="${u}-title">${esc(o.name)}</h2>
+${full ? `    <p class="adw-rating"><span class="adw-stars" role="img" aria-label="Rated ${r} out of 5">${"&#9733;".repeat(full)}${full < 5 ? `<span class="adw-off">${"&#9733;".repeat(5 - full)}</span>` : ""}</span> <span>${r.toFixed(1)}${o.reviews ? ` · ${esc(o.reviews)}` : ""}</span></p>\n` : ""}${o.desc ? `    <p class="adw-text">${esc(o.desc)}</p>\n` : ""}    <p class="adw-price"><strong>${cur(o.price)}</strong>${o.was ? ` <s>${cur(o.was)}</s>` : ""}${save ? ` <span class="adw-save">Save ${save}%</span>` : ""}</p>
+${lines(o.features).length ? `    <ul class="adw-features">\n${lines(o.features).map((f) => `      <li>${esc(f)}</li>`).join("\n")}\n    </ul>\n` : ""}${o.button ? `    <a class="adw-btn" ${aHref(o.link)}>${esc(o.button)}</a>\n` : ""}  </div>
+</article>`;
+    return { title: o.name, css, html, js: "" };
+  },
+});
+
+def({
+  id: "menu", name: "Menu card", blurb: "A restaurant or café menu with a photo, dishes and prices.", icon: "M6 3v7a2 2 0 0 0 4 0V3M8 10v11M17 3c-2.5 2-2.5 7 0 9v9",
+  options: [
+    { key: "eyebrow", label: "Small text above (optional)", type: "text", default: "Served 6 pm to 11 pm" },
+    { key: "title", label: "Heading", type: "text", default: "Tonight's menu" },
+    { key: "lead", label: "Text under the heading", type: "text", default: "Naan from the tandoor and slow-cooked classics." },
+    { key: "currency", label: "Currency", type: "text", default: "Rs" },
+    { key: "items", label: "Dishes", type: "items", itemName: "Dish", min: 1, max: 30, fields: [
+      { key: "name", label: "Name", type: "text" },
+      { key: "desc", label: "Description (optional)", type: "text" },
+      { key: "price", label: "Price", type: "text" },
+      { key: "tag", label: "Tag (optional, e.g. New, Veg)", type: "text" },
+    ], default: [
+      { name: "Chicken karahi", desc: "Tomato, ginger and green chilli; for two", price: "1,850", tag: "Chef's pick" },
+      { name: "Daal makhani", desc: "Black lentils simmered overnight", price: "750", tag: "Veg" },
+      { name: "Seekh kebab platter", desc: "Six kebabs, mint chutney, salad", price: "1,200", tag: "" },
+      { name: "Garlic naan", desc: "Butter and fresh coriander", price: "180", tag: "" },
+      { name: "Mango lassi", desc: "Sweet, thick and cold", price: "350", tag: "New" },
+    ] },
+    { key: "note", label: "Note (optional)", type: "text", default: "Prices include tax. Tell us about any allergies." },
+    { key: "button", label: "Button text (optional)", type: "text", default: "Book a table" },
+    { key: "link", label: "Button link", type: "url", default: "#book", show: (o) => !!o.button },
+    { key: "image", label: "Photo at the top", type: "image", default: () => photoFor("naan bread food", "menu") },
+    { key: "alt", label: "Describe the photo (for screen readers)", type: "text", default: "Fresh naan bread" },
+    ...STYLE(),
+  ],
+  render(o, u) {
+    const p = "adw-menu";
+    const pic = imgSrc(o.image);
+    const css = baseCss(p, o, `.${p} {
+  max-width: 720px;
+  margin: 0 auto;
+  overflow: hidden;
+  background: var(--adw-bg);
+  border: 1px solid var(--adw-line);
+  border-radius: calc(var(--adw-radius) * 2);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 40px 80px -46px var(--adw-shadow);
+}
+.${p} header {
+  position: relative;
+  isolation: isolate;
+  padding: clamp(26px, 6vw, 44px);
+  background: linear-gradient(135deg, var(--adw-accent), var(--adw-accent-2));
+  color: var(--adw-on-accent);
+}
+.${p} header.adw-has-photo {
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  color: #ffffff;
+}
+.${p} header img {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+}
+.${p} header.adw-has-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(10, 8, 6, .1), rgba(10, 8, 6, .82));
+}
+.${p} .adw-eyebrow {
+  align-self: flex-start;
+  background: var(--adw-accent);
+  color: var(--adw-on-accent);
+}
+${H2(p, "clamp(2rem, 6vw, 3rem)")}
+.${p} h2 {
+  margin: 0 0 6px;
+  font-weight: 900;
+}
+.${p} header p:last-child {
+  margin: 0;
+  opacity: .88;
+}
+.${p} ul {
+  margin: 0;
+  padding: clamp(14px, 4vw, 26px) clamp(20px, 5vw, 40px);
+  list-style: none;
+}
+.${p} li {
+  padding: 15px 0;
+  border-bottom: 1px dashed var(--adw-line);
+}
+.${p} li:last-child {
+  border-bottom: 0;
+}
+.${p} .adw-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.${p} h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.${p} .adw-dots {
+  flex: 1;
+  border-bottom: 2px dotted var(--adw-line);
+  transform: translateY(-4px);
+}
+.${p} .adw-price {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: var(--adw-accent);
+  white-space: nowrap;
+}
+.${p} .adw-tag {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--adw-soft);
+  color: var(--adw-accent);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.${p} .adw-desc {
+  margin: 4px 0 0;
+  color: var(--adw-muted);
+  font-size: .93rem;
+}
+.${p} footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px clamp(20px, 5vw, 40px) clamp(22px, 5vw, 34px);
+  border-top: 1px solid var(--adw-line);
+  color: var(--adw-muted);
+  font-size: .9rem;
+}
+.${p} footer p {
+  margin: 0;
+}`);
+    const items = o.items.filter((d) => d.name).map((d) => `<li>
+  <div class="adw-line"><h3>${esc(d.name)}</h3>${d.tag ? `<span class="adw-tag">${esc(d.tag)}</span>` : ""}<span class="adw-dots" aria-hidden="true"></span><span class="adw-price">${/\d/.test(d.price) && o.currency ? `${esc(o.currency)} ` : ""}${esc(d.price)}</span></div>
+${d.desc ? `  <p class="adw-desc">${esc(d.desc)}</p>\n` : ""}</li>`).join("\n");
+    const html = `<section class="${p}" aria-labelledby="${u}-title">
+  <header${pic ? ' class="adw-has-photo"' : ""}>
+${pic ? `    <img class="adw-cover" src="${esc(pic)}" alt="${esc(altOf(o.image, o.alt))}" width="1200" height="600">\n` : ""}${eyebrow(o.eyebrow, "    ")}    <h2 id="${u}-title">${esc(o.title)}</h2>
+${o.lead ? `    <p>${esc(o.lead)}</p>\n` : ""}  </header>
+  <ul>
+${ind(items, 4)}
+  </ul>
+${o.note || o.button ? `  <footer>${o.note ? `<p>${esc(o.note)}</p>` : ""}${o.button ? `<a class="adw-btn" ${aHref(o.link)}>${esc(o.button)}</a>` : ""}</footer>\n` : ""}</section>`;
+    return { title: o.title, css, html, js: "" };
+  },
+});
+
+def({
+  id: "booking", name: "Booking form", blurb: "Visitors pick a service, date and time; it opens their email app.", icon: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M8 14h3M8 17h6",
+  options: [
+    { key: "title", label: "Heading", type: "text", default: "Book your table" },
+    { key: "lead", label: "Text under the heading", type: "text", default: "Pick a day and time; we confirm by phone within the hour." },
+    { key: "to", label: "Your email address", type: "text", default: "bookings@example.com" },
+    { key: "subject", label: "Email subject", type: "text", default: "New booking request" },
+    { key: "choiceLabel", label: "Choice question", type: "text", default: "What would you like?" },
+    { key: "choices", label: "Choices (one per line)", type: "textarea", default: "Lunch\nDinner\nPrivate event" },
+    { key: "people", label: "Ask how many people", type: "checkbox", default: true },
+    { key: "button", label: "Button text", type: "text", default: "Request booking" },
+    PHOTO_OPT("Photo beside the form (optional)", () => photoFor("coffee espresso cup", "booking")),
+    ...STYLE(),
+  ],
+  check: EMAIL_OK,
+  render(o, u) {
+    const p = "adw-booking";
+    const to = String(o.to || "").trim(), pic = imgSrc(o.image);
+    const css = baseCss(p, o, `${card(p, 600)}
+${formCss(p)}
+${splitCss(p, 1040)}`);
+    const choices = lines(o.choices);
+    const inner = `<h2 id="${u}-title">${esc(o.title)}</h2>
+${o.lead ? `<p class="adw-lead">${esc(o.lead)}</p>\n` : ""}<form action="mailto:${esc(to)}?subject=${esc(encodeURIComponent(o.subject))}" method="post" enctype="text/plain" data-to="${esc(to)}" data-subject="${esc(o.subject)}">
+${choices.length ? `  <label>${esc(o.choiceLabel || "What would you like?")}
+    <select name="choice">
+${choices.map((c) => `      <option>${esc(c)}</option>`).join("\n")}
+    </select>
+  </label>
+` : ""}  <div class="adw-row">
+    <label>Date
+      <input name="date" type="date" required>
+    </label>
+    <label>Time
+      <input name="time" type="time" required>
+    </label>
+${o.people ? `    <label>People
+      <input name="people" type="number" min="1" max="100" value="2">
+    </label>
+` : ""}  </div>
+  <div class="adw-row">
+    <label>Your name
+      <input name="name" type="text" autocomplete="name" required>
+    </label>
+    <label>Phone
+      <input name="phone" type="tel" autocomplete="tel" required>
+    </label>
+  </div>
+  <label>Anything we should know? (optional)
+    <textarea name="notes" rows="3"></textarea>
+  </label>
+  <button class="adw-btn" type="submit">${esc(o.button)}</button>
+  <p class="adw-status" role="status" aria-live="polite"></p>
+</form>`;
+    const html = `<section class="${p}${pic ? " adw-split" : ""}" aria-labelledby="${u}-title">
+${pic ? `${media(o.image, "")}  <div class="adw-body">\n${ind(inner, 4)}\n  </div>` : ind(inner, 2)}
+</section>`;
+    const js = mailScript([["Booking", "choice"], ["Date", "date"], ["Time", "time"], ["People", "people"], ["Name", "name"], ["Phone", "phone"], ["Notes", "notes"]]);
+    return { title: o.title, css, html, js };
+  },
+});
+
+def({
+  id: "team", name: "Team cards", blurb: "The people behind your business, with roles and short bios.", icon: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20a6 6 0 0 1 12 0M10 20a6 6 0 0 1 12 0",
+  options: [
+    { key: "eyebrow", label: "Small text above (optional)", type: "text", default: "Our people" },
+    { key: "title", label: "Heading", type: "text", default: "Meet the team" },
+    { key: "lead", label: "Text under the heading", type: "text", default: "A small team that answers every message itself." },
+    { key: "items", label: "People", type: "items", itemName: "Person", min: 1, max: 12, fields: [
+      { key: "image", label: "Photo (optional)", type: "image" },
+      { key: "name", label: "Name", type: "text" },
+      { key: "role", label: "Role", type: "text" },
+      { key: "bio", label: "Short bio", type: "textarea" },
+      { key: "link", label: "Link (optional: profile or email)", type: "url" },
+    ], default: [
+      { image: "", name: "Ayesha Khan", role: "Founder", bio: "Twelve years in hotel kitchens before opening her own.", link: "" },
+      { image: "", name: "Omar Siddiqui", role: "Operations", bio: "Keeps every order on time and suppliers honest.", link: "" },
+      { image: "", name: "Sara Malik", role: "Customer care", bio: "Answers your WhatsApp messages, usually within minutes.", link: "" },
+      { image: "", name: "Bilal Ahmed", role: "Delivery lead", bio: "Knows every street of the city by heart.", link: "" },
+    ] },
+    ...STYLE(),
+  ],
+  render(o, u) {
+    const p = "adw-team";
+    const css = baseCss(p, o, `.${p} {
+  max-width: 1120px;
+  margin: 0 auto;
+  text-align: center;
+}
+${H2(p)}
+.${p} .adw-lead {
+  max-width: 560px;
+  margin: 0 auto 34px;
+  color: var(--adw-muted);
+  font-size: 1.05rem;
+}
+.${p} ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.${p} li {
+  overflow: hidden;
+  background: var(--adw-bg);
+  border: 1px solid var(--adw-line);
+  border-radius: calc(var(--adw-radius) * 1.8);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 26px 50px -32px var(--adw-shadow);
+  transition: transform .2s ease;
+}
+.${p} li:hover {
+  transform: translateY(-4px);
+}
+.${p} .adw-band {
+  height: 86px;
+  background: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, .35) 1px, transparent 1.5px) 0 0 / 14px 14px, linear-gradient(135deg, var(--adw-accent), var(--adw-accent-2));
+}
+.${p} .adw-face {
+  display: grid;
+  place-items: center;
+  width: 104px;
+  height: 104px;
+  margin: -52px auto 12px;
+  overflow: hidden;
+  border: 5px solid var(--adw-bg);
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--adw-accent-2), var(--adw-accent));
+  color: var(--adw-on-accent);
+  font-size: 2rem;
+  font-weight: 900;
+  box-shadow: 0 14px 26px -14px var(--adw-shadow);
+}
+.${p} h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+.${p} .adw-role {
+  margin: 4px 0 10px;
+  color: var(--adw-accent);
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.${p} .adw-bio {
+  margin: 0;
+  padding: 0 22px;
+  color: var(--adw-muted);
+  font-size: .94rem;
+}
+.${p} .adw-more {
+  display: inline-block;
+  margin: 14px 0 0;
+  color: var(--adw-accent);
+  font-weight: 800;
+  text-decoration: none;
+}
+.${p} .adw-card-end {
+  height: 24px;
+}`);
+    const people = o.items.filter((x) => x.name).map((x) => {
+      const src = imgSrc(x.image);
+      return `<li>
+  <div class="adw-band" aria-hidden="true"></div>
+  ${src ? `<img class="adw-face adw-cover" src="${esc(src)}" alt="${esc(x.name)}" width="104" height="104">` : `<div class="adw-face" aria-hidden="true">${esc(initials(x.name))}</div>`}
+  <h3>${esc(x.name)}</h3>
+${x.role ? `  <p class="adw-role">${esc(x.role)}</p>\n` : ""}${x.bio ? `  <p class="adw-bio">${esc(x.bio)}</p>\n` : ""}${x.link ? `  <a class="adw-more" ${aHref(x.link)}>Get in touch &rarr;</a>\n` : ""}  <div class="adw-card-end"></div>
+</li>`;
+    }).join("\n");
+    const html = `<section class="${p}" aria-labelledby="${u}-title">
+${eyebrow(o.eyebrow)}  <h2 id="${u}-title">${esc(o.title)}</h2>
+${o.lead ? `  <p class="adw-lead">${esc(o.lead)}</p>\n` : ""}  <ul>
+${ind(people, 4)}
+  </ul>
+</section>`;
+    return { title: o.title, css, html, js: "" };
+  },
+});
+
+/** "12,000+" → { pre: "", num: 12000, dec: 0, comma: true, post: "+" } (null when there is no number). */
+export function statParts(s) {
+  var m = /^([^0-9]*)([0-9][0-9,]*(?:\.[0-9]+)?)(.*)$/.exec(String(s || "").trim());
+  if (!m) return null;
+  var digits = m[2].replace(/,/g, ""), dot = digits.indexOf(".");
+  return { pre: m[1], num: parseFloat(digits), dec: dot < 0 ? 0 : digits.length - dot - 1, comma: m[2].indexOf(",") >= 0, post: m[3] };
+}
+/** The text of a stat at value v (same prefix, decimals, thousands commas and suffix). */
+export function statText(parts, v) {
+  var s = v.toFixed(parts.dec);
+  if (parts.comma) { var i = s.indexOf("."), head = i < 0 ? s : s.slice(0, i), tail = i < 0 ? "" : s.slice(i); s = head.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + tail; }
+  return parts.pre + s + parts.post;
+}
+
+def({
+  id: "stats", name: "Stats band", blurb: "Big numbers that count up when they scroll into view.", icon: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  options: [
+    { key: "eyebrow", label: "Small text above (optional)", type: "text", default: "Since 2015" },
+    { key: "title", label: "Heading", type: "text", default: "Numbers we are proud of" },
+    { key: "lead", label: "Text under the heading (optional)", type: "text", default: "" },
+    { key: "items", label: "Numbers", type: "items", itemName: "Number", min: 1, max: 6, fields: [
+      { key: "value", label: "Number (e.g. 12,000+ or 98%)", type: "text" },
+      { key: "label", label: "What it counts", type: "text" },
+    ], default: [
+      { value: "12,000+", label: "Happy customers" },
+      { value: "98%", label: "Orders on time" },
+      { value: "4.9", label: "Average rating" },
+      { value: "35", label: "Cities we deliver to" },
+    ] },
+    { key: "style", label: "Background", type: "select", choices: [["gradient", "Colour gradient"], ["plain", "Plain"], ["photo", "Photo"]], default: "gradient" },
+    PHOTO_OPT("Background photo (for the Photo background)"),
+    { key: "animate", label: "Count up when shown", type: "checkbox", default: true },
+    ...STYLE(),
+  ],
+  render(o, u) {
+    const p = "adw-stats";
+    const photo = o.style === "photo" && !!imgSrc(o.image), grad = o.style === "gradient";
+    const css = baseCss(p, o, `.${p} {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: clamp(30px, 6vw, 60px) clamp(22px, 5vw, 56px);
+  border-radius: calc(var(--adw-radius) * 2);
+  background: var(--adw-bg);
+  border: 1px solid var(--adw-line);
+  box-shadow: 0 40px 80px -46px var(--adw-shadow);
+  text-align: center;
+}
+.${p}.adw-grad {
+  border: 0;
+  background: radial-gradient(80% 120% at 100% 0%, rgba(255, 255, 255, .18), transparent 60%), linear-gradient(135deg, var(--adw-accent), var(--adw-accent-2));
+  color: var(--adw-on-accent);
+  box-shadow: 0 40px 80px -40px var(--adw-glow);
+}
+${photoBack(p)}
+${H2(p)}
+.${p} .adw-lead {
+  margin: 0 auto 8px;
+  max-width: 560px;
+  opacity: .85;
+}
+.${p} .adw-eyebrow {
+  background: rgba(255, 255, 255, .18);
+  color: inherit;
+}
+.${p}:not(.adw-grad):not(.adw-photo) .adw-eyebrow {
+  background: var(--adw-soft);
+  color: var(--adw-accent);
+}
+.${p} dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 26px 18px;
+  margin: 30px 0 0;
+}
+.${p} dl div {
+  display: flex;
+  flex-direction: column-reverse;
+  padding: 4px 8px;
+}
+.${p} dl div + div {
+  border-left: 1px solid currentColor;
+  border-left-color: color-mix(in srgb, currentColor 22%, transparent);
+}
+.${p} dd {
+  margin: 0;
+  font-size: clamp(2.4rem, 7vw, 3.6rem);
+  font-weight: 900;
+  letter-spacing: -.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.${p}:not(.adw-grad):not(.adw-photo) dd {
+  color: var(--adw-accent);
+}
+.${p} dt {
+  margin-top: 10px;
+  font-size: .9rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  opacity: .85;
+}
+@media (max-width: 560px) {
+  .${p} dl div + div {
+    border-left: 0;
+  }
+}`);
+    const items = o.items.filter((x) => x.value || x.label).map((x) => `  <div><dt>${esc(x.label)}</dt><dd data-value="${esc(x.value)}">${esc(x.value)}</dd></div>`).join("\n");
+    const html = `<section class="${p}${grad ? " adw-grad" : ""}${photo ? " adw-photo" : ""}" aria-labelledby="${u}-title">
+${photo ? bgImg(o.image) : ""}${eyebrow(o.eyebrow)}  <h2 id="${u}-title">${esc(o.title)}</h2>
+${o.lead ? `  <p class="adw-lead">${esc(o.lead)}</p>\n` : ""}  <dl>
+${items}
+  </dl>
+</section>`;
+    const js = o.animate ? `(function () {
+  var root = document.currentScript.previousElementSibling;
+  var cells = root.querySelectorAll('dd[data-value]');
+  ${statParts.toString().replace(/\n/g, "\n  ")}
+  ${statText.toString().replace(/\n/g, "\n  ")}
+  var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function run() {
+    Array.prototype.forEach.call(cells, function (el) {
+      var parts = statParts(el.getAttribute('data-value'));
+      if (!parts || calm || !window.requestAnimationFrame) return;
+      var start = null, ms = 1400;
+      function frame(t) {
+        if (start === null) start = t;
+        var k = Math.min(1, (t - start) / ms), eased = 1 - Math.pow(1 - k, 3);
+        el.textContent = statText(parts, parts.num * eased);
+        if (k < 1) window.requestAnimationFrame(frame);
+        else el.textContent = el.getAttribute('data-value');
+      }
+      window.requestAnimationFrame(frame);
+    });
+  }
+  if (window.IntersectionObserver) {
+    var seen = new IntersectionObserver(function (entries) {
+      if (entries.some(function (e) { return e.isIntersecting; })) { seen.disconnect(); run(); }
+    }, { threshold: 0.3 });
+    seen.observe(root);
+  } else run();
+})();` : "";
+    return { title: o.title, css, html, js };
+  },
+});
+
+def({
+  id: "newsletter", name: "Newsletter signup", blurb: "Email sign-ups that arrive in your inbox.", icon: "M3 6h18v12H3zM3 7l9 6 9-6",
+  options: [
+    { key: "eyebrow", label: "Small text above (optional)", type: "text", default: "Every Friday" },
+    { key: "title", label: "Heading", type: "text", default: "Get our best deals first" },
+    { key: "lead", label: "Text under the heading", type: "text", default: "One short email a week: new arrivals, recipes and members-only prices." },
+    { key: "perks", label: "Points (one per line, optional)", type: "textarea", default: "Early access to every sale\nA free recipe card each month\nNo spam; leave any time" },
+    { key: "to", label: "Your email address (sign-ups are sent here)", type: "text", default: "hello@example.com" },
+    { key: "subject", label: "Email subject", type: "text", default: "Please add me to the newsletter" },
+    { key: "button", label: "Button text", type: "text", default: "Subscribe" },
+    { key: "note", label: "Small print (optional)", type: "text", default: "We never share your email address." },
+    PHOTO_OPT("Photo beside the form (optional)", () => photoFor("fruit fruits fresh", "newsletter")),
+    ...STYLE(),
+  ],
+  check: EMAIL_OK,
+  render(o, u) {
+    const p = "adw-newsletter";
+    const to = String(o.to || "").trim(), pic = imgSrc(o.image), perks = lines(o.perks);
+    const css = baseCss(p, o, `${card(p, 620)}
+${formCss(p)}
+${splitCss(p, 1000)}
+.${p} .adw-perks {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 22px;
+  padding: 0;
+  list-style: none;
+}
+.${p} .adw-perks li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+.${p} .adw-perks li::before {
+  content: "";
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--adw-on-accent) 0 3px, transparent 3.5px), linear-gradient(135deg, var(--adw-accent), var(--adw-accent-2));
+}
+.${p} .adw-inline {
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--adw-line);
+  border-radius: calc(var(--adw-radius) + 6px);
+  background: var(--adw-bg);
+  box-shadow: 0 14px 30px -22px var(--adw-shadow);
+}
+.${p} .adw-inline input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  box-shadow: none;
+}
+.${p} .adw-inline .adw-btn {
+  flex: none;
+}
+.${p} .adw-note {
+  margin: 0;
+  color: var(--adw-muted);
+  font-size: .86rem;
+}
+@media (max-width: 440px) {
+  .${p} .adw-inline {
+    flex-direction: column;
+  }
+}`);
+    const inner = `${eyebrow(o.eyebrow, "")}<h2 id="${u}-title">${esc(o.title)}</h2>
+${o.lead ? `<p class="adw-lead">${esc(o.lead)}</p>\n` : ""}${perks.length ? `<ul class="adw-perks">\n${perks.map((x) => `  <li>${esc(x)}</li>`).join("\n")}\n</ul>\n` : ""}<form action="mailto:${esc(to)}?subject=${esc(encodeURIComponent(o.subject))}" method="post" enctype="text/plain" data-to="${esc(to)}" data-subject="${esc(o.subject)}">
+  <div class="adw-inline">
+    <label class="adw-sr" for="${u}-email">Your email</label>
+    <input id="${u}-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+    <button class="adw-btn" type="submit">${esc(o.button)}</button>
+  </div>
+${o.note ? `  <p class="adw-note">${esc(o.note)}</p>\n` : ""}  <p class="adw-status" role="status" aria-live="polite"></p>
+</form>`;
+    const html = `<section class="${p}${pic ? " adw-split" : ""}" aria-labelledby="${u}-title">
+${pic ? `${media(o.image, "")}  <div class="adw-body">\n${ind(inner, 4)}\n  </div>` : ind(inner, 2)}
+</section>`;
+    return { title: o.title, css, html, js: mailScript([["Email", "email"]]) };
+  },
+});
+
 export const WIDGETS = W;
 export const widgetById = (id) => W.find((w) => w.id === id);
 
@@ -2205,7 +3395,7 @@ function cleanValue(opt, v, fallback) {
     case "select": return (opt.choices || []).some(([k]) => k === v) ? v : fallback;
     case "time": return /^\d{1,2}:\d{2}$/.test(String(v || "")) ? String(v).padStart(5, "0") : fallback || "09:00";
     case "datetime": return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(String(v || "")) ? String(v).slice(0, 16) : fallback;
-    case "image": return isImageData(v) || /^sample:\d$/.test(String(v || "")) ? String(v) : "";
+    case "image": return isImageData(v) || /^sample:\d$/.test(String(v || "")) || photoOf(v) ? String(v) : "";
     case "textarea": return String(v ?? "").slice(0, 5000);
     default: return String(v ?? "").slice(0, 2000);
   }
@@ -2236,13 +3426,16 @@ export function warnings(id, opts, now = Date.now()) { const w = widgetById(id);
 
 /**
  * The widget's code: { page (full HTML document), snippet (style + markup + script to paste into a site), title, file }.
- * opts must be normalized (see normalize()).
+ * opts must be normalized (see normalize()). env.photo(p): the src for a library photo (the app passes a data: URL).
  */
-export function renderWidget(id, opts) {
+export function renderWidget(id, opts, env = {}) {
   const w = widgetById(id);
   if (!w) throw new Error("Unknown widget " + id);
   const u = "adw" + hash(id + JSON.stringify(opts));
-  const r = w.render(opts, u);
+  const prev = resolvePhoto;
+  if (typeof env?.photo === "function") resolvePhoto = (p) => String(env.photo(p) || "") || prev(p);
+  let r;
+  try { r = w.render(opts, u); } finally { resolvePhoto = prev; }
   const c = palette(opts);
   const bodyCss = r.page === "full" ? `html,
 body {
@@ -2258,7 +3451,8 @@ body {
 }` : `body {
   margin: 0;
   padding: clamp(16px, 4vw, 40px) 16px${r.page === "fixed" ? " 120px" : ""};
-  background: ${c.page};
+  background: radial-gradient(900px 520px at 0% 0%, ${c.soft}, transparent 70%), radial-gradient(800px 480px at 100% 100%, ${mix(c.accent2, opts.bg, 0.88)}, transparent 70%), ${c.page};
+  min-height: 100vh;
 }`;
   const snippet = `<style>
 ${ind(r.css, 2)}

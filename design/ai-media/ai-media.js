@@ -331,9 +331,24 @@ async function applyTemplate(id) {
   prompt.value = t.prompt; renderOptions(); updateCount(); syncPill();
   $("#formMsg").hidden = true;
   shell?.toast(state.ready ? `"${t.name}" is in the prompt. Change it, then press Generate.` : `"${t.name}" is in the prompt. Generating is coming soon.`);
+  showExample(t);
   return t;
 }
+/** The opened idea's design (same as its thumbnail, full-size library photo), clearly labelled as a design example. */
+function showExample(t) {
+  const svg = typeof gallery?.design === "function" ? gallery.design(t.id, "full") : "";
+  if (!svg) return;
+  let box = $("#tplExample");
+  if (!box) { box = el("figure", "am-example"); box.id = "tplExample"; box.style.cssText = "margin:0 0 14px;background:#fff;border:1px solid #e5e7f0;border-radius:14px;padding:10px;box-shadow:0 8px 22px -14px rgba(15,23,42,.4)"; document.querySelector(".am-result")?.prepend(box); }
+  box.dataset.kind = t.kind;
+  const art = el("div"); art.style.cssText = "border-radius:10px;overflow:hidden;aspect-ratio:16/10;background:#f3f4f8"; art.innerHTML = svg;
+  art.querySelector("svg")?.setAttribute("style", "display:block;width:100%;height:100%");
+  const cap = el("figcaption"); cap.style.cssText = "margin-top:8px;font-size:13px;line-height:1.4;color:#475569";
+  cap.append(el("b", "", `Idea: ${t.name}. `), state.ready ? "A design example made from a library photo. Your own result comes only from AsaanDesk AI when you press Generate." : "A design example made from a library photo, not a result made by AsaanDesk AI. Generating is coming soon.");
+  box.replaceChildren(art, cap);
+}
 function onToolChange(id) {
+  const ex = $("#tplExample"); if (ex && ex.dataset.kind !== id) ex.remove();
   syncPill();
   if (!shell) return;
   if (!userTitle) shell.setTitle(TOOLS[id].title);

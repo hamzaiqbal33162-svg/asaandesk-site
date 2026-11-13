@@ -101,7 +101,7 @@ export const LAYOUT_META = [
   ["kpi-dashboard", "Financial KPI dashboard", 6, "line", 4, ["kpi", "dashboard", "revenue"]],
   ["price-calculator", "Price calculator", 8, "bar2", 0, ["price", "cost", "markup"]],
   ["income-statement", "Income statement", 6, "bar2", 0, ["profit", "loss", "accounts"]],
-  ["blank-table", "Titled table", 8, null, 0, ["blank", "table", "simple"], true],
+  ["blank-table", "Simple list", 8, null, 0, ["blank", "table", "simple", "list"], true],
   ["marketing-budget", "Marketing budget tracker", 7, "bar2", 0, ["marketing", "campaign"]],
   ["sales-tracker", "Sales tracker", 6, "bar", 0, ["sales", "revenue"]],
   ["invoice-tracker", "Invoice tracker", 7, null, 3, ["invoices", "billing", "clients"]],
@@ -202,7 +202,7 @@ export function parseId(id) {
   return layout && palette && theme ? { layout, palette, theme } : null;
 }
 const lcFirst = (t) => (/^[A-Z][a-z]/.test(t) ? t[0].toLowerCase() + t.slice(1) : t);
-/** Display name of a generated template, e.g. "Clinic budget tracker" or "Titled table, teal". */
+/** Display name of a generated template, e.g. "Clinic budget tracker" or "Simple list, teal". */
 export function templateName(p) { return p.layout.blank ? `${p.layout.name}, ${p.palette.name.toLowerCase()}` : `${p.theme.label} ${lcFirst(p.layout.name)}`; }
 /** Small repeatable random numbers (same id → same numbers). */
 export function rng(seed) { let h = 2166136261; for (const ch of String(seed)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909)) >>> 0) / 4294967296; }

@@ -1,7 +1,9 @@
-// Builders for the generated Sheets templates: 30 base layouts filled with a content theme and a colour palette
+// Builders for the generated Sheets templates: 93 base layouts filled with a content theme and a colour palette
 // (see tpl-data.js). buildGenerated("budget-tracker~p07~clinic") → { name, sheets: [...] } in the same format as
-// templates.js: cells (inputs), styles, colW, rowH and charts. Pure module: no DOM.
+// templates.js: cells (inputs), styles, colW, rowH and charts. Pure module: no DOM. The look (banner with photo,
+// KPI cards, header, zebra rows, totals, chart colours) comes from the shared design kit, sheet-kit.js.
 import { parseId, rng, templateName, PEOPLE, CITIES } from "./tpl-data.js";
+import { sheetKit, bar10, mix, onFill, topicPhoto } from "./sheet-kit.js";
 
 const colL = (c) => { let s = ""; for (let n = c + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
 const ref = (r, c) => colL(c) + (r + 1);
@@ -9,39 +11,8 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const BLUE = { color: "#1d4ed8" };
 const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10);
 
-function sheet(name) {
-  const s = { name, cells: {}, styles: {}, colW: {}, rowH: {}, charts: [] };
-  const t = {
-    s,
-    put(r, c, v, st) { if (v !== null && v !== undefined && v !== "") s.cells[ref(r, c)] = String(v); if (st) t.style(r, c, st); return t; },
-    row(r, values, st) { values.forEach((v, c) => t.put(r, c, v, st)); return t; },
-    style(r, c, st) { const k = ref(r, c); s.styles[k] = { ...(s.styles[k] || {}), ...st }; return t; },
-    range(r1, c1, r2, c2, st) { for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) t.style(r, c, st); return t; },
-    widths(list) { list.forEach((w, c) => { if (w) s.colW[c] = w; }); return t; },
-    height(r, px) { s.rowH[r] = px; return t; },
-    title(text, c2, th, note) {
-      t.range(0, 0, 0, c2, { fill: th.band, color: "#ffffff" }).put(0, 0, text, { b: true, size: 22, valign: "middle" }).height(0, 48);
-      if (note) t.put(1, 0, note, { i: true, color: "#5b6478" });
-      return t;
-    },
-    head(r, values, th) { return t.row(r, values, { b: true, fill: th.head, color: th.ink, bd: "b", bc: th.band }).height(r, 30); },
-    zebra(r1, r2, c2, th) { for (let r = r1; r <= r2; r++) if ((r - r1) % 2) t.range(r, 0, r, c2, { fill: th.zebra }); return t; },
-    total(r, values, th) { return t.row(r, values, { b: true, fill: th.head, bd: "t", bc: th.band }); },
-    kpis(r, pairs, th) { // label row r, value row r+1: [[label, formula, fmt], …] two columns apart
-      pairs.forEach(([label, f, fmt], i) => { t.put(r, i * 2, label, { b: true, color: "#475569" }); t.put(r + 1, i * 2, f, { b: true, size: 17, color: th.ink, ...(fmt ? { fmt } : {}) }); });
-      return t.height(r + 1, 34);
-    },
-    box(r1, c1, r2, c2, color) { return t.range(r1, c1, r2, c2, { bd: "trbl", bc: color }); },
-    chart(ch) { s.charts.push({ w: 440, h: 280, ...ch }); return t; },
-    merge(r1, c1, r2, c2) { (s.merges ||= []).push({ r1, c1, r2, c2 }); return t; },
-    /** Dropdown pills on a range: [[label, colour], …]. */
-    dd(range, opts) { (s.dropdowns ||= []).push({ range, options: opts.map(([label, color]) => ({ label, color })) }); return t; },
-    /** Conditional formatting rule on a range. */
-    cf(range, op, v1, style, v2 = "") { (s.cf ||= []).push({ id: "r" + ((s.cf?.length || 0) + 1), range, op, v1: String(v1), v2: String(v2), style }); return t; },
-    link(r, c, url, text) { t.put(r, c, text, { link: url }); return t; },
-  };
-  return t;
-}
+// Every sheet uses the shared design kit (title banner, KPI cards, header, zebra rows, totals, charts).
+const sheet = (name) => sheetKit(name);
 
 const L = {
   "budget-tracker"(x) {
@@ -61,7 +32,7 @@ const L = {
     const rows = T.costs.map((c) => { const b = x.money(0.5); return [c, b, Math.round((b * (0.7 + x.rnd() * 0.45)) / 100) * 100]; });
     const income = Math.round((rows.reduce((a, r) => a + r[1], 0) * 1.15) / 1000) * 1000;
     t.title("Monthly budget", 5, th, `${T.biz}: this month, in rupees. Change the blue numbers.`);
-    t.row(2, ["Income", income, "Spent", "=C14", "Saved", "=B3-D3"], { b: true, size: 15 }).height(2, 32).style(2, 1, { fmt: "thousands", color: "#1d4ed8" }).style(2, 3, { fmt: "thousands" }).style(2, 5, { fmt: "thousands", color: "#047857" });
+    t.row(2, ["Income", income, "Spent", "=C14", "Saved", "=B3-D3"], { b: true, size: 15 }).height(2, 32).style(2, 1, { fmt: "thousands", color: "#1d4ed8" }).style(2, 3, { fmt: "thousands" }).style(2, 5, { fmt: "thousands", color: "#047857" }).pairCards(2, 0, 3, th);
     t.head(4, ["Category", "Budget", "Spent", "Remaining", "Status", "Share"], th);
     rows.forEach(([c, b, sp], i) => { const R = 6 + i; t.row(5 + i, [c, b, sp, `=B${R}-C${R}`, `=IF(C${R}>B${R},"Over budget","On track")`, `=IF($C$14=0,0,C${R}/$C$14)`]); });
     t.zebra(5, 12, 5, th).range(5, 1, 12, 2, BLUE).range(5, 4, 12, 4, { align: "center" });
@@ -94,7 +65,7 @@ const L = {
     const { T, th } = x, k = (v) => Math.round((v * T.money) / 50) * 1;
     const t = sheet("Balance sheet").widths([220, 150, 130, 130, 120, 100]);
     t.title("Balance sheet", 5, th, `${T.biz}: as at 30 June 2026, compared with last year. Amounts in rupees.`);
-    t.row(2, ["Total assets", "=C12", "Total liabilities", "=C17", "Check", '=IF(ROUND(C12-C23,0)=0,"Balanced","Not balanced")'], { b: true, color: th.ink }).style(2, 1, { fmt: "thousands" }).style(2, 3, { fmt: "thousands" }).style(2, 5, { color: "#047857" });
+    t.row(2, ["Total assets", "=C12", "Total liabilities", "=C17", "Check", '=IF(ROUND(C12-C23,0)=0,"Balanced","Not balanced")'], { b: true, color: th.ink }).style(2, 1, { fmt: "thousands" }).style(2, 3, { fmt: "thousands" }).style(2, 5, { color: "#047857" }).pairCards(2, 0, 3, th);
     t.head(4, ["Account", "Type", "This year", "Last year", "Change", "Change %"], th);
     const lines = { 5: ["Cash in hand", "Current asset", 85, 60], 6: ["Bank balance", "Current asset", 640, 520], 7: ["Money owed by customers", "Current asset", 310, 280], 8: ["Stock", "Current asset", 455, 400], 9: ["Equipment", "Fixed asset", 900, 950], 10: ["Vehicles", "Fixed asset", 1200, 1300], 13: ["Money owed to suppliers", "Current liability", 270, 300], 14: ["Short-term loan", "Current liability", 150, 200], 15: ["Long-term loan", "Long-term liability", 800, 950], 18: ["Owner's capital", "Equity", 1500, 1500] };
     for (const [r, [n, ty, a, b]] of Object.entries(lines)) { const R = +r + 1, f = 0.9 + x.rnd() * 0.2; t.row(+r, [n, ty, k(a * f), k(b * f), `=C${R}-D${R}`, `=IF(D${R}=0,0,E${R}/D${R})`]); }
@@ -109,9 +80,9 @@ const L = {
     const { T, th } = x;
     const t = sheet("Dashboard").widths([130, 130, 130, 130, 110, 110]);
     t.title("Financial KPI dashboard", 5, th, `${T.biz}: revenue, costs and profit by month, in rupees.`);
-    t.row(2, ["Total revenue", "Total profit", "Average margin", "Best month", "Months growing"], { b: true, color: "#475569", fill: "#f8fafc" });
-    t.row(3, ["=SUM(B8:B19)", "=SUM(D8:D19)", "=AVERAGE(E8:E19)", "=INDEX(A8:A19,MATCH(MAX(B8:B19),B8:B19,0))", '=COUNTIF(F9:F19,">0")'], { b: true, size: 17, color: th.ink, fill: "#f8fafc" }).height(3, 36);
-    t.style(3, 0, { fmt: "thousands" }).style(3, 1, { fmt: "thousands" }).style(3, 2, { fmt: "percent" }).box(2, 0, 3, 4, th.head);
+    t.row(2, ["Total revenue", "Total profit", "Average margin", "Best month", "Months growing"]);
+    t.row(3, ["=SUM(B8:B19)", "=SUM(D8:D19)", "=AVERAGE(E8:E19)", "=INDEX(A8:A19,MATCH(MAX(B8:B19),B8:B19,0))", '=COUNTIF(F9:F19,">0")']);
+    t.style(3, 0, { fmt: "thousands" }).style(3, 1, { fmt: "thousands" }).style(3, 2, { fmt: "percent" }).cardRows(2, 0, 4, th);
     t.head(6, ["Month", "Revenue", "Costs", "Profit", "Margin", "Growth"], th);
     let rev = T.money * 6;
     MONTHS.forEach((m, i) => { const R = 8 + i; rev = Math.round((rev * (0.96 + x.rnd() * 0.1)) / 1000) * 1000; const cost = Math.round((rev * (0.62 + x.rnd() * 0.16)) / 1000) * 1000; t.row(7 + i, [m, rev, cost, `=B${R}-C${R}`, `=IF(B${R}=0,0,D${R}/B${R})`, i ? `=B${R}/B${R - 1}-1` : ""]); });
@@ -124,7 +95,7 @@ const L = {
     const { T, th } = x, r10 = (v) => Math.max(10, Math.round(v / 10) * 10);
     const t = sheet("Calculator").widths([190, 110, 110, 110, 110, 120, 90, 130, 110, 140]);
     t.title("Price calculator", 9, th, `${T.biz}: type your costs and markup; selling price, profit and price with tax work out by themselves.`);
-    t.row(2, ["Sales tax", 0.17, "", "Average profit", "=AVERAGE(I7:I14)", "", "Best profit", "=INDEX(A7:A14,MATCH(MAX(I7:I14),I7:I14,0))"], { b: true, color: th.ink }).style(2, 1, { fmt: "percent", color: "#1d4ed8" }).style(2, 4, { fmt: "thousands" });
+    t.row(2, ["Sales tax", 0.17, "", "Average profit", "=AVERAGE(I7:I14)", "", "Best profit", "=INDEX(A7:A14,MATCH(MAX(I7:I14),I7:I14,0))"], { b: true, color: th.ink }).style(2, 1, { fmt: "percent", color: "#1d4ed8" }).style(2, 4, { fmt: "thousands" }).pairCards(2, 0, 1, th).pairCards(2, 3, 1, th).pairCards(2, 6, 1, th);
     t.head(5, ["Product", "Material (Rs)", "Labour (Rs)", "Packing (Rs)", "Shipping (Rs)", "Total cost (Rs)", "Markup", "Selling price (Rs)", "Profit (Rs)", "Price with tax (Rs)"], th);
     T.items.forEach(([n, cost], i) => { const R = 7 + i; t.row(6 + i, [n, r10(cost * 0.5), r10(cost * 0.3), r10(cost * 0.1), r10(cost * 0.1), `=SUM(B${R}:E${R})`, Math.round((0.3 + x.rnd() * 0.6) * 20) / 20, `=ROUND(F${R}*(1+G${R}),0)`, `=H${R}-F${R}`, `=ROUND(H${R}*(1+$B$3),0)`]); });
     t.total(14, ["Average", "", "", "", "", "=AVERAGE(F7:F14)", "=AVERAGE(G7:G14)", "=AVERAGE(H7:H14)", "=AVERAGE(I7:I14)", "=AVERAGE(J7:J14)"], th);
@@ -147,11 +118,14 @@ const L = {
   },
   "blank-table"(x) {
     const { T, th } = x;
-    const t = sheet("Table").widths([150, 120, 120, 120, 120, 120, 120, 120]);
-    t.title("Title", 7, th, T.biz);
-    t.head(2, ["Column 1", "Column 2", "Column 3", "Column 4", "Column 5", "Column 6", "Column 7", "Column 8"], th);
-    t.zebra(3, 17, 7, th).box(2, 0, 17, 7, th.head);
-    return t.total(18, ["Total", ..."BCDEFGH".split("").map((c) => `=SUM(${c}4:${c}18)`)], th);
+    // A ready list to type over: six sample rows from the theme, room for more, a total row that adds up.
+    const t = sheet("Table").widths([200, 120, 130, 110, 90, 120, 110, 170]);
+    t.title("My list", 7, th, `${T.biz}: type over the sample rows; the totals add up by themselves.`);
+    t.head(2, ["Item", "Category", "Owner", "Date", "Quantity", "Amount (Rs)", "Status", "Notes"], th);
+    const st = [["Ordered", PC.blue], ["Received", PC.green], ["Paid", PC.violet]], ppl = x.people(3);
+    T.items.slice(0, 6).forEach(([n, , price], i) => { const q = x.n(1, 12); t.row(3 + i, [n, T.costs[i % T.costs.length], ppl[i % 3], iso(2026, 11, 3 + i * 3), q, q * price, st[i % 3][0], T.tasks[i % T.tasks.length]]); });
+    t.zebra(3, 17, 7, th).range(3, 3, 17, 3, { fmt: "date" }).range(3, 5, 18, 5, { fmt: "thousands" }).range(3, 6, 17, 6, { align: "center" }).dd("G4:G18", st);
+    return t.total(18, ["Total", "", "", "", "=SUM(E4:E18)", "=SUM(F4:F18)", '=COUNTIF(G4:G18,"Paid")&" paid"'], th);
   },
   "marketing-budget"(x) {
     const { T, th } = x, s = T.money / 60000;
@@ -184,7 +158,7 @@ const L = {
     const { T, th } = x;
     const t = sheet("Invoices").widths([110, 200, 110, 110, 130, 100, 120]);
     t.title("Invoice tracker", 6, th, `${T.biz}: bills sent, due dates, paid and unpaid.`);
-    t.row(2, ["As of", "2026-11-15", "Billed", "=SUM(E7:E14)", "Unpaid", '=SUMIF(F7:F14,"Unpaid",E7:E14)'], { b: true, color: th.ink }).style(2, 1, { fmt: "date" }).style(2, 3, { fmt: "thousands" }).style(2, 5, { fmt: "thousands", color: "#c2410c" });
+    t.row(2, ["As of", "2026-11-15", "Billed", "=SUM(E7:E14)", "Unpaid", '=SUMIF(F7:F14,"Unpaid",E7:E14)'], { b: true, color: th.ink }).style(2, 1, { fmt: "date" }).style(2, 3, { fmt: "thousands" }).style(2, 5, { fmt: "thousands", color: "#c2410c" }).pairCards(2, 0, 3, th);
     t.head(5, ["Invoice #", "Client", "Date", "Due date", "Amount (Rs)", "Status", "Days overdue"], th);
     for (let i = 0; i < 8; i++) { const R = 7 + i; t.row(6 + i, [`INV-${2001 + i}`, T.clients[i % 6], iso(2026, 8, 1 + i * 9), `=C${R}+30`, x.money(0.8), x.rnd() < 0.55 ? "Paid" : "Unpaid", `=IF(F${R}="Paid",0,MAX(0,$B$3-D${R}))`]); }
     t.zebra(6, 13, 6, th).range(6, 2, 13, 3, { fmt: "date" }).range(6, 4, 14, 4, { fmt: "thousands" }).range(6, 5, 13, 6, { align: "center" });
@@ -1186,13 +1160,21 @@ const PC = { green: "#dcfce7", amber: "#fef3c7", blue: "#e0f2fe", red: "#fee2e2"
 const CG = { fill: "#dcfce7", color: "#166534" }, CR = { fill: "#fee2e2", color: "#991b1b" }, CA = { fill: "#fef3c7", color: "#92400e" };
 
 export const LAYOUT_IDS = Object.keys(L);
+// Layouts without a photo tile in the banner (plain tools where a picture would only get in the way).
+const NO_PHOTO = new Set(["times-table", "unit-converter", "currency-matrix"]);
+// Themes whose title banner uses the serif font (an elegant look).
+const SERIF_THEMES = new Set(["wedding", "salon", "realestate", "restaurant"]);
+// Photo topic per content theme (shared library words), so the banner photo shows that kind of business.
+export const PHOTO_TOPIC = { home: "home interior house", shop: "business sales shop store", school: "school education class", clinic: "clinic medical health care", restaurant: "restaurant food menu", wedding: "wedding celebration party", realestate: "real estate property architecture", gym: "fitness gym workout", startup: "tech software startup", ngo: "community nature green", travel: "travel trip mountains", salon: "salon beauty spa" };
+/** Banner photo (full size) for a theme, picked by the template id so it never changes. */
+export const themePhoto = (T, seed) => topicPhoto(PHOTO_TOPIC[T.id] || T.label, seed);
 
 /** Builds a generated template from its id, or null when the id is not a generated one. */
 export function buildGenerated(id) {
   const p = parseId(id);
   if (!p || !L[p.layout.id]) return null;
   const { layout, palette: P, theme: T } = p, rnd = rng(id);
-  const th = { band: P.band, head: P.head, ink: P.ink, zebra: P.zebra };
+  const th = { band: P.band, band2: P.band2, head: P.head, ink: P.ink, zebra: P.zebra, photo: NO_PHOTO.has(layout.id) ? null : themePhoto(T, id), font: SERIF_THEMES.has(T.id) ? "serif" : null };
   const x = {
     T, th, rnd,
     n: (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1)),

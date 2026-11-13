@@ -11,7 +11,7 @@ import {
 import { qrSvg } from "../code/qr.js";
 import { ICONS, PALETTES } from "./art.js";
 import { TEMPLATES, makeTemplate, templateArt, blankSite } from "./templates.js";
-import { exportHtml as renderExport, buildZip, zipName } from "./exporter.js";
+import { exportHtml as renderExport, exportHtmlFile, buildZipFile, absolutePhotos, zipName } from "./exporter.js";
 import * as gallery from "./gallery.js";
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -705,7 +705,8 @@ function download(data, name, type) {
   setTimeout(() => URL.revokeObjectURL(url), 8000);
 }
 const exportHtml = () => renderExport(state.site);
-async function exportZip() { const { zipSync } = await import("./lib/fflate.js"); return buildZip(state.site, { zipSync }); }
+// Downloads carry the template photos inside (index.html) or in images/ (ZIP), so the site works anywhere, offline too.
+async function exportZip() { const { zipSync } = await import("./lib/fflate.js"); return buildZipFile(state.site, { zipSync }); }
 
 /* ------------------------------------------------------------------ render all + events */
 function renderAll() {
@@ -777,9 +778,11 @@ function setupEvents() {
     if (!f || !cb) return;
     try { cb(await fileToDataUrl(f, imageMax)); } catch (err) { toast(err.message || "Could not use that picture."); }
   });
-  $("#exportHtml").addEventListener("click", () => {
+  $("#exportHtml").addEventListener("click", async () => {
     const name = pageFile(state.site, state.site.page || 0);
-    download(exportHtml(), name, "text/html;charset=utf-8");
+    let html;
+    try { html = await exportHtmlFile(state.site); } catch { html = exportHtml(); }
+    download(html, name, "text/html;charset=utf-8");
     toast(state.site.pages?.length > 1 ? `Downloaded ${name} (this page). The ZIP has every page.` : "Downloaded index.html: it opens in any browser and works offline.");
   });
   $("#exportZip").addEventListener("click", async (e) => {
@@ -1033,7 +1036,7 @@ async function websiteQrPng(size = 1024) {
 }
 async function publishZip() {
   const { zipSync } = await import("./lib/fflate.js");
-  const bytes = buildZip(state.site, { zipSync, publish: true });
+  const bytes = await buildZipFile(state.site, { zipSync, publish: true });
   download(bytes, zipName(state.site), "application/zip");
   const n = pageList(state.site).length;
   toast(`Downloaded the website: ${n} page${n > 1 ? "s" : ""}, images${settings().domain ? ", sitemap.xml" : ""} and robots.txt. Upload the files to your host.`);
@@ -1198,7 +1201,7 @@ const IMG_FIELD = { hero: "image", about: "image", map: "image", header: "logo" 
 const selBlock = () => blockById(state.selected);
 
 function previewSite() {
-  const url = URL.createObjectURL(new Blob([exportHtml()], { type: "text/html;charset=utf-8" }));
+  const url = URL.createObjectURL(new Blob([renderExport(absolutePhotos(state.site, location.origin))], { type: "text/html;charset=utf-8" }));
   const win = window.open(url, "_blank");
   try { if (win) win.opener = null; } catch {}
   if (!win) toast("Your browser blocked the new tab. Use Download index.html instead.");

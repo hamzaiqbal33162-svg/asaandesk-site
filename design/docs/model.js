@@ -5,6 +5,7 @@
 // Block = { type: 'p'|'h1'|'h2'|'h3'|'quote'|'code'|'hr'|'pagebreak'|'li'|'table'|'image',
 //           align?, lineHeight?, dir?: 'rtl', indent?,                  // text blocks
 //           bg?, deco?, dc?, dc2?, pad?, minh?,                         // coloured block: background, own decoration (decos.js), padding, min height (px)
+//           bgimg?, ov?,                                                // photo band: photo URL behind the block + overlay kind (PHOTO_OVERLAYS)
 //           runs?: [Run],                                               // p, h1-h3, quote, li
 //           list?: 'bullet'|'number'|'check', level?, checked?,         // li
 //           text?,                                                      // code
@@ -161,6 +162,18 @@ function normalizeBlock(b) {
 
 /** Divider styles. */
 export const HR_STYLES = ["dashed", "dotted", "double", "thick"];
+/** Photo bands: overlay kinds (shade = dark from the left, split = solid colour panel fading into the photo, tint = even
+ *  colour wash, soft = white fade for dark text) and the photo URLs allowed (same-origin path or https, no quotes). */
+export const PHOTO_OVERLAYS = ["shade", "split", "tint", "soft"];
+const BGIMG_RE = /^(\/(?!\/)|https:\/\/)[\w\-./%~?=&:+,]+$/;
+const rgbaOf = (hex, a) => { const v = String(normColor(hex) || "#1b2133").slice(1); return `rgba(${parseInt(v.slice(0, 2), 16)},${parseInt(v.slice(2, 4), 16)},${parseInt(v.slice(4, 6), 16)},${a})`; };
+/** CSS gradient laid over a band photo (the band colour keeps the text readable). */
+export function photoOverlayCss(ov, bg) {
+  if (ov === "split") return `linear-gradient(90deg,${rgbaOf(bg, 1)} 0%,${rgbaOf(bg, 0.97)} 44%,${rgbaOf(bg, 0.35)} 72%,${rgbaOf(bg, 0)} 100%)`;
+  if (ov === "tint") return `linear-gradient(${rgbaOf(bg, 0.66)},${rgbaOf(bg, 0.66)})`;
+  if (ov === "soft") return `linear-gradient(90deg,rgba(255,255,255,.97) 0%,rgba(255,255,255,.9) 42%,rgba(255,255,255,.2) 75%,rgba(255,255,255,0) 100%)`;
+  return `linear-gradient(100deg,${rgbaOf(bg, 0.94)} 0%,${rgbaOf(bg, 0.78)} 42%,${rgbaOf(bg, 0.2)} 100%)`;
+}
 /** Column widths in % (one per column, 5–95 each, summing to 100), or null. */
 export function colWidths(v, n) {
   const a = (Array.isArray(v) ? v : String(v ?? "").split(",")).map((x) => Math.round(+x));
@@ -184,6 +197,8 @@ function blockProps(b) {
   const mh = clampNum(b.minh, 0, 480); if (mh && b.minh != null) p.minh = Math.round(mh);
   const rad = clampNum(b.rad, 0, 40); if (rad && b.rad != null) p.rad = Math.round(rad);
   const bd = clampNum(b.bd, 0, 8); if (bd && b.bd != null) { p.bd = Math.round(bd); const bc = normColor(b.bc); if (bc) p.bc = bc; }
+  // Photo band (Canva-style photo header): a same-origin or https photo behind the block, under an overlay in the band colour.
+  if (typeof b.bgimg === "string" && BGIMG_RE.test(b.bgimg.trim())) { p.bgimg = b.bgimg.trim(); if (PHOTO_OVERLAYS.includes(b.ov)) p.ov = b.ov; }
   if (b.cmt != null && String(b.cmt).trim()) p.cmt = String(b.cmt).slice(0, 1000);
   // Paragraph / block spacing (pt before and after) and letter spacing (thousandths of an em), like Canva's
   // "Advanced settings" and "Spacing" sliders.
@@ -340,7 +355,7 @@ function hasBlockChild(n) {
   return kidsOf(n).some((k) => k.nodeType === 1 && !SKIP_TAGS.has(tagOf(k)) && (isBlockEl(k) || hasBlockChild(k)));
 }
 
-const BAND_KEYS = ["bg", "deco", "dc", "dc2", "pad", "minh", "rad", "bd", "bc", "cmt"];
+const BAND_KEYS = ["bg", "deco", "dc", "dc2", "pad", "minh", "rad", "bd", "bc", "bgimg", "ov", "cmt"];
 const SPACE_KEYS = ["ps", "lsp"];
 function blockPropsOf(n, st) {
   const p = {};
@@ -683,14 +698,15 @@ export function blockAttrs(b) {
   let data = b.cmt ? ` data-cmt="${escAttr(b.cmt)}"` : "";
   if (b.ps) { css.push(`margin-top:${b.ps}pt;margin-bottom:${b.ps}pt`); data += ` data-ps="${b.ps}"`; }
   if (b.lsp) { css.push(`letter-spacing:${b.lsp / 1000}em`); data += ` data-lsp="${b.lsp}"`; }
-  if (b.bg || b.deco || b.bd) {
+  if (b.bg || b.deco || b.bd || b.bgimg) {
     const pad = b.pad ?? 14;
     if (b.bg) css.push(`background-color:${b.bg}`);
     css.push(`padding:${pad}px ${Math.max(pad, 18)}px`);
     if (b.minh) css.push(`min-height:${b.minh}px`);
     if (b.rad) css.push(`border-radius:${b.rad}px`);
     if (b.bd) css.push(`border:${b.bd}px solid ${b.bc || "#1b2133"}`);
-    if (b.deco) { css.push(decoCss(b.deco, b.dc, b.dc2)); if (DECOS[b.deco].pos === "left") css.push(`padding-left:${Math.round(Math.max(110, (b.minh || 80) * 0.95))}px`); else css.push(`padding-right:${Math.round(Math.max(120, (b.minh || 60) * 1.3))}px`); }
+    if (b.bgimg) { css.push(`background-image:${photoOverlayCss(b.ov, b.bg)},url("${b.bgimg}")`, "background-size:cover", "background-position:center"); if (b.ov === "split" || b.ov === "soft") css.push("padding-right:44%"); }
+    else if (b.deco) { css.push(decoCss(b.deco, b.dc, b.dc2)); if (DECOS[b.deco].pos === "left") css.push(`padding-left:${Math.round(Math.max(110, (b.minh || 80) * 0.95))}px`); else css.push(`padding-right:${Math.round(Math.max(120, (b.minh || 60) * 1.3))}px`); }
     for (const k of BAND_KEYS) if (b[k] != null && k !== "cmt") data += ` data-${k}="${escAttr(b[k])}"`;
     data += ' class="band"';
   }

@@ -4,7 +4,8 @@
 //   video: [Clip] (played one after another), text: [TextClip], audio: [AudioClip], chapters: [{ t, title }] }
 // Media = { id, kind: 'video' | 'image' | 'audio', name, mime, duration, w, h, hasAudio, thumb, peaks }
 // Clip (video track) = { id, mediaId, kind: 'video' | 'image' | 'endscreen', in, out (source seconds), speed, volume, muted,
-//   fadeIn, fadeOut, transition: { type: 'none' | 'crossfade' | 'black', dur } (into this clip), fit: 'contain' | 'cover', endscreen? }
+//   fadeIn, fadeOut, transition: { type: 'none' | 'crossfade' | 'black', dur } (into this clip), fit: 'contain' | 'cover', endscreen?,
+//   kb? (pictures: '' | 'in' | 'out' | 'left' | 'right' = slow zoom / pan, compose.kenBurns) }
 // TextClip = { id, start, dur, text, family, size (px at 1080p), color, bold, italic, bg, x, y (0..1 centre), align, animIn, animOut }
 // AudioClip = { id, mediaId, start, in, out, speed, volume, muted, fadeIn, fadeOut }
 

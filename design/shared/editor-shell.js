@@ -144,7 +144,9 @@ const readUrl = (file) => new Promise((res, rej) => { const r = new FileReader()
 
 /** Mounts the editor frame around the app's stage. Returns the shell API (see CANVA-FLOW-PLAN.md). */
 export function mountShell(opts = {}) {
-  if (!document.querySelector(`link[href="${CSS_HREF}"]`) && ![...document.styleSheets].some((s) => s.href === CSS_HREF)) document.head.append(h("link", { rel: "stylesheet", href: CSS_HREF }));
+  // (the static export adds ?v=<content hash> to the page's own link, so compare without the query)
+  const noQ = (u) => String(u || "").split(/[?#]/)[0];
+  if (![...document.querySelectorAll('link[rel="stylesheet"]')].some((l) => noQ(l.href) === CSS_HREF) && ![...document.styleSheets].some((s) => noQ(s.href) === CSS_HREF)) document.head.append(h("link", { rel: "stylesheet", href: CSS_HREF }));
   const app = opts.app || "design", kind = opts.kind || "Design";
   const appPanels = opts.panels || {};
   const bottom = opts.bottom || { notes: true, timer: true, fullscreen: true, help: true };
@@ -203,7 +205,9 @@ export function mountShell(opts = {}) {
     return p;
   }
   function place(p, anchor) {
-    const r = anchor ? anchor.getBoundingClientRect() : { left: innerWidth / 2, right: innerWidth / 2, top: 80, bottom: 80 };
+    // A bottom-bar button folded into "More" is hidden: open its popover from "More" (or the bar) instead.
+    if (anchor && !anchor.getClientRects().length && foot.contains(anchor)) anchor = [...foot.querySelectorAll('[data-ads="bottom-more"]')].find((b) => b.getClientRects().length) || foot;
+    const r = anchor && anchor.getClientRects().length ? anchor.getBoundingClientRect() : { left: innerWidth / 2, right: innerWidth / 2, top: 80, bottom: 80 };
     const pw = p.offsetWidth, ph = p.offsetHeight;
     const up = r.top > innerHeight / 2 && r.bottom + ph + 8 > innerHeight;
     let left = r.right - pw > 8 && r.left + pw > innerWidth - 8 ? r.right - pw : r.left;
@@ -402,16 +406,56 @@ export function mountShell(opts = {}) {
   const PG = bottom.pages;
   let pagesB = null, countB = null, gridB = null, stripB = null;
   if (PG) {
-    pagesB = mk("ads-bb", "Pages", "pages", "Pages", () => pagesPop(pagesB), { "data-ads": "pages", "aria-haspopup": "menu", "aria-expanded": "false" });
-    countB = h("button", { type: "button", class: "ads-bb ads-count", "aria-label": "Page 1 of 1", "data-ads": "page-count", text: "1 / 1" });
+    // Canva: "Pages" shows/hides the page thumbnails above the bottom bar (lit while shown); the page count opens the
+    // list of pages. Apps with their own page strip (Studio) pass pages.strip = { shown(), toggle(on) }.
+    pagesB = mk("ads-bb", "Pages", "pages", "Pages", () => togglePages(), { "data-ads": "pages", "aria-pressed": "false" });
+    countB = h("button", { type: "button", class: "ads-bb ads-count", "aria-label": "Page 1 of 1", "data-ads": "page-count", text: "1 / 1", "aria-haspopup": "menu", "aria-expanded": "false" });
     countB.addEventListener("click", () => pagesPop(countB));
     gridB = btn("ads-bb", "Grid view", "grid", "", () => gridView(), { "data-ads": "grid" });
-    stripB = btn("ads-bb", "Show the page strip", "slides", "", () => toggleStrip(), { "data-ads": "strip-toggle", "aria-pressed": "false" });
-    foot.append(pagesB, countB, stripB, gridB);
+    stripB = btn("ads-bb", "Show the page strip", "slides", "", () => togglePages(), { "data-ads": "strip-toggle", "aria-pressed": "false" });
+    foot.append(pagesB, countB, gridB);
   }
   let fsB = null, helpB = null;
   if (bottom.fullscreen !== false) { fsB = btn("ads-bb", "Full screen", "expand", "", () => toggleFullscreen(), { "data-ads": "fullscreen", "aria-pressed": "false" }); foot.append(fsB); }
   if (bottom.help !== false) { helpB = btn("ads-bb", "Help and keyboard shortcuts", "help", "", () => helpPop(helpB), { "data-ads": "help", "aria-haspopup": "dialog", "aria-expanded": "false" }); foot.append(helpB); }
+  // The bottom bar always fits in its row (Canva: on a narrow canvas the labels go first, then the zoom slider, then
+  // the less used buttons move into a "More" menu). Nothing is ever cut off or pushed out of the window.
+  const bmoreB = btn("ads-bb ads-bmore", "More bottom bar options", "more", "", () => popover(bmoreB, (p) => {
+    for (const b of foot.querySelectorAll("[data-fold]")) p.append(menuItem(b.getAttribute("aria-label") || b.textContent.trim(), () => b.click(), { iconName: FOLD_ICON[b.dataset.ads] }));
+  }, { label: "More options", name: "bottom-more" }), { "data-ads": "bottom-more", "aria-haspopup": "menu", "aria-expanded": "false", hidden: true });
+  foot.append(bmoreB);
+  const FOLD = ["words", "timer", "outline", "grid", "pages", "notes"];
+  const FOLD_ICON = { words: "doc", timer: "timer", outline: "outline", grid: "grid", pages: "pages", notes: "notes" };
+  let fitting = false;
+  function fitBottom() {
+    if (fitting || !foot.isConnected) return; fitting = true;
+    try {
+      foot.classList.remove("ads-bc1", "ads-bc2", "ads-bc3"); bmoreB.hidden = true;
+      for (const b of foot.querySelectorAll("[data-fold]")) { b.hidden = false; delete b.dataset.fold; }
+      // (scrollWidth alone is not enough in every browser: also compare each shown control with the bar's own edges)
+      const over = () => {
+        if (foot.scrollWidth > foot.clientWidth + 1) return true;
+        const fr = foot.getBoundingClientRect();
+        for (const c of foot.children) { if (c.hidden || !c.getClientRects().length) continue; const r = c.getBoundingClientRect(); if (r.right > fr.right + 0.5 || r.left < fr.left - 0.5) return true; }
+        return false;
+      };
+      if (!foot.clientWidth) return;
+      for (const c of ["ads-bc1", "ads-bc2", "ads-bc3"]) { if (!over()) return; foot.classList.add(c); }
+      if (!over()) return;
+      bmoreB.hidden = false;
+      for (const id of FOLD) { const b = foot.querySelector(`[data-ads="${id}"]`); if (!b || b.hidden) continue; b.hidden = true; b.dataset.fold = "1"; if (!over()) return; }
+    } finally { fitting = false; }
+  }
+  // One pass on the next frame, and a second one a moment later (web fonts and late text changes can widen a label).
+  let fitRaf = 0, fitT = 0; const fitSoon = () => { if (typeof requestAnimationFrame !== "function") return fitBottom(); cancelAnimationFrame(fitRaf); fitRaf = requestAnimationFrame(fitBottom); clearTimeout(fitT); fitT = setTimeout(fitBottom, 250); };
+  if (document.fonts?.ready) document.fonts.ready.then(() => fitSoon()).catch(() => {});
+  if (typeof ResizeObserver === "function") new ResizeObserver(fitSoon).observe(foot);
+  // Canvas width class for the apps' own right-hand panels: on a narrow canvas they float over it instead of squeezing
+  // it (Canva keeps the page usable): data-cw = s (< 620 px), m (< 900 px) or l.
+  const cwOf = () => { const w = canvas.clientWidth; root.dataset.cw = !w ? "l" : w < 620 ? "s" : w < 900 ? "m" : "l"; };
+  if (typeof ResizeObserver === "function") new ResizeObserver(cwOf).observe(canvas);
+  if (typeof MutationObserver === "function") new MutationObserver(fitSoon).observe(foot, { childList: true, subtree: true, characterData: true });
+  addEventListener("resize", fitSoon);
   // Page strip above the bottom bar (the "Pages" view): one card per page, click to go there, drag to reorder.
   const strip = h("div", { class: "ads-strip", hidden: true, role: "group", "aria-label": "Pages", "data-ads": "strip" });
   let stripSig = "";
@@ -442,9 +486,24 @@ export function mountShell(opts = {}) {
       pageDnD(c, i);
       strip.append(c);
     }
-    if (PG.add) strip.append(h("button", { type: "button", class: "ads-scard ads-sadd", "aria-label": "Add page", "data-ads": "strip-add", html: icon("plus"), onclick: () => { PG.add(); refresh(); } }));
+    if (PG.add) {
+      // Canva: a "+" tile after the last page, with a small menu next to it (add, duplicate, delete).
+      const addB = h("button", { type: "button", class: "ads-scard ads-sadd", "aria-label": "Add page", title: "Add page", "data-ads": "strip-add", html: icon("plus"), onclick: () => { PG.add(); refresh(); } });
+      const addM = h("button", { type: "button", class: "ads-scard ads-saddm", "aria-label": "More page options", title: "More page options", "data-ads": "strip-add-menu", "aria-haspopup": "menu", "aria-expanded": "false", html: icon("chev") });
+      addM.addEventListener("click", () => popover(addM, (p) => {
+        let c = 0; try { c = PG.current(); } catch {}
+        p.append(menuItem("Add page", () => { PG.add(); refresh(); }, { iconName: "plus" }));
+        if (PG.duplicate) p.append(menuItem("Duplicate page", () => { PG.duplicate(c); refresh(); }, { iconName: "copy" }));
+        if (PG.remove) p.append(menuItem("Delete page", () => { PG.remove(c); refresh(); }, { iconName: "trash" }));
+        p.append(menuItem("Show all pages", () => gridView(), { iconName: "grid" }));
+      }, { label: "Page options", name: "strip-add" }));
+      strip.append(h("span", { class: "ads-saddwrap" }, addB, addM));
+    }
   }
-  function toggleStrip(on = strip.hidden) { strip.hidden = !on; stripB?.classList.toggle("on", on); stripB?.setAttribute("aria-pressed", String(on)); stripB?.setAttribute("aria-label", on ? "Hide the page strip" : "Show the page strip"); if (stripB) stripB.title = stripB.getAttribute("aria-label"); stripSig = ""; drawStrip(); }
+  function toggleStrip(on = strip.hidden) { strip.hidden = !on; stripB?.classList.toggle("on", on); stripB?.setAttribute("aria-pressed", String(on)); stripB?.setAttribute("aria-label", on ? "Hide the page strip" : "Show the page strip"); if (stripB) stripB.title = stripB.getAttribute("aria-label"); stripSig = ""; drawStrip(); syncPagesB(); }
+  const stripShown = () => { try { return PG?.strip ? !!PG.strip.shown() : !strip.hidden; } catch { return false; } };
+  function syncPagesB() { if (!pagesB) return; const on = stripShown(); pagesB.classList.toggle("on", on); pagesB.setAttribute("aria-pressed", String(on)); pagesB.title = on ? "Hide the page thumbnails" : "Show the page thumbnails"; }
+  function togglePages(on) { if (!PG) return; if (PG.strip) { try { PG.strip.toggle(on ?? !PG.strip.shown()); } catch (e) { console.error(e); } syncPagesB(); } else toggleStrip(on ?? strip.hidden); }
   if (PG) canvas.append(strip);
   function syncBottomButtons() { B.notes?.classList.toggle("on", active === "notes"); B.outline?.classList.toggle("on", active === "outline"); }
 
@@ -593,7 +652,7 @@ export function mountShell(opts = {}) {
       p.append(menuHead(`Pages (${n})`));
       for (let i = 0; i < n; i++) p.append(menuItem(pageLabel(i), () => { PG.go?.(i); refresh(); }, { iconName: "pages", checked: i === cur, role: "menuitemradio" }));
       if (PG.add) p.append(h("hr", { class: "ads-hr" }), menuItem("Add page", () => { PG.add(); refresh(); }, { iconName: "plus" }));
-      p.append(menuItem(strip.hidden ? "Show page strip" : "Hide page strip", () => toggleStrip(), { iconName: "slides", hint: "Thumbnails above the bottom bar" }));
+      p.append(menuItem(stripShown() ? "Hide page strip" : "Show page strip", () => togglePages(), { iconName: "slides", hint: "Thumbnails above the bottom bar" }));
     }, { label: "Pages", name: "pages" });
   }
   let grid = null;
@@ -859,6 +918,8 @@ export function mountShell(opts = {}) {
     const seeMore = IO ? new IntersectionObserver((es) => { if (es.some(live) && !more.hidden) page(); }, { root: scroll, rootMargin: "250px 0px" }) : null;
     const card = (x) => {
       const th = h("span", { class: "ads-tthumb", "data-id": x.id });
+      // A gallery can give its own card shape (Docs: portrait A4 pages, like Canva) instead of the 16:10 default.
+      if (gal.THUMB_RATIO) th.style.aspectRatio = String(gal.THUMB_RATIO);
       if (seeThumb) seeThumb.observe(th); else fill(th);
       const np = Math.max(1, Math.floor(+x.pages || 0));
       const c = h("button", { type: "button", class: "ads-tcard", "data-template": x.id, title: x.name, "aria-label": `Use template: ${x.name}${np > 1 ? ` (${np} pages)` : ""}` }, th, h("span", { class: "ads-tname", text: x.name }));
@@ -931,7 +992,9 @@ export function mountShell(opts = {}) {
       for (const x of items) {
         if (!x || x.id == null) continue;
         seen.set(x.id, x);
-        const sec = searching ? "Results" : x.section || "More templates for you";
+        // Big paged galleries mix categories on purpose (variety): one continuous two-column grid like Canva's panel
+        // (categories are the filter chips), instead of a new heading with a single card at every category change.
+        const sec = searching ? "Results" : paged ? "Templates for you" : x.section || "More templates for you";
         if (sec !== lastSec || !grid) { lastSec = sec; section(sec, searching ? "results" : null); }
         grid.append(card(x)); shown++;
       }
@@ -1303,8 +1366,9 @@ export function mountShell(opts = {}) {
   // ----- refresh zoom / pages from the app (also polled while the tab is visible)
   function refresh() {
     if (Z && zr && document.activeElement !== zr && document.activeElement !== zi) { try { const v = Math.round(Z.get()); if (Number.isFinite(v)) { zr.value = v; zi.value = v + "%"; } } catch {} }
-    if (PG && countB) { try { const n = PG.count(), c = PG.current(), nm = pageName(c); countB.textContent = `${c + 1} / ${n}`; countB.setAttribute("aria-label", `Page ${c + 1} of ${n}${nm ? `: ${nm}` : ""}`); countB.title = nm || ""; if (active === "notes" && notesPage !== c && document.activeElement?.dataset?.ads !== "notes-text") renderPanel("notes", panelBody("notes")); } catch {} }
+    if (PG && countB) { try { const n = PG.count(), c = PG.current(), nm = pageName(c); const ct = `${c + 1} / ${n}`; if (countB.textContent !== ct) countB.textContent = ct; countB.setAttribute("aria-label", `Page ${c + 1} of ${n}${nm ? `: ${nm}` : ""}`); countB.title = nm || ""; if (active === "notes" && notesPage !== c && document.activeElement?.dataset?.ads !== "notes-text") renderPanel("notes", panelBody("notes")); } catch {} }
     drawStrip();
+    syncPagesB();
   }
   const poll = setInterval(() => { if (!root.isConnected) { clearInterval(poll); return; } if (!document.hidden) refresh(); }, 700);
 
