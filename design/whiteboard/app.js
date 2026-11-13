@@ -9,10 +9,11 @@ import {
   History, parseBoard, boardToJSON, newId, NOTE_COLORS, INK_COLORS, HIGHLIGHT_COLORS, FILL_COLORS, SHAPE_KINDS, FORMAT,
 } from "./model.js";
 import { TEMPLATES, applyTemplate, templatePreviewSvg, templateBounds, templateById } from "./templates.js";
-import { exportScope, boardToSvg, exportPdf as writePdf, fileBase } from "./exporters.js";
+import { exportScope, boardToSvg, exportPdf as writePdf, fileBase, inlineLibraryPhotos } from "./exporters.js";
 import { saveProject, listProjects, getProject, deleteProject, putHandoff } from "../shared/store.js";
 import { boardToDeck, boardToDoc, boardSections } from "./convert.js";
-import { ensureFont } from "../shared/brand.js";
+import { ensureFont, loadBrand as loadBrandKit } from "../shared/brand.js";
+import { makeWhiteboardInsert, makeWhiteboardDraw } from "./insert.js";
 
 const SVGNS = "http://www.w3.org/2000/svg";
 const $ = (s, el = document) => el.querySelector(s);
@@ -97,7 +98,8 @@ const cache = new Map(); // id -> { g, sig }
 let raf = 0;
 function requestRender() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderNow(); }); }
 function sigOf(o, m) {
-  if (o.type === "image") return `${o.id}|${o.x}|${o.y}|${o.w}|${o.h}|${o.src.length}`;
+  // pictures: big data URLs by length only; library photos by path, plus the crop (focus, zoom) and round frame + ring
+  if (o.type === "image") return `${o.id}|${o.x}|${o.y}|${o.w}|${o.h}|${o.src.length > 300 ? o.src.length : o.src}|${o.fit || ""}|${o.round ? 1 : 0}|${o.fx}|${o.fy}|${o.zoom}|${o.fill}|${o.stroke}|${o.sw}`;
   if (o.type === "connector") { const r = routeConnector(o, m).points; return JSON.stringify(o) + JSON.stringify(r); }
   return JSON.stringify(o);
 }
@@ -1002,6 +1004,9 @@ function endGesture(e) {
       if (a.pts.length < 1) break;
       const ink = state.ink[a.tool];
       const s = makeStroke({ points: smoothPoints(a.pts), tool: a.tool, color: ink.color, width: ink.width });
+      // Draw tools from the panels: Glow pen (a soft halo) and pen transparency.
+      if (a.tool === "pen" && state.penStyle === "glow") s.glow = true;
+      if (a.tool === "pen" && state.penAlpha > 0 && state.penAlpha < 1) s.opacity = state.penAlpha;
       addObjects([s], { select: false });
       break;
     }
@@ -1340,7 +1345,7 @@ async function runExport(btn, kind, frameId = $("#exportScope").value || null) {
   try {
     if (kind === "png") { const { bytes } = await exportPng({ frameId }); download(bytes, name + ".png", "image/png"); }
     else if (kind === "jpg") { const { bytes } = await exportPng({ frameId, type: "jpg" }); download(bytes, name + ".jpg", "image/jpeg"); }
-    else if (kind === "svg") download(exportSvg({ frameId }), name + ".svg", "image/svg+xml");
+    else if (kind === "svg") download(await inlineLibraryPhotos(exportSvg({ frameId })), name + ".svg", "image/svg+xml");
     else { toast("Making your PDF…", 1500); download(await exportPdf({ frameId }), name + ".pdf", "application/pdf"); }
     toast(`Downloaded ${name}.${kind}`);
   } catch (err) { console.error(err); toast("Export failed: " + (err.message || err)); }
@@ -1503,13 +1508,14 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const ico = (inner, vb = "0 0 24 24") => `<svg viewBox="${vb}" aria-hidden="true">${inner}</svg>`;
 /** Places new objects in the middle of the view, selects them; text-like ones can start editing. */
-function placeAtCenter(list, { edit = false } = {}) {
-  const c = viewCenter(), m = byIdOf({ objects: list });
+function placeAtCenter(list, { edit = false, at = null } = {}) {
+  // at: a board point (items dropped from the panels land where they were dropped), else the middle of the view.
+  const c = at || viewCenter(), m = byIdOf({ objects: list });
   const r = unionRect(list.map((o) => objectBounds(o, m)));
   const dx = Math.round(c.x - (r.x + r.w / 2)), dy = Math.round(c.y - (r.y + r.h / 2));
   // Stagger repeated adds so they don't land exactly on top of each other.
-  const n = (placeAtCenter.n = ((placeAtCenter.t || 0) > Date.now() - 8000 ? (placeAtCenter.n || 0) + 1 : 0)) % 6;
-  placeAtCenter.t = Date.now();
+  const n = at ? 0 : (placeAtCenter.n = ((placeAtCenter.t || 0) > Date.now() - 8000 ? (placeAtCenter.n || 0) + 1 : 0)) % 6;
+  if (!at) placeAtCenter.t = Date.now();
   for (const o of list) { if (o.type === "connector") { for (const k of ["from", "to"]) if (o[k].id == null) { o[k].x += dx + n * 24; o[k].y += dy + n * 24; } } else { o.x += dx + n * 24; o.y += dy + n * 24; } }
   const frames = list.filter((o) => o.type === "frame");
   if (frames.length) change(() => { board().objects = [...frames, ...board().objects, ...list.filter((o) => o.type !== "frame")]; });
@@ -1579,7 +1585,16 @@ function renderElementsPanel(el) {
     }
     addElement(d.wb, { color: d.color, kind: d.kind, size: d.size });
   });
-  el.querySelector(".wb-stk-search").addEventListener("input", () => fillStickerGrid(el));
+  if (shell) {
+    // In the editor frame the shared kit's Elements panel has the shapes, lines and arrows, tables, graphics and
+    // stickers (they insert as board objects): this part keeps only what is the board's own (Canva whiteboards too).
+    for (const s of el.querySelectorAll(".wb-sec")) {
+      const t = s.querySelector("h3")?.textContent;
+      if (["Shapes", "Draw and text", "Tables", "Stickers"].includes(t)) s.remove();
+      else if (t === "Lines and arrows") { s.querySelector("h3").textContent = "Connect and flow"; for (const b of s.querySelectorAll('[data-wb="line"]')) b.remove(); }
+    }
+  }
+  el.querySelector(".wb-stk-search")?.addEventListener("input", () => fillStickerGrid(el));
   loadElements().then((E) => { const cats = el.querySelector(".wb-stk-cats"); if (!cats) return; el.__cat ||= "all"; cats.innerHTML = [{ id: "all", label: "All" }, ...E.CATEGORIES].map((c) => `<button type="button" class="chip wb-chip${c.id === el.__cat ? " on" : ""}" data-cat="${c.id}">${esc(c.label)}</button>`).join(""); fillStickerGrid(el); })
     .catch(() => { const g = el.querySelector(".wb-stk-grid"); if (g) g.innerHTML = '<p class="muted">Stickers could not be loaded. Check your connection and try again.</p>'; });
 }
@@ -1603,6 +1618,8 @@ function renderTextPanel(el) {
 <button type="button" class="wb-text l" data-wb="label"><span>Section title</span></button>
 <button type="button" class="wb-text n" data-wb="note" data-color="#ffe27a"><span>Sticky note text</span></button></div>
 <p class="muted">Double-click any text on the board to change it. Pick a font, size and colour in the bar above the board.</p>`;
+  // In the editor frame the kit's Text panel has Add a text box and the default styles: keep the board's own text.
+  if (shell) for (const s of el.querySelectorAll(".wb-sec")) if (!/Whiteboard text/.test(s.querySelector("h3")?.textContent || "")) s.remove();
   wirePanel(el, (e) => { const b = e.target.closest("[data-wb]"); if (b) addElement(b.dataset.wb, { color: b.dataset.color, text: b.dataset.wb === "note" ? "" : undefined }); });
 }
 let timer = { end: 0, left: 0, id: 0, total: 0 };
@@ -1622,6 +1639,8 @@ function renderToolsPanel(el) {
 <div class="wb-sec"><h3>Reactions</h3><div class="wb-row">${REACTIONS.map(([r, c]) => `<button type="button" class="wb-react" data-wb="reaction" data-text="${esc(r)}" style="background:${c}">${esc(r)}</button>`).join("")}</div></div>
 <div class="wb-sec"><h3>AI ideas</h3><div class="wb-row"><input type="text" class="ad-input wb-ai-topic" data-ai-topic placeholder="Topic, e.g. team lunch ideas" aria-label="Topic for AI ideas" maxlength="120"><button type="button" class="wb-chipbtn" data-ai-go>Get ideas</button></div><p class="muted" data-ai-status role="status">Ideas are written on this device when your browser has built-in AI. Nothing is sent anywhere.</p></div>
 <div class="wb-sec"><h3>View</h3><div class="wb-row"><button type="button" class="wb-chipbtn" data-view="hand">Move the view</button><button type="button" class="wb-chipbtn" data-view="fit">Fit the board</button><button type="button" class="wb-chipbtn" data-view="map">Mini map on/off</button></div></div>`;
+  // In the editor frame the kit's Tools panel has Draw (Pen, Marker, Glow pen, Highlighter, Eraser on the board's pen).
+  if (shell) for (const s of el.querySelectorAll(".wb-sec")) if (s.querySelector("h3")?.textContent === "Draw") s.remove();
   wirePanel(el, (e) => {
     const b = e.target.closest("button"); if (!b) return;
     const d = b.dataset;
@@ -1746,6 +1765,33 @@ $("#wbTimerReset").addEventListener("click", () => { if (timer.total) startTimer
 /* ------------------------------------------------------------------ the editor frame (shared shell) */
 function selectedTexty() { return board().objects.filter((o) => state.sel.has(o.id) && TEXTY.has(o.type) && !o.locked); }
 async function newBoardFromMenu() { finishEdit(); if (!state.saved && board().objects.length) await saveNow().catch(() => {}); startNewBoard(false); toast("New whiteboard"); }
+// Insert adapter + draw tools for the shared left-rail panels (Elements, Text, Tools): native board objects.
+const kitDeps = {
+  get state() { return state; }, board, change, setSel, setTool, placeAtCenter, toWorld, viewSize, toast, find, finishEdit, loadElements, undo,
+  fontReady: (family, bold, italic) => ensureFont(family, bold, italic).then(() => { for (const c of cache.values()) c.sig = null; requestRender(); }).catch(() => {}),
+};
+const kitInsert = makeWhiteboardInsert(kitDeps), kitDraw = makeWhiteboardDraw(kitDeps);
+/** Brand panel › Apply brand to the whole board: the board's main shape colours (most used first) become the brand
+ *  colours, big text gets the heading font and other text the body font. Sticky notes keep their note colours. */
+function applyBrandToBoard(kit = {}) {
+  if (state.mode !== "edit") { toast("Switch to Editing to change the board."); return false; }
+  const cols = (kit.colors || []).filter((c) => /^#[0-9a-f]{6}$/i.test(c) && !/^#(?:f{6}|0{6})$/i.test(c));
+  const neutral = (c) => { if (!/^#[0-9a-f]{6}$/i.test(c || "")) return true; const n = parseInt(c.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255; return Math.max(r, g, b) - Math.min(r, g, b) < 24; };
+  const shapes = board().objects.filter((o) => o.type === "shape" && !o.cell && !o.locked);
+  const count = new Map();
+  for (const o of shapes) if (!neutral(o.fill)) count.set(o.fill.toLowerCase(), (count.get(o.fill.toLowerCase()) || 0) + 1);
+  const map = new Map([...count.entries()].sort((a, b) => b[1] - a[1]).map(([c], i) => [c, cols.length ? cols[i % cols.length] : c]));
+  const texts = board().objects.filter((o) => TEXTY.has(o.type) && !o.locked);
+  const big = Math.max(0, ...board().objects.filter((o) => o.type === "text").map((o) => o.size || 0));
+  const fam = (f) => (["sans", "serif", "mono", "calibri", "cambria"].includes(f) ? f : null), head = fam(kit.fonts?.heading), body = fam(kit.fonts?.body);
+  change(() => {
+    for (const o of shapes) { const to = map.get((o.fill || "").toLowerCase()); if (to) { if (o.stroke && o.stroke.toLowerCase() === o.fill.toLowerCase()) o.stroke = to; o.fill = to; } }
+    for (const o of texts) { const f = o.type === "text" && (o.size || 0) >= big * 0.6 ? head : body; if (f) { o.font = f; normalizeObject(o); } }
+  });
+  for (const f of new Set([head, body].filter(Boolean))) ensureFont(f).then(() => { for (const c of cache.values()) c.sig = null; requestRender(); }).catch(() => {});
+  toast(`Brand applied: ${map.size} colour${map.size === 1 ? "" : "s"} and the brand fonts.`);
+  return true;
+}
 async function mountFrame() {
   let mod = null;
   try { mod = await importModule("../shared/editor-shell.js"); } catch { return null; }
@@ -1779,11 +1825,11 @@ async function mountFrame() {
       ],
       share: { download: [{ label: "PNG", act: () => downloadAs("png") }, { label: "JPG", act: () => downloadAs("jpg") }, { label: "PDF", act: () => downloadAs("pdf") }, { label: "SVG", act: () => downloadAs("svg") }], link: () => location.href },
       templates: gallery ? { gallery, tool: "whiteboard", apply: async (id) => { useTemplate(id); try { shell?.pushRecent?.(id); } catch {} }, placeholder: "Search Whiteboard templates", blank: () => newBoardFromMenu(), blankLabel: "Create a blank whiteboard" } : null,
-      panels: { elements: (el) => renderElementsPanel(el), text: (el) => renderTextPanel(el), tools: (el) => renderToolsPanel(el) },
+      panels: { elements: { render: (el) => renderElementsPanel(el), kitLabel: "Whiteboard" }, text: (el) => renderTextPanel(el), tools: (el) => renderToolsPanel(el) },
       rail: ["templates", "elements", "text", "brand", "uploads", "tools", "projects", "apps", "translate"],
       insert: {
-        image: async (src, name) => { try { const img = await loadImg(src); const w0 = img.naturalWidth || 300, h0 = img.naturalHeight || 200, k = Math.min(1, 480 / Math.max(w0, h0)); placeAtCenter([makeImage({ w: Math.round(w0 * k), h: Math.round(h0 * k), src, name: name || "Image" })]); } catch (e) { toast(e.message || "This image could not be added."); } },
-        text: (str, style) => addElement(style === "heading" || style === "h1" ? "heading" : style === "subheading" || style === "h2" ? "subheading" : "body", { text: String(str || "Text") }),
+        ...kitInsert,
+        text: (spec, pt) => (typeof spec === "string" ? addElement(pt === "heading" || pt === "h1" ? "heading" : pt === "subheading" || pt === "h2" ? "subheading" : "body", { text: spec || "Text" }) : kitInsert.text(spec, pt)),
         color: (hex) => {
           const sel = board().objects.filter((o) => state.sel.has(o.id) && !o.locked);
           if (!sel.length) { state.noteColor = hex; addElement("shape", { fill: hex, stroke: hex }); return; }
@@ -1791,6 +1837,8 @@ async function mountFrame() {
         },
         font: (family) => { const sel = selectedTexty(); if (!sel.length) { toast("Select a text, note or shape first."); return; } change(() => sel.forEach((o) => { o.font = family; normalizeObject(o); })); ensureFont(family).then(() => { for (const c of cache.values()) c.sig = null; requestRender(); }).catch(() => {}); },
       },
+      draw: kitDraw,
+      applyBrand: (kit) => applyBrandToBoard(kit || loadBrandKit()),
       getText: () => { const sel = selectedTexty(); return (sel.length ? sel : board().objects.filter((o) => TEXTY.has(o.type))).map((o) => o.text || "").filter(Boolean).join("\n"); },
       setText: (str) => {
         const sel = selectedTexty(), list = (sel.length ? sel : board().objects.filter((o) => TEXTY.has(o.type))).filter((o) => o.text), lines = String(str || "").split("\n");
@@ -1846,6 +1894,8 @@ window.adApp = {
   toWorld, setTool, select: (ids) => setSel(ids), applyTemplate: useTemplate, saveNow, undo, redo, fit, zoomToRect,
   downloadAs, get shell() { return shell; }, get lastCopiedText() { return lastCopiedText; }, sortNotes, copyAsText, addElement: (kind, opt) => addElement(kind, opt), zoomTo: (pct) => { const v = viewSize(); zoomAt(v.w / 2, v.h / 2, pct / 100); },
   get saved() { return state.saved; },
+  /** The shared panels' insert adapter and draw tools (see insert.js). */
+  insert: kitInsert, draw: kitDraw, applyBrand: (kit) => applyBrandToBoard(kit || loadBrandKit()),
 };
 
 /* ------------------------------------------------------------------ start */

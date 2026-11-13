@@ -148,7 +148,7 @@ export const FRAMES = [
   { id: "blob", name: "Soft blob" },
 ];
 /** Frames that cut the photo to a shape (no extra space round it; the rest becomes see-through). */
-export const SHAPE_FRAMES = new Set(["rounded", "circle", "heart", "star", "hexagon", "arch", "diamond", "blob"]);
+export const SHAPE_FRAMES = new Set(["rounded", "circle", "heart", "star", "hexagon", "arch", "diamond", "blob", "path"]); // path = any outline (frame.d in frame.vb) from the Elements panel
 /** Extra space a frame (and its photo shadow, frame.shadow) adds around a W×H picture (width = % of the long side). */
 export function framePad(frame, W, H) {
   const p = borderPad(frame, W, H);

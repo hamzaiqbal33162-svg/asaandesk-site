@@ -3,7 +3,7 @@
 // templates.js: cells (inputs), styles, colW, rowH and charts. Pure module: no DOM. The look (banner with photo,
 // KPI cards, header, zebra rows, totals, chart colours) comes from the shared design kit, sheet-kit.js.
 import { parseId, rng, templateName, PEOPLE, CITIES } from "./tpl-data.js";
-import { sheetKit, bar10, mix, onFill, topicPhoto } from "./sheet-kit.js";
+import { sheetKit, bar10, mix, onFill, topicPhoto, personPhoto } from "./sheet-kit.js";
 
 const colL = (c) => { let s = ""; for (let n = c + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
 const ref = (r, c) => colL(c) + (r + 1);
@@ -1168,13 +1168,34 @@ const SERIF_THEMES = new Set(["wedding", "salon", "realestate", "restaurant"]);
 export const PHOTO_TOPIC = { home: "home interior house", shop: "business sales shop store", school: "school education class", clinic: "clinic medical health care", restaurant: "restaurant food menu", wedding: "wedding celebration party", realestate: "real estate property architecture", gym: "fitness gym workout", startup: "tech software startup", ngo: "community nature green", travel: "travel trip mountains", salon: "salon beauty spa" };
 /** Banner photo (full size) for a theme, picked by the template id so it never changes. */
 export const themePhoto = (T, seed) => topicPhoto(PHOTO_TOPIC[T.id] || T.label, seed);
+// Layouts about people show PEOPLE in the banner photo (shared people library), as Canva's contact-list and
+// social-media-campaign sheets do: [who the photo shows, "group" (a wide group photo) or "one" (one person), true when
+// the theme's word is added where the library has that kind (a salon customer, a gym member…)].
+export const PEOPLE_KIND = {
+  "team-directory": ["team colleagues staff office", "group"],
+  "customer-list": ["smiling customer happy", "one", true],
+  "content-calendar": ["woman phone social media influencer", "one"],
+  "campaign-tracker": ["woman social media marketing phone business", "one"],
+  "candidate-tracker": ["business professional candidate portrait", "one"],
+  "volunteer-signup": ["community volunteers teamwork group", "group"],
+  commission: ["sales team business meeting colleagues", "group"],
+};
+const THEME_PERSON = { salon: "beauty", gym: "fitness", travel: "travel", school: "student" };
+/** Who the banner photo of a generated template shows: { kind, opts } for pickPerson, or null (a place/thing photo). */
+export function peopleKind(layoutId, T) {
+  const k = PEOPLE_KIND[layoutId];
+  if (!k) return null;
+  if (k[1] === "group") return { kind: k[0], opts: { group: true, landscape: true } };
+  return { kind: k[2] && THEME_PERSON[T?.id] ? `${k[0]} ${THEME_PERSON[T.id]}` : k[0], opts: { group: false } };
+}
 
 /** Builds a generated template from its id, or null when the id is not a generated one. */
 export function buildGenerated(id) {
   const p = parseId(id);
   if (!p || !L[p.layout.id]) return null;
   const { layout, palette: P, theme: T } = p, rnd = rng(id);
-  const th = { band: P.band, band2: P.band2, head: P.head, ink: P.ink, zebra: P.zebra, photo: NO_PHOTO.has(layout.id) ? null : themePhoto(T, id), font: SERIF_THEMES.has(T.id) ? "serif" : null };
+  const pk = NO_PHOTO.has(layout.id) ? null : peopleKind(layout.id, T), pp = pk ? personPhoto(pk.kind, id, pk.opts) : null;
+  const th = { band: P.band, band2: P.band2, head: P.head, ink: P.ink, zebra: P.zebra, photo: NO_PHOTO.has(layout.id) ? null : pp ? pp.photo : themePhoto(T, id), ...(pp ? { photoPos: pp.photoPos } : {}), font: SERIF_THEMES.has(T.id) ? "serif" : null };
   const x = {
     T, th, rnd,
     n: (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1)),

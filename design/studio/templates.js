@@ -35,6 +35,7 @@ import { textHeight } from "./textlayout.js";
 import { pageSvg } from "./svg.js";
 import { collageFrames } from "./collage.js";
 import { fillPhotos, thumbUrlOf } from "./templates-photos.js";
+import { castPeople } from "./templates-people.js";
 
 const EL = new Map(ELEMENTS.map((e) => [e.id, e]));
 let seq = 0;
@@ -541,7 +542,9 @@ function buildAll() {
       if (r) { pages = r.pages; famN.set(fam, n + 1); PRO_LOOKS.set(d.id, { look: r.look, pattern: r.pattern, style: r.style }); }
     }
     const design = { version: 1, name: d.title, preset: designPreset(p), pages };
-    // Every photo frame shows a real library photo (by topic; the template id as seed keeps it stable).
+    // Person spots first (team members, followers, models, family and friends in collages: templates-people.js), then
+    // every other photo frame shows a real library photo (by topic; the template id as seed keeps it stable).
+    castPeople(design, d.id, `${d.title} ${tags.join(" ")}`);
     fillPhotos(design, `${d.title} ${tags.join(" ")}`, d.id);
     return { id: d.id, title: d.title, presetId: p.id, group: p.group, tags, pages: pages.length, design };
   });

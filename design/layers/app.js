@@ -162,6 +162,7 @@ function renderPage() {
       const t = l.text;
       el.textContent = t.content;
       Object.assign(el.style, { fontFamily: BR.FONT_FAMILIES[t.family]?.css || "sans-serif", fontSize: t.size + "px", fontWeight: t.bold ? "700" : "400", fontStyle: t.italic ? "italic" : "normal", lineHeight: String(t.lineHeight), color: t.color });
+      if (t.letterSpacing) el.style.letterSpacing = t.letterSpacing + "px";
       if (t.align && t.align !== "left") el.style.textAlign = t.align;
     }
     el.className = "ly ly-" + l.type + (l.locked ? " locked" : "");
@@ -630,20 +631,6 @@ async function addImage(src, name = "Picture") {
   renderPage();
   return l;
 }
-async function insertImage(src, name) {
-  if (state.done && replaceTarget && layerById(replaceTarget)?.type === "image") {
-    try { await replaceLayerImage(replaceTarget, src, name); } catch (e) { console.error(e); toast(e.message || "This picture could not be used."); }
-    return;
-  }
-  if (!state.done && !state.busy) {
-    // no design yet: split the picture into layers (the main job of this tool)
-    try {
-      const blob = await (await fetch(src)).blob();
-      if (/^image\/(png|jpe?g|webp)$/.test(blob.type)) { run(new File([blob], name || "Picture.png", { type: blob.type })); return; }
-    } catch (e) { console.warn(e); }
-  }
-  try { await addImage(src, name); } catch (e) { console.error(e); toast("This picture could not be added."); }
-}
 function setSelColor(hex) {
   const l = cur()?.layers.find((x) => x.id === state.sel);
   if (!l || l.type !== "text") { toast("Select a text layer first."); return; }
@@ -654,6 +641,175 @@ function setSelFont(family) {
   if (!l || l.type !== "text") { toast("Select a text layer first."); return; }
   record(); l.text.family = BR.FONT_FAMILIES[family] ? family : "sans"; renderPage();
   BR.ensureFont(l.text.family, l.text.bold, l.text.italic).catch(() => {});
+}
+
+/* ---------- left-rail kit inserts (shared/panels: Elements, Text, Uploads, Brand, Tools → Draw) ----------
+ * Magic Layers has two kinds of layer: pictures and text. Pictures, graphics and drawings become picture layers (SVG
+ * stays sharp: the layer keeps the SVG), texts become text layers; shapes, charts, tables, frames and grids reach us as
+ * their SVG through the kit's fallback (svg → picture layer). pt = {x, y, clientX, clientY}; none = middle of the view. */
+const KIT_TEXT = { heading: 0.075, subheading: 0.045, body: 0.028, caption: 0.022 };
+const KIT_WORDS = { heading: "Add a heading", subheading: "Add a subheading", body: "Add a little bit of body text", caption: "Add a caption" };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function familyKey(f) {
+  if (!f) return null;
+  if (BR.FONT_FAMILIES[f]) return f;
+  const s = String(f).toLowerCase();
+  for (const [k, v] of Object.entries(BR.FONT_FAMILIES)) if (v.css.toLowerCase() === s || v.label.toLowerCase() === s) return k;
+  if (/mono|courier|consol/.test(s)) return "mono";
+  if (/cambria|caladea/.test(s)) return "cambria";
+  if (/calibri|carlito/.test(s)) return "calibri";
+  if ((/serif/.test(s) && !/sans/.test(s)) || /times|georgia|garamond|playfair|merriweather|lora|didot/.test(s)) return "serif";
+  return "sans";
+}
+/** Drop point (or the middle of the part of the page you can see) in page px. */
+function kitPoint(pt) {
+  const page = cur(), sheet = document.querySelector("#stage .sheet"), r = sheet?.getBoundingClientRect?.();
+  if (!page) return { x: 540, y: 540 };
+  if (!r || !(r.width > 0) || !(r.height > 0)) return { x: page.w / 2, y: page.h / 2 };
+  let cx, cy;
+  if (pt && Number.isFinite(pt.clientX) && Number.isFinite(pt.clientY)) { cx = pt.clientX; cy = pt.clientY; }
+  else {
+    const s = (shell?.slots?.stage || $("main"))?.getBoundingClientRect?.();
+    const L = Math.max(r.left, s?.left ?? -Infinity), T = Math.max(r.top, s?.top ?? -Infinity, 0), R = Math.min(r.right, s?.right ?? Infinity), B = Math.min(r.bottom, s?.bottom ?? Infinity, innerHeight || Infinity);
+    cx = R > L ? (L + R) / 2 : r.left + r.width / 2; cy = B > T ? (T + B) / 2 : r.top + r.height / 2;
+  }
+  return { x: clamp(((cx - r.left) * page.w) / r.width, 0, page.w), y: clamp(((cy - r.top) * page.h) / r.height, 0, page.h) };
+}
+/** Top-left box in page px: the longer side is rel × the page's shorter side, centred on pt, kept on the page. */
+function kitBox(rel, aspect, pt, def = 0.3) {
+  const page = cur(), S = Math.min(page.w, page.h), a = aspect > 0 && Number.isFinite(aspect) ? aspect : 1, L = (rel > 0 ? rel : def) * S;
+  let w = a >= 1 ? L : L * a, h = a >= 1 ? L / a : L;
+  const k = Math.min(1, page.w / w, page.h / h); w *= k; h *= k;
+  const c = kitPoint(pt);
+  return { x: Math.round(clamp(c.x - w / 2, 0, page.w - w)), y: Math.round(clamp(c.y - h / 2, 0, page.h - h)), w: Math.round(w), h: Math.round(h) };
+}
+function svgAspect(svg) {
+  const vb = /viewBox\s*=\s*["']\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(svg || "");
+  if (vb && +vb[1] > 0 && +vb[2] > 0) return +vb[1] / +vb[2];
+  const w = /\swidth\s*=\s*["']([\d.]+)/i.exec(svg || ""), h = /\sheight\s*=\s*["']([\d.]+)/i.exec(svg || "");
+  return w && h && +w[1] > 0 && +h[1] > 0 ? +w[1] / +h[1] : 0;
+}
+const svgUrl = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(String(svg || ""));
+/** A picture layer at pt (or in a given box), selected, one undo step. */
+async function kitPicture(src, name, pt, { rel, aspect, def = 0.5, box } = {}) {
+  if (!ensureDesign()) throw new Error("Please wait, the last file is still being split.");
+  const page = cur();
+  let a = aspect;
+  if (!(a > 0) && /^data:image\/svg\+xml/i.test(src)) { try { a = svgAspect(decodeURIComponent(src.slice(src.indexOf(",") + 1))); } catch { a = 0; } }
+  if (!(a > 0)) { try { const img = await loadImg(src); a = img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1; } catch { throw new Error("This picture could not be added."); } }
+  const b = box || kitBox(rel, a, pt, def);
+  const l = imageLayer({ src, ...b, name: String(name || "Picture").replace(/\.[a-z0-9]+$/i, "").slice(0, 40) || "Picture" });
+  record();
+  page.layers.push(l);
+  state.sel = l.id;
+  renderPage();
+  return l.id;
+}
+function kitTextLayer(spec, c, page) {
+  const role = KIT_TEXT[spec.role] ? spec.role : "body", S = Math.min(page.w, page.h);
+  const size = Math.max(6, Math.round((spec.rel > 0 ? spec.rel : KIT_TEXT[role]) * S));
+  let text = String(spec.content ?? KIT_WORDS[role]).slice(0, 2000);
+  if (spec.uppercase) text = text.toUpperCase();
+  const bold = spec.bold != null ? !!spec.bold : spec.weight ? spec.weight >= 600 : role === "heading" || role === "subheading";
+  const lh = spec.lineHeight > 0.5 && spec.lineHeight < 4 ? +spec.lineHeight : LINE_HEIGHT, ls = (+spec.letterSpacing || 0) * size;
+  const lines = text.split("\n");
+  const est = Math.ceil(Math.max(...lines.map((x) => x.length)) * (size * (bold ? 0.62 : 0.56) + ls)) + 8;
+  const w = Math.round(Math.min(page.w * 0.95, spec.width > 0 ? spec.width * S : est)), h = Math.round(size * lh * lines.length * 100) / 100;
+  return {
+    id: newId(), type: "text", name: text.trim().slice(0, 24) || "Text", x: Math.round(clamp(c.x - w / 2, 0, page.w - w)), y: Math.round(clamp(c.y - h / 2, 0, page.h - h)),
+    w, h, rotation: 0, opacity: 1, locked: false, hidden: false, animation: null,
+    text: { content: text, family: familyKey(spec.family) || loadBrand().fonts?.[role === "heading" ? "heading" : "body"] || "sans", size, bold, italic: !!spec.italic, underline: false,
+      color: spec.color || "#1f2937", align: ["left", "center", "right"].includes(spec.align) ? spec.align : "center", lineHeight: lh, letterSpacing: Math.round(ls * 100) / 100 },
+  };
+}
+/** Text layers: one, or a font combination (placed by dx/dy in rel units, else stacked) as one undo step. */
+function kitText(specs, pt) {
+  if (!ensureDesign()) throw new Error("Please wait, the last file is still being split.");
+  const page = cur(), S = Math.min(page.w, page.h), c = kitPoint(pt);
+  const list = specs.map((s) => (typeof s === "string" ? { content: s } : s || {}));
+  const placed = list.some((s) => Number.isFinite(s.dx) || Number.isFinite(s.dy));
+  const made = list.map((s) => kitTextLayer(s, placed ? { x: c.x + (s.dx || 0) * S, y: c.y + (s.dy || 0) * S } : c, page));
+  if (!placed) {
+    const gap = (i) => made[i].text.size * 0.3, total = made.reduce((a, l, i) => a + l.h + (i ? gap(i) : 0), 0);
+    let y = c.y - total / 2;
+    made.forEach((l, i) => { if (i) y += gap(i); l.y = Math.round(clamp(y, 0, page.h - l.h)); y += l.h; });
+  }
+  record();
+  page.layers.push(...made);
+  state.sel = made[0].id;
+  renderPage();
+  for (const l of made) BR.ensureFont(l.text.family, l.text.bold, l.text.italic).catch(() => {});
+  return made.length > 1 ? made.map((l) => l.id) : made[0].id;
+}
+async function kitDrawing(svg, size = {}, pt) {
+  if (!ensureDesign()) throw new Error("Please wait, the last file is still being split.");
+  const sw = +size.w || 0, sh = +size.h || 0, page = cur(), sheet = document.querySelector("#stage .sheet"), r = sheet?.getBoundingClientRect?.();
+  let box = null;
+  if (sw > 0 && sh > 0 && pt && Number.isFinite(pt.clientX) && r && r.width > 0) {
+    const k = page.w / r.width, w = Math.min(page.w, sw * k), h = Math.min(page.h, sh * k), c = kitPoint(pt);
+    box = { x: Math.round(clamp(c.x - w / 2, 0, page.w - w)), y: Math.round(clamp(c.y - h / 2, 0, page.h - h)), w: Math.round(w), h: Math.round(h) };
+  }
+  return kitPicture(svgUrl(svg), size.name || "Drawing", pt, { aspect: sw > 0 && sh > 0 ? sw / sh : svgAspect(svg) || 1, def: 0.6, box });
+}
+function buildInsert() {
+  return {
+    // uploads and photos: with nothing open the picture is split into layers (this tool's job); else a picture layer
+    image: async (src, name, pt) => {
+      if (state.done && replaceTarget && layerById(replaceTarget)?.type === "image") { await replaceLayerImage(replaceTarget, src, name); return replaceTarget; }
+      if (!state.done && !state.busy && !/^data:image\/svg/i.test(String(src))) {
+        try {
+          const blob = await (await fetch(src)).blob();
+          if (/^image\/(png|jpe?g|webp)$/.test(blob.type)) { run(new File([blob], name || "Picture.png", { type: blob.type })); return "split"; }
+        } catch (e) { console.warn(e); }
+      }
+      return kitPicture(src, name, pt, { def: 0.6 });
+    },
+    svg: (markup, meta = {}, pt) => kitPicture(svgUrl(markup), meta.name || "Graphic", pt, { rel: meta.rel, aspect: meta.aspect || svgAspect(markup) || 1, def: 0.3 }),
+    text: (spec, pt) => kitText([typeof spec === "string" ? { content: spec, role: /^(h1|heading|title)$/.test(pt || "") ? "heading" : /^(h2|subheading)$/.test(pt || "") ? "subheading" : "body" } : spec || {}], typeof pt === "string" ? undefined : pt),
+    textGroup: (specs, pt) => kitText(Array.isArray(specs) && specs.length ? specs : [{}], pt),
+    drawing: (svg, size, pt) => kitDrawing(svg, size || {}, pt),
+    color: (hex) => setSelColor(hex),
+    font: (family) => setSelFont(family),
+  };
+}
+const kitInsert = buildInsert();
+
+/* ---------- Design panel: Styles (font sets and text colours for every text layer) and a template's style ----------
+ * Headings are the text layers at least 80 % as big as the biggest one; the rest is body text. One undo step. */
+const STYLE_FONTS = [["Classic", "serif", "sans"], ["Clean", "sans", "sans"], ["Office", "cambria", "calibri"], ["Friendly", "calibri", "cambria"], ["Bookish", "serif", "serif"], ["Typewriter", "mono", "sans"]];
+const STYLE_COLORS = [["Ink and coral", "#1f2937", "#e63946"], ["Navy and sand", "#0b3d91", "#f4a261"], ["Forest", "#14532d", "#65a30d"], ["Plum and pink", "#3a0ca3", "#f72585"], ["Teal", "#134e4a", "#0d9488"], ["Charcoal", "#222222", "#555555"], ["Light on dark", "#f8fafc", "#ffd166"], ["Sunset", "#7c2d12", "#ea580c"]];
+function restyleText({ head = {}, body = {} } = {}) {
+  const texts = state.pages.flatMap((p) => p.layers.filter((l) => l.type === "text" && !l.locked));
+  if (!texts.length) throw new Error("This design has no text layers yet. Add a heading from the Text panel first.");
+  const max = Math.max(...texts.map((l) => l.text.size));
+  record();
+  for (const l of texts) {
+    const s = l.text.size >= max * 0.8 ? head : body;
+    if (s.family && BR.FONT_FAMILIES[s.family]) l.text.family = s.family;
+    if (s.color) l.text.color = s.color;
+    if (s.bold != null) l.text.bold = !!s.bold;
+  }
+  renderPage();
+  for (const l of texts) BR.ensureFont(l.text.family, l.text.bold, l.text.italic).catch(() => {});
+  return true;
+}
+function renderDesignStyles(box) {
+  const mk = (tag, props = {}, ...kids) => { const n = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === "text") n.textContent = v; else if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v); } n.append(...kids.filter(Boolean)); return n; };
+  const run = (fn) => { try { if (!state.done) throw new Error("Open a picture, a PDF or a sample first."); fn(); } catch (e) { toast(e.message || "That style could not be used."); } };
+  box.append(mk("p", { class: "ads-muted", text: "Styles change every text layer at once: headings and body text. Undo takes a style back." }));
+  box.append(mk("h3", { class: "ads-h3", text: "Font sets" }), mk("div", { class: "ly-styles" }, ...STYLE_FONTS.map(([name, h, b]) => mk("button", { type: "button", class: "ly-style", "data-style-fonts": `${h}+${b}`, "aria-label": `Font set ${name}`, onclick: () => run(() => restyleText({ head: { family: h }, body: { family: b } })) },
+    mk("b", { style: `font-family:${BR.FONT_FAMILIES[h].css}`, text: name }), mk("small", { style: `font-family:${BR.FONT_FAMILIES[b].css}`, text: `${BR.FONT_FAMILIES[h].label.split(" (")[0]} and ${BR.FONT_FAMILIES[b].label.split(" (")[0]}` })))));
+  box.append(mk("h3", { class: "ads-h3", text: "Colour palettes" }), mk("div", { class: "ly-styles" }, ...STYLE_COLORS.map(([name, bodyC, headC]) => mk("button", { type: "button", class: "ly-style", "data-style-colors": `${headC}+${bodyC}`, "aria-label": `Colour palette ${name}`, onclick: () => run(() => restyleText({ head: { color: headC }, body: { color: bodyC } })) },
+    mk("span", { class: "ly-sw", "aria-hidden": "true" }, mk("i", { style: `background:${headC}` }), mk("i", { style: `background:${bodyC}` })), mk("small", { text: name })))));
+}
+/** A sample's style on the open design: its heading and body fonts and colours go to your text layers. */
+async function applyTemplateStyle(id) {
+  if (!state.done || !cur()) throw new Error("Open a picture, a PDF or a sample first, then apply a style to it.");
+  const G = await gallery(), page = G.design(id);
+  const texts = (page?.layers || []).filter((l) => l.type === "text").sort((a, b) => b.text.size - a.text.size);
+  if (!texts.length) throw new Error("That sample has no text style to apply.");
+  const pick = (l) => ({ family: l.text.family, color: l.text.color, bold: l.text.bold });
+  return restyleText({ head: pick(texts[0]), body: pick(texts[texts.length > 1 ? texts.length - 1 : 0]) });
 }
 
 /* ---------- recolour and replace (Canva's Magic Layers lets you recolour and swap elements) ---------- */
@@ -901,13 +1057,17 @@ function refreshTextPanel() {
   el.replaceChildren();
   const mk = (tag, props = {}, ...kids) => { const n = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === "text") n.textContent = v; else if (k === "html") n.innerHTML = v; else if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v); } n.append(...kids.filter(Boolean)); return n; };
   const wrap = mk("div", { class: "ly-tpanel" });
-  wrap.append(mk("h3", { class: "ads-h3", text: "Add text" }), mk("div", { class: "ly-addt" },
+  // In the editor frame the shared kit's Text panel adds text (heading, subheading, body, font combinations); this part
+  // lists every text layer to edit. Without the frame (old page) it keeps its own add buttons.
+  const framed = !!shell;
+  if (!framed) wrap.append(mk("h3", { class: "ads-h3", text: "Add text" }), mk("div", { class: "ly-addt" },
     mk("button", { type: "button", id: "addHeading", class: "h", onclick: () => addText("heading") }, "Add a heading"),
     mk("button", { type: "button", id: "addSubheading", class: "sh", onclick: () => addText("subheading") }, "Add a subheading"),
     mk("button", { type: "button", id: "addBody", class: "bd", onclick: () => addText("body") }, "Add a little bit of body text")));
   const page = cur(), texts = page ? page.layers.filter((l) => l.type === "text").reverse() : [];
-  wrap.append(mk("h3", { class: "ads-h3", text: page ? `Text in this design (${texts.length})` : "Text in this design" }));
-  if (!texts.length) wrap.append(mk("p", { class: "ads-muted", text: page ? "No text layers yet. Add one above." : "Open a sample, a picture or a PDF, or add text to start a blank design." }));
+  if (framed) { if (page && texts.length) wrap.append(mk("p", { class: "ads-muted ly-tcount", text: `${texts.length} text layer${texts.length === 1 ? "" : "s"}` })); }
+  else wrap.append(mk("h3", { class: "ads-h3", text: page ? `Text in this design (${texts.length})` : "Text in this design" }));
+  if (!texts.length) wrap.append(mk("p", { class: "ads-muted", text: page ? (framed ? "No text layers yet. Add a heading, a subheading or a font combination from this panel." : "No text layers yet. Add one above.") : "Open a sample, a picture or a PDF, or add text to start a blank design." }));
   for (const l of texts) {
     const ta = mk("textarea", { rows: String(Math.min(4, l.text.content.split("\n").length)), "aria-label": `Text of layer ${l.text.content.slice(0, 30)}`, "data-id": l.id });
     ta.value = l.text.content;
@@ -984,6 +1144,7 @@ async function renderCanvas(index = state.current, { scale = 1, background = nul
         const sh = t.shadow, c = hexToRgb(sh.color) || [0, 0, 0];
         x.shadowColor = `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${sh.opacity ?? 0.5})`; x.shadowOffsetX = (sh.x || 0) * scale; x.shadowOffsetY = (sh.y || 0) * scale; x.shadowBlur = (sh.blur || 0) * scale;
       }
+      if (t.letterSpacing && "letterSpacing" in x) x.letterSpacing = t.letterSpacing * scale + "px";
       x.fillStyle = t.color; x.textBaseline = "alphabetic";
       x.textAlign = t.align === "center" ? "center" : t.align === "right" ? "right" : "left";
       const tx = t.align === "center" ? l.x + l.w / 2 : t.align === "right" ? l.x + l.w : l.x;
@@ -1010,7 +1171,7 @@ function svgOf(index = state.current) {
       const t = l.text, lh = t.size * (t.lineHeight || LINE_HEIGHT), off = baselineOffset(t.size, t.family, t.lineHeight || LINE_HEIGHT);
       const tx = t.align === "center" ? l.x + l.w / 2 : t.align === "right" ? l.x + l.w : l.x, anchor = t.align === "center" ? "middle" : t.align === "right" ? "end" : "start";
       const spans = t.content.split("\n").map((line, i) => `<tspan x="${tx}" y="${(l.y + off + i * lh).toFixed(2)}">${esc(line)}</tspan>`).join("");
-      out.push(`<text font-family="${esc(BR.FONT_FAMILIES[t.family]?.css || "sans-serif")}" font-size="${t.size}" font-weight="${t.bold ? 700 : 400}"${t.italic ? ' font-style="italic"' : ""} fill="${esc(t.color)}" text-anchor="${anchor}" xml:space="preserve"${tr}${op}${style}>${spans}</text>`);
+      out.push(`<text font-family="${esc(BR.FONT_FAMILIES[t.family]?.css || "sans-serif")}" font-size="${t.size}" font-weight="${t.bold ? 700 : 400}"${t.italic ? ' font-style="italic"' : ""}${t.letterSpacing ? ` letter-spacing="${t.letterSpacing}"` : ""} fill="${esc(t.color)}" text-anchor="${anchor}" xml:space="preserve"${tr}${op}${style}>${spans}</text>`);
     }
   }
   out.push("</svg>");
@@ -1096,19 +1257,18 @@ async function mountFrame() {
         { label: "Fit to screen", group: "View", act: () => setZoom(null) },
       ],
       share: { download: [{ label: "PNG", act: () => download("png") }, { label: "JPG", act: () => download("jpg") }, { label: "SVG", act: () => download("svg") }], link: () => (state.template ? `${location.origin}${location.pathname}?template=${state.template}` : location.href) },
-      templates: { gallery: () => gallery(), tool: "magic-layers", apply: async (id) => { await openTemplate(id); }, placeholder: "Search sample designs" },
+      templates: { gallery: () => gallery(), tool: "magic-layers", apply: async (id) => { await openTemplate(id); }, applyStyle: (id) => applyTemplateStyle(id), placeholder: "Search sample designs" },
+      // Design panel's Styles tab: font sets and colour palettes for every text layer
+      design: { styles: (box) => renderDesignStyles(box) },
       panels: {
         layers: { label: "Layers", icon: "pages", render: (el) => { el.append(empty, $("#layersPanel")); } },
-        text: { label: "Text", icon: "text", render: (el) => renderTextPanel(el) },
+        // the shared kit's Text panel (shared/panels/) adds text; Magic Layers' own part edits every text layer it found
+        text: { title: "Text in this design", render: (el) => renderTextPanel(el) },
       },
-      rail: ["templates", "layers", "text", "uploads", "projects", "apps"],
+      // Canva's rail with Magic Layers' layer list first; Elements, Text and Tools are the shared kit's panels
+      rail: ["templates", "layers", "elements", "text", "brand", "uploads", "tools", "projects", "apps"],
       onPanel: (id) => { openPanelId = id; if (id === "text") refreshTextPanel(); },
-      insert: {
-        image: (src, name) => insertImage(src, name),
-        text: (str, style) => addText(style === "heading" || style === "h1" ? "heading" : style === "subheading" || style === "h2" ? "subheading" : "body", str),
-        color: (hex) => setSelColor(hex),
-        font: (family) => setSelFont(family),
-      },
+      insert: kitInsert,
       projects: { save: saveProjectData, open: openProjectRec },
       bottom: {
         notes: true, outline: null, timer: true, fullscreen: true, help: true,
@@ -1163,5 +1323,9 @@ window.adApp = {
   renderPng: async (opts) => (await renderCanvas(state.current, opts || {})).toDataURL("image/png"),
   get shell() { return shell; },
   get zoom() { return Math.round((state.scale || 1) * 100); },
+  /** the left-rail kit's insert adapter (shared/panels/index.js): image, svg, text, textGroup, drawing, colour, font */
+  insert: kitInsert,
+  /** Design panel: Styles tab and "Apply this template style" */
+  designStyles: (el) => renderDesignStyles(el), restyleText, applyTemplateStyle,
 };
 boot();

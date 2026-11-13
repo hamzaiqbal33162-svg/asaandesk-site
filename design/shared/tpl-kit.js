@@ -5,9 +5,9 @@
 //   const k = kit("my-template-id");                       // ids/defs for one SVG
 //   const p = k.pick("restaurant menu", "my-template-id");  // a photo for a topic (deterministic)
 //   return k.svg(320, 240, compose.fullBleed(k, { w: 320, h: 240, pal: PAL.ink, photo: p, title: "Fresh desi food" }));
-import { pickPhoto, photosFor, photoUrl } from "./photo-library.js";
+import { pickPhoto, photosFor, photoUrl, pickPerson, peopleFor, isPerson, coverBox } from "./photo-library.js";
 
-export { pickPhoto, photosFor, photoUrl };
+export { pickPhoto, photosFor, photoUrl, pickPerson, peopleFor };
 
 export const FONT = {
   sans: "Inter,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif",
@@ -148,11 +148,21 @@ export function kit(seed = "t", salt = "") {
     /** a photo for a topic (deterministic per seed) */
     pick(topic, s = seed, o = {}) { return pickPhoto(topic, s, o); },
     picks(topic, count, s = seed) { return photosFor(topic, count, s); },
-    /** a real photo filling a box (cover crop). opts: rx, size ("thumb" | "full"), align, opacity, clip (shape markup), ex, fallback colour */
-    photo(p, x, y, w, h, { rx = 0, size = "thumb", align = "xMidYMid", opacity = 1, clip = "", ex = "", fallback = "#94a3b8", tint = "" } = {}) {
+    /** a people photo for a person spot ("business woman headshot", "team meeting", "chef"…), deterministic per seed */
+    person(kind, s = seed, o = {}) { return pickPerson(kind, s, o); },
+    people(kind, count, s = seed, o = {}) { return peopleFor(kind, count, s, o); },
+    /** a real photo filling a box (cover crop). opts: rx, size ("thumb" | "full"), align, opacity, clip (shape markup), ex, fallback colour.
+     *  People photos are cropped around the face (unless an align is given). */
+    photo(p, x, y, w, h, { rx = 0, size = "thumb", align = null, opacity = 1, clip = "", ex = "", fallback = "#94a3b8", tint = "" } = {}) {
       const url = photoUrl(p, size);
       const cp = clip ? k.clip(clip) : rx ? k.clipRect(x, y, w, h, rx) : "";
-      const img = url ? `<image href="${url}" x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" preserveAspectRatio="${align} slice"${opacity !== 1 ? ` opacity="${opacity}"` : ""}${ex}/>` : rect(x, y, w, h, fallback);
+      const op = opacity !== 1 ? ` opacity="${opacity}"` : "";
+      let img;
+      if (!url) img = rect(x, y, w, h, fallback);
+      else if (!align && isPerson(p) && w > 0 && h > 0) {
+        const b = coverBox(p, w, h);
+        img = `<svg x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" overflow="hidden"><image href="${url}" x="${n(b.x)}" y="${n(b.y)}" width="${n(b.w)}" height="${n(b.h)}" preserveAspectRatio="none"${op}${ex}/></svg>`;
+      } else img = `<image href="${url}" x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" preserveAspectRatio="${align || "xMidYMid"} slice"${op}${ex}/>`;
       const t = tint ? rect(x, y, w, h, tint) : "";
       return cp ? `<g${cp}>${rect(x, y, w, h, fallback)}${img}${t}</g>` : rect(x, y, w, h, fallback) + img + t;
     },

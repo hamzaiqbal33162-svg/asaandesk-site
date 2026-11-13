@@ -1,7 +1,7 @@
 // Starter sheets for Magic Insights (data sets to explore) and Magic Formulas (formula practice), 24 each.
 // Pure module (no DOM). STARTERS = gallery entries; buildStarter(id) → workbook in the templates.js format.
 import { PALETTES, PEOPLE, CITIES, rng } from "./tpl-data.js";
-import { sheetKit, topicPhoto, chartColors } from "./sheet-kit.js";
+import { sheetKit, topicPhoto, personPhoto, chartColors } from "./sheet-kit.js";
 
 const colL = (c) => { let s = ""; for (let n = c + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
 const ref = (r, c) => colL(c) + (r + 1);
@@ -92,11 +92,24 @@ function sheet(name, th) {
   return t;
 }
 
+// Starters whose data is about people show people in the banner photo (shared people library): [who the photo
+// shows, true for a group photo (wide), false for one person].
+export const PEOPLE_STARTER = {
+  "ins-survey-scores": ["smiling customer happy", false],
+  "ins-work-hours": ["team colleagues office staff", true],
+  "ins-call-centre": ["support customer service call center headset team", true],
+  "ins-class-marks": ["students class school teacher", true],
+  "fx-if-pass-fail": ["students study school university", true],
+  "fx-ifs-grades": ["student graduate", false],
+  "fx-countif-attendance": ["team colleagues staff office", true],
+};
+
 /** Builds a starter sheet ("ins-…" or "fx-…"), or null for other ids. */
 export function buildStarter(id) {
   const meta = STARTERS.find((x) => x.id === id);
   if (!meta) return null;
-  const P = meta.look.p, th = { band: P.band, band2: P.band2, head: P.head, ink: P.ink, zebra: P.zebra, photo: topicPhoto(meta.tool === "magic-formulas" ? "school education class" : meta.name.replace(/categor\w*/gi, ""), id) }, rnd = rng(id);
+  const ps = PEOPLE_STARTER[id], pp = ps ? personPhoto(ps[0], id, ps[1] ? { group: true, landscape: true } : { group: false }) : null;
+  const P = meta.look.p, th = { band: P.band, band2: P.band2, head: P.head, ink: P.ink, zebra: P.zebra, ...(pp || { photo: topicPhoto(meta.tool === "magic-formulas" ? "school education class" : meta.name.replace(/categor\w*/gi, ""), id) }) }, rnd = rng(id);
   if (id.startsWith("ins-")) {
     const [, name, labelHead, labels0, vals, chart] = INS.find((x) => "ins-" + x[0] === id);
     const labels = Array.isArray(labels0) ? labels0 : LABELS[labels0], n = labels.length, nc = vals.length;

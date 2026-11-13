@@ -127,8 +127,9 @@ export function drawText(ctx, W, H, c, st) {
   const k = Math.min(W, H) / 1080, px = Math.max(4, c.size * k);
   ctx.save();
   ctx.font = fontCss(c, px);
+  if (+c.spacing && "letterSpacing" in ctx) ctx.letterSpacing = (c.spacing * px).toFixed(2) + "px"; // em, like the kit's font combinations
   const lines = wrapLines(ctx, c.text || "", W * 0.9);
-  const widths = lines.map((l) => ctx.measureText(l).width), bw = Math.max(1, ...widths), lh = px * 1.22, bh = lines.length * lh;
+  const widths = lines.map((l) => ctx.measureText(l).width), bw = Math.max(1, ...widths), lh = px * (+c.lineHeight > 0.6 ? +c.lineHeight : 1.22), bh = lines.length * lh;
   const cx = c.x * W + st.dx * k, cy = c.y * H + st.dy * k, pad = px * 0.32;
   const box = { x: cx - bw / 2 - pad, y: cy - bh / 2 - pad, w: bw + pad * 2, h: bh + pad * 2 };
   ctx.globalAlpha *= st.alpha;
@@ -169,8 +170,11 @@ export function drawText(ctx, W, H, c, st) {
     const s = left < l.length ? l.slice(0, left) : l;
     left -= l.length + 1;
     const y = cy - bh / 2 + lh * (i + 0.5);
-    if (c.align === "center" && s !== l) { ctx.textAlign = "left"; ctx.fillText(s, cx - widths[i] / 2, y); ctx.textAlign = "center"; }
-    else ctx.fillText(s, x, y);
+    const tx = c.align === "center" && s !== l ? cx - widths[i] / 2 : x;
+    if (c.align === "center" && s !== l) ctx.textAlign = "left";
+    if (c.stroke && +c.strokeW > 0) { ctx.save(); ctx.shadowColor = "transparent"; ctx.lineJoin = "round"; ctx.lineWidth = c.strokeW * px * 2; ctx.strokeStyle = c.stroke; ctx.strokeText(s, tx, y); ctx.restore(); } // outline (em), drawn under the fill
+    ctx.fillText(s, tx, y);
+    if (c.align === "center" && s !== l) ctx.textAlign = "center";
   });
   ctx.restore();
   return box;

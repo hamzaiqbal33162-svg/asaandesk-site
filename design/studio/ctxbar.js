@@ -1,6 +1,8 @@
 // AsaanDesk Studio: floating context toolbar (the white pill above the canvas). Its buttons change with
-// the selection: text (font, size −/+, colour, B I U, align, list, spacing, effects, animate, position),
-// shapes (fill, border, transparency), photos (crop, filters, flip), stickers (colours), charts/tables, page.
+// the selection, in Canva's order: what the item is (text: font, size −/+, colour, B I U, align, list, spacing,
+// effects; shapes: colour, border, Edit; photos: Edit, Replace, Crop, Flip; graphics: colours, Edit, Flip; frames: Edit,
+// Replace, Crop; charts/tables: Edit data), then Animate, Position, copy style, and on the right transparency, lock,
+// duplicate, delete, comment and more (…). Nothing selected: the page toolbar.
 import { S, on, emit, commit, curPage, single, selLayers, h } from "./state.js";
 import * as E from "./editor.js";
 import { FONT_FAMILIES } from "../shared/brand.js";
@@ -85,7 +87,7 @@ function shapeTools(l) {
     h("label.st-cx-row", {}, h("span", { text: "Colour" }), colorBtn("ctxStroke", s.stroke !== "none" ? s.stroke : "#1b2133", "Border colour", (v) => upd((x) => { if (x.type === "shape") { x.shape.stroke = v; if (!x.shape.strokeWidth) x.shape.strokeWidth = 4; } }, "stroke"))),
     sliderRow(line ? "Thickness" : "Border width", s.strokeWidth || 0, 0, Math.max(40, Math.min(l.w, l.h) / 3), 0.5, (v) => upd((x) => { if (x.type === "shape") { x.shape.strokeWidth = v; if (v && x.shape.stroke === "none") x.shape.stroke = "#1b2133"; } }, "sw"), (v) => v, "ctxStrokeW"),
     s.kind === "rect" ? sliderRow("Corner rounding", s.radius || 0, 0, Math.min(l.w, l.h) / 2, 1, (v) => upd((x) => { if (x.type === "shape") x.shape.radius = v; }, "radius"), (v) => Math.round(v), "ctxRadius") : null));
-  out.push(border, transparency(l));
+  out.push(border, b("ctxEditShape", "Edit", "Edit shape: border, corners, gradient and effects", () => hooks.props?.(), { class: "st-cx-btn st-cx-txt" }));
   return out;
 }
 /** Flip menu (Canva: Flip horizontal / Flip vertical) for photos and graphics. */
@@ -118,11 +120,11 @@ function imageTools(l) {
   return [b("ctxFilters", "Edit", "Edit photo: effects, filters and adjust", () => hooks.props?.("filters"), { class: "st-cx-btn st-cx-txt" }),
     replaceBtn((f) => E.replaceImage(l, f)),
     b("cropBtnCx", svg("crop") + "<span>Crop</span>", "Crop", () => E.toggleCrop(l.id), { class: "st-cx-btn st-cx-txt" }),
-    flipBtn("image"), transparency(l)];
+    flipBtn("image")];
 }
 function elementTools(l) {
   const toks = elementTokens(l.element);
-  return [...toks.map((k, i) => colorBtn("ctxEl" + i, l.element.colors[k] || "#5b4cf0", "Colour " + (i + 1), (v) => upd((x) => { if (x.type === "element") x.element.colors = { ...x.element.colors, [k]: v }; }, "el-" + k))), flipBtn("element"), transparency(l)];
+  return [...toks.map((k, i) => colorBtn("ctxEl" + i, l.element.colors[k] || "#5b4cf0", "Colour " + (i + 1), (v) => upd((x) => { if (x.type === "element") x.element.colors = { ...x.element.colors, [k]: v }; }, "el-" + k))), b("ctxEditEl", "Edit", "Edit graphic: colours and effects", () => hooks.props?.(), { class: "st-cx-btn st-cx-txt" }), flipBtn("element")];
 }
 function pageTools() {
   const pg = curPage();
@@ -181,16 +183,19 @@ export function renderCtx() {
   else if (l?.type === "shape") items = shapeTools(l);
   else if (l?.type === "image") items = imageTools(l);
   else if (l?.type === "element") items = elementTools(l);
-  else if (l?.type === "frame") items = [b("ctxFrame", l.frame.image ? "Crop" : "Add photo", l.frame.image ? "Crop" : "Add photo", () => (l.frame.image ? E.toggleCrop(l.id) : hooks.props?.("frame")), { class: "st-cx-btn st-cx-txt" }), transparency(l)];
-  else if (l?.type === "chart" || l?.type === "table") items = [b("ctxData", "Edit data", "Edit data", () => hooks.props?.("data"), { class: "st-cx-btn st-cx-txt" }), transparency(l)];
-  else if (sel.length > 1) items = [b("ctxGroup", "Group", "Group", () => E.groupSel(), { class: "st-cx-btn st-cx-txt" }), b("ctxTidy", svg("tidy") + "<span>Tidy up</span>", "Tidy up: equal gaps in a row, column or grid", () => P3.tidySelection(), { class: "st-cx-btn st-cx-txt" }), transparency(sel[0])];
-  else if (l?.type === "group") items = [b("ctxUngroup", "Ungroup", "Ungroup", () => E.ungroupSel(), { class: "st-cx-btn st-cx-txt" }), transparency(l)];
+  else if (l?.type === "frame") items = [b("ctxEditFrame", "Edit", "Edit frame: shape, border and photo", () => hooks.props?.("frame"), { class: "st-cx-btn st-cx-txt" }), b("ctxFrame", l.frame.image ? "Crop" : "Add photo", l.frame.image ? "Crop" : "Add photo", () => (l.frame.image ? E.toggleCrop(l.id) : hooks.props?.("frame")), { class: "st-cx-btn st-cx-txt" })];
+  else if (l?.type === "chart" || l?.type === "table") items = [b("ctxData", "Edit data", "Edit data", () => hooks.props?.("data"), { class: "st-cx-btn st-cx-txt" })];
+  else if (sel.length > 1) items = [b("ctxGroup", "Group", "Group", () => E.groupSel(), { class: "st-cx-btn st-cx-txt" }), b("ctxTidy", svg("tidy") + "<span>Tidy up</span>", "Tidy up: equal gaps in a row, column or grid", () => P3.tidySelection(), { class: "st-cx-btn st-cx-txt" })];
+  else if (l?.type === "group") items = [b("ctxUngroup", "Ungroup", "Ungroup", () => E.ungroupSel(), { class: "st-cx-btn st-cx-txt" })];
   if (l?.type === "frame" && l.frame?.image) items.splice(1, 0, replaceBtn((f) => E.addImageFiles([f], { frameId: l.id })));
+  // Canva's order for a selection: what the item is (colour, Edit, Replace, Crop…), then Animate, Position and copy
+  // style; on the right transparency, lock, duplicate, delete, comment and more. Nothing selected: the page toolbar.
   bar.append(...items);
   if (sel.length) {
     bar.append(sep(), b("ctxAnimate", "Animate", "Animate", () => hooks.panel?.("animate"), { class: "st-cx-btn st-cx-txt" }),
-      b("ctxPosition", svg("position") + "<span>Position</span>", "Position", () => hooks.props?.("position"), { class: "st-cx-btn st-cx-txt" }), sep(),
-      b("ctxDup", svg("copy"), "Duplicate", () => E.duplicateSel()), lockBtn(sel), b("ctxCopyStyle", svg("roller"), "Copy style (Ctrl+Alt+C, then click another item)", () => { if (P3.startCopyStyle()) bar.querySelector("#ctxCopyStyle")?.classList.add("on"); }, { class: "st-cx-btn" + (S.paintStyle ? " on" : "") }), b("ctxDelete", svg("trash"), "Delete", () => E.deleteSel()));
+      b("ctxPosition", svg("position") + "<span>Position</span>", "Position", () => hooks.props?.("position"), { class: "st-cx-btn st-cx-txt" }),
+      b("ctxCopyStyle", svg("roller"), "Copy style (Ctrl+Alt+C, then click another item)", () => { if (P3.startCopyStyle()) bar.querySelector("#ctxCopyStyle")?.classList.add("on"); }, { class: "st-cx-btn" + (S.paintStyle ? " on" : "") }), sep(),
+      transparency(l || sel[0]), lockBtn(sel), b("ctxDup", svg("copy"), "Duplicate", () => E.duplicateSel()), b("ctxDelete", svg("trash"), "Delete", () => E.deleteSel()));
   }
   // Canva: comment on the selected item (or the page) right from the toolbar.
   bar.append(b("ctxComment", svg("comment"), "Comment", () => { const it = l || sel[0]; emit("comment", it ? { id: it.id, label: `Page ${S.page + 1}: ${it.name || it.type}` } : { id: curPage().id, label: `Page ${S.page + 1}` }); }));

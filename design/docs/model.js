@@ -163,16 +163,45 @@ function normalizeBlock(b) {
 /** Divider styles. */
 export const HR_STYLES = ["dashed", "dotted", "double", "thick"];
 /** Photo bands: overlay kinds (shade = dark from the left, split = solid colour panel fading into the photo, tint = even
- *  colour wash, soft = white fade for dark text) and the photo URLs allowed (same-origin path or https, no quotes). */
-export const PHOTO_OVERLAYS = ["shade", "split", "tint", "soft"];
+ *  colour wash, soft = white fade for dark text; for people photos: dock = the photo at full band height docked on the
+ *  right with the band colour fading in from the left, so the person stays visible beside the title; tintl = a lighter
+ *  wash) and the photo URLs allowed (same-origin path or https, no quotes). */
+export const PHOTO_OVERLAYS = ["shade", "split", "tint", "soft", "dock", "tintl"];
 const BGIMG_RE = /^(\/(?!\/)|https:\/\/)[\w\-./%~?=&:+,]+$/;
 const rgbaOf = (hex, a) => { const v = String(normColor(hex) || "#1b2133").slice(1); return `rgba(${parseInt(v.slice(0, 2), 16)},${parseInt(v.slice(2, 4), 16)},${parseInt(v.slice(4, 6), 16)},${a})`; };
 /** CSS gradient laid over a band photo (the band colour keeps the text readable). */
 export function photoOverlayCss(ov, bg) {
   if (ov === "split") return `linear-gradient(90deg,${rgbaOf(bg, 1)} 0%,${rgbaOf(bg, 0.97)} 44%,${rgbaOf(bg, 0.35)} 72%,${rgbaOf(bg, 0)} 100%)`;
   if (ov === "tint") return `linear-gradient(${rgbaOf(bg, 0.66)},${rgbaOf(bg, 0.66)})`;
+  if (ov === "tintl") return `linear-gradient(${rgbaOf(bg, 0.5)},${rgbaOf(bg, 0.5)})`;
+  if (ov === "dock") return `linear-gradient(90deg,${rgbaOf(bg, 1)} 0%,${rgbaOf(bg, 1)} 40%,${rgbaOf(bg, 0.55)} 50%,${rgbaOf(bg, 0)} 60%)`;
   if (ov === "soft") return `linear-gradient(90deg,rgba(255,255,255,.97) 0%,rgba(255,255,255,.9) 42%,rgba(255,255,255,.2) 75%,rgba(255,255,255,0) 100%)`;
   return `linear-gradient(100deg,${rgbaOf(bg, 0.94)} 0%,${rgbaOf(bg, 0.78)} 42%,${rgbaOf(bg, 0.2)} 100%)`;
+}
+// Face focus of a band photo (CSS background-position, e.g. "48% 36%": people photos keep the face in view) and the
+// round portrait of a résumé band (pimg = photo URL, pfo = "face x,face y,width/height" of that photo).
+const BGPOS_RE = /^\d{1,3}(\.\d{1,2})?% \d{1,3}(\.\d{1,2})?%$/;
+const PFO_RE = /^(0(\.\d{1,4})?|1),(0(\.\d{1,4})?|1),\d{1,2}(\.\d{1,4})?$/;
+const r1 = (v) => Math.round(v * 10) / 10;
+/** Size of the round portrait in a band of min height minh (px): diameter D, gap from the band's left edge X. */
+export function portraitGeom(minh) { return { D: Math.round(Math.max(88, Math.min(132, (minh || 130) * 0.8))), X: 18 }; }
+/** CSS of a band with a round portrait at its left: the photo layer (cover-cropped around the face) under a layer in
+ *  the band colour with a round hole and a thin light ring. The left gap is var(--px) (the editor's page margin for the
+ *  cover band; 18px elsewhere). */
+function portraitCss(b) {
+  const { D, X } = portraitGeom(b.minh), R = D / 2;
+  const [fx, fy, ar] = String(b.pfo || "0.5,0.3,0.6667").split(",").map(Number);
+  const sw = ar >= 1 ? D * ar : D, sh = ar >= 1 ? D : D / ar;
+  const bx = -Math.max(0, Math.min(sw - D, fx * sw - R)), by = -Math.max(0, Math.min(sh - D, (fy + 0.06) * sh - R));
+  const bg = b.bg || "#ffffff", ring = "rgba(255,255,255,.88)", px = `var(--px, ${X}px)`;
+  return [
+    `--pd:${D}px`,
+    `background-image:radial-gradient(circle ${R + 4}px at calc(${px} + ${R}px) 50%,rgba(255,255,255,0) ${r1(R - 0.6)}px,${ring} ${R}px,${ring} ${R + 3}px,${bg} ${r1(R + 3.6)}px),url("${b.pimg}")`,
+    "background-repeat:no-repeat",
+    `background-size:100% 100%,${r1(sw)}px ${r1(sh)}px`,
+    `background-position:0 0,calc(${px} + ${r1(bx)}px) calc(50% + ${r1(by + (sh - D) / 2)}px)`,
+    `padding-left:calc(${px} + ${D + 24}px)`,
+  ];
 }
 /** Column widths in % (one per column, 5–95 each, summing to 100), or null. */
 export function colWidths(v, n) {
@@ -198,7 +227,9 @@ function blockProps(b) {
   const rad = clampNum(b.rad, 0, 40); if (rad && b.rad != null) p.rad = Math.round(rad);
   const bd = clampNum(b.bd, 0, 8); if (bd && b.bd != null) { p.bd = Math.round(bd); const bc = normColor(b.bc); if (bc) p.bc = bc; }
   // Photo band (Canva-style photo header): a same-origin or https photo behind the block, under an overlay in the band colour.
-  if (typeof b.bgimg === "string" && BGIMG_RE.test(b.bgimg.trim())) { p.bgimg = b.bgimg.trim(); if (PHOTO_OVERLAYS.includes(b.ov)) p.ov = b.ov; }
+  if (typeof b.bgimg === "string" && BGIMG_RE.test(b.bgimg.trim())) { p.bgimg = b.bgimg.trim(); if (PHOTO_OVERLAYS.includes(b.ov)) p.ov = b.ov; if (BGPOS_RE.test(String(b.bgpos || ""))) p.bgpos = b.bgpos; }
+  // Round portrait (résumé / about-me header): a people photo with its face focus.
+  if (typeof b.pimg === "string" && BGIMG_RE.test(b.pimg.trim())) { p.pimg = b.pimg.trim(); if (PFO_RE.test(String(b.pfo || ""))) p.pfo = b.pfo; }
   if (b.cmt != null && String(b.cmt).trim()) p.cmt = String(b.cmt).slice(0, 1000);
   // Paragraph / block spacing (pt before and after) and letter spacing (thousandths of an em), like Canva's
   // "Advanced settings" and "Spacing" sliders.
@@ -355,7 +386,7 @@ function hasBlockChild(n) {
   return kidsOf(n).some((k) => k.nodeType === 1 && !SKIP_TAGS.has(tagOf(k)) && (isBlockEl(k) || hasBlockChild(k)));
 }
 
-const BAND_KEYS = ["bg", "deco", "dc", "dc2", "pad", "minh", "rad", "bd", "bc", "bgimg", "ov", "cmt"];
+const BAND_KEYS = ["bg", "deco", "dc", "dc2", "pad", "minh", "rad", "bd", "bc", "bgimg", "ov", "bgpos", "pimg", "pfo", "cmt"];
 const SPACE_KEYS = ["ps", "lsp"];
 function blockPropsOf(n, st) {
   const p = {};
@@ -698,14 +729,16 @@ export function blockAttrs(b) {
   let data = b.cmt ? ` data-cmt="${escAttr(b.cmt)}"` : "";
   if (b.ps) { css.push(`margin-top:${b.ps}pt;margin-bottom:${b.ps}pt`); data += ` data-ps="${b.ps}"`; }
   if (b.lsp) { css.push(`letter-spacing:${b.lsp / 1000}em`); data += ` data-lsp="${b.lsp}"`; }
-  if (b.bg || b.deco || b.bd || b.bgimg) {
+  if (b.bg || b.deco || b.bd || b.bgimg || b.pimg) {
     const pad = b.pad ?? 14;
     if (b.bg) css.push(`background-color:${b.bg}`);
     css.push(`padding:${pad}px ${Math.max(pad, 18)}px`);
     if (b.minh) css.push(`min-height:${b.minh}px`);
     if (b.rad) css.push(`border-radius:${b.rad}px`);
     if (b.bd) css.push(`border:${b.bd}px solid ${b.bc || "#1b2133"}`);
-    if (b.bgimg) { css.push(`background-image:${photoOverlayCss(b.ov, b.bg)},url("${b.bgimg}")`, "background-size:cover", "background-position:center"); if (b.ov === "split" || b.ov === "soft") css.push("padding-right:44%"); }
+    if (b.bgimg && b.ov === "dock") css.push(`background-image:${photoOverlayCss(b.ov, b.bg)},url("${b.bgimg}")`, "background-repeat:no-repeat", "background-size:100% 100%,auto 100%", "background-position:0 0,right center", "padding-right:44%");
+    else if (b.bgimg) { css.push(`background-image:${photoOverlayCss(b.ov, b.bg)},url("${b.bgimg}")`, "background-size:cover", `background-position:${b.bgpos ? "0 0," + b.bgpos : "center"}`); if (b.ov === "split" || b.ov === "soft") css.push("padding-right:44%"); }
+    else if (b.pimg) css.push(...portraitCss(b));
     else if (b.deco) { css.push(decoCss(b.deco, b.dc, b.dc2)); if (DECOS[b.deco].pos === "left") css.push(`padding-left:${Math.round(Math.max(110, (b.minh || 80) * 0.95))}px`); else css.push(`padding-right:${Math.round(Math.max(120, (b.minh || 60) * 1.3))}px`); }
     for (const k of BAND_KEYS) if (b[k] != null && k !== "cmt") data += ` data-${k}="${escAttr(b[k])}"`;
     data += ' class="band"';

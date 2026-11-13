@@ -233,12 +233,19 @@ function roundRect(x, X, Y, W, H, r) {
   x.lineTo(X, Y + r); x.arcTo(X, Y, X + r, Y, r);
   x.closePath();
 }
-function shapePath(x, kind, w, h) {
+function shapePath(x, kind, w, h, o = {}) {
   const hw = w / 2, hh = h / 2;
   x.beginPath();
   switch (kind) {
     case "ellipse": x.ellipse(0, 0, hw, hh, 0, 0, Math.PI * 2); break;
-    case "rounded": roundRect(x, -hw, -hh, w, h, Math.min(w, h) * 0.18); break;
+    case "rounded": roundRect(x, -hw, -hh, w, h, Math.min(w, h) * (o.radius > 0 ? Math.min(0.5, o.radius) : 0.18)); break;
+    case "polygon": {
+      // regular polygon with o.sides corners (shapes from the Elements panel), point up
+      const n = Math.max(3, Math.min(24, Math.round(o.sides || 6)));
+      for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + (i * 2 * Math.PI) / n, px = Math.cos(a) * hw, py = Math.sin(a) * hh; if (i) x.lineTo(px, py); else x.moveTo(px, py); }
+      x.closePath();
+      break;
+    }
     case "triangle": x.moveTo(0, -hh); x.lineTo(hw, hh); x.lineTo(-hw, hh); x.closePath(); break;
     case "line": x.moveTo(-hw, 0); x.lineTo(hw, 0); break;
     case "arrow": {
@@ -247,9 +254,10 @@ function shapePath(x, kind, w, h) {
       break;
     }
     case "star": {
-      for (let i = 0; i < 10; i++) {
-        const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 0.45 : 1;
-        const px = Math.cos(a) * hw * r, py = Math.sin(a) * hh * r + hh * 0.1;
+      const n = Math.max(3, Math.min(24, Math.round(o.points || 5))), inner = o.inner > 0 && o.inner < 1 ? o.inner : n === 5 ? 0.45 : 0.55;
+      for (let i = 0; i < n * 2; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / n, r = i % 2 ? inner : 1;
+        const px = Math.cos(a) * hw * r, py = Math.sin(a) * hh * r + (n === 5 ? hh * 0.1 : 0);
         if (i) x.lineTo(px, py); else x.moveTo(px, py);
       }
       x.closePath();
@@ -269,9 +277,11 @@ function shapePath(x, kind, w, h) {
 export function measureText(x, o, W, H) {
   const size = Math.max(4, o.size * H);
   x.font = `${o.italic ? "italic " : ""}${o.bold ? 700 : 400} ${size}px ${fontCss(o.family)}`;
-  const lines = String(o.text || " ").split("\n");
+  // letter spacing (o.spacing, em) where the browser's canvas has it; the caller's save/restore puts it back
+  if ("letterSpacing" in x) x.letterSpacing = o.spacing ? (o.spacing * size).toFixed(2) + "px" : "0px";
+  const lines = String((o.upper ? String(o.text || " ").toUpperCase() : o.text) || " ").split("\n");
   const widths = lines.map((l) => x.measureText(l || " ").width);
-  const lh = size * 1.2, pad = o.bg ? size * 0.35 : o.outline ? size * 0.08 : 0;
+  const lh = size * (o.lineHeight > 0.5 && o.lineHeight < 4 ? o.lineHeight : 1.2), pad = o.bg ? size * 0.35 : o.outline ? size * 0.08 : 0;
   return { size, lines, widths, lh, w: Math.max(...widths) + pad * 2, h: lh * lines.length + pad * 2, pad };
 }
 
@@ -299,13 +309,19 @@ export function drawOverlay(x, o, W, H) {
       x.shadowColor = "transparent";
     });
   } else if (o.type === "shape") {
-    shapePath(x, o.shape, b.w, b.h);
     const sw = (o.strokeWidth || 0) * Math.min(W, H) * 0.01;
     // template extras: soft = blurred edge (fraction of the short side), fade = see-through towards that side (scrims)
     if (o.soft > 0 && "filter" in x) x.filter = `blur(${(o.soft * Math.min(W, H)).toFixed(1)}px)`;
-    if (o.shape === "line") { x.lineWidth = Math.max(2, sw || Math.min(W, H) * 0.012); x.lineCap = "round"; x.strokeStyle = o.fill; x.stroke(); }
-    else {
-      x.fillStyle = o.fade ? fadeFill(x, o.fill, o.fade, b.w, b.h) : o.fill; x.fill();
+    if (o.dash && o.dash.length) x.setLineDash(o.dash.map((d) => d * Math.max(1, sw || Math.min(W, H) * 0.012)));
+    if (o.shape === "path" && o.d) drawPathShape(x, o, b.w, b.h, sw);
+    else if (o.shape === "line") {
+      shapePath(x, "line", b.w, b.h, o);
+      const lw = Math.max(2, sw || Math.min(W, H) * 0.012);
+      x.lineWidth = lw; x.lineCap = "round"; x.strokeStyle = o.fill; x.stroke();
+      if (o.arrow) lineArrows(x, o.arrow, b.w, lw, o.fill);
+    } else {
+      shapePath(x, o.shape, b.w, b.h, o);
+      if (o.fill && o.fill !== "none") { x.fillStyle = o.fade ? fadeFill(x, o.fill, o.fade, b.w, b.h) : o.fill; x.fill(); }
       if (sw > 0) { x.lineWidth = sw; x.lineJoin = "round"; x.strokeStyle = o.stroke; x.stroke(); }
     }
   } else if (o.type === "sticker") {
@@ -329,6 +345,28 @@ function fadeFill(x, hex, side, w, h) {
   const g = x.createLinearGradient(x0, y0, x1, y1);
   g.addColorStop(0, `rgba(${rgb},0)`); g.addColorStop(1, `rgba(${rgb},1)`);
   return g;
+}
+/** A shape drawn from an SVG path (o.d in the box o.vb = [x, y, w, h]) stretched to a w×h box round 0,0. */
+function drawPathShape(x, o, w, h, sw) {
+  const vb = Array.isArray(o.vb) && o.vb.length === 4 ? o.vb : [0, 0, 100, 100];
+  let p;
+  try { p = new Path2D(o.d); } catch { return; }
+  const sx = w / (vb[2] || 1), sy = h / (vb[3] || 1);
+  x.save();
+  x.translate(-w / 2, -h / 2); x.scale(sx, sy); x.translate(-vb[0], -vb[1]);
+  if (o.fill && o.fill !== "none") { x.fillStyle = o.fill; x.fill(p, o.evenodd ? "evenodd" : "nonzero"); }
+  const lw = sw > 0 ? sw : o.fill === "none" ? Math.max(w, h) * 0.02 : 0;
+  if (lw > 0) { x.lineWidth = lw / Math.sqrt(Math.abs(sx * sy) || 1); x.lineJoin = "round"; x.lineCap = "round"; x.strokeStyle = o.stroke || o.fill || "#1b2133"; x.stroke(p); }
+  x.restore();
+}
+/** Arrow heads on a straight line overlay (o.arrow: "end", "start" or "both"). */
+function lineArrows(x, which, w, lw, color) {
+  const s = Math.max(lw * 3, 8), ends = which === "both" ? [1, -1] : which === "start" ? [-1] : [1];
+  x.setLineDash([]); x.fillStyle = color;
+  for (const d of ends) {
+    const tip = (d * w) / 2;
+    x.beginPath(); x.moveTo(tip + d * lw * 0.5, 0); x.lineTo(tip - d * s, -s * 0.6); x.lineTo(tip - d * s, s * 0.6); x.closePath(); x.fill();
+  }
 }
 // Pictures of "image" overlays (Magic Grab) live in the app's pixel store; the app tells us how to find them.
 let overlayImage = () => null;
@@ -416,6 +454,16 @@ function drawFrame(src, frame) {
         roundRect(x, px, (p.top - hole) / 2, hole, hole * 0.8, hole * 0.2); x.fill();
         roundRect(x, px, out.height - p.bottom + (p.bottom - hole) / 2, hole, hole * 0.8, hole * 0.2); x.fill();
       }
+      break;
+    }
+    case "path": {
+      // any outline from the Elements panel's frames (letters, flowers, blobs, retro): fitted in the middle, keeps its shape
+      let p = null;
+      try { p = new Path2D(frame.d); } catch { return src; }
+      const vb = Array.isArray(frame.vb) && frame.vb.length === 4 ? frame.vb : [0, 0, ...(Array.isArray(frame.vb) && frame.vb.length === 2 ? frame.vb : [100, 100])];
+      const s = Math.min(W / (vb[2] || 1), H / (vb[3] || 1)), into = () => { x.translate((W - vb[2] * s) / 2, (H - vb[3] * s) / 2); x.scale(s, s); x.translate(-vb[0], -vb[1]); };
+      x.save(); into(); x.clip(p); x.setTransform(1, 0, 0, 1, 0, 0); x.drawImage(src, 0, 0); x.restore();
+      if (frame.width > 0) { x.save(); into(); x.lineWidth = (u * 0.5) / s; x.strokeStyle = color; x.lineJoin = "round"; x.stroke(p); x.restore(); }
       break;
     }
     case "rounded": case "circle": case "heart": case "star": case "hexagon": case "arch": case "diamond": case "blob": {

@@ -1,10 +1,11 @@
 // Building blocks for the whiteboard templates (pure, no DOM): a board frame with a bold title header, section panels
-// with coloured header pills, sticky-note grids, avatars, line icons (stickers), photos from the shared library and
-// connectors. Every template is drawn on a 1280 × 800 board so its thumbnail is readable. Colours are the base colours
-// of variants.js (palettes recolour them). All wording is our own.
+// with coloured header pills, sticky-note grids, avatars (round people photos), line icons (stickers), photos from the
+// shared library (places, things and people, cropped around faces) and connectors. Every template is drawn on a
+// 1280 × 800 board so its thumbnail is readable. Colours are the base colours of variants.js (palettes recolour them).
+// All wording is our own.
 import { makeNote, makeShape, makeText, makeFrame, makeConnector, makeImage, makeSticker, makeStroke } from "./model.js";
 import { textWidth } from "./render.js";
-import { pickPhoto, photoUrl } from "../shared/photo-library.js";
+import { pickPhoto, pickPerson, photoUrl, PEOPLE as LIB_PEOPLE } from "../shared/photo-library.js";
 
 export const W = 1280, H = 800, M = 40, TOP = 160, BOT = 764;
 /** Accent, tint and paper slots (recoloured by the palettes in variants.js). */
@@ -18,7 +19,7 @@ export const INK = "#1b2133", TEAL = "#0f766e", GREY = "#5d6478", SOFT = "#8a91a
 /* ---------------------------------------------------------------- content theme (variants) */
 let CUR = null, SEED = "board";
 /** Sets the content theme (variants.js THEMES entry or null) and the photo seed (template id) for the next build. */
-export function setBuild(theme, seed) { CUR = theme?.items ? theme : null; SEED = String(seed || "board"); }
+export function setBuild(theme, seed) { CUR = theme?.items ? theme : null; SEED = String(seed || "board"); resetPeople(); }
 export const themed = () => !!CUR;
 /** Sticky-note phrases: the layout's own, or the theme's phrases from offset off. */
 export const th = (list, off = 0) => (CUR?.items ? list.map((_, i) => CUR.items[(off + i) % CUR.items.length]) : list);
@@ -168,12 +169,82 @@ export function badge(x, y, size, name, fill = A[0], color = WHITE, o = {}) {
   if (o.role) { b.role = o.role; i.role = o.role; }
   return [b, i];
 }
-/** Round avatar with initials (white ring). */
+/* ---------------------------------------------------------------- people (shared library photos) */
+// First names (and family words) used on the boards -> "f" / "m", so a person's photo matches the name.
+const SEX_F = new Set("sara hina ayesha aisha maham nasreen sana zara noor asma laila rida maria mehak rabia amna mona nadia iqra hira areeba fatima nida komal sobia anum shazia uzma saima mahnoor mariam maryam alina sadia mehwish lubna zainab huma sadaf samina bushra farah kiran saba ms mrs miss mum mom mother grandma granny aunt bride sister daughter".split(" "));
+const SEX_M = new Set("bilal omar umar danish saad rashid imran tariq ali hamza musa kamran faisal usman hamid ahmed hassan yusuf farhan shahid adeel sami kashif jawad raza waqas babar naveed ehsan ayaan rayan junaid hammad fahad asad zain haris talha adnan arif khalid nabeel salman shoaib waleed zubair mr dad father grandpa grandad uncle groom brother son".split(" "));
+/** "f", "m" or null from a name like "Dr. Ayesha, Lead" or "Mum, Plans". */
+export function sexOf(name) {
+  for (const w of nameOf(name).toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/)) { if (SEX_F.has(w)) return "f"; if (SEX_M.has(w)) return "m"; }
+  return null;
+}
+// Role words -> the kind of photo (words the shared library understands); the default is a business headshot.
+const ROLE_KIND = [
+  [/\bnurse\b/i, "nurse"], [/\b(?:dr|doctor|gp|lab)\b/i, "doctor"], [/\b(?:chef|kitchen|cook)\b/i, "chef"],
+  [/\b(?:coach|yoga|strength|trainer|nutrition|fitness)\b/i, "fitness trainer"], [/\b(?:principal|science|teacher|tutor|art|sports)\b/i, "teacher"],
+  [/\b(?:agent|broker|viewings|realtor)\b/i, "realtor"], [/\b(?:customers?|buyers?|neighbours?|guests?|shoppers?)\b/i, "customer smiling"],
+  [/\b(?:grandma|grandpa|grandad|granny|grandmother|grandfather)\b/i, "senior elderly"],
+  [/\b(?:mum|mom|dad|bride|groom|best man|family|maps|games|photos|food|planner)\b/i, "smiling casual"],
+];
+// Children: the library has few child portraits, so two boys are tight face crops from a family photo (focus + zoom).
+// Oldest first; each board uses each child crop once.
+const KIDS = [
+  { id: "person-child-girl-smiling", sex: "f" }, { id: "person-child-playing-leaves", sex: "f", fx: 0.55, fy: 0.3, zoom: 1.6 },
+  { id: "person-teen-striped-shirt", sex: "m" }, { id: "person-family-picnic", sex: "m", fx: 0.255, fy: 0.54, zoom: 3.4 },
+  { id: "person-family-picnic", sex: "m", fx: 0.595, fy: 0.63, zoom: 3.8 },
+];
+const KID_IDS = [...new Set(KIDS.map((k) => k.id))];
+let PEEPS = new Map(), PUSED = [], KUSED = new Set();
+/** Clears the people picked for the board being built (each build picks its own, without repeats). */
+export function resetPeople() { PEEPS = new Map(); PUSED = []; KUSED = new Set(); }
+const r2 = (v) => Math.round(v * 100) / 100;
+/** Focus point (0..1) to keep in view when a people photo is cropped: the face, with a little head room. */
+const focusOf = (p) => ({ fx: r2(p.fx ?? 0.5), fy: r2(Math.min(1, (p.fy ?? 0.44) + 0.06)) });
+/** Crop of a library photo for a spot: { p, fx, fy, zoom?, nw, nh }. */
+const cropOf = (p, c = {}) => ({ p, ...focusOf(p), ...(c.fx != null ? { fx: c.fx, fy: c.fy } : {}), ...(c.zoom > 1 ? { zoom: c.zoom } : {}), nw: p.w, nh: p.h });
+/** The people photo (crop) for a person on this board: the same name gets the same face, different names different faces. */
+export function personFor(name, o = {}) {
+  if (!LIB_PEOPLE.length) return null;
+  const key = nameOf(name).toLowerCase() + "|" + (o.kind || "");
+  if (PEEPS.has(key)) return PEEPS.get(key);
+  const sex = o.sex || sexOf(name), word = sex === "f" ? "woman" : sex === "m" ? "man" : "";
+  let crop = null;
+  if (/\b(?:child|kids?|girl|boy)\b/i.test(o.kind || "")) {
+    const i = KIDS.findIndex((k, j) => !KUSED.has(j) && (!sex || k.sex === sex));
+    const p = i >= 0 ? LIB_PEOPLE.find((x) => x.id === KIDS[i].id) : null;
+    if (p) { KUSED.add(i); crop = cropOf(p, KIDS[i]); }
+  }
+  if (!crop) {
+    const role = ROLE_KIND.find(([re]) => re.test(String(name)))?.[1];
+    const kind = o.kind ? `${o.kind} ${word} portrait` : role ? `${role} ${word} portrait` : `business ${word} professional headshot portrait`;
+    // grown-ups never get a child's or a teen's photo
+    const p = pickPerson(kind.replace(/\s+/g, " ").trim(), `${SEED}:${key}`, { exclude: [...PUSED, ...KID_IDS], sex });
+    if (p) crop = cropOf(p);
+  }
+  PEEPS.set(key, crop);
+  if (crop) PUSED.push(crop.p.id);
+  return crop;
+}
+/** Round people photo of a person (white ring), a normal image layer: replaceable, cropped around the face. */
 export function avatar(x, y, d, name, fill = A[1], o = {}) {
+  const c = personFor(name, o);
+  if (!c) return initialsAvatar(x, y, d, name, fill, o);
+  const { p, ...crop } = c;
+  const img = makeImage({ x, y, w: d, h: d, src: photoUrl(p, "full"), name: `${nameOf(name)} photo` });
+  Object.assign(img, { fit: "cover", round: true, ...crop, fill, stroke: o.ring || WHITE, sw: o.sw ?? 3 });
+  if (o.role) img.role = o.role;
+  return img;
+}
+/** Round avatar with initials (white ring): only when the people photo library is empty. */
+export function initialsAvatar(x, y, d, name, fill = A[1], o = {}) {
   const s = shape(x, y, d, d, { kind: "ellipse", fill, stroke: o.ring || WHITE, sw: o.sw ?? 3, text: initials(name), size: Math.round(d * 0.36), bold: true, tc: WHITE });
   if (o.role) s.role = o.role;
   return s;
 }
+// People photo kind per content theme (the theme's own kind of people), for picture spots that show people.
+const THEME_PEOPLE = { school: "teacher students class", shop: "fashion shopping style", clinic: "doctor nurse", restaurant: "chef cooking", wedding: "wedding couple bride groom", "real-estate": "realtor showing home", fitness: "fitness gym workout", startup: "team startup laptop", ngo: "team volunteers community", travel: "traveler trip", marketing: "creator influencer camera" };
+/** The theme's people kind (or def on the layout's own text). */
+export const themePeople = (def) => (CUR && THEME_PEOPLE[CUR.id] ? THEME_PEOPLE[CUR.id] : def);
 
 /* ---------------------------------------------------------------- photos (shared library) */
 let photoN = 0;
@@ -191,7 +262,24 @@ export function photo(x, y, w, h, topic, o = {}) {
   if (o.used) o.used.push(p?.id);
   return out;
 }
-export const resetPhotos = () => { photoN = 0; };
+/** A people photo (kind = who: "fashion model woman", "traveler"…) that fills its box, cropped around the face. */
+export function personPhoto(x, y, w, h, kind, o = {}) {
+  const exclude = [...PUSED, ...(o.exclude || []), ...(/\b(?:child|kids?|girl|boy)\b/i.test(kind) ? [] : KID_IDS)];
+  const p = LIB_PEOPLE.length ? pickPerson(kind, `${SEED}:p${o.slot ?? photoN++}`, { exclude, landscape: o.landscape ?? null, sex: o.sex || null }) : null;
+  if (!p) return photo(x, y, w, h, kind, o);
+  PUSED.push(p.id);
+  const out = [];
+  const m = o.card === false ? 0 : o.card ?? 8;
+  if (m) out.push(shape(x - m, y - m, w + m * 2, h + m * 2 + (o.caption ? 34 : 0), { kind: "rect", fill: WHITE, stroke: LINE, sw: 1 }));
+  const img = makeImage({ x, y, w, h, src: photoUrl(p, "full"), name: p.title || "Photo" });
+  const { p: _p, ...crop } = cropOf(p);
+  Object.assign(img, { fit: "cover", ...crop });
+  out.push(img);
+  if (o.caption) out.push(txt(x, y + h + 6, w, o.caption, 18, { bold: true, align: "center", color: INK }));
+  if (o.used) o.used.push(p.id);
+  return out;
+}
+export const resetPhotos = () => { photoN = 0; resetPeople(); };
 
 /* ---------------------------------------------------------------- board frame + header */
 const PEOPLE = ["Sara Ahmed, Lead", "Bilal Khan, Design", "Hina Raza, Ops", "Omar Shah, Sales"];

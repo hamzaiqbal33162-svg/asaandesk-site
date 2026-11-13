@@ -8,6 +8,8 @@ import { SCRIPT_LAYOUTS, SCRIPT_THEMES, voiceArt, themePhoto } from "../voice/ga
 import { kit, fit, text, headline, rect, circle, pathEl, line, icon, isDark, mix as mix6, rng } from "../shared/tpl-kit.js";
 import { look, pixelGrid } from "../ai-image/looks.js";
 import { VOICE_STYLES } from "./tools.js";
+import { cast } from "../video/people.js";
+import { isPerson } from "../shared/photo-library.js";
 
 export const SLUG = { video: "ai-video-generator", music: "ai-music-generator", voice: "ai-voice-generator" };
 export const TOOL_OF_SLUG = { "ai-video-generator": "video", "ai-music-generator": "music", "ai-voice-generator": "voice" };
@@ -191,11 +193,30 @@ const STYLE_NAME = { cinematic: "Cinematic", realistic: "Realistic", animation: 
 const STYLE_LOOK = { cinematic: "cinematic", realistic: "photo", product: "vibrant", animation: "soft3d", illustration: "anime" };
 const KEY_LOOK = { clay: "clay", pixel: "pixel", papercut: "flat", doodle: "pencil", night: "night", rain: "cool", underwater: "cool", festive: "sunny", sunrise: "sunny", stopmotion: "fadedfilm", loop: "blurwash", logo: "blurwash", kinetic: "duotone", countdown: "duotone", "outro-card": "blurwash", mascot: "anime", "aerial-map": "fadedfilm" };
 const KEY_WORDS = { drone: "aerial landscape", night: "city night lights", sunrise: "sunrise sky", underwater: "sea water beach", rain: "city night", seasons: "autumn nature", "aerial-map": "travel road", festive: "celebration lights", timelapse: "city skyline", loop: "abstract bokeh", logo: "abstract", kinetic: "abstract", confetti: "celebration confetti", countdown: "celebration", "outro-card": "abstract", crowd: "people", teamwork: "meeting team office" };
-const mediaPhoto = (t) => themePhoto(t.theme, t.id, KEY_WORDS[t.structure] || "");
+// People (shared library, video/people.js kinds), like Canva's video and music templates: the ideas whose prompt shows
+// people get a people photo of the theme's kind (a customer talking to the camera, a happy crowd, a team at work, hands of
+// the stylist/chef/barista at work, slow-motion moments of people), and the music styles that are played or danced by
+// people (acoustic, folk, country, rock, dance, gospel, hip-hop, workout, wedding walk, kids) show the performers, the
+// couple, a child… on their cover. Places, products and abstract ideas keep their photos.
+const BY_THEME = { shop: "friends", clinic: "doctor", school: "students", restaurant: "chef", fitness: "trainer", realestate: "lovers", tech: "team", charity: "volunteers", travel: "traveller", cafe: "barista", wedding: "couple", salon: "salon" };
+const PEOPLE_IDEA = {
+  interview: () => "customer", crowd: (th) => BY_THEME[th], teamwork: (th) => (th === "realestate" ? "team" : BY_THEME[th]),
+  hands: (th) => ({ clinic: "doctor", school: "teacher", restaurant: "chef", tech: "developer", charity: "volunteers", cafe: "barista", salon: "salon", travel: "traveller", fitness: "trainer" })[th],
+  slowmo: (th) => ({ wedding: "couple", fitness: "trainer", salon: "beauty", restaurant: "chef", charity: "child" })[th],
+  // music styles
+  acoustic: () => "musician", folk: () => "musician", country: () => "musician", rock: () => "musician", hiphop: () => "musician", ukulele: () => "musician",
+  dance: () => "crowd", gospel: () => "crowd", workout: () => "trainer", "wedding-walk": () => "couple", kids: () => "child",
+};
+const mediaPhoto = (t) => {
+  const kind = t.kind !== "voice" && PEOPLE_IDEA[t.structure]?.(t.theme);
+  return (kind && cast([["p", kind]], t.id).p) || themePhoto(t.theme, t.id, KEY_WORDS[t.structure] || "");
+};
+// people photos are cropped around the face (the kit does it when no fixed alignment is given); a team triptych keeps thirds
+const alignFor = (ph, t, a) => (isPerson(ph) && t.structure !== "teamwork" ? null : a);
 
 // ----- video: overlays per prompt structure, drawn in the frame box b = { x, y, w, h }
 function frameStart(k, t, b, fx, size, ph) {
-  const pic = (x, y, w, h, o = {}) => k.photo(ph, x, y, w, h, { size, ex: o.fx ?? fx, align: o.align || "xMidYMid" });
+  const pic = (x, y, w, h, o = {}) => k.photo(ph, x, y, w, h, { size, ex: o.fx ?? fx, align: alignFor(ph, t, o.align || "xMidYMid") });
   const half = (x0, w0, f, al) => `<g${k.clipRect(x0, b.y, w0, b.h)}>${pic(b.x, b.y, b.w, b.h, { fx: f, align: al })}</g>`;
   switch (t.structure) {
     case "beforeafter": return pic(b.x, b.y, b.w, b.h) + half(b.x, b.w / 2, look(k, "mono"));
@@ -265,7 +286,7 @@ function videoArt(t, size) {
     if (!CENTER_BUSY.has(t.structure)) s += play(160, b.y + b.h * 0.48, 15);
     s += circle(b.x + 4, 160, 3.5, c2) + text(b.x + 12, 162.5, one(t.prompt, b.w - 64, 7.2), { size: 7.2, fill: "#e2e8f0", weight: 600 }) + text(b.x + b.w, 162.5, `0:03 / 0:${String(o.duration).padStart(2, "0")}`, { size: 6.5, fill: "#fff", anchor: "end", weight: 700, font: "mono" });
     const n = 6, tw = (b.w - (n - 1) * 4) / n, al = ["xMinYMin", "xMidYMid", "xMaxYMax", "xMinYMax", "xMaxYMin", "xMidYMid"];
-    for (let i = 0; i < n; i++) s += k.photo(ph, b.x + i * (tw + 4), 170, tw, 24, { size, rx: 3, ex: fx, align: al[i] }) + (i === 2 ? rect(b.x + i * (tw + 4), 170, tw, 24, "none", 3, ` stroke="${c2}" stroke-width="1.6"`) : "");
+    for (let i = 0; i < n; i++) s += k.photo(ph, b.x + i * (tw + 4), 170, tw, 24, { size, rx: 3, ex: fx, align: alignFor(ph, t, al[i]) }) + (i === 2 ? rect(b.x + i * (tw + 4), 170, tw, 24, "none", 3, ` stroke="${c2}" stroke-width="1.6"`) : "");
     s += line(b.x + 2 * (tw + 4) + tw * 0.6, 167, b.x + 2 * (tw + 4) + tw * 0.6, 197, "#fff", 1.4) + circle(b.x + 2 * (tw + 4) + tw * 0.6, 167, 3, "#fff");
   } else if (o.aspect === "9:16") {
     s += rect(0, 0, W, H, k.lin([c1, c2], 135)) + k.blob(70, 170, 80, "#fff", { ex: ' opacity=".1"' }) + rect(0, 0, W, H, k.dots("#fff", 11, 1, 0.14));
@@ -284,7 +305,7 @@ function videoArt(t, size) {
   } else {
     s += rect(0, 0, W, H, k.lin([mix(c1, "#ffffff", 0.86), mix(c2, "#ffffff", 0.92)], 90));
     const b = { x: 16, y: 14, w: 172, h: 172 };
-    s += `<g transform="rotate(-5 ${b.x + 86} ${b.y + 86})">` + rect(b.x + 10, b.y + 6, b.w, b.h, "#fff", 10, k.shadow(4, 10, 0.18)) + k.photo(ph, b.x + 16, b.y + 12, b.w - 12, b.h - 12, { size, rx: 8, ex: fx, align: "xMinYMax", opacity: 0.6 }) + `</g>`;
+    s += `<g transform="rotate(-5 ${b.x + 86} ${b.y + 86})">` + rect(b.x + 10, b.y + 6, b.w, b.h, "#fff", 10, k.shadow(4, 10, 0.18)) + k.photo(ph, b.x + 16, b.y + 12, b.w - 12, b.h - 12, { size, rx: 8, ex: fx, align: alignFor(ph, t, "xMinYMax"), opacity: 0.6 }) + `</g>`;
     s += rect(b.x, b.y, b.w, b.h, "#000", 10, k.shadow(8, 16, 0.3)) + `<g${k.clipRect(b.x, b.y, b.w, b.h, 10)}>` + frameStart(k, t, b, fx, size, ph) + overlay(k, t, b, c1, c2) + k.scrim(b.x, b.y + b.h * 0.65, b.w, b.h * 0.35, "#000", 0, 0.55) + `</g>`;
     if (!CENTER_BUSY.has(t.structure)) s += play(b.x + b.w / 2, b.y + b.h / 2, 14);
     s += rect(b.x + 10, b.y + b.h - 12, b.w - 20, 2.5, "#ffffff", 1.2, ' opacity=".45"') + rect(b.x + 10, b.y + b.h - 12, (b.w - 20) * 0.45, 2.5, c2, 1.2) ;
@@ -363,7 +384,9 @@ function musicArt(t, size) {
 const VOICE_LABEL = Object.fromEntries(VOICE_STYLES.map((v) => [v.value, v.label]));
 function voiceIdeaArt(t, size) {
   const v = (Number(t.palette.slice(1)) - 1) % 3, o = t.options;
-  return voiceArt({ id: t.id, key: t.structure, name: t.layoutName, theme: VTBY[t.theme], script: t.prompt, colors: t.colors, ai: true, speed: o.speed, voiceLabel: "AI voice · " + (VOICE_LABEL[o.voice] || "Warm (female)"), languageLabel: "English" }, 3 + v, size);
+  return voiceArt({ id: t.id, key: t.structure, name: t.layoutName, theme: VTBY[t.theme], script: t.prompt, colors: t.colors, ai: true, speed: o.speed, voiceLabel: "AI voice · " + (VOICE_LABEL[o.voice] || "Warm (female)"), languageLabel: "English",
+    // the persona photo is a woman or a man like the chosen voice (storyteller / news reader: the narrator kind decides)
+    voiceStyle: o.voice, voiceSex: /female/.test(o.voice || "warm-female") ? "f" : /male/.test(o.voice) ? "m" : null }, 3 + v, size);
 }
 const THEME = Object.fromEntries(THEMES.map((x) => [x.key, x]));
 /** The idea's design as SVG (320×200); size "full" uses full-size photos (the opened template's preview). */

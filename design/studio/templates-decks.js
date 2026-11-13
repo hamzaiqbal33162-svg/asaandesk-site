@@ -7,6 +7,7 @@
 // rounded cards, icon tiles, big numbers and a timeline. Our own copy, colours and shapes.
 import { kit, PATTERNS, STYLES, alpha, r1 } from "./templates-pro.js";
 import { photoPicker, hasPeople } from "./templates-photos.js";
+import { castFor, member, face } from "./templates-faces.js";
 import { mix } from "./textfx.js";
 import { textWidth } from "./textlayout.js";
 
@@ -85,12 +86,13 @@ const deckData = [
     solution: { title: "The big idea", text: "Water keeps moving in a loop: the sun lifts it into the air, it cools into clouds and it falls back as rain or snow.", bullets: ["The sun gives the energy", "Cold air turns vapour into drops", "Rivers carry water back to the sea"] },
     stats: { title: "Water in numbers", note: "All the water on Earth, and where it is right now.", items: [["97%", "is salt water in the oceans"], ["2%", "is frozen in ice and snow"], ["9 days", "a drop stays in the air"]] },
     product: { title: "Key words", items: [["Evaporation", "Liquid water turns into a gas."], ["Condensation", "Vapour cools into water drops."], ["Precipitation", "Water falls as rain, snow or hail."], ["Collection", "Water gathers in rivers and seas."]] },
-    team: { title: "Group roles", people: [["Leader", "keeps the group on task"], ["Recorder", "writes what you see"], ["Timekeeper", "watches the clock"], ["Reporter", "shares with the class"]] },
+    team: { title: "Group roles", kind: "student young portrait smiling", people: [["Leader", "keeps the group on task"], ["Recorder", "writes what you see"], ["Timekeeper", "watches the clock"], ["Reporter", "shares with the class"]] },
     plans: { title: "Choose your challenge", items: [["Explorer", "Level 1", "10 minutes", ["Label the diagram", "Match the key words", "Draw one cloud"]], ["Scientist", "Level 2", "15 minutes", ["Explain each step", "Add arrows", "Give an example"]], ["Expert", "Level 3", "20 minutes", ["Design an experiment", "Predict the result", "Present it"]]] },
     roadmap: { title: "Today's lesson", items: [["10 min", "Warm-up questions"], ["15 min", "The cycle step by step"], ["15 min", "Group challenge"], ["5 min", "Quiz time"]] },
     closing: { title: "Quiz time!", text: "What makes water rise into the sky? Write your answer, then share it.", contact: ["Homework: page 42", "Bring a clear jar on Friday", "Science club · Wed 3 pm"] },
     notes: ["Ask: who got wet on the way to school?", "Read the five steps aloud together.", "Let pairs guess the answers first.", "Draw the loop on the board as you talk.", "Ask which number surprises them.", "Students copy the key words.", "Hand out the role cards.", "Students pick a level.", "Keep time with the class timer.", "Collect answers on sticky notes."] }],
   ["company-profile", "Company profile", "ocean", "company profile corporate about us services clients logistics", {
+    photoHint: "Corporate office logistics", agendaWho: "team colleagues meeting office staff",
     kicker: "Company profile", name: "Bluewave Logistics", sub: "Moving goods safely across the country since 2012.", by: "www.bluewave.example", date: "2026", brand: "Bluewave",
     agenda: ["Who we are", "What we do", "Our network", "Clients", "Contact"],
     problem: { title: "What our clients face", lead: "Getting goods across the country on time is harder than it looks.", items: [["Delays", "One late truck can stop a whole production line."], ["Damage", "Fragile goods break when they change hands."], ["No visibility", "Most firms cannot say where a parcel is right now."]] },
@@ -117,6 +119,7 @@ const deckData = [
     closing: { title: "Questions?", text: "The full tracker is shared in the project folder.", contact: ["omar@company.example", "Weekly call · Mon 10 am", "Tracker: /projects/web"] },
     notes: ["Lead with the headline: on track.", "Agenda in one line.", "Name each risk and its owner.", "Show the fix, not just the problem.", "Progress against plan.", "Demo one item if there is time.", "Thank the team by name.", "Budget is on track.", "Dates the team should remember.", "Open the floor."] }],
   ["portfolio", "Design portfolio", "paper", "portfolio design work case study creative designer", {
+    coverWho: "woman headshot portrait professional creative",
     labels: { problem: "Process", solution: "Case study", product: "Services", team: "Clients", plans: "Packages", roadmap: "Process" }, kicker: "Portfolio 2026", name: "Selected Work", sub: "Brand identity, packaging and web design.", by: "Zara Ahmed · Designer", date: "2026", brand: "Zara Ahmed",
     agenda: ["About me", "Brand identity", "Packaging", "Web design", "Contact"],
     problem: { title: "How I work", lead: "Good design starts with listening, not with a logo.", items: [["Listen", "Workshops with the team and their customers."], ["Shape", "Sketches, moodboards and three clear directions."], ["Refine", "One idea, polished down to the last detail."]] },
@@ -124,7 +127,7 @@ const deckData = [
     chart: { labels: ["2022", "2023", "2024", "2025", "2026"], values: [6, 8, 9, 11, 14] },
     stats: { title: "In numbers", note: "Eight years of independent practice.", items: [["60+", "brands designed"], ["14", "awards and features"], ["9 / 10", "clients come back"]] },
     product: { title: "Services", items: [["Brand identity", "Logos, colours, type and voice."], ["Packaging", "From concept to print-ready files."], ["Web design", "Sites that are clear and fast."], ["Art direction", "Photo shoots and campaigns."]] },
-    team: { title: "Clients and partners", people: [["Saffron Kitchen", "Restaurant brand"], ["Northwind", "Logistics identity"], ["Loop Bottles", "Packaging"], ["Fieldnote", "Website"]] },
+    team: { title: "Clients and partners", kind: "happy customer client portrait smiling", people: [["Saffron Kitchen", "Restaurant brand"], ["Northwind", "Logistics identity"], ["Loop Bottles", "Packaging"], ["Fieldnote", "Website"]] },
     plans: { title: "Packages", items: [["Starter", "$1,800", "project", ["Logo and colours", "Business cards", "Two rounds"]], ["Brand", "$4,500", "project", ["Full identity", "Guidelines", "Social kit"]], ["Launch", "$9,000", "project", ["Identity and web", "Packaging", "Art direction"]]] },
     roadmap: { title: "A typical project", items: [["Week 1", "Discovery workshop"], ["Week 2", "Three directions"], ["Week 4", "Refined identity"], ["Week 6", "Files and guidelines"]] },
     closing: { title: "Let's work together", text: "Taking new projects from June.", contact: ["hello@zaraahmed.example", "+1 555 0123 987", "www.zaraahmed.example"] },
@@ -176,7 +179,7 @@ const deckData = [
     chart: { labels: ["Week 1", "Week 2", "Week 3", "Week 4"], values: [1, 2, 4, 5], unit: " h" },
     stats: { title: "What changes", note: "Survey of 300 people four weeks after this workshop.", items: [["5 hrs", "saved each week"], ["78%", "feel more in control"], ["3", "priorities, not 30"]] },
     product: { title: "Four tools", items: [["Time audit", "Track one normal day in 30-minute blocks."], ["Weekly reset", "A 30-minute Friday planning habit."], ["Focus blocks", "90 minutes, phone away, door closed."], ["The kind no", "Polite ways to protect your time."]] },
-    team: { title: "Today's groups", people: [["Team Sun", "tables 1–3"], ["Team Sea", "tables 4–6"], ["Team Sky", "tables 7–9"], ["Team Leaf", "tables 10–12"]] },
+    team: { title: "Today's groups", kind: "team colleagues group workshop", group: true, people: [["Team Sun", "tables 1–3"], ["Team Sea", "tables 4–6"], ["Team Sky", "tables 7–9"], ["Team Leaf", "tables 10–12"]] },
     plans: { title: "Pick your plan", items: [["Light", "1 habit", "this week", ["Weekly reset", "One focus block", "Check in Friday"]], ["Steady", "2 habits", "this month", ["Weekly reset", "Daily focus block", "Email twice a day"]], ["Full", "4 habits", "this quarter", ["All four tools", "Buddy check-ins", "Monthly review"]]] },
     roadmap: { title: "Today's plan", items: [["9:00", "Where time goes"], ["10:00", "Plan the week"], ["11:15", "Focus and saying no"], ["12:15", "Action plans"]] },
     closing: { title: "Thank you", text: "Slides and worksheets are in your inbox.", contact: ["nadia@trainers.example", "+1 555 0166 230", "Follow-up call in 4 weeks"] },
@@ -277,7 +280,9 @@ const SLIDES = {
     // Bold styles show the gradient-blob variant as mega type (huge tight capitals on the style colour).
     const pat = st.dark ? DARK_SWAP[pat0] || pat0 : LIGHT_SWAP[pat0] || (pat0 === "blob" && st.deco === "bold" ? "mega" : pat0);
     const S = Math.min(W, H);
-    const pg = { k: g.k, c: { head: d.name, kicker: d.kicker, sub: d.sub, details: [d.by, d.date].filter(Boolean), cta: null, price: null, deco: null, hint: d.hint }, W, H, S, b: 0, st, v: g.v, mir: g.v % 2 === 1, land: true, wide: false, tall: false, m: r1(H * 0.09) };
+    // A deck about a person (a portfolio) shows that person on the cover, like Canva's portfolio covers; a second
+    // photo (diamond pair) shows the deck's subject.
+    const pg = { k: g.k, c: { head: d.name, kicker: d.kicker, sub: d.sub, details: [d.by, d.date].filter(Boolean), cta: null, price: null, deco: null, hint: d.coverWho || d.hint, ...(d.coverWho ? { hint2: d.hint } : {}) }, W, H, S, b: 0, st, v: g.v, mir: g.v % 2 === 1, land: true, wide: false, tall: false, m: r1(H * 0.09) };
     pg.X = (x, w) => (pg.mir ? W - x - w : x);
     g.k.boost = 1.15;
     const out = PATTERNS[pat](pg);
@@ -305,7 +310,11 @@ const SLIDES = {
     const hd = heading(g, lab(g, "agenda", "Agenda"), d.agendaTitle || "Today's agenda", { x: left, w: colW, size: H * 0.125 });
     L.push(...hd.layers);
     const ph = { x: left, y: hd.bottom + H * 0.06, w: colW * 0.82, h: H - hd.bottom - H * 0.06 - H * 0.12 };
-    if (ph.h > H * 0.2) L.push(k.photo(ph.x, ph.y, ph.w, ph.h, { shape: "rounded", radius: H * 0.025, hint: d.hint }));
+    if (ph.h > H * 0.2) {
+      const f = k.photo(ph.x, ph.y, ph.w, ph.h, { shape: "rounded", radius: H * 0.025, hint: d.hint });
+      // "Who we are" (company profile): the team at work, like Canva's about-us slides.
+      L.push(d.agendaWho ? face(g.cast, f, d.agendaWho, { group: true }) : f);
+    }
     const rx = g.mir ? mx : W * 0.5, rw = W * 0.5 - mx, rowH = Math.min(H * 0.15, (H * 0.72) / items.length), y0 = H * 0.5 - (rowH * items.length) / 2;
     items.forEach((s, i) => {
       const y = y0 + i * rowH;
@@ -433,10 +442,11 @@ const SLIDES = {
         const ini = n.split(/\s+/).filter((w) => /^[A-Z]/.test(w)).slice(0, 2).map((w) => w[0]).join("") || n.slice(0, 2).toUpperCase();
         const t = k.text(ini, ax, 0, dd, { size: dd * 0.34, bold: true, family: st.head, color: "#ffffff", align: "center", lines: 1, name: "Initials" });
         t.y = r1(top + (dd - t.h) / 2); L.push(t);
-      } else if (square) L.push(k.photo(x, top, cw, dd, { shape: "rounded", radius: H * 0.025, hint: "team people portrait" }));
+      } else if (square) L.push(member(g.cast, k.photo(x, top, cw, dd, { shape: "rounded", radius: H * 0.025, hint: "team people portrait" }), n, r, { base: t.kind, group: t.group }));
       else {
         L.push(k.circle(x + (cw - dd) / 2 + dd * 0.08, top + dd * 0.08, dd, i % 2 ? st.acc2 === st.bg ? accentOn(st) : st.acc2 : accentOn(st), { name: "Colour disc", op: 0.9 }));
-        L.push(k.photo(x + (cw - dd) / 2, top, dd, dd, { shape: "circle", hint: "team people portrait" }));
+        // The member's own portrait: woman or man by the name, the kind by the role (doctor, teacher…) or the deck.
+        L.push(member(g.cast, k.photo(x + (cw - dd) / 2, top, dd, dd, { shape: "circle", hint: "team people portrait" }), n, r, { base: t.kind, group: t.group }));
       }
       const al = square && faces ? "left" : "center";
       L.push(k.text(n, x, top + dd + H * 0.04, cw, { size: H * 0.034, bold: true, color: st.ink, align: al, lines: 1, name: "Name" }));
@@ -531,13 +541,15 @@ export default function addDecks(K) {
     const x = CONTENT[key], st0 = DS[styleKey];
     if (!x || !st0) return null;
     const st = { key: styleKey, ...st0 };
-    const d = { ...x.c, hint: x.title.replace(/\b(deck|slides|presentation)\b/gi, "").trim() };
+    const d = { ...x.c, hint: x.c.photoHint || x.title.replace(/\b(deck|slides|presentation)\b/gi, "").trim() };
     const pick = photoPicker(`${x.title} ${x.tags}`, `deck.${key}.${styleKey}.v${v}`);
     const k = kit(K, W, H, st, pick, 0);
+    // People in this deck (team portraits): a picker of its own, so the other photos stay the deck's subject photos.
+    const cast = castFor(`deck.${key}.${styleKey}.v${v}:people`);
     const pages = [];
     order.forEach((name, i) => {
       if (name !== "cover" && !d[name]) return; // a deck without that part skips the slide
-      const g ={ K, k, st, W, H, S: Math.min(W, H), mx: r1(W * 0.06), my: r1(H * 0.1), v, mir: v % 2 === 1, d, n: pages.length + 1 };
+      const g ={ K, k, st, W, H, S: Math.min(W, H), mx: r1(W * 0.06), my: r1(H * 0.1), v, mir: v % 2 === 1, d, n: pages.length + 1, cast };
       const out = name === "stats2" ? SLIDES.stats(g, "stats2") : SLIDES[name](g);
       const pg = page(out.bg, out.layers);
       pg.notes = d.notes?.[i] ?? "";

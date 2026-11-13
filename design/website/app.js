@@ -6,10 +6,10 @@ import {
   BLOCK_TYPES, BLOCK_ORDER, BG_CHOICES, CORNERS, MODES, renderSite, normalizeSite, newBlock, moveBlock, insertBlock,
   removeBlock, duplicateBlock, insertIndex, anchors, blockTitle, getPath, setPath, clone, esc, slugify, ICON_NAMES, embedHeight,
   addPage, switchPage, renamePage, removePage, movePage, duplicatePage, pageList, pageFile, normSettings, cleanDomain, validGaId, sha256Hex, MAX_PAGES,
-  ANIMS, MAX_SECTIONS, canAddBlock, publishChecks, setPageSlug, setPageMeta, siteBase, cleanSubpath,
+  ANIMS, MAX_SECTIONS, canAddBlock, publishChecks, setPageSlug, setPageMeta, siteBase, cleanSubpath, videoEmbed, TEXT_ALIGNS,
 } from "./blocks.js";
 import { qrSvg } from "../code/qr.js";
-import { ICONS, PALETTES } from "./art.js";
+import { ICONS, PALETTES, photoPos } from "./art.js";
 import { TEMPLATES, makeTemplate, templateArt, blankSite } from "./templates.js";
 import { exportHtml as renderExport, exportHtmlFile, buildZipFile, absolutePhotos, zipName } from "./exporter.js";
 import * as gallery from "./gallery.js";
@@ -504,12 +504,51 @@ function renderEditPane() {
   bgBox.lastChild.append(row);
   if (!(b.type === "hero" && b.data.layout === "cover")) bgBox.append(imageField(b, "style.bgImage", "Background picture (darkened so text stays readable)", true, { style: true }));
   pane.append(bgBox);
+  if (b.type !== "header" && b.type !== "embed") pane.append(textStyleField(b));
   if (b.type !== "header") pane.append(animField(b));
   if (BLOCK_TYPES[b.type].anchor) {
     const ids = anchors(state.site);
     const lab = input(b, "anchor", "text", b.anchor ?? ids[b.id], { label: `Section link name (menu links use #${ids[b.id]})`, onInput: (v) => { b.anchor = slugify(v); } });
     pane.append(lab);
   }
+}
+
+/** This block's own text style (fonts, colour, alignment), e.g. from a Text panel font combination. Empty = the theme. */
+const TEXT_KEYS = ["hf", "bf", "fg", "align", "upper", "ls"];
+function textStyleField(b) {
+  const box = el("fieldset", { class: "sub-fld", id: "blockText" }, "<legend>Text style (this block)</legend>");
+  const opt = (v, l, on) => `<option value="${esc(v)}"${on ? " selected" : ""}>${esc(l)}</option>`;
+  const set = (k, v) => change(() => { if (v === "" || v == null || v === false) delete b.style[k]; else b.style[k] = v; }, { panels: false });
+  const row = (label, ctl) => { const l = el("label", { class: "fld" }, `<span>${esc(label)}</span>`); l.append(ctl); return l; };
+  const fam = (k, label) => {
+    const s = el("select", { class: "ad-input", "data-tstyle": k, "aria-label": label });
+    s.innerHTML = opt("", "Site font", !b.style[k]) + Object.entries(FONT_FAMILIES).map(([fk, f]) => opt(fk, f.label.replace(/ \(.*\)$/, ""), b.style[k] === fk)).join("");
+    s.addEventListener("change", () => set(k, s.value));
+    return row(label, s);
+  };
+  const al = el("select", { class: "ad-input", "data-tstyle": "align", "aria-label": "Text alignment" });
+  al.innerHTML = TEXT_ALIGNS.map(([v, l]) => opt(v, l, (b.style.align || "") === v)).join("");
+  al.addEventListener("change", () => set("align", al.value));
+  const own = /^#[0-9a-f]{6}$/i.test(b.style.fg || "");
+  const cs = el("select", { class: "ad-input", "data-tstyle": "fgmode", "aria-label": "Text colour" });
+  cs.innerHTML = opt("", "Site colours", !own) + opt("own", "Pick a colour…", own);
+  const cc = el("input", { type: "color", "data-tstyle": "fg", "aria-label": "Text colour for this block", value: own ? b.style.fg : "#1b2133", hidden: own ? null : true });
+  cs.addEventListener("change", () => { cc.hidden = cs.value !== "own"; set("fg", cs.value === "own" ? cc.value : ""); });
+  cc.addEventListener("input", () => change(() => { b.style.fg = cc.value; }, { key: `${b.id}:fg`, panels: false, delay: 60 }));
+  const cr = el("div", { class: "color-row" }); cr.append(cs, cc);
+  box.append(fam("hf", "Heading font"), fam("bf", "Text font"), row("Text colour", cr), row("Alignment", al));
+  if (b.style.upper || b.style.ls) {
+    const caps = el("input", { type: "checkbox", "data-tstyle": "upper" }); caps.checked = !!b.style.upper;
+    caps.addEventListener("change", () => set("upper", caps.checked));
+    const cl = el("label", { class: "fld chk" }); cl.append(caps, document.createTextNode(" Capital letters in headings"));
+    box.append(cl);
+  }
+  if (TEXT_KEYS.some((k) => b.style[k])) {
+    const clr = el("button", { type: "button", class: "btn small", "data-tstyle": "clear", text: "Use the site's text style" });
+    clr.addEventListener("click", () => { change(() => { for (const k of TEXT_KEYS) delete b.style[k]; }); toast("This block uses the site's fonts and colours again"); });
+    box.append(clr);
+  }
+  return box;
 }
 
 /* ------------------------------------------------------------------ Theme pane */
@@ -616,7 +655,7 @@ function saveLink(remove = false) {
 function renderTemplateGrid() {
   const g = $("#tplGrid");
   if (g.childElementCount) return;
-  const card = (id, label, desc, img) => `<button type="button" class="tpl" data-template="${id}" aria-label="Start a ${esc(label)} site"><span class="tpl-img">${img ? `<img src="${img}" alt="" loading="lazy">` : `<span class="tpl-blank" aria-hidden="true">+</span>`}</span><span class="meta"><b>${esc(label)}</b><small>${esc(desc)}</small></span></button>`;
+  const card = (id, label, desc, img) => `<button type="button" class="tpl" data-template="${id}" aria-label="Start a ${esc(label)} site"><span class="tpl-img">${img ? `<img src="${img}" alt=""${photoPos(img) ? ` style="object-position:${photoPos(img)}"` : ""} loading="lazy">` : `<span class="tpl-blank" aria-hidden="true">+</span>`}</span><span class="meta"><b>${esc(label)}</b><small>${esc(desc)}</small></span></button>`;
   g.innerHTML = TEMPLATES.map((t) => card(t.id, t.label, t.desc, templateArt(t.id))).join("") + card("blank", "Blank page", "Just a header, a headline and a footer. Add blocks yourself.", "");
 }
 async function applyTemplate(id) {
@@ -1186,17 +1225,6 @@ const LAYOUTS = {
 };
 const layGet = (b, L2) => (L2[0] === "style.variant" ? b.style?.variant || "" : b.data[L2[0].slice(5)]) ?? "";
 const laySet = (b, L2, v) => { if (L2[0] === "style.variant") b.style.variant = v; else b.data[L2[0].slice(5)] = v; };
-const STICKERS = [
-  ["Star", '<path d="M60 8l15 31 34 5-25 24 6 34-30-16-30 16 6-34-25-24 34-5z" fill="#f59e0b"/>'],
-  ["Heart", '<path d="M60 104S12 74 12 42a24 24 0 0148-8 24 24 0 0148 8c0 32-48 62-48 62z" fill="#e11d48"/>'],
-  ["Circle", '<circle cx="60" cy="60" r="48" fill="#5b4cf0"/>'],
-  ["Blob", '<path d="M88 22c18 14 22 42 10 62s-42 28-62 16S6 60 18 38 70 8 88 22z" fill="#14b8a6"/>'],
-  ["New badge", '<path d="M60 6l12 14 18-4 4 18 16 10-10 16 4 18-18 4-6 18-18-8-18 8-6-18-18-4 4-18-10-16 16-10 4-18 18 4z" fill="#ff7a59"/><text x="60" y="68" text-anchor="middle" font-family="Arial" font-weight="700" font-size="22" fill="#fff">NEW</text>'],
-  ["Arrow", '<path d="M14 52h62V30l32 30-32 30V68H14z" fill="#2563eb"/>'],
-  ["Sparkle", '<path d="M60 10c4 30 20 46 50 50-30 4-46 20-50 50-4-30-20-46-50-50 30-4 46-20 50-50z" fill="#8b5cf6"/>'],
-  ["Speech bubble", '<path d="M14 18h92v62H50l-24 22V80H14z" fill="#22c55e"/>'],
-];
-const stickerUrl = (body) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="480" height="480">${body}</svg>`);
 const IMG_FIELD = { hero: "image", about: "image", map: "image", header: "logo" };
 const selBlock = () => blockById(state.selected);
 
@@ -1267,7 +1295,9 @@ function buildBar() {
   prev.addEventListener("click", () => openPreview());
   const pub = el("button", { type: "button", class: "tool ws-b ws-pub-btn", id: "barPublish", title: "Publish: site settings and a ready-to-upload ZIP" }, svgI("M12 16V4M7 9l5-5 5 5M5 20h14") + "<span>Publish</span>");
   pub.addEventListener("click", () => openPublish());
-  bar.append($("#addBlockBtn"), sep(), name, mini("up", "Move up"), mini("down", "Move down"), mini("dup", "Duplicate"), mini("del", "Delete"), bg, bgc, lay, font, animB, edit, theme, sep(), $("#undoBtn"), $("#redoBtn"), sep(), $(".topbar .sizes"), sep(), prev, pub);
+  // Canva's order for a selected element: colour, Edit, layout (replace), text style, Animate, Position (move up / down),
+  // then duplicate and delete on the right; then undo / redo, preview sizes, Preview and Publish.
+  bar.append($("#addBlockBtn"), sep(), name, bg, bgc, edit, lay, font, animB, mini("up", "Move up"), mini("down", "Move down"), sep(), mini("dup", "Duplicate"), mini("del", "Delete"), theme, sep(), $("#undoBtn"), $("#redoBtn"), sep(), $(".topbar .sizes"), sep(), prev, pub);
   return bar;
 }
 function updateBar() {
@@ -1293,50 +1323,306 @@ function blockThumb(i) {
   const b = state.site.blocks[i];
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 100"><rect width="160" height="100" rx="8" fill="#f4f3ff"/><rect x="12" y="14" width="${b?.type === "hero" ? 110 : 80}" height="10" rx="5" fill="#5b4cf0"/><rect x="12" y="34" width="130" height="6" rx="3" fill="#c9c6f5"/><rect x="12" y="46" width="100" height="6" rx="3" fill="#c9c6f5"/><text x="12" y="84" font-family="Arial" font-size="13" font-weight="700" fill="#1b2133">${esc(b ? labelOf(b) : "")}</text></svg>`;
 }
-function insertImage(src, name = "Picture") {
-  const b = selBlock();
-  if (b && IMG_FIELD[b.type]) { change(() => { b.data[IMG_FIELD[b.type]] = src; }); toast(`Picture placed in the ${labelOf(b)} block`); return; }
-  if (b?.type === "gallery") { change(() => b.data.images.push({ src, caption: "" })); toast("Picture added to the gallery"); return; }
-  if (b?.type === "products") { change(() => b.data.items.push({ image: src, name: String(name || "New product").replace(/\.[a-z0-9]+$/i, "").slice(0, 40), price: "Rs 1,000", text: "" })); toast("Product added with this picture"); return; }
-  if (!canAddBlock(state.site)) { toast(fullMsg()); return; }
-  const nb = newBlock("about", { title: "", text: "Click to write about this picture.", image: src, button: { label: "", href: "" }, side: "left" });
-  change((s) => insertBlock(s, nb, insertIndex(s, state.selected)));
-  select(nb.id, { scroll: true });
-  toast("Picture added in a new block");
+/* ------------------------------------------------------------------ insert adapter (left-rail kit) */
+// The shared Elements / Text / Tools panels (../shared/panels/) insert through opts.insert. A website's native
+// objects are its sections (blocks): a picture goes into the picture under the drop point (or the selected block's
+// picture on a click), text and font combinations become text sections with their own fonts and colours, layout grids
+// become a gallery, frames an empty picture spot, tables a real HTML table, video links a Video block. Sections go after
+// the block under the drop point (before it when dropped on its top half), else after the selected block.
+// Shapes, graphics, charts and drawings use the kit's fallback (an SVG picture), which lands in the same places.
+const PAGE_NO_MSG = "Websites have no page numbers: every page has its own address in the menu.";
+const isPageNo = (x) => /^page number$/i.test(String(x?.name ?? x ?? ""));
+/** The block (and picture) under a drop point {clientX, clientY} in the preview frame, or null. */
+function dropTarget(pt) {
+  if (!pt || !Number.isFinite(pt.clientX) || !frameDoc?.body) return null;
+  const fr = $("#preview"), r = fr.getBoundingClientRect();
+  if (!r.width || pt.clientX < r.left || pt.clientX > r.right || pt.clientY < r.top || pt.clientY > r.bottom) return null;
+  const k = r.width / (fr.offsetWidth || r.width);
+  const x = (pt.clientX - r.left) / k, y = (pt.clientY - r.top) / k;
+  const node = frameDoc.elementFromPoint?.(x, y);
+  const blockEl = node?.closest?.("[data-block]");
+  const b = blockById(blockEl?.dataset.block);
+  if (!b) return null;
+  const br = blockEl.getBoundingClientRect();
+  return { b, img: node.closest("[data-img]")?.dataset.img || "", before: y < br.top + br.height / 2 };
 }
-function insertText(str, style) {
-  const heading = style === "heading" || style === "h1" || style === "subheading" || style === "h2";
-  if (!canAddBlock(state.site)) { toast(fullMsg()); return; }
-  const nb = newBlock("about", heading ? { title: String(str || "Add a heading"), text: style === "subheading" || style === "h2" ? "" : "Click to add your text.", image: "", button: { label: "", href: "" } } : { title: "", text: String(str || "Add a little bit of body text"), image: "", button: { label: "", href: "" } });
-  change((s) => insertBlock(s, nb, insertIndex(s, state.selected)));
-  select(nb.id, { scroll: true });
-  toast("Text block added. Click it in the preview to type.");
+/** Where a new section goes for a drop point (or the selected block on a click). */
+function placeIndex(pt) {
+  const t = dropTarget(pt), bl = state.site.blocks;
+  if (!t) return insertIndex(state.site, state.selected);
+  const i = bl.indexOf(t.b);
+  if (t.b.type === "header") return i + 1;
+  if (t.b.type === "footer") return i;
+  return t.before ? i : i + 1;
 }
-function renderElements(box) {
-  box.append(el("p", { class: "ws-hint", text: "Click a block to add it under the selected one. Stickers go into the selected block's picture." }));
-  box.append(el("h3", { class: "ws-h3", text: "Blocks" }));
+function addSection(type, data, style, pt, msg) {
+  if (!canAddBlock(state.site)) throw new Error(fullMsg());
+  const nb = newBlock(type, data, style);
+  const at = placeIndex(pt);
+  change((s) => insertBlock(s, nb, at));
+  select(nb.id, { scroll: true });
+  if (msg) toast(msg);
+  return nb.id;
+}
+const NO_BTN = { label: "", href: "" };
+function insertImage(src, name = "Picture", pt) {
+  if (isPageNo(name)) throw new Error(PAGE_NO_MSG);
+  const t = dropTarget(pt);
+  if (t?.img) { const b = t.b; change(() => { if (t.img.startsWith("style.")) setPath(b, t.img, src); else setPath(b.data, t.img, src); }); select(b.id); toast(`Picture placed in the ${labelOf(b)} block`); return b.id; }
+  const b = t ? t.b : pt ? null : selBlock();
+  if (b && !t && IMG_FIELD[b.type]) { change(() => { b.data[IMG_FIELD[b.type]] = src; }); toast(`Picture placed in the ${labelOf(b)} block`); return b.id; }
+  if (b?.type === "gallery") { change(() => b.data.images.push({ src, caption: "" })); select(b.id); toast("Picture added to the gallery"); return b.id; }
+  if (b?.type === "products") { change(() => b.data.items.push({ image: src, name: String(name || "New product").replace(/\.[a-z0-9]+$/i, "").slice(0, 40), price: "Rs 1,000", text: "" })); select(b.id); toast("Product added with this picture"); return b.id; }
+  return addSection("about", { title: "", text: "Click to write about this picture.", image: src, button: NO_BTN, side: "left" }, {}, pt, "Picture added in a new block");
+}
+/** A FONT_FAMILIES key for a kit family (a key, or a CSS family name), else "". */
+function famKey(f) {
+  if (!f) return "";
+  if (FONT_FAMILIES[f]) return f;
+  const n = String(f).split(",")[0].replace(/["']/g, "").trim().toLowerCase();
+  return Object.keys(FONT_FAMILIES).find((k) => FONT_FAMILIES[k].css.toLowerCase().includes(n) || FONT_FAMILIES[k].label.toLowerCase().startsWith(n)) || "";
+}
+const ROLE_TEXT = { heading: "Add a heading", subheading: "Add a subheading", body: "Add a little bit of body text", caption: "Add a caption" };
+/** Old callers: text(str, style). Kit: text({content, role, family, color, align, uppercase, letterSpacing…}, pt). */
+function textSpec(spec, style) {
+  if (typeof spec === "string" || spec == null) {
+    const role = style === "heading" || style === "h1" ? "heading" : style === "subheading" || style === "h2" ? "subheading" : "body";
+    return { content: spec == null ? "" : String(spec), role };
+  }
+  return spec;
+}
+/** Block style from text specs: heading spec -> heading font, body spec -> body font; colour/alignment/caps of the first. */
+function textBlockStyle(head, body) {
+  const st = {}, f = head || body;
+  const hf = famKey(head?.family), bf = famKey(body?.family);
+  if (hf) st.hf = hf;
+  if (bf) st.bf = bf;
+  if (/^#[0-9a-f]{3,6}$/i.test(f?.color || "")) st.fg = f.color.length === 4 ? "#" + [...f.color.slice(1)].map((c) => c + c).join("") : f.color.toLowerCase();
+  if (["left", "center", "right"].includes(f?.align)) st.align = f.align;
+  if (head?.uppercase) st.upper = true;
+  if (Number(head?.letterSpacing)) st.ls = Math.max(-0.5, Math.min(1, Number(head.letterSpacing)));
+  return st;
+}
+function insertText(spec, pt) {
+  const s = textSpec(spec, pt), role = s.role || "body";
+  if (isPageNo(s)) throw new Error(PAGE_NO_MSG);
+  if (typeof spec === "string" || spec == null) pt = undefined; // old form: second argument was the style
+  const content = String(s.content ?? "").trim() || ROLE_TEXT[role] || ROLE_TEXT.body;
+  const heading = role === "heading" || role === "subheading";
+  const data = heading ? { title: content, text: role === "subheading" ? "" : "Click to add your text.", image: "", button: NO_BTN, side: "none" } : { title: "", text: content, image: "", button: NO_BTN, side: "none" };
+  return addSection("about", data, textBlockStyle(heading ? s : null, heading ? null : s), pt, "Text block added. Click it in the preview to type.");
+}
+/** Font combinations: one text section, the first (biggest) line as its title and the rest as its text. */
+function insertTextGroup(specs, pt) {
+  const list = (Array.isArray(specs) ? specs : [specs]).map((x) => textSpec(x)).filter((x) => String(x.content ?? "").trim());
+  if (!list.length) return insertText({ role: "heading" }, pt);
+  const order = { heading: 0, subheading: 1, body: 2, caption: 3 };
+  const sorted = [...list].sort((a, b) => (order[a.role] ?? 2) - (order[b.role] ?? 2) || (Number(b.rel) || 0) - (Number(a.rel) || 0));
+  const head = sorted[0], rest = list.filter((x) => x !== head);
+  const data = { title: String(head.content).trim(), text: rest.map((x) => String(x.content).trim()).join("\n"), image: "", button: NO_BTN, side: "none" };
+  return addSection("about", data, textBlockStyle(head, rest[0] || null), pt, "Text block added with its fonts. Click it in the preview to type.");
+}
+/** Layout grids: a gallery with one empty picture spot per cell (mosaic when the cells differ in size). */
+function insertGrid(spec, pt) {
+  const cells = Array.isArray(spec?.cells) && spec.cells.length ? spec.cells.slice(0, 12) : [[0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5], [0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5]];
+  const sizes = new Set(cells.map((c) => `${Math.round(c[2] * 100)}x${Math.round(c[3] * 100)}`));
+  return addSection("gallery", { title: "", intro: "", images: cells.map(() => ({ src: "", caption: "" })) }, sizes.size > 1 ? { variant: "mosaic" } : {}, pt, "Grid added. Click a spot to add its picture.");
+}
+/** Frames: an empty picture spot (a text-and-picture section) to fill with a photo. */
+function insertFrame(spec, pt) {
+  const t = dropTarget(pt);
+  if (t?.img) throw new Error("Drop a photo on a picture to replace it. Frames go between sections.");
+  return addSection("about", { title: "", text: "", image: "", button: NO_BTN, side: "left" }, {}, pt, "Picture frame added. Click it to add your photo.");
+}
+const cssColor = (c, d) => (/^#[0-9a-f]{3,8}$/i.test(String(c || "")) || /^rgba?\([\d\s.,%]+\)$/i.test(String(c || "")) ? String(c) : d);
+/** A real, responsive HTML table from a kit table spec. */
+function tableHtml(spec = {}) {
+  const rows = Math.max(1, Math.min(30, +spec.rows || spec.cells?.length || 3)), cols = Math.max(1, Math.min(12, +spec.cols || spec.cells?.[0]?.length || 3));
+  const st = spec.style || {}, head = spec.header !== false;
+  const hb = cssColor(st.head, "#5b4cf0"), stripe = cssColor(st.stripe, ""), line = cssColor(st.border, "#d9dbe7");
+  const cell = (r, c) => esc(String(spec.cells?.[r]?.[c] ?? (head && r === 0 ? `Heading ${c + 1}` : "")));
+  let h = `<table style="width:100%;border-collapse:collapse;font:15px/1.45 system-ui,sans-serif;color:#1b2133">`;
+  for (let r = 0; r < rows; r++) {
+    const th = head && r === 0, bg = th ? hb : stripe && r % 2 === (head ? 0 : 1) ? stripe : "#ffffff";
+    h += `<tr style="background:${bg}">`;
+    for (let c = 0; c < cols; c++) h += `<${th ? "th" : "td"} style="border:1px solid ${line};padding:10px 12px;text-align:left${th ? ";color:#fff;font-weight:700" : ""}">${cell(r, c)}</${th ? "th" : "td"}>`;
+    h += "</tr>";
+  }
+  return h + "</table>";
+}
+function insertTable(spec, pt) {
+  const rows = Math.max(1, Math.min(30, +spec?.rows || spec?.cells?.length || 3));
+  return addSection("embed", { title: "", code: `<div style="padding:4px;overflow-x:auto">${tableHtml(spec)}</div>`, height: embedHeight(rows * 44 + 24) }, {}, pt, "Table added. Change its words in Edit (HTML code).");
+}
+/** Video links play in a Video block; our animated clips (SVG) are pictures that keep moving; others use the poster. */
+function insertVideo(spec, pt) {
+  const src = String(spec?.src || "");
+  if (videoEmbed(src)) {
+    const a = Number(spec.aspect) || 16 / 9, ratio = a < 0.8 ? "9:16" : a < 1.15 ? "1:1" : a < 1.5 ? "4:3" : "16:9";
+    return addSection("video", { title: "", intro: "", url: src, ratio }, {}, pt, "Video block added. It plays in Preview and on the published site.");
+  }
+  if (/^data:image\/svg\+xml|\.svg(\?|$)/i.test(src)) return insertImage(src, spec.name || "Animation", pt);
+  return false; // not a video a website can play: the kit falls back to the poster picture
+}
+/** The adapter handed to the shell (and exposed as adApp.insert for tests). */
+const INSERT = {
+  image: (src, name, pt) => insertImage(src, name, pt),
+  text: (spec, pt) => insertText(spec, pt),
+  textGroup: (specs, pt) => insertTextGroup(specs, pt),
+  grid: (spec, pt) => insertGrid(spec, pt),
+  frame: (spec, pt) => insertFrame(spec, pt),
+  table: (spec, pt) => insertTable(spec, pt),
+  video: (spec, pt) => insertVideo(spec, pt),
+  pageNumber: () => { throw new Error(PAGE_NO_MSG); },
+  color: (hex) => { const b = selBlock(); if (b) change(() => { b.style.bg = hex; }); else change((s) => { s.theme.primary = hex; }); },
+  font: (key) => { if (!FONT_FAMILIES[key]) return; change((s) => { s.theme.headingFont = key; }); toast("Heading font applied"); },
+};
+/** Elements panel, own section: the website's sections (blocks) to add. */
+function renderSections(box) {
+  box.append(el("p", { class: "ws-hint", text: "Website sections: click one to add it under the selected section." }));
   const grid = el("div", { class: "ws-elgrid" });
   for (const type of BLOCK_ORDER) {
     const c = el("button", { type: "button", class: "ws-el", "data-type": type, title: BLOCK_TYPES[type].desc }, `<b>${esc(BLOCK_TYPES[type].label)}</b><small>${esc(BLOCK_TYPES[type].desc)}</small>`);
     c.addEventListener("click", () => addBlock(type));
     grid.append(c);
   }
-  box.append(grid, el("h3", { class: "ws-h3", text: "Shapes and stickers" }));
-  const sg = el("div", { class: "ws-stickers" });
-  for (const [name, body] of STICKERS) {
-    const c = el("button", { type: "button", class: "ws-sticker", "data-sticker": name, "aria-label": `Add sticker: ${name}`, title: name }, `<svg viewBox="0 0 120 120" aria-hidden="true">${body}</svg>`);
-    c.addEventListener("click", () => insertImage(stickerUrl(body), name));
-    sg.append(c);
-  }
-  box.append(sg);
+  box.append(grid);
 }
-function renderTextPanel(box) {
-  for (const [label, style, cls] of [["Add a heading", "heading", "big"], ["Add a subheading", "subheading", "mid"], ["Add a little bit of body text", "body", "small"]]) {
-    const b = el("button", { type: "button", class: `ws-textbtn ${cls}`, "data-text": style, text: label });
-    b.addEventListener("click", () => insertText(label, style));
-    box.append(b);
+/* ------------------------------------------------------------------ Design panel: Layouts and Styles tabs, template pages */
+// Canva's Design panel = Templates | Layouts | Styles. Layouts: ready page layouts (a new page with those sections, or
+// this page's sections replaced) and the selected section's own layouts. Styles: colour palettes, font sets, corners
+// and light / dark for the whole site. Every click is one undo step.
+const PAGE_LAYOUTS = [
+  ["landing", "Landing page", ["hero", "features", "testimonials", "contact"]],
+  ["about", "About us", ["hero", "about", "team", "timeline"]],
+  ["services", "Services", ["hero", "features", "pricing", "faq", "contact"]],
+  ["shop", "Shop", ["hero", "products", "testimonials", "faq"]],
+  ["portfolio", "Portfolio", ["hero", "gallery", "testimonials", "contact"]],
+  ["event", "Event", ["hero", "timeline", "map", "contact"]],
+  ["menu", "Menu and prices", ["hero", "pricing", "gallery", "map"]],
+  ["video", "Video page", ["hero", "video", "features", "contact"]],
+  ["contact", "Contact", ["hero", "contact", "map", "faq"]],
+];
+/** A small wireframe of a stack of sections (our own drawing). */
+function layoutThumb(types) {
+  const W = 160, n = types.length, gap = 3, h = (100 - 8 - gap * (n - 1)) / n;
+  const r = (x, y, w, hh, f, rx = 2) => `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${hh.toFixed(1)}" rx="${rx}" fill="${f}"/>`;
+  let y = 4, body = "";
+  for (const t of types) {
+    body += r(6, y, W - 12, h, t === "hero" ? "#e4e1ff" : "#ffffff", 3);
+    const cy = y + h / 2, ln = (x, w, yy = cy - 1.5, f = "#c9c6f5") => r(x, yy, w, 3, f, 1.5);
+    if (t === "hero") body += r(12, cy - 5, 58, 5, "#5b4cf0") + ln(12, 44, cy + 3) + r(98, y + 3, 50, h - 6, "#bdb7f7");
+    else if (["features", "pricing", "products", "team"].includes(t)) for (let k = 0; k < 3; k++) body += r(14 + k * 46, y + 3, 40, h - 6, "#ecebff");
+    else if (t === "gallery") for (let k = 0; k < 4; k++) body += r(14 + k * 34, y + 3, 30, h - 6, "#d8d4fb");
+    else if (t === "testimonials") body += r(14, y + 3, 64, h - 6, "#ecebff") + r(84, y + 3, 64, h - 6, "#ecebff");
+    else if (t === "about") body += r(14, y + 3, 50, h - 6, "#bdb7f7") + ln(72, 60, cy - 4) + ln(72, 44, cy + 2);
+    else if (t === "video") body += r(44, y + 3, 72, h - 6, "#1f2440") + `<path d="M77 ${(cy - 4).toFixed(1)}l8 4-8 4z" fill="#fff"/>`;
+    else if (t === "map" || t === "contact") body += ln(14, 56, cy - 4) + ln(14, 40, cy + 2) + r(90, y + 3, 56, h - 6, t === "map" ? "#cfe9df" : "#ecebff");
+    else body += ln(14, 120, cy - 4) + ln(14, 90, cy + 2);
+    y += h + gap;
   }
-  box.append(el("h3", { class: "ws-h3", text: "Font combinations" }), el("p", { class: "ws-hint", text: "Sets the fonts for the whole site." }));
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 100" aria-hidden="true"><rect width="160" height="100" rx="6" fill="#f4f3ff"/>${body}</svg>`;
+}
+const layoutBlocks = (types, name) => types.map((t) => (t === "hero" ? newBlock("hero", { eyebrow: "", title: name, text: "Click any text to change it.", layout: "minimal", primary: { label: "", href: "" }, secondary: { label: "", href: "" }, image: "" }) : newBlock(t)));
+/** Adds a page with a layout (as) a new page, or replaces this page's sections (menu bar and footer stay). */
+function useLayout(id, where = "new") {
+  const L2 = PAGE_LAYOUTS.find((x) => x[0] === id);
+  if (!L2) throw new Error("That layout was not found.");
+  const [, name, types] = L2;
+  if (where === "here") {
+    const blocks = layoutBlocks(types, name);
+    change((s) => { const head = s.blocks.filter((b) => b.type === "header"), foot = s.blocks.filter((b) => b.type === "footer"); s.blocks.splice(0, s.blocks.length, ...head, ...blocks, ...foot); if (s.pages?.length) s.pages[s.page || 0].blocks = s.blocks; });
+    state.selected = blocks[0].id; renderAll(); refreshPagesPanel();
+    toast(`${name} layout used on this page. Undo brings the old sections back.`);
+    return true;
+  }
+  if (pageList(state.site).length >= MAX_PAGES) throw new Error(`A site can have up to ${MAX_PAGES} pages.`);
+  const i = change((s) => addPage(s, name, layoutBlocks(types, name)));
+  state.selected = null; renderAll(); refreshPagesPanel();
+  toast(`Page added: ${state.site.pages[i].name}, with the ${name} layout.`);
+  return i;
+}
+function renderDesignLayouts(box) {
+  box._shown = () => renderDesignLayouts(box); // the Design tab redraws each time it is shown (selection, theme)
+  box.replaceChildren();
+  const b = selBlock(), L2 = b && LAYOUTS[b.type];
+  if (L2) {
+    box.append(el("h3", { class: "ws-h3", text: `This section: ${labelOf(b)}` }));
+    const row = el("div", { class: "ws-laysec" });
+    const cur = layGet(b, L2) || L2[1][0][0];
+    for (const [v, label] of L2[1]) {
+      const x = el("button", { type: "button", class: "ws-chip" + (v === cur ? " on" : ""), "data-section-layout": v, "aria-pressed": String(v === cur), text: label });
+      x.addEventListener("click", () => { const bb = selBlock(); if (!bb || !LAYOUTS[bb.type]) return; change(() => laySet(bb, LAYOUTS[bb.type], v)); renderDesignLayouts(box); });
+      row.append(x);
+    }
+    box.append(row);
+  } else box.append(el("p", { class: "ws-hint", text: "Select a section (hero, about, features, gallery or reviews) to see its own layouts here." }));
+  box.append(el("h3", { class: "ws-h3", text: "Page layouts" }), el("p", { class: "ws-hint", text: "Click a layout to add a page with it, or use it on this page." }));
+  const grid = el("div", { class: "ws-laygrid" });
+  for (const [id, name, types] of PAGE_LAYOUTS) {
+    const card = el("div", { class: "ws-laycard", "data-layout": id });
+    const pic = el("button", { type: "button", class: "ws-laypic", "aria-label": `Add a page with the ${name} layout`, title: types.map((t) => BLOCK_TYPES[t]?.label || t).join(", ") }, layoutThumb(types) + `<span>${esc(name)}</span>`);
+    pic.addEventListener("click", () => { try { useLayout(id, "new"); } catch (e) { toast(e.message); } });
+    const here = el("button", { type: "button", class: "ws-layhere", "data-layout-here": id, text: "Use on this page" });
+    here.addEventListener("click", () => { try { useLayout(id, "here"); renderDesignLayouts(box); } catch (e) { toast(e.message); } });
+    card.append(pic, here); grid.append(card);
+  }
+  box.append(grid);
+}
+function renderDesignStyles(box) {
+  box._shown = () => renderDesignStyles(box); // the Design tab redraws each time it is shown (selection, theme)
+  box.replaceChildren();
+  const T0 = state.site.theme;
+  box.append(el("h3", { class: "ws-h3", text: "Colour palettes" }));
+  const pal = el("div", { class: "ws-palgrid" });
+  const sets = [...Object.entries(PALETTES).map(([k, p]) => ({ id: k, name: k[0].toUpperCase() + k.slice(1), colors: [p.a, p.b] })), ...gallery.PALETTES_LIST];
+  for (const p of sets) {
+    const on = T0.primary === p.colors[0] && T0.accent === p.colors[1];
+    const x = el("button", { type: "button", class: "ws-pal" + (on ? " on" : ""), "data-palette": p.id, "aria-pressed": String(on), "aria-label": `Use the ${p.name} colours`, title: p.name }, `<span class="dots"><i style="background:${esc(p.colors[0])}"></i><i style="background:${esc(p.colors[1])}"></i></span><small>${esc(p.name)}</small>`);
+    x.addEventListener("click", () => { change((s) => { s.theme.primary = p.colors[0]; s.theme.accent = p.colors[1]; }); toast(`${p.name} colours used on the whole site`); renderDesignStyles(box); });
+    pal.append(x);
+  }
+  box.append(pal, el("h3", { class: "ws-h3", text: "Font sets" }));
+  renderSiteFonts(box);
+  box.append(el("h3", { class: "ws-h3", text: "Corners and mode" }));
+  const row = el("div", { class: "ws-laysec" });
+  for (const [k, c] of Object.entries(CORNERS)) {
+    const x = el("button", { type: "button", class: "ws-chip" + (T0.corners === k ? " on" : ""), "data-corners": k, text: `${c.label} corners` });
+    x.addEventListener("click", () => { change((s) => { s.theme.corners = k; }); renderDesignStyles(box); });
+    row.append(x);
+  }
+  for (const m of Object.keys(MODES)) {
+    const x = el("button", { type: "button", class: "ws-chip" + ((T0.mode || "light") === m ? " on" : ""), "data-mode": m, text: m === "dark" ? "Dark site" : "Light site" });
+    x.addEventListener("click", () => { change((s) => { s.theme.mode = m; s.theme.bg = MODES[m].bg; s.theme.text = MODES[m].text; }); renderDesignStyles(box); });
+    row.append(x);
+  }
+  box.append(row);
+}
+/** Template detail view: one page of a (multi-page) template added to this site as a new page. */
+function applyTemplatePage(id, i = 0) {
+  if (!gallery.hasTemplate(id)) throw new Error("That template was not found.");
+  const src = gallery.makeSite(id);
+  const pages = src.pages?.length ? src.pages : [{ name: "Home", blocks: src.blocks }];
+  const k = Math.max(0, Math.min(pages.length - 1, i | 0)), pg = pages[k];
+  if (pageList(state.site).length >= MAX_PAGES) throw new Error(`A site can have up to ${MAX_PAGES} pages.`);
+  const name = k === 0 || !pg.name || /^home$/i.test(pg.name) ? String(src.name || "New page").slice(0, 40) : pg.name;
+  const body = pg.blocks.filter((b) => b.type !== "header" && b.type !== "footer").map((b) => newBlock(b.type, b.data, b.style));
+  const at = change((s) => addPage(s, name, body));
+  state.selected = null; renderAll(); refreshPagesPanel();
+  toast(`Page added: ${state.site.pages[at].name}, from the template. Its colours stay the site's (use "Apply this template style").`);
+  return true;
+}
+/** Template detail view: the template's colours, fonts, corners and light / dark mode on this site (words stay). */
+function applyTemplateStyle(id) {
+  if (!gallery.hasTemplate(id)) throw new Error("That template was not found.");
+  const t = gallery.makeSite(id).theme || {};
+  change((s) => { for (const k of ["primary", "accent", "bg", "text", "headingFont", "bodyFont", "corners", "mode"]) if (t[k]) s.theme[k] = t[k]; });
+  toast("Template style applied: colours and fonts. Your words and pictures stay.");
+  return true;
+}
+/** Design > Styles: font pairs for the whole site (the theme), not one text block. */
+function renderSiteFonts(box) {
+  box.append(el("p", { class: "ws-hint", text: "Fonts for the whole site: every heading and text changes." }));
   const keys = Object.keys(FONT_FAMILIES);
   const pairs = keys.flatMap((hk) => keys.filter((bk) => bk !== hk && bk !== "mono").slice(0, 2).map((bk) => [hk, bk])).slice(0, 8);
   for (const [hk, bk] of pairs) {
@@ -1389,21 +1675,21 @@ async function mountFrame() {
         { label: "Preview", act: () => openPreview(), icon: "eye" },
         { label: "Preview site in a new tab", act: previewSite, icon: "eye" },
       ], link: () => location.origin + "/tools/websites" },
-      templates: { gallery, tool: "websites", apply: async (id) => { await applyTemplate(id); }, placeholder: "Search website templates" },
+      // Template detail view: "Apply all N pages" = apply; one page = a new page of this site; the template's style =
+      // its colours and fonts on this site.
+      templates: { gallery, tool: "websites", apply: async (id) => { await applyTemplate(id); }, applyPage: (id, i) => applyTemplatePage(id, i), applyStyle: (id) => applyTemplateStyle(id), placeholder: "Search website templates" },
+      // Design panel tabs next to Templates (Canva: Templates | Layouts | Styles).
+      design: { layouts: (box) => renderDesignLayouts(box), styles: (box) => renderDesignStyles(box) },
+      // Elements, Text and Tools are the shared kit panels (Canva structure); the website adds its sections to Elements
+      // as one extra section (site-wide fonts are in Design > Styles). No `label` here: it would rename the rail button.
       panels: {
-        elements: (box) => renderElements(box),
-        text: (box) => renderTextPanel(box),
+        elements: { title: "Website sections", kitLabel: "Website sections", render: (box) => renderSections(box) },
         layers: { label: "Blocks", icon: "outline", render: (box) => { box.append($("#side")); } },
         pages: { label: "Pages", icon: "pages", render: (box) => renderPagesPanel(box), refresh: true },
         mobile: { label: "Mobile preview", icon: "device", render: (box) => renderMobilePanel(box), refresh: true },
       },
-      rail: ["templates", "elements", "text", "layers", "pages", "brand", "uploads", "mobile", "projects", "apps", "translate"],
-      insert: {
-        image: (src, name) => insertImage(src, name),
-        text: (str, style) => insertText(str, style),
-        color: (hex) => { const b = selBlock(); if (b) change(() => { b.style.bg = hex; }); else change((s) => { s.theme.primary = hex; }); },
-        font: (key) => { if (!FONT_FAMILIES[key]) return; change((s) => { s.theme.headingFont = key; }); toast("Heading font applied"); },
-      },
+      rail: ["templates", "elements", "text", "brand", "uploads", "tools", "layers", "pages", "mobile", "projects", "apps", "translate"],
+      insert: INSERT,
       getText: textOf, setText: setTextOf,
       projects: {
         save: async () => { await flush(); return { name: state.site.name, data: clone(state.site) }; },
@@ -1488,5 +1774,9 @@ window.adApp = {
   setAnim, animateAll, checks: () => publishChecks(state.site), websiteQr, websiteQrPng, maxSections: MAX_SECTIONS,
   setPageMeta: (i, meta) => change((s) => setPageMeta(s, i, meta)), setPageSlug: (i, path) => change((s) => setPageSlug(s, i, path)),
   setBlockData: (blockId, patch) => { const b = blockById(blockId); if (b) change(() => Object.assign(b.data, patch)); return !!b; },
+  // Left-rail kit insert adapter (Elements, Text, Tools): adApp.insert.text({content, role}, pt) etc.
+  // Design panel (Layouts / Styles) and the template detail view (one page, the template's style).
+  useLayout, applyTemplatePage, applyTemplateStyle, design: { layouts: (box) => renderDesignLayouts(box), styles: (box) => renderDesignStyles(box) }, layouts: () => PAGE_LAYOUTS.map(([id, name, types]) => ({ id, name, types })),
+  insert: INSERT, blockAt: (pt) => { const t = dropTarget(pt); return t ? { id: t.b.id, type: t.b.type, img: t.img, before: t.before } : null; },
 };
 start().catch((e) => { console.error(e); toast("Something went wrong while starting: " + e.message); });

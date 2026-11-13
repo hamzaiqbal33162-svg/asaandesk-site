@@ -1,12 +1,29 @@
 // AsaanDesk Sheets: one design kit for every template (pure module, no DOM). It gives every sheet the same
 // professional pattern: a merged title banner (big bold title, subtitle line, accent rule and, where it fits, a real
 // photo tile from the shared library), KPI summary cards, a solid header row, zebra rows with hairlines, a ruled total
-// row and charts in the template's own colours. Colours come from a theme th = { band, band2, head, ink, zebra, photo }.
+// row and charts in the template's own colours. Colours come from a theme th = { band, band2, head, ink, zebra, photo,
+// photoPos }: sheets about people (team, customers, social media, candidates, volunteers) get a people photo whose face
+// position (photoPos, CSS object-position) is kept as the image cell's pos style.
 
-import { PHOTOS, themesFor, pickPhoto, photoUrl } from "../shared/photo-library.js";
+import { PHOTOS, ALL_PHOTOS, themesFor, pickPhoto, pickPerson, photoUrl, objectPosition } from "../shared/photo-library.js";
 
-/** Small (thumbnail) version of a library photo URL, for template pictures. */
-export function photoThumb(url) { const f = String(url).split("/").pop(); const p = PHOTOS.find((x) => x.file === f); return p ? photoUrl(p, "thumb") : url; }
+const BY_FILE = new Map(ALL_PHOTOS.map((p) => [p.file, p]));
+/** Library photo record of a photo URL (places and people), or null. */
+export const photoOf = (url) => BY_FILE.get(String(url || "").split("/").pop()) || null;
+/** Small (thumbnail) version of a library photo URL (places and people), for template pictures. */
+export function photoThumb(url) { const p = photoOf(url); return p ? photoUrl(p, "thumb") : url; }
+/** Banner photo of a people spot ("team colleagues staff", "smiling customer"…): { photo: full-size URL, photoPos: CSS
+ *  position that keeps the face in view }. Deterministic by seed (the template id). opts go to pickPerson (a group spot
+ *  asks for { group: true, landscape: true }: the tile is wide). */
+export function personPhoto(kind, seed, opts = {}) {
+  const p = pickPerson(kind, seed, opts);
+  return { photo: photoUrl(p, "full"), photoPos: objectPosition(p) };
+}
+/** "48% 30%" style focus of an image cell → [0.48, 0.3] (null when absent or malformed). */
+export function posOf(pos) {
+  const m = /^(\d{1,3}(?:\.\d+)?)% (\d{1,3}(?:\.\d+)?)%$/.exec(String(pos || "").trim());
+  return m ? [Math.min(100, +m[1]) / 100, Math.min(100, +m[2]) / 100] : null;
+}
 /** Banner photo for a topic (shared library): only photos of the topic's leading themes, picked by the seed. */
 export function topicPhoto(topic, seed, size = "full") {
   const list = [];
@@ -50,7 +67,8 @@ export function sheetKit(name, existing = null) {
     height(r, px) { s.rowH[r] = px; return t; },
     merge(r1, c1, r2, c2) { if (r2 > r1 || c2 > c1) (s.merges ||= []).push({ r1, c1, r2, c2 }); return t; },
     image(r, c, src, st) { if (src) { (s.images ||= {})[ref(r, c)] = src; t.style(r, c, { fit: "cover", ...(st || {}) }); } return t; },
-    /** Title banner on rows 0 (title) and 1 (subtitle) across columns 0..c2, with a photo tile at the right when th.photo. */
+    /** Title banner on rows 0 (title) and 1 (subtitle) across columns 0..c2, with a photo tile at the right when th.photo
+     *  (a people photo keeps its face in view with th.photoPos, stored as the image cell's pos style). */
     title(text, c2, th, note) {
       t.th = th;
       const last = note ? 1 : 0, pc = th.photo && c2 >= 4 ? (c2 >= 7 ? 2 : 1) : 0, tc2 = c2 - pc;
@@ -58,7 +76,7 @@ export function sheetKit(name, existing = null) {
       t.put(0, 0, text, { b: true, size: 30, valign: "middle", ...(th.font ? { font: th.font } : {}) }).height(0, 70).merge(0, 0, 0, tc2);
       if (note) t.put(1, 0, note, { size: 12, color: mix(th.band, "#ffffff", 0.82), valign: "top" }).height(1, 30).merge(1, 0, 1, tc2);
       t.range(last, 0, last, c2, { bd: "b", bc: th.band2 || th.ink, bs: "thick" });
-      if (pc) t.image(0, tc2 + 1, th.photo, { fill: th.band }).merge(0, tc2 + 1, last, c2);
+      if (pc) t.image(0, tc2 + 1, th.photo, { fill: th.band, ...(th.photoPos ? { pos: th.photoPos } : {}) }).merge(0, tc2 + 1, last, c2);
       return t;
     },
     /** Solid header row. */

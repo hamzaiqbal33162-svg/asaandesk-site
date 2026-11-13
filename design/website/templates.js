@@ -44,7 +44,7 @@ const T = {
       { primary: "#c2410c", accent: "#eab308", headingFont: "serif", bodyFont: "sans", corners: "round" }, [
         newBlock("header", { brand: "Spice Garden", links: [L("Menu", "#pricing"), L("Our story", "#about"), L("Gallery", "#gallery"), L("Reviews", "#reviews"), L("Visit", "#location")], cta: L("Book a table", "#contact") }),
         newBlock("hero", { eyebrow: "Open daily · 12pm to midnight", title: "Fresh desi food, cooked slow", text: "Charcoal karahi, handmade naan and our grandmother's recipes, served warm in the heart of the city.", primary: L("Book a table", "#contact"), secondary: L("See the menu", "#pricing"), image: ph("restaurant dining dinner banquet", "hero"), layout: "cover" }),
-        newBlock("about", { title: "Our story", text: "Spice Garden started as a small family kitchen in 2012. Today we still grind our own spices every morning and cook every karahi to order.\nNo shortcuts, no frozen food: just honest flavour.", image: ph("restaurant kitchen chef cooking", "about"), button: L("Book a table", "#contact"), side: "left" }),
+        newBlock("about", { title: "Our story", text: "Spice Garden started as a small family kitchen in 2012. Today we still grind our own spices every morning and cook every karahi to order.\nNo shortcuts, no frozen food: just honest flavour.", image: ph.person("chef cooking kitchen #chef", "about"), button: L("Book a table", "#contact"), side: "left" }),
         newBlock("pricing", { title: "Family deals", intro: "Every deal comes with fresh naan, raita and salad.", plans: [
           { name: "Dinner for two", price: "Rs 3,200", period: "", text: "Perfect for a quiet night out.", features: ["Half chicken karahi", "2 naan and raita", "2 soft drinks"], button: L("Order on WhatsApp", "https://wa.me/" + WA + "?text=Dinner%20for%20two%20please"), featured: false },
           { name: "Family feast", price: "Rs 7,900", period: "", text: "Feeds 4 to 5 people.", features: ["Full mutton karahi", "Chicken tikka (6 pieces)", "Biryani (family size)", "Kheer for everyone"], button: L("Order on WhatsApp", "https://wa.me/" + WA + "?text=Family%20feast%20please"), featured: true },
@@ -68,7 +68,7 @@ const T = {
     make: (ph = photoPicker("portfolio")) => site("Sana Malik · Designer", "Brand identities, social media designs and packaging for small businesses.",
       { primary: "#e11d48", accent: "#7c3aed", headingFont: "sans", bodyFont: "sans", corners: "round" }, [
         newBlock("header", { brand: "Sana Malik", links: [L("Work", "#gallery"), L("Services", "#features"), L("About", "#about"), L("Contact", "#contact")], cta: L("Hire me", "#contact") }),
-        newBlock("hero", { eyebrow: "Graphic designer · Islamabad", title: "I design brands people remember", text: "Logos, social media posts and packaging for small businesses that want to look as good as they are.", primary: L("See my work", "#gallery"), secondary: L("Get a quote", "#contact"), image: ph("workspace creative design", "hero"), layout: "left" }),
+        newBlock("hero", { eyebrow: "Graphic designer · Islamabad", title: "I design brands people remember", text: "Logos, social media posts and packaging for small businesses that want to look as good as they are.", primary: L("See my work", "#gallery"), secondary: L("Get a quote", "#contact"), image: ph.person("business woman portrait creative professional", "hero"), layout: "left" }),
         newBlock("gallery", { title: "Selected work", intro: "A few projects from the last two years.", images: ph.many("abstract creative design pattern", 6, "g").map((src, k) => ({ src, caption: ["Café brand identity", "Clothing label", "Social media set", "Book cover", "Event poster", "Tea packaging"][k] })) }, { bg: "alt" }),
         newBlock("features", { title: "What I can do for you", intro: "", items: [
           { icon: "palette", title: "Brand identity", text: "Logo, colours and fonts that fit your story." },
@@ -95,10 +95,10 @@ const T = {
           { when: "14:00", title: "Maker market", text: "60 local makers selling and showing their work." },
           { when: "17:00", title: "Awards and closing", text: "Best stall, best project and best team." }] }), { anchor: "schedule" }),
         Object.assign(newBlock("team", { title: "Speakers", intro: "People who build things and love to share how.", members: [
-          { photo: ph("event conference meeting", "t0"), name: "Dr Kamran I.", role: "Robotics teacher" },
-          { photo: ph("event conference meeting", "t1"), name: "Zara H.", role: "Product designer" },
-          { photo: ph("event conference meeting", "t2"), name: "Faisal M.", role: "Hardware founder" },
-          { photo: ph("event conference meeting", "t3"), name: "Nida S.", role: "Craft business owner" }] }, { bg: "alt" }), { anchor: "speakers" }),
+          { photo: ph.person("speaker member portrait professional", "t0", { sex: "m" }), name: "Dr Kamran I.", role: "Robotics teacher" },
+          { photo: ph.person("speaker member portrait professional", "t1", { sex: "f" }), name: "Zara H.", role: "Product designer" },
+          { photo: ph.person("speaker member portrait professional", "t2", { sex: "m" }), name: "Faisal M.", role: "Hardware founder" },
+          { photo: ph.person("speaker member portrait professional", "t3", { sex: "f" }), name: "Nida S.", role: "Craft business owner" }] }, { bg: "alt" }), { anchor: "speakers" }),
         Object.assign(newBlock("pricing", { title: "Tickets", intro: "Tickets include lunch, tea and all workshops.", plans: [
           { name: "Student", price: "Rs 1,000", period: "", text: "Bring your student card.", features: ["All talks", "One workshop", "Lunch and tea"], button: L("Book student ticket", "#contact"), featured: false },
           { name: "Standard", price: "Rs 2,500", period: "", text: "Most people pick this.", features: ["All talks", "Two workshops", "Lunch and tea", "Festival T-shirt"], button: L("Book standard ticket", "#contact"), featured: true },
@@ -118,7 +118,7 @@ const T = {
     make: (ph = photoPicker("academy")) => site("Bright Minds Academy", "Small-group tuition for Matric, FSc and O/A Levels with experienced teachers and weekly tests.",
       { primary: "#0f766e", accent: "#f59e0b", headingFont: "cambria", bodyFont: "calibri", corners: "soft" }, [
         newBlock("header", { brand: "Bright Minds Academy", links: [L("Subjects", "#features"), L("Teachers", "#team"), L("Fees", "#pricing"), L("FAQ", "#faq"), L("Admissions", "#contact")], cta: L("Free trial class", "#contact") }),
-        newBlock("hero", { eyebrow: "Admissions open for 2026–27", title: "Better grades with small classes and caring teachers", text: "Matric, FSc and O/A Level tuition in groups of 12. Weekly tests, monthly parent reports and a free trial class.", primary: L("Book a free trial", "#contact"), secondary: L("See fees", "#pricing"), image: ph("education classroom school", "hero"), layout: "split" }, { bg: "alt" }),
+        newBlock("hero", { eyebrow: "Admissions open for 2026–27", title: "Better grades with small classes and caring teachers", text: "Matric, FSc and O/A Level tuition in groups of 12. Weekly tests, monthly parent reports and a free trial class.", primary: L("Book a free trial", "#contact"), secondary: L("See fees", "#pricing"), image: ph.person("students study class university #students", "hero"), layout: "split" }, { bg: "alt" }),
         newBlock("features", { title: "Subjects we teach", intro: "Every subject is taught by a specialist teacher.", items: [
           { icon: "spark", title: "Mathematics", text: "Concepts first, then lots of practice." },
           { icon: "bolt", title: "Physics", text: "Clear explanations with real-life examples." },
@@ -128,10 +128,10 @@ const T = {
           { icon: "book", title: "Exam preparation", text: "Past papers and timed mock exams." }] }, { bg: "alt" }),
         newBlock("about", { title: "Why parents trust us", text: "We keep classes small so every student is noticed. Teachers track progress every week and parents get a short report every month.\nOver 90% of our students improved their grade in the first term.", image: ph("library books education", "about"), button: L("Visit the academy", "#location"), side: "right" }),
         newBlock("team", { title: "Our teachers", intro: "", members: [
-          { photo: ph("education classroom study", "t2"), name: "Mr Adeel R.", role: "Mathematics, 12 years" },
-          { photo: ph("education classroom study", "t1"), name: "Ms Farah J.", role: "Chemistry and Biology" },
-          { photo: ph("education classroom study", "t0"), name: "Mr Hamid Q.", role: "Physics" },
-          { photo: ph("education classroom study", "t3"), name: "Ms Amna Z.", role: "English" }] }),
+          { photo: ph.person("teacher member portrait professional", "t2", { sex: "m" }), name: "Mr Adeel R.", role: "Mathematics, 12 years" },
+          { photo: ph.person("teacher member portrait professional", "t1", { sex: "f" }), name: "Ms Farah J.", role: "Chemistry and Biology" },
+          { photo: ph.person("teacher member portrait professional", "t0", { sex: "m" }), name: "Mr Hamid Q.", role: "Physics" },
+          { photo: ph.person("teacher member portrait professional", "t3", { sex: "f" }), name: "Ms Amna Z.", role: "English" }] }),
         newBlock("pricing", { title: "Monthly fees", intro: "No admission fee this month. Sibling discount 10%.", plans: [
           { name: "Matric", price: "Rs 6,000", period: "/ month", text: "Classes 9 and 10.", features: ["3 subjects", "5 days a week", "Weekly tests"], button: L("Apply now", "#contact"), featured: false },
           { name: "FSc", price: "Rs 9,000", period: "/ month", text: "Pre-medical and pre-engineering.", features: ["4 subjects", "6 days a week", "Weekly tests", "Mock exams"], button: L("Apply now", "#contact"), featured: true },
@@ -185,7 +185,7 @@ const T = {
     make: (ph = photoPicker("cv")) => site("Ayesha Raza · Data analyst", "Data analyst with 5 years of experience in SQL, Python and Power BI dashboards.",
       { primary: "#334155", accent: "#0ea5e9", headingFont: "serif", bodyFont: "sans", corners: "sharp" }, [
         newBlock("header", { brand: "Ayesha Raza", links: [L("About", "#about"), L("Experience", "#experience"), L("Skills", "#skills"), L("Contact", "#contact")], cta: L("Email me", "mailto:ayesha@example.com") }),
-        newBlock("hero", { eyebrow: "Data analyst · Lahore", title: "Hi, I'm Ayesha. I turn data into clear decisions.", text: "5 years of building dashboards, cleaning messy data and explaining numbers in plain words.", primary: L("Contact me", "#contact"), secondary: L("See experience", "#experience"), image: ph("workspace laptop desk", "hero"), layout: "left" }, { bg: "alt" }),
+        newBlock("hero", { eyebrow: "Data analyst · Lahore", title: "Hi, I'm Ayesha. I turn data into clear decisions.", text: "5 years of building dashboards, cleaning messy data and explaining numbers in plain words.", primary: L("Contact me", "#contact"), secondary: L("See experience", "#experience"), image: ph.person("business woman portrait professional young", "hero"), layout: "left" }, { bg: "alt" }),
         newBlock("about", { title: "About me", text: "I studied Statistics at university and have worked with retail, banking and health teams since 2021.\nI enjoy turning a messy spreadsheet into one simple chart that everyone understands.", image: ph("notebook pen writing workspace", "about"), button: L("", ""), side: "left" }, { bg: "alt" }),
         Object.assign(newBlock("timeline", { title: "Experience and education", items: [
           { when: "2024 – now", title: "Senior data analyst, a retail chain", text: "Built the weekly sales dashboard used by 40 store managers." },
@@ -206,14 +206,19 @@ const T = {
 
 // Section entrance animations (they play in Preview and on the published site as visitors scroll, like Canva websites).
 const ANIM = { hero: "fade", gallery: "zoom", pricing: "pop", products: "pop", about: "pan" };
-// Reviewers' photos (small round pictures next to each review): photo-library topic per template.
-const PEOPLE = { business: "interior home", restaurant: "restaurant food dining", portfolio: "workspace creative design", event: "conference event seminar", academy: "education study classroom", shop: "fashion shopping boutique", cv: "workspace coworking meeting" };
+// Reviewers' photos (small round pictures next to each review): real people (photo-library pickPerson) matching the
+// reviewers' names in order: f woman, m man, c couple, o / O older woman / man.
+const PEOPLE = { business: ["testimonial customer smiling portrait", "fmf"], restaurant: ["testimonial customer smiling portrait", "cfm"], portfolio: ["testimonial client business portrait", "mfm"], event: ["testimonial customer smiling portrait", "fmf"], academy: ["testimonial parent customer portrait", "om"], shop: ["testimonial customer smiling portrait", "fmf"], cv: ["testimonial client business portrait", "mfm"] };
 /** Animations + review photos on a freshly built template site (blocks that already have them keep theirs). */
 export function finishSite(site, id) {
   const ph = photoPicker(`${id}:people`);
   for (const b of site.blocks) {
     if (b.type !== "header" && b.type !== "footer" && !b.style.anim) b.style.anim = ANIM[b.type] || "rise";
-    if (b.type === "testimonials" && PEOPLE[id]) b.data.items.forEach((q, i) => { if (!q.photo) q.photo = ph(PEOPLE[id], "q" + i); });
+    if (b.type === "testimonials" && PEOPLE[id]) {
+      ph.reserve(site.blocks.flatMap((x) => [x.data.image, x.style.bgImage, ...(x.data.members || []).map((m) => m.photo)]));
+      const faces = ph.cast(PEOPLE[id][0], PEOPLE[id][1].padEnd(b.data.items.length, "x"), "q");
+      b.data.items.forEach((q, i) => { if (!q.photo) q.photo = faces[i]; });
+    }
   }
   return site;
 }

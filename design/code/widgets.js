@@ -4,7 +4,7 @@
 // needed, a small vanilla script. Nothing is loaded from other websites: pictures are data: URLs inside the code (the
 // app embeds library photos that way when it copies or downloads the code).
 import { qrSvg } from "./qr.js";
-import { photoOf, photoFor, photoUrl } from "./photos.js";
+import { photoOf, photoFor, photoUrl, isPerson, objectPosition } from "./photos.js";
 
 /* ------------------------------------------------------------------ small helpers */
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -54,6 +54,8 @@ let resolvePhoto = (p) => PHOTO_SITE + photoUrl(p, "full");
 /** src for a picture value: a data: URL as it is, a library photo through the resolver, anything else "". */
 const imgSrc = (v) => (isImageData(v) ? String(v) : photoOf(v) ? resolvePhoto(photoOf(v)) : "");
 const altOf = (v, alt) => String(alt || "").trim() || photoOf(v)?.title || "";
+/** Inline object-position for a people photo (its face stays in view in any crop), else nothing. */
+const posOf = (v) => { const p = photoOf(v); return p && isPerson(p) ? ` style="object-position: ${objectPosition(p)}"` : ""; };
 
 export const FONT_CSS = {
   system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
@@ -63,7 +65,7 @@ export const FONT_CSS = {
   calibri: 'Calibri, Carlito, "Segoe UI", sans-serif',
   cambria: "Cambria, Caladea, Georgia, serif",
 };
-const FONT_CHOICES = [["system", "System (clean)"], ["sans", "Sans (Arial style)"], ["serif", "Serif (Georgia style)"], ["mono", "Mono (typewriter)"], ["calibri", "Calibri style"], ["cambria", "Cambria style"]];
+export const FONT_CHOICES = [["system", "System (clean)"], ["sans", "Sans (Arial style)"], ["serif", "Serif (Georgia style)"], ["mono", "Mono (typewriter)"], ["calibri", "Calibri style"], ["cambria", "Cambria style"]];
 const CORNERS = { square: 0, soft: 10, round: 18 };
 
 /* ------------------------------------------------------------------ logic shared with the generated scripts */
@@ -433,7 +435,7 @@ const formCss = (p) => `.${p} form {
   font-size: .9rem;
   color: var(--adw-muted);
 }`;
-const media = (v, alt, pad = "  ") => (imgSrc(v) ? `${pad}<div class="adw-media"><img class="adw-cover" src="${esc(imgSrc(v))}" alt="${esc(altOf(v, alt))}" width="1200" height="900"></div>\n` : "");
+const media = (v, alt, pad = "  ") => (imgSrc(v) ? `${pad}<div class="adw-media"><img class="adw-cover" src="${esc(imgSrc(v))}" alt="${esc(altOf(v, alt))}" width="1200" height="900"${posOf(v)}></div>\n` : "");
 // A photo band across the top of a card (bleeds to the card's edges).
 const topPhotoCss = (p) => `.${p} .adw-topphoto {
   height: clamp(150px, 30vw, 210px);
@@ -447,8 +449,8 @@ const topPhotoCss = (p) => `.${p} .adw-topphoto {
 .${p}:hover .adw-topphoto img {
   transform: scale(1.04);
 }`;
-const topPhoto = (v, alt = "", pad = "  ") => (imgSrc(v) ? `${pad}<div class="adw-topphoto"><img class="adw-cover" src="${esc(imgSrc(v))}" alt="${esc(altOf(v, alt))}" width="1200" height="600"></div>\n` : "");
-const bgImg = (v, pad = "  ") => (imgSrc(v) ? `${pad}<img class="adw-bgimg" src="${esc(imgSrc(v))}" alt="" width="1600" height="1000">\n` : "");
+const topPhoto = (v, alt = "", pad = "  ") => (imgSrc(v) ? `${pad}<div class="adw-topphoto"><img class="adw-cover" src="${esc(imgSrc(v))}" alt="${esc(altOf(v, alt))}" width="1200" height="600"${posOf(v)}></div>\n` : "");
+const bgImg = (v, pad = "  ") => (imgSrc(v) ? `${pad}<img class="adw-bgimg" src="${esc(imgSrc(v))}" alt="" width="1600" height="1000"${posOf(v)}>\n` : "");
 const eyebrow = (s, pad = "  ") => (s ? `${pad}<p class="adw-eyebrow">${esc(s)}</p>\n` : "");
 const PHOTO_OPT = (label = "Background photo (optional)", def = "") => ({ key: "image", label, type: "image", default: def });
 
@@ -1246,6 +1248,7 @@ def({
       { key: "name", label: "Name", type: "text" },
       { key: "role", label: "City or role", type: "text" },
       { key: "rating", label: "Stars (1 to 5)", type: "number", min: 1, max: 5, step: 1 },
+      { key: "image", label: "Photo (optional)", type: "image" },
     ], default: [
       { quote: "Fast delivery and the food was still warm. We order every Friday now.", name: "Sana R.", role: "Lahore", rating: 5 },
       { quote: "They fixed my phone screen in one hour. Fair price and friendly staff.", name: "Bilal A.", role: "Karachi", rating: 5 },
@@ -1353,6 +1356,7 @@ def({
   background: linear-gradient(135deg, var(--adw-accent), var(--adw-accent-2));
   color: var(--adw-on-accent);
   font-weight: 800;
+  object-fit: cover;
   box-shadow: 0 8px 16px -8px var(--adw-glow);
 }
 .${p} figcaption span {
@@ -1393,7 +1397,7 @@ ${o.stars ? `    <p class="adw-stars" role="img" aria-label="Rated ${r} out of 5
       <p>${esc(t.quote)}</p>
     </blockquote>
     <figcaption>
-      <span class="adw-avatar" aria-hidden="true">${esc(initials(t.name))}</span>
+      ${imgSrc(t.image) ? `<img class="adw-avatar" src="${esc(imgSrc(t.image))}" alt="" width="46" height="46"${posOf(t.image)}>` : `<span class="adw-avatar" aria-hidden="true">${esc(initials(t.name))}</span>`}
       <div><strong>${esc(t.name)}</strong>${t.role ? `<span>${esc(t.role)}</span>` : ""}</div>
     </figcaption>
   </figure>
@@ -2068,7 +2072,7 @@ def({
   font-size: .86rem;
   color: var(--adw-muted);
 }`);
-    const avatar = imgSrc(o.avatar) ? `<img class="adw-avatar" src="${esc(imgSrc(o.avatar))}" alt="${esc(o.name)}" width="96" height="96">` : `<div class="adw-avatar" aria-hidden="true">${esc(initials(o.name))}</div>`;
+    const avatar = imgSrc(o.avatar) ? `<img class="adw-avatar" src="${esc(imgSrc(o.avatar))}" alt="${esc(o.name)}" width="96" height="96"${posOf(o.avatar)}>` : `<div class="adw-avatar" aria-hidden="true">${esc(initials(o.name))}</div>`;
     const html = `<main class="${p}">
   <div class="adw-inner">
 ${imgSrc(o.cover) ? `    <div class="adw-coverimg"><img class="adw-cover" src="${esc(imgSrc(o.cover))}" alt="" width="920" height="380"></div>\n` : ""}    <header>
@@ -3124,7 +3128,7 @@ ${H2(p)}
       const src = imgSrc(x.image);
       return `<li>
   <div class="adw-band" aria-hidden="true"></div>
-  ${src ? `<img class="adw-face adw-cover" src="${esc(src)}" alt="${esc(x.name)}" width="104" height="104">` : `<div class="adw-face" aria-hidden="true">${esc(initials(x.name))}</div>`}
+  ${src ? `<img class="adw-face adw-cover" src="${esc(src)}" alt="${esc(x.name)}" width="104" height="104"${posOf(x.image)}>` : `<div class="adw-face" aria-hidden="true">${esc(initials(x.name))}</div>`}
   <h3>${esc(x.name)}</h3>
 ${x.role ? `  <p class="adw-role">${esc(x.role)}</p>\n` : ""}${x.bio ? `  <p class="adw-bio">${esc(x.bio)}</p>\n` : ""}${x.link ? `  <a class="adw-more" ${aHref(x.link)}>Get in touch &rarr;</a>\n` : ""}  <div class="adw-card-end"></div>
 </li>`;

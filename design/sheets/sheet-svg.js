@@ -4,11 +4,24 @@
 // shows the finished template, with its real labels and numbers.
 import { Workbook, parseCellName, parseRangeName, FormulaError } from "./formula.js";
 import { displayText, chartData } from "./model.js";
+import { photoOf, posOf } from "./sheet-kit.js";
 
 const FONT = "system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif";
 const DEF_W = 110, DEF_H = 28, NOW = () => new Date(Date.UTC(2026, 10, 12, 9, 0, 0));
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const n1 = (v) => Math.round(v * 10) / 10;
+const ALIGN = (v) => (v < 0.34 ? "Min" : v > 0.66 ? "Max" : "Mid");
+/** An <image> that covers the box (x, y, w, h), clipped by clipId. pos ("48% 30%", the image cell's focus, CSS
+ *  object-position semantics) keeps a face in view: exact for library photos (their size is known), the nearest
+ *  xMin/xMid/xMax + YMin/YMid/YMax alignment for other pictures. */
+function coverImage(href, src, pos, x, y, w, h, clipId) {
+  const f = posOf(pos), p = f ? photoOf(src) : null;
+  if (p && p.w && p.h && w > 0 && h > 0) {
+    const s = Math.max(w / p.w, h / p.h), iw = p.w * s, ih = p.h * s;
+    return `<image href="${esc(href)}" x="${n1(x + (w - iw) * f[0])}" y="${n1(y + (h - ih) * f[1])}" width="${n1(iw)}" height="${n1(ih)}" preserveAspectRatio="none" clip-path="url(#${clipId})"/>`;
+  }
+  return `<image href="${esc(href)}" x="${n1(x)}" y="${n1(y)}" width="${n1(w)}" height="${n1(h)}" preserveAspectRatio="${f ? `x${ALIGN(f[0])}Y${ALIGN(f[1])}` : "xMidYMid"} slice" clip-path="url(#${clipId})"/>`;
+}
 /** Rough text width (px) of a string in our sans font. */
 export function textW(t, size = 13, bold = false) {
   let w = 0;
@@ -208,7 +221,9 @@ export function sheetSvg(book, opts = {}) {
       if (img) {
         const href = opts.photo ? opts.photo(img) : img;
         const pad = stl?.fit === "cover" ? 0 : 2;
-        extras.push(`<clipPath id="${uid}-ic${r}-${c}"><rect x="${X(q.x + pad)}" y="${Yp(q.y + pad)}" width="${n1((q.w - pad * 2) * k)}" height="${n1((q.h - pad * 2) * k)}" rx="${n1((stl?.rad || 0) * k)}"/></clipPath><image href="${esc(href)}" x="${X(q.x + pad)}" y="${Yp(q.y + pad)}" width="${n1((q.w - pad * 2) * k)}" height="${n1((q.h - pad * 2) * k)}" preserveAspectRatio="xMidYMid ${stl?.fit === "cover" ? "slice" : "meet"}" clip-path="url(#${uid}-ic${r}-${c})"/>`);
+        const cid = `${uid}-ic${r}-${c}`, ix = (q.x + pad) * k, iy = (q.y + pad) * k, iw = (q.w - pad * 2) * k, ih = (q.h - pad * 2) * k;
+        extras.push(`<clipPath id="${cid}"><rect x="${X(q.x + pad)}" y="${Yp(q.y + pad)}" width="${n1(iw)}" height="${n1(ih)}" rx="${n1((stl?.rad || 0) * k)}"/></clipPath>` +
+          (stl?.fit === "cover" ? coverImage(href, img, stl.pos, ix, iy, iw, ih, cid) : `<image href="${esc(href)}" x="${X(q.x + pad)}" y="${Yp(q.y + pad)}" width="${n1(iw)}" height="${n1(ih)}" preserveAspectRatio="xMidYMid meet" clip-path="url(#${cid})"/>`));
       }
       if (v === null || v === undefined || v === "") continue;
       let text = v instanceof FormulaError ? v.code : displayText(v, stl);
@@ -319,14 +334,14 @@ function bannerSvg(M, bLast, W, bh, k, uid, photoFn) {
   const a1 = M.styleAt(0, 0) || {}, fill = a1.fill || "#4f46e5", out = [];
   out.push(`<rect width="${W}" height="${n1(bh)}" fill="${fill}"/>`);
   out.push(`<circle cx="${n1(W * 0.62)}" cy="${n1(bh * 1.05)}" r="${n1(bh * 0.9)}" fill="#ffffff" opacity=".07"/><circle cx="${n1(W * 0.5)}" cy="${n1(-bh * 0.3)}" r="${n1(bh * 0.55)}" fill="#ffffff" opacity=".06"/>`);
-  let img = null;
-  for (const [ref, src] of Object.entries(M.src.images || {})) { const p = parseCellName(ref); if (p && p.row <= bLast) { img = src; break; } }
+  let img = null, pos = null;
+  for (const [ref, src] of Object.entries(M.src.images || {})) { const p = parseCellName(ref); if (p && p.row <= bLast) { img = src; pos = M.styleAt(p.row, p.col)?.pos || null; break; } }
   let pw = 0;
   if (img) {
     pw = Math.min(W * 0.34, bh * 2.1);
     const href = photoFn ? photoFn(img) : img;
     out.push(`<defs><linearGradient id="${uid}-bf" x1="0" x2="1"><stop offset="0" stop-color="${fill}"/><stop offset=".38" stop-color="${fill}" stop-opacity="0"/></linearGradient><clipPath id="${uid}-bc"><rect x="${n1(W - pw)}" y="0" width="${n1(pw)}" height="${n1(bh)}"/></clipPath></defs>`);
-    out.push(`<image href="${esc(href)}" x="${n1(W - pw)}" y="0" width="${n1(pw)}" height="${n1(bh)}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${uid}-bc)"/>`);
+    out.push(coverImage(href, img, pos, W - pw, 0, pw, bh, `${uid}-bc`));
     out.push(`<rect x="${n1(W - pw - 1)}" y="0" width="${n1(pw + 1)}" height="${n1(bh)}" fill="url(#${uid}-bf)"/>`);
   }
   const t0 = M.get(0, 0), h0 = M.rowY[1] * k, max = W - pw - 22;

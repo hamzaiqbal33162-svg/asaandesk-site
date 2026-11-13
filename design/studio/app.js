@@ -9,7 +9,8 @@ import { listTemplates, getTemplate } from "./templates.js";
 import { magicResize } from "./resize.js";
 import { applyCollage } from "./collage.js";
 import { autoAnimate } from "./animate.js";
-import { applyBrand } from "./brandkit.js";
+import { applyBrand, mainColors } from "./brandkit.js";
+import * as P2 from "./panels2.js";
 import { textHeight } from "./textlayout.js";
 import { saveProject, listProjects, getProject, deleteProject, takeHandoff, putHandoff } from "../shared/store.js";
 import { loadBrand, saveBrand } from "../shared/brand.js";
@@ -25,6 +26,10 @@ import * as DL from "./download.js";
 import { parsePageRange, formatPageRange } from "./pagetools.js";
 import { createCtxBar, renderCtx } from "./ctxbar.js";
 import { pageSvg } from "./svg.js";
+import { makeStudioInsert, studioDraw, studioMagicWrite } from "./insert.js";
+
+// Insert adapter for the shared left-rail panels (Elements, Text, Tools): native Studio layers for every kit item.
+const kitInsert = makeStudioInsert();
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -612,7 +617,11 @@ function mountFrame() {
   const ctx = createCtxBar({ props: (sec) => UI.openProps(sec === "all" ? null : sec), panel: (name) => UI.openPanel(name) });
   const own = (id) => ({ render: (el) => UI.renderInto(id, el), label: PANEL_LABELS[id], refresh: true });
   const panels = {};
-  for (const id of OWN_PANELS) panels[id] = own(id);
+  // Elements and Text come entirely from the shared kit (every item inserts as a Studio layer; page number options show
+  // when a page number is selected); Tools shows Studio's own tool hub inside the kit.
+  // Brand is the shared Brand panel (kit, Apply brand to the whole design); a logo's own actions (save to the brand
+  // kit, business card, mockup) are in Apps › Tools for this design.
+  for (const id of OWN_PANELS) if (id !== "elements" && id !== "text" && id !== "brand") panels[id] = own(id);
   shell = shellMod.mountShell({
     app: "studio", kind, timerKeys: true, title: /^Untitled/.test(S.design.name) ? "" : S.design.name, home: "/tools/" + shellTool,
     onTitle: (t) => { if (!S.design) return; S.design.name = t || "Untitled design"; $("#nameInput").value = S.design.name; commit("name"); },
@@ -639,11 +648,26 @@ function mountFrame() {
       { label: "More download options…", group: "Download", act: () => openExport() },
     ],
     share: { download: [...DOWNLOADS.map(([f, label]) => ({ label, act: () => quickExport(f) })), { label: "Present full screen", act: () => startPresent() }], link: () => location.href },
-    templates: { gallery: Gallery, tool: shellTool, apply: (id) => applyTemplateFromPanel(id), placeholder: `Search ${info.kind || kind} templates` },
+    templates: {
+      gallery: Gallery, tool: shellTool, apply: (id) => applyTemplateFromPanel(id), placeholder: `Search ${info.kind || kind} templates`,
+      // Template detail view: its pages one by one, and its style (colours + fonts) on this design.
+      applyPage: (id, i) => applyTemplatePage(id, i), applyStyle: (id) => applyTemplateStyle(id),
+      pageCount: (id) => builtTemplate(id)?.design.pages.length || 0, pageThumb: (id, i, width) => templatePageThumb(id, i, width),
+    },
+    // Brand panel: Apply brand to the whole design (colours in order of use, heading / body fonts).
+    applyBrand: (kit) => { if (!S.design) return false; if (S.editing) E.endEdit(); const r = applyBrand(S.design, kit || loadBrand()); E.renderAll(); commit("brand"); emit("pages"); return r; },
+    // Design panel tabs next to Templates: Studio's Layouts and Styles (palettes and font pairs).
+    design: { layouts: (box) => P2.layoutsPanel(box), styles: (box) => P2.stylesPanel(box) },
     panels,
     rail: ["templates", "elements", "text", "brand", "uploads", "tools", "projects", "apps", "translate"],
     getText: () => { const out = []; for (const pg of S.design?.pages || []) for (const l of pg.layers) if (l.type === "text") out.push(l.text.content); return out.join("\n"); },
-    insert: { text: (str) => emit("paste-text", String(str || "")), color: (c) => UI.applyColor(c), font: (f) => E.updateSel((l) => { if (l.type === "text") l.text.family = f; }, "font") },
+    insert: {
+      ...kitInsert,
+      text: (spec, pt) => (typeof spec === "string" ? emit("paste-text", spec) : kitInsert.text(spec, pt)),
+      color: (c) => UI.applyColor(c), font: (f) => E.updateSel((l) => { if (l.type === "text") l.text.family = f; }, "font"),
+    },
+    draw: studioDraw,
+    magicWrite: () => studioMagicWrite(UI),
     projects: { save: async () => { await saveNow(); return { name: S.design.name, data: clone(S.design), thumb: thumbUrl || "" }; }, open: async (rec) => { await openProject(rec.id); } },
     bottom: {
       notes: true, timer: true, fullscreen: true, help: true,
@@ -675,6 +699,41 @@ function mountFrame() {
   shell.refresh();
   window.adShell = shell;
 }
+/* ---------------- Design panel: a template's single pages and its style (Canva's template detail view) ---------------- */
+let builtTpl = null;
+function builtTemplate(id) {
+  if (builtTpl?.id !== id) { const t = Gallery.build(id) || getTemplate(Gallery.resolveTemplate(id).base); builtTpl = t ? { id, t } : null; }
+  return builtTpl?.t || null;
+}
+/** Adds page i of a template to the design (resized to the design's size when it differs): on an empty page it fills
+ *  that page, otherwise it comes in as a new page after the current one. */
+function applyTemplatePage(id, i = 0) {
+  const t = builtTemplate(id);
+  if (!t || !S.design) return false;
+  if (S.editing) E.endEdit();
+  let d = clone(t.design);
+  const a = presetPx(d.preset), b = presetPx(S.design.preset);
+  if (Math.abs(a.w - b.w) > 1 || Math.abs(a.h - b.h) > 1) d = magicResize(d, S.design.preset);
+  const src = d.pages[Math.max(0, Math.min(d.pages.length - 1, +i || 0))];
+  const page = { ...clone(src), id: newId("p"), layers: src.layers.map(withNewIds) };
+  if (!curPage().layers.length) { page.notes = curPage().notes || page.notes; S.design.pages[S.page] = page; S.sel = []; commit("template-page"); E.goPage(S.page); }
+  else { S.design.pages.splice(S.page + 1, 0, page); commit("template-page"); E.goPage(S.page + 1); }
+  emit("pages");
+  toast(`Page ${(+i || 0) + 1} of “${t.title}” added.`);
+  return true;
+}
+/** Applies a template's style to the design: its main colours and its heading / body fonts (Canva: Apply this template style). */
+function applyTemplateStyle(id) {
+  const t = builtTemplate(id);
+  if (!t || !S.design) return false;
+  const { colors, heading, body } = Gallery.styleOf(id) || { colors: mainColors(t.design).slice(0, 5), heading: "sans", body: "sans" };
+  if (S.editing) E.endEdit();
+  applyBrand(S.design, { colors, fonts: { heading, body } });
+  E.renderAll(); commit("template-style"); emit("pages");
+  toast(`Template style applied: ${colors.length} colour${colors.length === 1 ? "" : "s"} and its fonts.`);
+  return true;
+}
+const templatePageThumb = (id, i, width = 240) => { const t = builtTemplate(id); return t ? pageSvg(t.design, i, presetPx(t.design.preset), { width, idp: `tp${i}-`, urlOf: E.urlOf, chartPrims: S.env.chartPrims, tablePrims: S.env.tablePrims }) : ""; };
 async function applyTemplateFromPanel(id) {
   const ref = Gallery.resolveTemplate(id);
   if (curPageEmpty()) await openTemplate(id, ref.mode, S.projectId);
@@ -721,6 +780,12 @@ function hooks() {
     canUndo: () => !!S.history?.canUndo,
     addText: (content, o = {}) => { const l = textLayer(content, { w: pageSize().w * 0.6, size: 64, ...o }); l.h = textHeight(l.text, l.w); return E.addLayer(l).id; },
     addShape: (kind = "rect", o = {}) => E.addLayer(shapeLayer(kind, { w: 200, h: 200, ...o })).id,
+    /** The shared panels' insert adapter (image, shape, svg, text, textGroup, chart, table, frame, grid, video, pageNumber, drawing). */
+    insert: kitInsert,
+    draw: studioDraw,
+    applyTemplatePage: (id, i) => applyTemplatePage(id, i),
+    applyTemplateStyle: (id) => applyTemplateStyle(id),
+    templatePageThumb: (id, i, w) => templatePageThumb(id, i, w),
     addSticker: async (id, o = {}) => { const { ELEMENTS } = await import("/pdf-editor/elements.js"); const el = ELEMENTS.find((x) => x.id === id); return E.addLayer(elementLayer(el, { w: 200, ...o })).id; },
     /** Screen box (client px) of a layer, for real mouse actions in tests. */
     box: (id) => { const l = layerById(id); return l ? E.clientBox(l) : null; },

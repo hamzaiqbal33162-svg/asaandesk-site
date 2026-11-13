@@ -10,7 +10,7 @@
 // template's photo) is open, then the look (filters, adjustments, duotone), the crop shape, frame and every overlay
 // (text, shapes, extra photos) exactly as the thumbnail shows them (tpl-draw.js draws both from the same recipe).
 import { kit, photoUrl, hash } from "../shared/tpl-kit.js";
-import { PHOTOS } from "../shared/photo-library.js";
+import { PHOTOS, PEOPLE, pickPerson, isPerson } from "../shared/photo-library.js";
 import { SAMPLES, sceneSvg, backdropSvg, backdropInner } from "./scenes.js";
 import { esc, em, lookPhoto, overlaySvg, framed, borderPad, popBody, popBox, popShape, frameShapeD, isDarkHex } from "./tpl-draw.js";
 
@@ -327,7 +327,7 @@ const PE_LAYOUTS = [
 ];
 // duotone per palette (the "Concert poster" layout)
 const DUO_OF = { p01: "violet", p02: "coral", p03: "teal", p04: "ocean", p05: "sunset", p06: "berry", p07: "forest", p08: "ocean", p09: "sunset", p10: "violet", p11: "berry", p12: "coral" };
-const PE_EXTRA = [{ id: "pe~passport~people", layout: "passport", theme: "people", name: "Passport photo 35 × 45 mm", section: LOOKS, tags: ["passport", "id", "35x45"], recipe: { kind: "look", aspect: "passport", panel: "export" } }];
+const PE_EXTRA = [{ id: "pe~passport~people", layout: "passport", theme: "people", name: "Passport photo 35 × 45 mm", section: LOOKS, tags: ["passport", "id", "35x45"], recipe: { kind: "look", aspect: "passport", panel: "export" } }]; // a real head-and-shoulders portrait
 // layouts of earlier versions that were replaced: their ids open the closest new design
 const ALIAS_LAYOUT = { meme: "video-thumbnail" };
 
@@ -408,9 +408,9 @@ const BR_LAYOUTS = [
     texts: (c) => [T(up(c.th.word) + "!", { x: 0.22, y: 0.14, size: 0.12, color: "#ffffff", outline: c.p.a, rotation: -10 }), T(c.th.handle, { right: 0.95, y: 0.93, size: 0.032, color: c.p.d })] }),
   B("floating", "Floating with shadow", ["shadow", "white", "product"], () => ({ mode: "color", color: "#ffffff", shadow: { dist: 18, blur: 30, angle: 90, alpha: 35 } }), { fixed: true, clip: "ellipse", shadow: true,
     texts: (c) => [brTitle(c, c.th.title, 0.1, { color: "#1b2133", max: 0.13 }), T(c.th.price, { y: 0.92, size: 0.045, bg: "#1b2133", color: "#ffffff" })] }),
-  // ID photo backgrounds: the library has no CC0 portraits yet, so the sample is a pet (and says so)
-  B("id-blue", "ID photo, light blue", ["passport", "id", "blue"], () => ({ mode: "color", color: "#dbeafe" }), { fixed: true, aspect: "passport", clip: "none", photoWords: "cat animals", sampleLabel: "Pet sample" }),
-  B("id-white", "ID photo, white", ["passport", "id", "white"], () => ({ mode: "color", color: "#ffffff" }), { fixed: true, aspect: "passport", clip: "none", photoWords: "cat animals", sampleLabel: "Pet sample" }),
+  // ID photo backgrounds: the sample is a head-and-shoulders portrait from the people library
+  B("id-blue", "ID photo, light blue", ["passport", "id", "blue"], () => ({ mode: "color", color: "#dbeafe" }), { fixed: true, aspect: "passport", clip: "none", sampleLabel: "Portrait sample" }),
+  B("id-white", "ID photo, white", ["passport", "id", "white"], () => ({ mode: "color", color: "#ffffff" }), { fixed: true, aspect: "passport", clip: "none", sampleLabel: "Portrait sample" }),
   B("dark-studio", "Dark studio", ["dark", "studio", "dramatic"], (p) => pop(p, { c1: p.a, c2: "#05060a", grad: "radial", shape: "none", pattern: "floor", c3: "#000000" }), { clip: "ellipse", shadow: true,
     texts: (c) => [brTitle(c, up(c.th.title), 0.86, { max: 0.12 }), brSub(c, c.th.brand, 0.94, { color: "#d9dbe4" })] }),
   B("youtube-cutout", "Video thumbnail cut-out", ["youtube", "thumbnail", "16:9"], (p) => pop(p, { c1: p.a, c2: p.d, grad: "diag", pattern: "halftone", pc: "#ffffff", po: 0.12, shape: "circle", sc: p.b === "#1f2937" ? "#ffd166" : p.b, r: 0.36 }), { aspect: "16:9", clip: "circle", outline: true,
@@ -492,6 +492,141 @@ const TOOLS = {
 };
 const PRE_TOOL = Object.fromEntries(Object.entries(TOOLS).map(([k, v]) => [v.pre, k]));
 
+/* ---------- people: Canva's photo collages show people in about half of them (women in nature, friends, couples,
+   models), and a profile picture, ID photo, review, magazine cover or photo-booth strip always shows a person. ---------- */
+// Each theme's person: `one` (the theme's own person: the name and role in its copy, `sex` matches that name), `head` (a
+// head-and-shoulders portrait for profile pictures) and `group`.
+const WHO = {
+  travel: { one: "traveler woman travel trip", head: "woman smiling portrait traveler", group: "backpackers travel friends adventure", sex: "f" },
+  city: { one: "young man city casual portrait", head: "man smiling portrait casual", group: "friends young city", sex: "m" },
+  garden: { one: "woman park nature smiling", head: "woman smiling portrait", group: "family picnic outdoors", sex: "f" },
+  people: { one: "business woman team member portrait", head: "business woman headshot", group: "team meeting office colleagues", sex: "f" },
+  cafe: { one: "barista man coffee cafe", head: "barista man portrait", group: "friends young happy", sex: "m" },
+  beach: { one: "man smiling outdoors vacation", head: "man smiling portrait", group: "friends holiday vacation", sex: "m" },
+  kitchen: { one: "chef cook kitchen", head: "chef portrait", group: "family", sex: "m" },
+  // no "pets" entry: a card of the Pets theme keeps its animal (a person must not stand in for a pet either)
+};
+// A spot: { kind, sex, group, landscape, region: [x0, x1, y0, y1] = where the face must sit in the finished picture so the
+// design's text bands and panels never cover it }. The photo editor crops a template's photo from the centre, so the
+// photo is chosen with its face already in that region (thumbnails draw the same centre crop as the design that opens).
+const ID_SPOT = { kind: "woman professional headshot portrait", region: [0.35, 0.65, 0.3, 0.48] };
+const PE_PERSON = { // always a person (the layout's name or copy is about one)
+  "round-profile": (T) => ({ kind: T.head, sex: T.sex, region: [0.32, 0.68, 0.24, 0.5] }),
+  "profile-banner": (T) => ({ kind: T.one, sex: T.sex, region: [0.6, 0.93, 0.15, 0.6] }),
+  testimonial: (T) => ({ kind: "testimonial customer smiling", sex: T.sex }),
+  "magazine-cover": () => ({ kind: "fashion model woman portrait", region: [0.35, 0.8, 0.16, 0.5] }),
+  "rose-blush": () => ({ kind: "wedding couple bride groom", region: [0.2, 0.8, 0.1, 0.3] }),
+  "birthday-card": () => ({ kind: "child girl smiling kids", region: [0.15, 0.85, 0.12, 0.5] }),
+  "photo-strip": () => ({ kind: "young woman smiling happy portrait", region: [0.2, 0.8, 0.05, 0.24] }), // the top frame of the strip
+  "video-thumbnail": () => ({ kind: "young woman smiling happy", region: [0.56, 0.95, 0.1, 0.55] }),
+  "noir-drama": (T) => ({ kind: T.one, region: [0.2, 0.8, 0.14, 0.5] }),
+  "gritty-mono": () => ({ kind: "fashion street style outfit", region: [0.35, 0.85, 0.08, 0.55] }),
+  "classic-mono": () => ({ kind: "fashion model woman portrait", region: [0.15, 0.85, 0.12, 0.45] }),
+};
+const PE_LIFE = { // lifestyle layouts: a person when the theme is about people outdoors (travel, city, garden, beach) or the team
+  "warm-glow": (T) => ({ kind: T.one, region: [0.15, 0.85, 0.12, 0.45] }),
+  "soft-glow": (T) => ({ kind: T.one, region: [0.2, 0.8, 0.1, 0.33] }),
+  "instant-photo": (T) => ({ kind: T.one, region: [0.15, 0.85, 0.12, 0.6] }),
+  "story-cover": (T) => ({ kind: T.one, region: [0.15, 0.85, 0.1, 0.45] }),
+  "kite-sky": () => ({ kind: "concert crowd festival friends", group: true, region: [0.1, 0.75, 0.36, 0.7] }),
+  "mountain-morning": (T) => ({ kind: T.group, group: true, region: [0.1, 0.9, 0.3, 0.62] }),
+  "event-flyer": (T) => ({ kind: T.group, group: true, region: [0.3, 0.9, 0.12, 0.45] }),
+};
+const LIFE_THEMES = new Set(["travel", "city", "garden", "beach"]);
+// the "Meet the team" theme shows the team in every layout except the ones about a menu, a recipe, a place or the weather
+const TEAM_SKIP = new Set(["faded-matte", "tea-time", "recipe-card", "postcard", "sea-breeze", "rainy-day", "old-town", "travel-stamp", "square-post", "polaroid-stack", "duotone-pop"]);
+function peSpot(lid, tid, aspect) {
+  const T = WHO[tid];
+  if (!T) return null;
+  if (PE_PERSON[lid]) return PE_PERSON[lid](T);
+  if (PE_LIFE[lid] && (LIFE_THEMES.has(tid) || tid === "people")) return PE_LIFE[lid](T);
+  if (tid === "people" && !TEAM_SKIP.has(lid)) return (RATIO[aspect] || 1) >= 1 ? { kind: T.group, group: true } : { kind: T.one };
+  return null;
+}
+// Background remover: the cut-out subject is a person in portrait layouts; the Beauty, Coffee and Food themes show their
+// person (a skincare model, a barista, a chef) in the bold cut-out styles, products and pets stay in the others.
+const BR_PERSON = {
+  "profile-circle": (T) => ({ kind: T.head, sex: T.sex, region: [0.32, 0.68, 0.24, 0.5] }),
+  "soft-blur": (T) => ({ kind: T.one }),
+  "id-blue": () => ({ ...ID_SPOT, kind: "man professional headshot portrait" }), "id-white": () => ({ ...ID_SPOT, kind: "woman headshot glasses portrait" }),
+  "youtube-cutout": () => ({ kind: "creator youtuber vlog camera" }),
+  stars: (T) => ({ kind: T.one }),
+  rainbow: () => ({ kind: "child kids girl smiling" }),
+  confetti: () => ({ kind: "child girl smiling kids" }),
+  hearts: () => ({ kind: "couple love valentine" }),
+  sticker: () => ({ kind: "young woman smiling happy" }),
+  meadow: () => ({ kind: "child playing outdoors kids" }),
+};
+const BR_BOLD = new Set(["solid", "gradient", "blob-pop", "sunset", "bokeh", "halftone", "split", "stripes", "dots", "brick", "dark-studio", "terrazzo", "diamond", "waves", "checkfloor"]);
+const BR_CHEF = new Set(["dark-studio", "gradient"]); // food stays food, except the chef's portrait styles
+function brSpot(lid, tid) {
+  const T = tid === "people" ? { one: "beauty skincare woman", head: "beauty skincare woman portrait", sex: "f" } : WHO[tid];
+  if (!T) return null;
+  if (BR_PERSON[lid]) return BR_PERSON[lid](T);
+  if (BR_BOLD.has(lid) && (tid === "people" || tid === "cafe" || (tid === "kitchen" && BR_CHEF.has(lid)))) return { kind: T.one };
+  return null;
+}
+// Image enhancer: portraits, family memories and social posts are people (and travel photos show the traveller).
+const IE_PERSON = {
+  portrait: (T) => ({ kind: T.head }), "face-4x": (T) => ({ kind: T.head }), "social-2x": (T) => ({ kind: T.one }),
+  memory: () => ({ kind: "family parents kids", group: true }), "old-photo": () => ({ kind: "senior couple elderly grandparents" }),
+};
+// AI photo editor: the ideas people try on portraits (cartoon, film noir, 1970s, neon, studio light), and the team.
+const AI_PERSON = {
+  "remove-people": () => ({ kind: "manager leader team behind", group: true }), "film-noir": (T) => ({ kind: T.one }), cartoon: (T) => ({ kind: T.head }),
+  seventies: (T) => ({ kind: T.one }), "neon-night": () => ({ kind: "woman smiling street city portrait" }), "studio-light": () => ({ kind: "woman headshot portrait" }),
+  "golden-autumn": (T) => ({ kind: T.one }),
+};
+function ieAiSpot(tool, lid, tid) {
+  const T = WHO[tid];
+  if (!T) return null;
+  const M = tool === IE ? IE_PERSON : AI_PERSON;
+  if (M[lid]) return M[lid](T);
+  if (tool === IE && tid === "travel" && ["sharpen-2x", "print-2x"].includes(lid)) return { kind: T.one };
+  if (tool === AI && tid === "people") return { kind: T.group, group: true };
+  return null;
+}
+const DEF_REGION = [0.15, 0.85, 0.12, 0.62];
+/** The cover crop {x, y, w, h} (fractions of the photo) for a picture of aspect r: the editor's centre crop, or with
+ * `region` the crop that moves the face as close to the region's middle as the photo allows. */
+function cropOf(p, r, region = null) {
+  const pr = p.w / p.h, cw = pr > r ? r / pr : 1, ch = pr > r ? 1 : pr / r;
+  if (!region) return { x: (1 - cw) / 2, y: (1 - ch) / 2, w: cw, h: ch };
+  const [x0, x1, y0, y1] = region, cl = (v, max) => Math.max(0, Math.min(max, v));
+  return { x: cl((p.fx ?? 0.5) - cw * (x0 + x1) / 2, 1 - cw), y: cl((p.fy ?? 0.4) - ch * (y0 + y1) / 2, 1 - ch), w: cw, h: ch };
+}
+/** Is the face of p inside the region (fractions of the picture) of crop c? */
+const faceInside = (p, c, [x0, x1, y0, y1] = DEF_REGION) => { const u = ((p.fx ?? 0.5) - c.x) / c.w, v = ((p.fy ?? 0.4) - c.y) / c.h; return u >= x0 && u <= x1 && v >= y0 && v <= y1; };
+// How specific a tag is among the people photos (a rare tag like "barista" says more than "man" or "portrait").
+const IDF = (() => { const df = new Map(); for (const p of PEOPLE) for (const t of new Set(p.tags || [])) df.set(t, (df.get(t) || 0) + 1); return (w) => (df.has(w) ? Math.log(PEOPLE.length / df.get(w)) : 0); })();
+/** A people photo for a spot: the library's best matches for the kind (pickPerson), most specific tags first, and among
+ * the right kind the one whose face already sits in the spot's region of the editor's centre crop at aspect r. When none
+ * does, `crop` is the crop that puts the face there (the editor's applyLook should use it for the template's own photo).
+ * r = null: any framing (thumbnails crop around the face). Deterministic per seed; never one of `exclude`. */
+function personFor(spot, r, seed, exclude = [], { cropOk = true } = {}) {
+  const ex = [...exclude.filter(Boolean)], pool = [];
+  const o = { sex: spot.sex || null, group: spot.group ?? null, landscape: spot.landscape ?? null };
+  for (let i = 0; i < 32; i++) {
+    const p = pickPerson(spot.kind, `${seed}:${i}`, { ...o, exclude: ex });
+    if (!p || !isPerson(p) || ex.includes(p.id)) break;
+    pool.push(p); ex.push(p.id);
+  }
+  if (!pool.length) return null;
+  const words = [...new Set(String(spot.kind).toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2))];
+  const score = (p) => words.reduce((s, w) => s + (p.tags?.includes(w) ? IDF(w) : 0), 0);
+  const ranked = pool.map((p, i) => [p, score(p), i]).sort((a, b) => b[1] - a[1] || a[2] - b[2]);
+  // the right kind (close to the best score), in pickPerson's seeded order so templates of one kind vary
+  const near = ranked.filter(([, s]) => s >= ranked[0][1] - 1.5).sort((a, b) => a[2] - b[2]).map(([p]) => p), all = ranked.map(([p]) => p);
+  if (!r) return { photo: near[0], crop: null };
+  const centre = (p) => faceInside(p, cropOf(p, r), spot.region), moved = (p) => faceInside(p, cropOf(p, r, spot.region || DEF_REGION), spot.region);
+  let p = near.find(centre);
+  if (p) return { photo: p, crop: null };
+  if (cropOk && (p = near.find(moved))) return { photo: p, crop: cropOf(p, r, spot.region || DEF_REGION) };
+  if ((p = all.find(centre))) return { photo: p, crop: null };
+  if (cropOk && (p = all.find(moved))) return { photo: p, crop: cropOf(p, r, spot.region || DEF_REGION) };
+  return { photo: all[0], crop: null };
+}
+
 /** A library photo for topic words (best first: a theme hit counts most, then tags), deterministic per seed; only
  * close matches are used, so a cat template gets an animal, a coffee template a cup. */
 function choose(words, seed, exclude = []) {
@@ -509,32 +644,58 @@ function choose(words, seed, exclude = []) {
   const list = good.length ? good : scored.length ? scored.map(([, p]) => p) : PHOTOS.filter((p) => !exclude.includes(p.id));
   return list.length ? list[hash(String(seed)) % list.length] : null;
 }
-/** The template's photo from the library (same id -> same photo) and more photos for collages (never the same one). */
-const mainPhoto = (tool, th, id) => choose(tool === BR ? th.cut : id === "pe~passport~people" ? "graduate portrait person" : th.topic, id);
-function morePhotos(th, id, main, count) {
+/** The template's photo from the library (same id -> same photo): a people photo where the template shows a person. */
+const mainPhoto = (tool, th, id) => choose(tool === BR ? th.cut : th.topic, id);
+/** More photos for collages (never the same one): the photo-booth strip shows people in every frame, the team theme its
+ * team, and the front print of a lifestyle photo stack a person; the rest are photos of the theme. Boxes are 1:1 except
+ * the strip's wide frames. */
+function morePhotos(th, id, main, count, lid = "", tid = "") {
   const out = [], ex = [main?.id];
-  for (let i = 0; i < count; i++) { const q = choose(th.topic, `${id}:more${i}`, ex); out.push(q); ex.push(q?.id); }
+  const spotAt = (i) => {
+    if (lid === "photo-strip") return [i % 2 ? { kind: "couple love happy", region: [0.15, 0.85, 0.15, 0.7] } : { kind: "friends young happy group", group: true, region: [0.15, 0.85, 0.15, 0.7] }, 1.94];
+    if (tid === "people" && (lid === "collage-grid" || lid === "polaroid-stack")) return [i % 2 ? { kind: WHO.people.one } : { kind: WHO.people.group, group: true }, 1];
+    if (lid === "polaroid-stack" && LIFE_THEMES.has(tid) && i === count - 1) return [{ kind: WHO[tid].one, region: [0.2, 0.8, 0.12, 0.55] }, 1];
+    if (lid === "collage-grid" && LIFE_THEMES.has(tid) && i === 0) return [{ kind: WHO[tid].one, region: [0.2, 0.8, 0.12, 0.6] }, 0.98];
+    return null;
+  };
+  for (let i = 0; i < count; i++) {
+    // the editor centre-crops these extra photos into their boxes, so the face must already be in view there
+    const sp = spotAt(i), q = (sp && personFor(sp[0], sp[1], `${id}:more${i}`, ex, { cropOk: false })?.photo) || choose(th.topic, `${id}:more${i}`, ex);
+    out.push(q); ex.push(q?.id);
+  }
   return out;
+}
+/** The template's photo { photo, crop }: a person for a person spot (its face where the design leaves room for it; crop
+ * when the centre crop cannot show it there), else the theme's photo. */
+function templatePhoto(tool, lid, tid, id, aspect) {
+  const th = THEMES[tid];
+  const spot = id === "pe~passport~people" ? ID_SPOT : tool === PE ? peSpot(lid, tid, aspect) : tool === BR ? brSpot(lid, tid) : ieAiSpot(tool, lid, tid);
+  // background-remover cut-outs in a shape are fitted around the face in the thumbnail; full-frame ones are cropped
+  const r = spot && (tool === PE || (tool === BR && spot.region)) ? RATIO[aspect] || null : null;
+  return (spot && personFor(spot, r, id)) || { photo: mainPhoto(tool, th, id), crop: null };
 }
 /** Build the recipe for an id like "pe~instant-photo~beach~p02" (tool~layout~theme[~palette]). */
 function recipe(id) {
   const parts = String(id || "").split("~"), [pre, lid0, tid, pid] = parts, tool = PRE_TOOL[pre], d = TOOLS[tool];
   if (!d || parts.length > 4) return null;
   const extra = d.extra.find((x) => x.id === id);
-  if (extra) { const th = THEMES[extra.theme]; return { ...extra.recipe, id, tool, sample: th.sample, photo: mainPhoto(tool, th, id), theme: extra.theme, layout: extra.layout, layoutName: extra.name, themeName: th.label, name: extra.name, section: extra.section, tags: extra.tags }; }
+  if (extra) { const th = THEMES[extra.theme], tp = templatePhoto(tool, extra.layout, extra.theme, id, extra.recipe.aspect); return { ...extra.recipe, id, tool, sample: th.sample, photo: tp.photo, ...(tp.crop ? { crop: tp.crop } : {}), theme: extra.theme, layout: extra.layout, layoutName: extra.name, themeName: th.label, name: extra.name, section: extra.section, tags: extra.tags }; }
   const lid = ALIAS_LAYOUT[lid0] || lid0;
   const Lx = d.layouts.find((x) => x.id === lid), th = THEMES[tid];
   if (!Lx || !th || !d.themes.includes(tid)) return null;
   const pal = d.pals && !Lx.fixed ? palById[pid] : null;
   if (d.pals && !Lx.fixed && !pal) return null;
   if ((Lx.fixed || !d.pals) && pid) return null;
-  const photo = Lx.photoWords ? choose(Lx.photoWords, id) : mainPhoto(tool, th, id);
-  const base = { id, tool, sample: th.sample, photo, theme: tid, layout: lid, palette: pal?.id || null, layoutName: Lx.name, themeName: th.label };
+  // photo-editor layouts give their crop shape from the build (it does not depend on the photo)
+  const probe = tool === PE ? Lx.build({ th, p: pal, r: 1, photo: null, id, more: () => [null, null, null] }) : null;
+  // crop: where the photo editor should crop a people photo so the face sits where the design leaves room for it (only
+  // when its centre crop cannot); thumbnails and designSvg draw that crop
+  const { photo, crop } = templatePhoto(tool, lid, tid, id, probe ? probe.aspect : Lx.aspect);
+  const base = { id, tool, sample: th.sample, photo, ...(crop ? { crop } : {}), theme: tid, layout: lid, palette: pal?.id || null, layoutName: Lx.name, themeName: th.label };
   const ratioOf = (aspect) => RATIO[aspect] || (photo ? photo.w / photo.h : 1.5);
   if (tool === PE) {
-    const probe = Lx.build({ th, p: pal, r: 1, photo, id, more: () => [null, null, null] });
     const r = ratioOf(probe.aspect);
-    const c = { th, p: pal, r, photo, id, more: (k) => morePhotos(th, id, photo, k) };
+    const c = { th, p: pal, r, photo, id, more: (k) => morePhotos(th, id, photo, k, lid, tid) };
     const b = Lx.build(c);
     return { ...base, kind: "look", ...b, name: `${Lx.name} · ${th.title} · ${pal.name}`, section: Lx.section, tags: [...Lx.tags, ...th.tags, pal.name.toLowerCase()] };
   }
@@ -587,7 +748,7 @@ const nn = (v) => String(Math.round(v * 100) / 100);
 /** The finished picture of a "look" template, W×H, before its frame. */
 const idGuide = (W, H) => `<g fill="none" stroke="#fff" stroke-width="${nn(W * 0.008)}" stroke-dasharray="${nn(W * 0.03)} ${nn(W * 0.02)}" opacity=".9"><ellipse cx="${nn(W / 2)}" cy="${nn(H * 0.44)}" rx="${nn(W * 0.27)}" ry="${nn(H * 0.29)}"/><path d="M0 ${nn(H * 0.12)}H${nn(W)}M0 ${nn(H * 0.8)}H${nn(W)}"/></g>`;
 function lookBody(k, t, W, H, size) {
-  let s = lookPhoto(k, t, t.photo, 0, 0, W, H, size);
+  let s = lookPhoto(k, t, t.photo, 0, 0, W, H, size, { crop: t.crop });
   for (const o of t.overlays || []) s += overlaySvg(k, o, W, H, size);
   if (t.aspect === "passport") s += idGuide(W, H);
   return `<g${k.clipRect(0, 0, W, H)}>${s}</g>`;
@@ -608,24 +769,41 @@ function bgBody(k, t, W, H, size) {
   else back = `<svg x="${nn(ox)}" y="${nn(oy)}" width="${nn(FW)}" height="${nn(FH)}" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid slice">${backdropInner(b.backdrop, k.id("b"))}</svg>`;
   // the subject's outline in the full box
   const kx = FW / VW, m = Math.min(FW, FH);
-  let d;
+  let d, box = null;
   const clip = t.clip || "blob", bd = b.backdrop?.kind === "pop" ? b.backdrop : null;
   const scaled = (dd) => `<path d="${dd}" transform="translate(${nn(ox)} ${nn(oy)}) scale(${nn(kx)})"/>`;
+  // the shape's box (px), where a person's head and shoulders are fitted (popShape geometry, in the scaled pop box)
+  const popBoxOf = (spec, grow) => {
+    const cx = VW / 2, cy = VH * (spec.cy ?? 0.54), R = Math.min(VW, VH) * (spec.r ?? 0.36) * grow;
+    const [hx, y0, y1] = spec.shape === "arch" ? [R * 0.85, cy - R * 1.25, VH] : spec.shape === "half" ? [R * 1.4, VH - R * 1.4, VH] : spec.shape === "square" ? [R * 0.875, cy - R * 0.875, cy + R * 0.875]
+      : spec.shape === "diamond" ? [R * 1.25, cy - R * 1.25, cy + R * 1.25] : spec.shape === "blob" || !spec.shape ? [R * 1.1, cy - R * 1.1, cy + R * 1.1] : [R, cy - R, cy + R];
+    return { x: ox + (cx - hx) * kx, y: oy + y0 * kx, w: 2 * hx * kx, h: (y1 - y0) * kx };
+  };
   if (clip === "none") d = `<rect width="${nn(W)}" height="${nn(H)}"/>`;
-  else if (bd && bd.shape !== "none" && ["circle", "blob", "arch", "diamond", "rounded"].includes(clip) && clip === (bd.shape === "square" ? "rounded" : bd.shape === "half" ? "arch" : bd.shape === "ring" || bd.shape === "stack" ? "circle" : bd.shape)) d = scaled(popShape(bd, VW, VH, bd.shape === "half" ? 0.75 : 0.93));
-  else if (clip === "ellipse") d = `<ellipse cx="${nn(W / 2)}" cy="${nn(H * 0.55)}" rx="${nn(m * 0.36)}" ry="${nn(m * 0.42)}"/>`;
-  else if (clip === "circle") d = `<circle cx="${nn(W / 2)}" cy="${nn(H * 0.54)}" r="${nn(m * 0.34)}"/>`;
-  else if (clip === "rect" || clip === "rounded") d = `<rect x="${nn(W / 2 - m * 0.33)}" y="${nn(H * 0.54 - m * 0.33)}" width="${nn(m * 0.66)}" height="${nn(m * 0.66)}" rx="${nn(clip === "rounded" ? m * 0.08 : m * 0.01)}"/>`;
-  else if (clip === "arch") d = scaled(popShape({ shape: "arch", cy: 0.6 }, VW, VH, 0.93));
-  else if (clip === "heart") d = `<path d="${frameShapeD("heart", m * 0.7, m * 0.66)}" transform="translate(${nn(W / 2 - m * 0.35)} ${nn(H * 0.55 - m * 0.33)})"/>`;
-  else d = scaled(popShape({ shape: clip === "diamond" ? "diamond" : "blob", seed: 4 }, VW, VH, 0.93));
+  else if (bd && bd.shape !== "none" && ["circle", "blob", "arch", "diamond", "rounded"].includes(clip) && clip === (bd.shape === "square" ? "rounded" : bd.shape === "half" ? "arch" : bd.shape === "ring" || bd.shape === "stack" ? "circle" : bd.shape)) {
+    d = scaled(popShape(bd, VW, VH, bd.shape === "half" ? 0.75 : 0.93)); box = popBoxOf(bd, bd.shape === "half" ? 0.75 : 0.93);
+  } else if (clip === "ellipse") { d = `<ellipse cx="${nn(W / 2)}" cy="${nn(H * 0.55)}" rx="${nn(m * 0.36)}" ry="${nn(m * 0.42)}"/>`; box = { x: W / 2 - m * 0.36, y: H * 0.55 - m * 0.42, w: m * 0.72, h: m * 0.84 }; }
+  else if (clip === "circle") { d = `<circle cx="${nn(W / 2)}" cy="${nn(H * 0.54)}" r="${nn(m * 0.34)}"/>`; box = { x: W / 2 - m * 0.34, y: H * 0.54 - m * 0.34, w: m * 0.68, h: m * 0.68 }; }
+  else if (clip === "rect" || clip === "rounded") { d = `<rect x="${nn(W / 2 - m * 0.33)}" y="${nn(H * 0.54 - m * 0.33)}" width="${nn(m * 0.66)}" height="${nn(m * 0.66)}" rx="${nn(clip === "rounded" ? m * 0.08 : m * 0.01)}"/>`; box = { x: W / 2 - m * 0.33, y: H * 0.54 - m * 0.33, w: m * 0.66, h: m * 0.66 }; }
+  else if (clip === "arch") { d = scaled(popShape({ shape: "arch", cy: 0.6 }, VW, VH, 0.93)); box = popBoxOf({ shape: "arch", cy: 0.6 }, 0.93); }
+  else if (clip === "heart") { d = `<path d="${frameShapeD("heart", m * 0.7, m * 0.66)}" transform="translate(${nn(W / 2 - m * 0.35)} ${nn(H * 0.55 - m * 0.33)})"/>`; box = { x: W / 2 - m * 0.3, y: H * 0.55 - m * 0.2, w: m * 0.6, h: m * 0.5 }; }
+  else { const sp = { shape: clip === "diamond" ? "diamond" : "blob", seed: 4 }; d = scaled(popShape(sp, VW, VH, 0.93)); box = popBoxOf(sp, 0.93); }
   const cid = k.id("c");
   k.defs.push(`<clipPath id="${cid}">${d}</clipPath>`);
   const shapeOnly = d.replace(/\/>$/, ` fill="#ffffff"/>`);
   let subj = "";
   if (t.cutShadow || b.shadow) subj += `<g opacity=".55"${k.blur(m * 0.025)} transform="translate(${nn(m * 0.02)} ${nn(m * 0.035)})"><g fill="#000">${shapeOnly.replace(/fill="#ffffff"/, 'fill="#000000"')}</g></g>`;
   if (t.cutOutline || b.outline) subj += `<g transform="translate(0 0)">${shapeOnly.replace(/\/>$/, ` stroke="#ffffff" stroke-width="${nn(m * 0.035)}" stroke-linejoin="round"/>`)}</g>`;
-  subj += `<g clip-path="url(#${cid})">${lookPhoto(k, { adjust: { vibrance: 10, clarity: 8 } }, ph, clip === "none" ? 0 : ox, clip === "none" ? 0 : oy, clip === "none" ? W : FW, clip === "none" ? H : FH, size)}</g>`;
+  // a person in a shape: the photo is placed so the face sits in the upper part of the shape and the shape is covered by
+  // the head and shoulders (the editor's real cut-out keeps the whole person; this preview clips it to the shape)
+  let px = clip === "none" ? 0 : ox, py = clip === "none" ? 0 : oy, pw = clip === "none" ? W : FW, phh = clip === "none" ? H : FH;
+  if (box && isPerson(ph)) {
+    const fx = Math.min(0.85, Math.max(0.15, ph.fx ?? 0.5)), fy = Math.min(0.7, Math.max(0.08, ph.fy ?? 0.3)), ar = ph.w / ph.h;
+    const tx = box.x + box.w / 2, ty = box.y + box.h * 0.36;
+    phh = Math.max(box.h * 1.25, (box.h * 0.38) / fy, (box.h * 0.66) / (1 - fy), box.w / (2 * fx * ar), box.w / (2 * (1 - fx) * ar));
+    pw = phh * ar; px = tx - fx * pw; py = ty - fy * phh;
+  }
+  subj += `<g clip-path="url(#${cid})">${lookPhoto(k, { adjust: { vibrance: 10, clarity: 8 } }, ph, px, py, pw, phh, size, { crop: clip === "none" ? t.crop : null })}</g>`;
   let s = back + subj;
   for (const o of t.overlays || []) s += overlaySvg(k, o, W, H, size);
   if (t.aspect === "passport") s += idGuide(W, H);
@@ -639,8 +817,8 @@ const AFTER = { adjust: { contrast: 14, vibrance: 22, clarity: 20, exposure: 4 }
 /** Image enhancer card: the real photo before (blurry / noisy / faded / dark) and after (crisp), several layouts. */
 function enhanceSvg(k, t, size) {
   const e = t.enhance, ph = t.photo, bf = BEFORE[t.before] || BEFORE.blur, badge = e.scale === 1 ? "Crisp" : e.scale + "×";
-  const before = (x, y, w, h, clip = "") => { let s = lookPhoto(k, bf, ph, x, y, w, h, size, { extraBlur: bf.blur, clip }); if (bf.noise) { const fid = k.id("n"); k.defs.push(`<filter id="${fid}" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" seed="3"/><feColorMatrix values="0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 1.2 -.35"/></filter>`); s += `<rect x="${nn(x)}" y="${nn(y)}" width="${nn(w)}" height="${nn(h)}" filter="url(#${fid})" opacity=".55"${clip}/>`; } return s; };
-  const after = (x, y, w, h, clip = "") => lookPhoto(k, AFTER, ph, x, y, w, h, size, { clip });
+  const before = (x, y, w, h, clip = "") => { let s = lookPhoto(k, bf, ph, x, y, w, h, size, { face: true, extraBlur: bf.blur, clip }); if (bf.noise) { const fid = k.id("n"); k.defs.push(`<filter id="${fid}" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" seed="3"/><feColorMatrix values="0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 1.2 -.35"/></filter>`); s += `<rect x="${nn(x)}" y="${nn(y)}" width="${nn(w)}" height="${nn(h)}" filter="url(#${fid})" opacity=".55"${clip}/>`; } return s; };
+  const after = (x, y, w, h, clip = "") => lookPhoto(k, AFTER, ph, x, y, w, h, size, { face: true, clip });
   const label = (x, y, txt, dark = true, anchor = "start") => pillSvg(x, y, txt, 9, dark ? "rgba(17,20,33,.72)" : "#5b4cf0", "#ffffff", anchor);
   let s = `<rect width="320" height="200" fill="${k.lin(["#f3f4fa", "#e6e9f3"], 90)}"/>`;
   const X = 8, Y = 8, W = 304, H = 184;
@@ -691,27 +869,27 @@ function aiSvg(k, t, size) {
   const look = t.panel ? { adjust: { vibrance: 12, clarity: 10 } } : t;
   const chip = (x, y, maxW = 292) => { const fs = 10.5, w = Math.min(maxW, em(prompt, "sans", true) * fs * 1.04 + 48); return `<g${k.shadow(3, 8, 0.25)}><rect x="${x}" y="${y}" width="${nn(w)}" height="30" rx="15" fill="#ffffff"/></g>${sparkle(x + 16, y + 15, 8, "#8b5cf6")}<text x="${x + 30}" y="${y + 19}" font-family="Arial,Helvetica,sans-serif" font-size="${fs}" font-weight="600" fill="#1b2133">${esc(prompt)}</text>`; };
   let s = `<rect width="320" height="200" fill="${k.lin(["#f5f3ff", "#ece9fb"], 90)}"/>`;
-  if (t.panel === "bg") { s += `<rect x="8" y="8" width="304" height="184" rx="10" fill="#ffffff"/>` + `<g${k.shadow(8, 16, 0.25)}>${lookPhoto(k, look, ph, 100, 30, 120, 120, size, { clip: k.clip(`<path d="${frameShapeD("blob", 120, 120)}" transform="translate(100 30)"/>`) })}</g>` + chip(14, 156); return s; }
+  if (t.panel === "bg") { s += `<rect x="8" y="8" width="304" height="184" rx="10" fill="#ffffff"/>` + `<g${k.shadow(8, 16, 0.25)}>${lookPhoto(k, look, ph, 100, 30, 120, 120, size, { face: true, clip: k.clip(`<path d="${frameShapeD("blob", 120, 120)}" transform="translate(100 30)"/>`) })}</g>` + chip(14, 156); return s; }
   switch (t.view) {
     case "split": {
-      s += lookPhoto(k, { adjust: {} }, ph, 8, 8, 304, 184, size, { clip: k.clipRect(8, 8, 152, 184, 0) }) + lookPhoto(k, look, ph, 8, 8, 304, 184, size, { clip: k.clipRect(160, 8, 152, 184, 0) });
+      s += lookPhoto(k, { adjust: {} }, ph, 8, 8, 304, 184, size, { face: true, clip: k.clipRect(8, 8, 152, 184, 0) }) + lookPhoto(k, look, ph, 8, 8, 304, 184, size, { face: true, clip: k.clipRect(160, 8, 152, 184, 0) });
       s += `<rect x="158.5" y="8" width="3" height="184" fill="#fff"/>` + chip(14, 14) + sparkle(292, 170, 10, "#ffffff");
       break;
     }
     case "chat": {
       s += `<rect x="8" y="8" width="304" height="184" rx="12" fill="#ffffff"/>`;
-      s += lookPhoto(k, { adjust: {} }, ph, 18, 18, 86, 64, size, { clip: k.clipRect(18, 18, 86, 64, 8) }) + `<path d="M112 50h22M128 44l6 6-6 6" stroke="#8b5cf6" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
-      s += `<g${k.shadow(6, 14, 0.28)}>${lookPhoto(k, look, ph, 142, 18, 160, 120, size, { clip: k.clipRect(142, 18, 160, 120, 10) })}</g>` + sparkle(290, 30, 9, "#ffffff");
+      s += lookPhoto(k, { adjust: {} }, ph, 18, 18, 86, 64, size, { face: true, clip: k.clipRect(18, 18, 86, 64, 8) }) + `<path d="M112 50h22M128 44l6 6-6 6" stroke="#8b5cf6" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+      s += `<g${k.shadow(6, 14, 0.28)}>${lookPhoto(k, look, ph, 142, 18, 160, 120, size, { face: true, clip: k.clipRect(142, 18, 160, 120, 10) })}</g>` + sparkle(290, 30, 9, "#ffffff");
       s += chip(18, 150, 284);
       break;
     }
     case "card": {
-      s += `<g${k.shadow(8, 16, 0.25)}>${lookPhoto(k, look, ph, 40, 14, 240, 140, size, { clip: k.clipRect(40, 14, 240, 140, 12) })}</g>` + chip(24, 160, 272) + sparkle(266, 30, 11, "#ffffff") + sparkle(250, 46, 6, "#ffffff");
+      s += `<g${k.shadow(8, 16, 0.25)}>${lookPhoto(k, look, ph, 40, 14, 240, 140, size, { face: true, clip: k.clipRect(40, 14, 240, 140, 12) })}</g>` + chip(24, 160, 272) + sparkle(266, 30, 11, "#ffffff") + sparkle(250, 46, 6, "#ffffff");
       break;
     }
     default: {
-      s += lookPhoto(k, look, ph, 8, 8, 304, 184, size, { clip: k.clipRect(8, 8, 304, 184, 10) });
-      s += `<g${k.shadow(4, 10, 0.3)}>${lookPhoto(k, { adjust: {} }, ph, 18, 18, 70, 52, size, { clip: k.clipRect(18, 18, 70, 52, 6) })}</g><rect x="18" y="18" width="70" height="52" rx="6" fill="none" stroke="#fff" stroke-width="2"/>` + pillSvg(22, 54, "Before", 7, "rgba(17,20,33,.72)", "#fff");
+      s += lookPhoto(k, look, ph, 8, 8, 304, 184, size, { face: true, clip: k.clipRect(8, 8, 304, 184, 10) });
+      s += `<g${k.shadow(4, 10, 0.3)}>${lookPhoto(k, { adjust: {} }, ph, 18, 18, 70, 52, size, { face: true, clip: k.clipRect(18, 18, 70, 52, 6) })}</g><rect x="18" y="18" width="70" height="52" rx="6" fill="none" stroke="#fff" stroke-width="2"/>` + pillSvg(22, 54, "Before", 7, "rgba(17,20,33,.72)", "#fff");
       s += chip(14, 154) + sparkle(292, 28, 11, "#ffffff") + sparkle(276, 44, 6, "#ffffff");
     }
   }

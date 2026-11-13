@@ -270,10 +270,10 @@ const screenR = (item) => Math.round(paintRatio(pageOf(item)) * 100) / 100;
 // Per box: measured on the box's own original letters (at 1x hinting treats "Male" and "0300…" differently).
 const fitKey = (item, R) => (item.font.orig ? `${item.id}|${item.font.orig.key}|${famOf(item.font)}|${!!item.font.italic}|${R}` : null);
 // Only while the box keeps the document's style (a font, weight or slant picked by hand is used as picked).
-const useFit = (item) => !!(item.font.orig && item.font.useOrig && item.base && fontSig(item.font) === item.base.font);
+const hasOwnFit = (item) => !!(item.font.orig && item.font.useOrig && item.base && fontSig(item.font) === item.base.font);
 function fallbackFit(item, R = PDF_R) {
   const key = fitKey(item, R);
-  if (!key || !useFit(item)) return Promise.resolve(null);
+  if (!key || !hasOwnFit(item)) return Promise.resolve(null);
   if (!fitCache.has(key)) {
     const e = { value: undefined, promise: null };
     e.promise = measureFit(item, R).catch((err) => { console.warn("Weight measurement failed", err); return null; }).then((v) => {
@@ -287,14 +287,14 @@ function fallbackFit(item, R = PDF_R) {
 }
 // The measured fit for an item right now: undefined while it is being measured, null when there is none.
 function fitNow(item, R) {
-  if (!useFit(item)) return null;
+  if (!hasOwnFit(item)) return null;
   const e = fitCache.get(fitKey(item, R));
   if (!e) { fallbackFit(item, R); return undefined; }
   return e.value;
 }
 // Weight and slant of the look-alike font file for an item (at resolution R: the screen's by default).
 function openSpec(item, R = screenR(item)) {
-  const fit = useFit(item) ? fitCache.get(fitKey(item, R))?.value : null;
+  const fit = hasOwnFit(item) ? fitCache.get(fitKey(item, R))?.value : null;
   return fit ? { bold: fit.weight >= 600, italic: !!item.font.italic, weight: fit.weight } : { bold: !!item.font.bold, italic: !!item.font.italic, weight: item.font.weight ?? null };
 }
 async function measureFit(item, key) {
@@ -2390,7 +2390,7 @@ async function exportText(out, p, page, item, { at, k, rot, embedded, notes, lin
   const inkAlpha = ink.fillAlpha < 1 ? ink.fillAlpha : 1;
   // Lines the document's font can't write: the look-alike at the weight measured on the page at PDF_R (the outlines'
   // own thickness, which every viewer draws; see fallbackFit).
-  const fit = useFit(item) ? await fallbackFit(item, PDF_R) : null, spec = openSpec(item, PDF_R);
+  const fit = hasOwnFit(item) ? await fallbackFit(item, PDF_R) : null, spec = openSpec(item, PDF_R);
   let shadow = null;
   if (fx.shadow) {
     const ang = ((fx.shadow.angle ?? 45) * Math.PI) / 180, d = (fx.shadow.dist ?? 0.08) * size, dx = Math.cos(ang) * d, dy = Math.sin(ang) * d;
@@ -2869,7 +2869,8 @@ function placeElement(el) {
 }
 async function renderPhotos() {
   if (!photosLib) {
-    try { photosLib = (await (await fetch(new URL("photos/photos.json", import.meta.url))).json()).photos || []; }
+    // People photos (Pexels) are template sample photos only, not part of the insertable photo collection.
+    try { photosLib = ((await (await fetch(new URL("photos/photos.json", import.meta.url))).json()).photos || []).filter((ph) => !ph.people); }
     catch { $("photoGrid").innerHTML = '<p class="muted">Photos could not be loaded. Check the connection and try again.</p>'; return; }
   }
   const words = $("photoSearch").value.toLowerCase().split(/\s+/).filter(Boolean);

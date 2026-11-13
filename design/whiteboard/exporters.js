@@ -1,6 +1,6 @@
 // Board exports (pure; the PDF writer gets pdf-lib and /pdf-editor/vector.js drawPrims passed in).
 import { rectsIntersect } from "./geometry.js";
-import { objectPrims, objectBounds, primsToSvg, objectSvg, canRotate, centerOf } from "./render.js";
+import { objectPrims, objectBounds, primsToSvg, objectSvg, canRotate, centerOf, coverCrop } from "./render.js";
 import { byIdOf } from "./model.js";
 
 export const PDF_SCALE = 0.75; // 96 px = 72 pt
@@ -39,6 +39,23 @@ ${body}
 `;
 }
 
+/** The SVG file with every same-origin library photo (/pdf-editor/photos/…, e.g. the people photos of a team board)
+ *  embedded as a data: URL, so the downloaded file shows its photos when opened on its own. */
+export async function inlineLibraryPhotos(svg, fetchFn = globalThis.fetch) {
+  const urls = [...new Set([...String(svg).matchAll(/href="(\/pdf-editor\/photos\/[\w.-]+\.(?:jpe?g|png))"/gi)].map((m) => m[1]))];
+  for (const u of urls) {
+    try {
+      const r = await fetchFn(u);
+      if (!r.ok) continue;
+      const b = new Uint8Array(await r.arrayBuffer());
+      let s = "";
+      for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+      svg = svg.split(`href="${u}"`).join(`href="data:${/png$/i.test(u) ? "image/png" : "image/jpeg"};base64,${btoa(s)}"`);
+    } catch { /* keep the link */ }
+  }
+  return svg;
+}
+
 /** Bytes and type of a data: URL. */
 export function dataUrlBytes(src) {
   const m = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(String(src || ""));
@@ -72,6 +89,9 @@ export async function exportPdf(board, { PDFLib, drawPrims }, opts = {}) {
     const origin = rotated ? [origin0[0] + ccx * s, origin0[1] - ccy * s] : origin0;
     const rotationDeg = rotated ? -o0.rot : 0;
     const prims = objectPrims(o, byId);
+    // Shapes drawn under a picture (the colour circle behind a round people photo) go first.
+    const under = prims.filter((p) => p.under);
+    if (under.length) await drawPrims(out, page, under, { origin, sx: s, embedded, rotationDeg });
     for (const p of prims) {
       if (p.img == null) continue;
       let img = images.get(p.img);
@@ -89,16 +109,18 @@ export async function exportPdf(board, { PDFLib, drawPrims }, opts = {}) {
         // pdf-lib turns an image around its bottom-left corner: place that corner where the rotation puts it.
         const t = (rotationDeg * Math.PI) / 180, cos = Math.cos(t), sin = Math.sin(t), lx = p.x, ly = p.y + p.h;
         page.drawImage(img, { x: origin[0] + (cos * lx + sin * ly) * s, y: origin[1] + (sin * lx - cos * ly) * s, width: p.w * s, height: p.h * s, rotate: PDFLib.degrees(rotationDeg), opacity: p.op ?? 1 });
-      } else if (img && p.fit === "cover" && img.width && img.height && PDFLib.clip) {
-        // Fill the box and crop: draw the picture bigger, clipped to the box.
-        const bx = origin[0] + p.x * s, by = origin[1] - (p.y + p.h) * s, bw = p.w * s, bh = p.h * s, k = Math.max(bw / img.width, bh / img.height);
-        page.pushOperators(PDFLib.pushGraphicsState(), PDFLib.rectangle(bx, by, bw, bh), PDFLib.clip(), PDFLib.endPath());
-        page.drawImage(img, { x: bx + (bw - img.width * k) / 2, y: by + (bh - img.height * k) / 2, width: img.width * k, height: img.height * k, opacity: p.op ?? 1 });
+      } else if (img && (p.fit === "cover" || p.round) && img.width && img.height && PDFLib.clip) {
+        // Fill the box and crop around the focus: draw the picture bigger, clipped to the box (an ellipse when round).
+        const bx = origin[0] + p.x * s, by = origin[1] - (p.y + p.h) * s, bw = p.w * s, bh = p.h * s;
+        const c = p.fit === "cover" ? coverCrop(p.w, p.h, img.width / img.height, p.fx, p.fy, p.zoom) : { x: 0, y: 0, w: 1, h: 1 };
+        const dw = bw / c.w, dh = bh / c.h;
+        page.pushOperators(PDFLib.pushGraphicsState(), ...clipPath(PDFLib, bx, by, bw, bh, p.round), PDFLib.clip(), PDFLib.endPath());
+        page.drawImage(img, { x: bx - c.x * dw, y: by + bh + c.y * dh - dh, width: dw, height: dh, opacity: p.op ?? 1 });
         page.pushOperators(PDFLib.popGraphicsState());
       } else if (img) page.drawImage(img, { x: origin[0] + p.x * s, y: origin[1] - (p.y + p.h) * s, width: p.w * s, height: p.h * s, opacity: p.op ?? 1 });
     }
     // Emoji reaction marks have no letters in the open PDF fonts: the badge and its count are kept, the emoji is left out quietly.
-    const shapes = prims.filter((p) => p.img == null && p.t == null), texts = prims.filter((p) => p.t != null && !p.emoji);
+    const shapes = prims.filter((p) => p.img == null && p.t == null && !p.under), texts = prims.filter((p) => p.t != null && !p.emoji);
     if (shapes.length) await drawPrims(out, page, shapes, { origin, sx: s, embedded, rotationDeg });
     // Text line by line: a letter the open fonts don't have (emoji, some scripts) only drops that letter.
     for (const t of texts) {
@@ -111,6 +133,13 @@ export async function exportPdf(board, { PDFLib, drawPrims }, opts = {}) {
   }
   if (dropped.length) opts.onWarning?.(`Some letters (like emoji) can't be written in a PDF with the open fonts and were left out.`, dropped);
   return out.save();
+}
+/** PDF path operators for a clip: the box, or the ellipse inside it (four Bézier arcs) when round and pdf-lib has curves. */
+function clipPath(PDFLib, x, y, w, h, round) {
+  if (!round || !PDFLib.moveTo || !PDFLib.appendBezierCurve) return [PDFLib.rectangle(x, y, w, h)];
+  const k = 0.5522847498, cx = x + w / 2, cy = y + h / 2, rx = w / 2, ry = h / 2, B = PDFLib.appendBezierCurve;
+  return [PDFLib.moveTo(cx + rx, cy), B(cx + rx, cy + ry * k, cx + rx * k, cy + ry, cx, cy + ry), B(cx - rx * k, cy + ry, cx - rx, cy + ry * k, cx - rx, cy),
+    B(cx - rx, cy - ry * k, cx - rx * k, cy - ry, cx, cy - ry), B(cx + rx * k, cy - ry, cx + rx, cy - ry * k, cx + rx, cy), PDFLib.closePath ? PDFLib.closePath() : PDFLib.lineTo(cx + rx, cy)];
 }
 // Letters outside what the open fonts reliably cover: Latin, Greek, Cyrillic, common punctuation and the euro sign.
 const UNSAFE = /[^\u0000-\u052f\u2010-\u2027\u2030-\u205e\u20ac]/gu;

@@ -1,15 +1,32 @@
-// Pictures for the website templates: real photos from the shared library (CC0 / public domain, same origin, credits
-// in /pdf-editor/photos/CREDITS.md) for heroes, about, gallery, team, products and testimonials; our own simple SVG
+// Pictures for the website templates: real photos from the shared library (places: CC0 / public domain; people: Pexels
+// License; same origin, credits in /pdf-editor/photos/CREDITS.md) for heroes, about, gallery, products, and real people
+// for team members, review avatars and person-led heroes / about photos (faces kept in view); our own simple SVG
 // drawings (kept for block defaults and saved sites) plus a small stroke icon set for feature cards. Pure (no DOM).
-import { photoUrl, themesFor, PHOTOS, PHOTO_BASE } from "../shared/photo-library.js";
+import { photoUrl, themesFor, PHOTOS, PEOPLE, ALL_PHOTOS, PHOTO_BASE, pickPerson, isPerson, objectPosition } from "../shared/photo-library.js";
 
 /* ------------------------------------------------------------------ library photos */
 export { PHOTO_BASE };
-const THUMB_OF = new Map(PHOTOS.map((p) => [PHOTO_BASE + p.file, PHOTO_BASE + p.thumb]));
+// Places/things AND people photos (Pexels License, /pdf-editor/photos/CREDITS.md) by their full and small file URLs.
+const THUMB_OF = new Map(ALL_PHOTOS.map((p) => [PHOTO_BASE + p.file, PHOTO_BASE + p.thumb]));
+const BY_URL = new Map(ALL_PHOTOS.flatMap((p) => [[PHOTO_BASE + p.file, p], [PHOTO_BASE + p.thumb, p]]));
 /** True for a same-origin library photo URL ("/pdf-editor/photos/…"). */
 export const isLibraryPhoto = (u) => typeof u === "string" && u.startsWith(PHOTO_BASE) && /^\/pdf-editor\/photos\/[\w.-]+\.(jpe?g|png|webp)$/i.test(u);
 /** The small (360 px) file of a full-size library photo URL; other URLs are returned unchanged. */
 export const thumbOf = (u) => THUMB_OF.get(u) || u;
+// A downloaded site has its library photos inside as data: URLs (exporter.js bundlePhotos). It tells us which data:
+// URL was which library photo (a short fingerprint, not the data itself), so people photos keep their face crop there.
+const ALIAS = new Map();
+const tip = (u) => `${u.length}:${u.slice(-48)}`;
+/** Called by the exporter with its Map(library URL -> data: URL) before it renders a download. */
+export function rememberPhotoData(map) { ALIAS.clear(); for (const [u, data] of map) if (typeof data === "string" && data.startsWith("data:")) ALIAS.set(tip(data), u); }
+/** The library photo record of a picture URL (full, small or a bundled data: copy), or null. */
+export function libraryPhotoOf(u) {
+  if (typeof u !== "string") return null;
+  if (u.startsWith("data:")) { const lib = ALIAS.get(tip(u)); return lib ? BY_URL.get(lib) || null : null; }
+  return BY_URL.get(u.replace(/^https?:\/\/[^/]+/, "")) || null;
+}
+/** CSS object-position that keeps the face in view for a library people photo ("" for every other picture). */
+export function photoPos(u) { const p = libraryPhotoOf(u); return isPerson(p) ? objectPosition(p) : ""; }
 // Close matches for a topic: photos whose library theme or one of whose tags IS one of the topic's words (or a
 // multi-word tag like "living room" found in the topic), best first (more matching words, then the library's own theme
 // order for the topic). The picker stays inside them, so a travel hero never gets a circuit board. Only when fewer than
@@ -27,6 +44,9 @@ function close(topic) {
   }
   return CLOSE.get(topic);
 }
+// People photos of children / teens (used only when a spot asks for kids, a school, a family…).
+const KIDS = PEOPLE.filter((p) => p.tags.some((t) => /^(child|kids|teen|teens|boy)$/.test(t))).map((p) => p.id);
+const KIDS_WORDS = /\b(?:child|children|kids?|girl|boy|teens?|family|families|school|class|classroom|students?)\b/i;
 const fnv = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 /**
  * A photo picker for one design: pick(topic, slot) -> full-size URL. The same seed always gives the same photos (one
@@ -43,6 +63,41 @@ export function photoPicker(seed) {
     return photoUrl(p, "full");
   };
   pick.many = (topic, count, slot = "m") => Array.from({ length: count }, (_, i) => pick(topic, `${slot}${i}`));
+  /**
+   * A people photo for a person spot (photo-library pickPerson): kind = who ("business woman headshot", "team
+   * meeting", "chef", "wedding couple", "testimonial customer"…), opts = { sex: "f" | "m", landscape, shot, group }.
+   * One picker never repeats a person.
+   */
+  pick.person = (kind, slot = used.size, opts = {}) => {
+    // "#tag" words in the kind = the photo must have that tag ("yoga woman #yoga"), while such photos are unused;
+    // children and teens only when the kind asks for them (a customer review or a team member is an adult).
+    const need = [...String(kind).matchAll(/#(\w+)/g)].map((x) => x[1]);
+    let text = String(kind).replace(/#\w+/g, " ").trim();
+    let exclude = [...used];
+    if (!KIDS_WORDS.test(text)) exclude = exclude.concat(KIDS);
+    if (need.length) {
+      const ok = new Set(PEOPLE.filter((p) => !exclude.includes(p.id) && need.some((t) => p.tags.includes(t)) && (!opts.sex || p.people.sex === opts.sex)).map((p) => p.id));
+      if (ok.size) exclude = exclude.concat(PEOPLE.filter((p) => !ok.has(p.id)).map((p) => p.id));
+      // every photo of that role is used: a plain smiling portrait rather than another job (no chef as a coach)
+      else text = /\b(?:team|group|audience|crowd|class|family|couple)\b/i.test(text) ? text : "member portrait smiling casual";
+    }
+    const p = pickPerson(text, `${seed}:${slot}`, { ...opts, exclude });
+    if (p) used.add(p.id);
+    return photoUrl(p, "full");
+  };
+  /** Marks photos a site already shows as used (by URL), so later picks never repeat them. */
+  pick.reserve = (urls) => { for (const u of urls || []) { const p = libraryPhotoOf(u); if (p) used.add(p.id); } return pick; };
+  /**
+   * Portraits for a row of people (team members, reviewers), one code per person: "f" woman, "m" man, "c" a couple,
+   * "g" a family or group, "o" / "O" an older woman / man, anything else = either (alternating).
+   */
+  pick.cast = (kind, codes, slot = "c") => [...String(codes)].map((c, i) => {
+    const s = `${slot}${i}`;
+    if (c === "c") return pick.person("couple love portrait", s);
+    if (c === "g") return pick.person("family", s);
+    if (c === "o" || c === "O") return pick.person("senior elderly portrait", s, { sex: c === "o" ? "f" : "m" });
+    return pick.person(kind, s, c === "f" || c === "m" ? { sex: c } : { sex: i % 2 ? "m" : "f" });
+  });
   return pick;
 }
 

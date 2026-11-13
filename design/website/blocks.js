@@ -2,7 +2,7 @@
 // renderer used for both the editor preview and the exported page, so what you see is what you export.
 // No DOM here: Node tests import this file directly.
 import { FONT_FAMILIES } from "../shared/brand.js";
-import { art, iconSvg, ICON_NAMES } from "./art.js";
+import { art, iconSvg, ICON_NAMES, photoPos } from "./art.js";
 
 /* ------------------------------------------------------------------ small helpers */
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -117,7 +117,7 @@ export const BLOCK_TYPES = {
   about: {
     label: "About", desc: "Your story with a picture.", anchor: "about",
     fields: [{ k: "title", t: "text", label: "Title" }, { k: "text", t: "area", label: "Text" }, { k: "image", t: "image", label: "Picture", optional: true }, { k: "button", t: "link", label: "Button" },
-      { k: "side", t: "select", label: "Picture side", options: [["left", "Left"], ["right", "Right"]] }],
+      { k: "side", t: "select", label: "Picture side", options: [["left", "Left"], ["right", "Right"], ["none", "No picture (text only)"]] }],
     make: () => ({ title: "About us", text: "Tell your story here: who you are, what you do and why you started.", image: art("shop"), button: L("", ""), side: "left" }),
   },
   gallery: {
@@ -226,6 +226,27 @@ export const ANIMS = [["", "None"], ["fade", "Fade"], ["rise", "Rise"], ["pan", 
 /** Embed block height (px) for a widget of a given height. */
 export const embedHeight = (h) => String([320, 480, 640, 840].find((x) => x >= (+h || 0) + 24) || 840);
 export const BG_CHOICES = [["", "Page colour"], ["alt", "Soft grey"], ["tint", "Light main colour"], ["primary", "Main colour"], ["dark", "Dark"]];
+/**
+ * A block's own text style (text added from the Text panel, font combinations): style.hf / style.bf heading and body
+ * font keys (FONT_FAMILIES), style.fg text colour, style.align, style.upper (capital headings), style.ls heading letter
+ * spacing (em). Empty = the site's theme. -> { css (inline on the section), cls (extra classes) }.
+ */
+export const TEXT_ALIGNS = [["", "Site default"], ["left", "Left"], ["center", "Centre"], ["right", "Right"]];
+export function textStyle(st = {}) {
+  let css = "", cls = "";
+  if (FONT_FAMILIES[st.hf]) css += `--hf:${fontStack(st.hf)};`;
+  if (FONT_FAMILIES[st.bf]) css += `--bf:${fontStack(st.bf)};font-family:${fontStack(st.bf)};`;
+  const fg = hex6(st.fg);
+  if (fg) css += `color:${fg};--hd:${fg};--mu:${fg};`;
+  if (["left", "center", "right"].includes(st.align)) css += `text-align:${st.align};`;
+  const ls = Number(st.ls);
+  if (st.upper || (ls && Math.abs(ls) <= 1)) {
+    cls += " tx";
+    if (st.upper) css += "--htt:uppercase;";
+    if (ls && Math.abs(ls) <= 1) css += `--hls:${Math.round(ls * 1000) / 1000}em;`;
+  }
+  return { css, cls };
+}
 
 export function newBlock(type, data = {}, style = {}) {
   const def = BLOCK_TYPES[type];
@@ -440,6 +461,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.65 var(--bf)}
 img{max-width:100%;height:auto;display:block}a{color:var(--pl)}
 h1,h2,h3{font-family:var(--hf);line-height:1.15;margin:0 0 .45em;color:var(--hd);overflow-wrap:break-word}
 h1{font-size:clamp(2.1rem,5.2vw,3.6rem);letter-spacing:-.025em}h2{font-size:clamp(1.65rem,3.4vw,2.4rem);letter-spacing:-.015em}h3{font-size:1.18rem}
+.tx h1,.tx h2,.tx h3{text-transform:var(--htt,none);letter-spacing:var(--hls,-.015em)}
 p{margin:0 0 1em}.wrap{width:min(1140px,100% - 40px);margin-inline:auto}
 :focus-visible{outline:3px solid var(--a);outline-offset:3px}
 .skip{position:absolute;left:-9999px;top:10px;z-index:20;background:var(--p);color:var(--onp);padding:10px 16px;border-radius:var(--rb)}.skip:focus{left:10px}
@@ -590,7 +612,9 @@ export function renderSite(input, { mode = "export", imageMode = "inline", asset
     const I = (path, alt, { cls = "", eager = false, ph = "Add a picture" } = {}) => {
       const src = getPath(d, path);
       if (!src) return edit ? `<div class="ed-empty" data-img="${esc(path)}" role="button" tabindex="0">${esc(ph)}</div>` : "";
-      return `<img src="${esc(asset(src))}" alt="${esc(String(alt || "").trim())}"${cls ? ` class="${cls}"` : ""}${eager ? "" : ' loading="lazy"'} decoding="async"${edit ? ` data-img="${esc(path)}"` : ""}>`;
+      // library people photos keep the face in view in every crop (circles, 4:3, 21:9…)
+      const pos = photoPos(src);
+      return `<img src="${esc(asset(src))}" alt="${esc(String(alt || "").trim())}"${cls ? ` class="${cls}"` : ""}${pos ? ` style="object-position:${pos}"` : ""}${eager ? "" : ' loading="lazy"'} decoding="async"${edit ? ` data-img="${esc(path)}"` : ""}>`;
     };
     const items = (k) => (Array.isArray(d[k]) ? d[k] : []);
     const head = (center = true, introKey = "intro") => {
@@ -606,11 +630,15 @@ export function renderSite(input, { mode = "export", imageMode = "inline", asset
     const coverImg = b.type === "hero" && d.layout === "cover" && d.image ? d.image : "";
     const cardImg = b.type === "hero" && d.layout === "card" && d.image ? d.image : "";
     const bgImg = coverImg || st.bgImage;
+    const bgPos = photoPos(cardImg || bgImg);
     if (cardImg) { css += `background-image:url("${asset(cardImg)}");`; cls += " has-img hero-cardbg"; }
     else if (bgImg) { css += `background-image:linear-gradient(rgba(12,14,28,.58),rgba(12,14,28,.58)),url("${asset(bgImg)}");`; cls += " has-img on-dark"; }
+    if ((cardImg || bgImg) && bgPos) css += `background-position:${bgPos};`;
     const variant = String(st.variant || "");
     const anim = !edit && b.type !== "header" && ANIMS.some(([k]) => k && k === st.anim) ? st.anim : "";
     if (anim) { cls += ` anim anim-${anim}`; usesAnim = true; }
+    const tx = textStyle(st);
+    css += tx.css; cls += tx.cls;
     const attrs = (css ? ` style="${esc(css)}"` : "") + (edit ? ` data-block="${esc(b.id)}"` : "");
     const section = (inner) => `<section id="${ids[b.id]}" class="blk blk-${b.type}${cls}"${attrs}>${inner}</section>`;
 
@@ -652,7 +680,7 @@ export function renderSite(input, { mode = "export", imageMode = "inline", asset
         return section(`<div class="wrap">${head()}<div class="grid">${its.map((it, i) => `<article class="card feat"><div class="ic">${iconSvg(it.icon)}</div>${T("h3", `items.${i}.title`, { ph: "Title" })}${T("p", `items.${i}.text`, { multi: true, ph: "Text" })}</article>`).join("")}</div></div>`);
       }
       case "about": {
-        const media = d.image || edit ? `<div class="split-media">${I("image", d.title)}</div>` : "";
+        const media = d.side !== "none" && (d.image || edit) ? `<div class="split-media">${I("image", d.title)}</div>` : "";
         const body = `<div class="text-block">${T(isH1 ? "h1" : "h2", "title", { ph: "Title" })}${T("p", "text", { multi: true, ph: "Your story" })}${d.button?.label || edit ? `<div class="actions">${A("button")}</div>` : ""}</div>`;
         return section(`<div class="wrap ${media ? `split${d.side === "right" ? " rev" : ""}` : "about-c"}">${media}${body}</div>`);
       }

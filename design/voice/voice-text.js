@@ -179,3 +179,39 @@ export function recordingName(date = new Date(), ext = "wav") {
   const p = (n) => String(n).padStart(2, "0");
   return `voiceover-${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}-${p(date.getHours())}${p(date.getMinutes())}.${ext}`;
 }
+
+// ---------- Design › Styles: reading styles (speed and pitch of the voice; the browser voice itself is picked in Voices) ----------
+export const READING_STYLES = [
+  { id: "calm", label: "Calm narrator", hint: "Unhurried, a little lower", rate: 0.9, pitch: 0.9 },
+  { id: "friendly", label: "Friendly guide", hint: "Warm and a little brighter", rate: 1, pitch: 1.1 },
+  { id: "ad", label: "Energetic ad", hint: "Quick and upbeat", rate: 1.2, pitch: 1.2 },
+  { id: "news", label: "News reader", hint: "Steady and clear", rate: 1.1, pitch: 1 },
+  { id: "story", label: "Storyteller", hint: "Slower, with feeling", rate: 0.9, pitch: 1.1 },
+  { id: "clear", label: "Slow and clear", hint: "For lessons and learners", rate: 0.8, pitch: 1 },
+  { id: "kids", label: "Kids' story", hint: "Bright and playful", rate: 1, pitch: 1.4 },
+  { id: "deep", label: "Deep voice", hint: "Low and serious", rate: 0.9, pitch: 0.7 },
+];
+
+// ---------- left-rail kit text (shared/panels: Text panel, font combinations) ----------
+export const KIT_TEXT = { heading: "Add a heading", subheading: "Add a subheading", body: "Add a little bit of body text", caption: "Add a caption" };
+/** The words of a kit text spec (or a plain string): its content, else the role's default, upper case when asked. */
+export function kitWords(s) {
+  if (typeof s === "string") return s.trim();
+  const t = String(s?.content ?? "").trim() || KIT_TEXT[s?.role] || KIT_TEXT.body;
+  return s?.uppercase ? t.toUpperCase() : t;
+}
+/**
+ * What to type at the cursor for kit text: the lines on lines of their own when it is a heading, a subheading or a
+ * group (a blank line before and after, like a new paragraph of the script), else inline with a space around it.
+ * before / after = the script text around the cursor. Returns "" when there is nothing to add.
+ */
+export function scriptInsert(before, after, specs) {
+  const list = (Array.isArray(specs) ? specs : [specs]).filter((s) => s != null);
+  const lines = list.map(kitWords).filter(Boolean);
+  if (!lines.length) return "";
+  const para = lines.length > 1 || list.some((s) => typeof s === "object" && (s.role === "heading" || s.role === "subheading"));
+  const b = String(before || ""), a = String(after || "");
+  const lead = !b ? "" : para ? (b.endsWith("\n\n") ? "" : b.endsWith("\n") ? "\n" : "\n\n") : /\s$/.test(b) ? "" : " ";
+  const tail = !a ? (para ? "\n\n" : " ") : para ? (a.startsWith("\n\n") ? "" : a.startsWith("\n") ? "\n" : "\n\n") : /^\s/.test(a) ? "" : " ";
+  return lead + lines.join("\n") + tail;
+}

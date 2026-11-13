@@ -4,8 +4,13 @@
 // 14 landscape US (336 × 192), 3 portrait (192 × 336), 3 square (240 × 240).
 // Print rules: important text stays at least 10 px inside the trim; background shapes that touch an edge
 // run 12 px past it (bleed), so nothing white shows after cutting.
+import { castFor, face, KIND } from "./templates-faces.js";
+
 export default function add(k) {
-  const { tpl, T, S, R, C, E, F, page } = k;
+  const { T, S, R, C, E, F, page } = k;
+  // Person spots show people photos of their kind (templates-faces.js): one person picker per template build.
+  let CAST = null;
+  const tpl = (id, title, preset, tags, build) => k.tpl(id, title, preset, tags, (W, H) => { CAST = castFor(id); return build(W, H); });
   const { WHITE } = k.K;
   const US = "business-card-us", VT = "business-card-vertical", SQ = "business-card-square";
   const B = 12; // bleed
@@ -43,7 +48,7 @@ export default function add(k) {
       page(WHITE, [
         R(-B, -B, 150, H + 2 * B, NV, { name: "Navy panel" }),
         C(80, 30, 116, 116, WHITE, { name: "Photo ring" }),
-        F(86, 36, 104, 104, { shape: "circle", name: "Agent photo" }),
+        face(CAST, F(86, 36, 104, 104, { shape: "circle", name: "Agent photo" }), "realtor agent real estate property home", { sex: "f" }),
         E("icon-home", 20, 156, 18, { c1: GD, c2: GD, c3: NV }),
         T("HARBOR HOMES", 42, 160, 84, { size: 8, bold: true, color: WHITE, ls: 1 }),
         T("Sofia Marin", 208, 38, 118, { size: 18, bold: true, color: NV }),
@@ -95,7 +100,7 @@ export default function add(k) {
     tpl("salon-capsule-card-bc4", "Hair and nail salon business card", VT, tags("hair salon nail salon beauty stylist appointment photo shape capsule portrait vertical"), (W, H) => [
       page("#fbeff1", [
         R(46, 34, 112, 148, "none", { radius: 56, stroke: LN, sw: 1.2, name: "Offset outline" }),
-        F(34, 24, 112, 148, { shape: "rounded", radius: 56, name: "Salon photo" }),
+        face(CAST, F(34, 24, 112, 148, { shape: "rounded", radius: 56, name: "Salon photo" }), KIND.beauty + " portrait", { sex: "f" }),
         E("deco-sparkles", 146, 18, 28, { c1: LN, c2: "#e8b4bc" }),
         T("VELVET ROOM", 16, 198, W - 32, { size: 15, family: "serif", bold: true, color: DK, align: "center", ls: 3 }),
         T("HAIR  ·  NAILS  ·  BROWS", 16, 220, W - 32, { size: 7, color: "#a0606e", align: "center", ls: 2 }),

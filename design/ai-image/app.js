@@ -183,7 +183,7 @@ async function toPhoto(p) {
 }
 async function renderGallery() {
   const box = $("#gallery");
-  const list = await listProjects("ai-image").catch(() => []);
+  const list = (await listProjects("ai-image").catch(() => [])).filter(isPicture); // saved prompts (Projects) have no picture
   box.innerHTML = "";
   $("#galleryHead").hidden = !list.length;
   for (const p of list) {
@@ -405,6 +405,129 @@ async function showExample(p) {
       aiReady() ? "A style example made from a library photo. Your own picture comes from AsaanDesk AI when you press Generate." : "A style example made from a library photo, not a picture made by AsaanDesk AI. AsaanDesk AI is coming soon."));
   } catch (e) { console.warn("Template example unavailable", e); }
 }
+/* ---------- insert adapter (left-rail kit: Elements, Text, Tools, Uploads) ---------- */
+// The generator has no canvas. Every Elements / Uploads item reaches it as a picture (photos directly; graphics, shapes,
+// frames, charts, drawings through the kit's picture fallback) and becomes the reference picture ("Use a reference").
+// Text and font combinations add their words to the prompt as words to show in the picture. Nothing is sent or made up.
+const PAGE_NO_MSG = "AI pictures have no page numbers. Add words with Text instead.";
+const isPageNo = (x) => /^page number$/i.test(String(x?.name ?? x ?? ""));
+async function refFromUrl(src) {
+  const img = new Image();
+  img.decoding = "async";
+  img.src = src;
+  await (img.decode ? img.decode() : new Promise((res, rej) => { img.onload = res; img.onerror = rej; }));
+  const nw = img.naturalWidth || 768, nh = img.naturalHeight || 768, k = Math.min(1, 768 / Math.max(nw, nh));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(nw * k)); c.height = Math.max(1, Math.round(nh * k));
+  const g = c.getContext("2d");
+  g.fillStyle = "#ffffff"; g.fillRect(0, 0, c.width, c.height); // see-through graphics on white, like the JPEG keeps them
+  g.drawImage(img, 0, 0, c.width, c.height);
+  const url = c.toDataURL("image/jpeg", 0.85);
+  if (!cleanReference(url)) throw new Error("That picture could not be used as a reference.");
+  return url;
+}
+async function useAsReference(src, name) {
+  if (isPageNo(name)) throw new Error(PAGE_NO_MSG);
+  const tmp = src instanceof Blob ? URL.createObjectURL(src) : "";
+  let url;
+  try { url = cleanReference(String(tmp || src)) || await refFromUrl(String(tmp || src)); }
+  catch (e) { throw new Error(e?.message && /reference/.test(e.message) ? e.message : "That picture could not be used as a reference."); }
+  finally { if (tmp) URL.revokeObjectURL(tmp); }
+  setReference(url);
+  $("#refPreview")?.scrollIntoView?.({ block: "nearest" });
+  toast(`${String(name || "Picture").replace(/\.[a-z0-9]{2,4}$/i, "")} is the reference picture now (${(REF_MODES.find(([k]) => k === state.refMode) || REF_MODES[0])[1].toLowerCase()}).`);
+  return true;
+}
+const FONT_WORDS = { serif: "elegant serif lettering", sans: "clean sans-serif lettering", mono: "typewriter lettering", calibri: "modern rounded lettering", cambria: "classic book lettering" };
+/** The words of kit text specs as a prompt phrase: with the words "…" (in capital letters, bold serif lettering…). */
+function textPhrase(specs) {
+  const list = (Array.isArray(specs) ? specs : [specs]).filter((s) => String(s?.content ?? "").trim());
+  if (!list.length) return "";
+  const words = list.map((s) => String(s.content).replace(/\s+/g, " ").trim()).join(" / ").replace(/"/g, "'").slice(0, 160);
+  const s = list[0], how = [s.uppercase ? "in capital letters" : "", FONT_WORDS[s.family] ? `${s.bold || s.weight >= 600 ? "bold " : ""}${FONT_WORDS[s.family]}` : s.bold ? "bold lettering" : "", /^#[0-9a-f]{6}$/i.test(s.color || "") ? `colour ${s.color.toLowerCase()}` : ""].filter(Boolean);
+  return `with the words "${words}"${how.length ? ` (${how.join(", ")})` : ""}`;
+}
+function wordsToPrompt(specs) {
+  const list = (Array.isArray(specs) ? specs : [specs]).map((s) => (typeof s === "string" ? { content: s } : s || {}));
+  if (list.some(isPageNo)) throw new Error(PAGE_NO_MSG);
+  const phrase = textPhrase(list);
+  if (!phrase) throw new Error("Type the words first.");
+  const box = $("#prompt");
+  box.value = addToPrompt(box.value, phrase);
+  box.dispatchEvent(new Event("input"));
+  toast("Added to the prompt: the picture will show these words. Change them in the prompt box.");
+  return true;
+}
+const INSERT = {
+  image: (src, name) => useAsReference(src, name),
+  text: (spec, style) => wordsToPrompt(typeof spec === "string" ? { content: spec, role: style } : spec),
+  textGroup: (specs) => wordsToPrompt(specs),
+  pageNumber: () => { throw new Error(PAGE_NO_MSG); },
+};
+/* ---------- Projects: saved prompts (and made pictures) ---------- */
+const isPicture = (p) => !!(p?.data && (p.data.blob || p.data.src));
+function promptThumb(it) {
+  const words = String(it.prompt || "").replace(/\s+/g, " ").trim(), lines = [words.slice(0, 26), words.slice(26, 52) + (words.length > 52 ? "…" : "")].filter(Boolean);
+  const esc2 = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ece9ff"/><stop offset="1" stop-color="#ffe9e1"/></linearGradient></defs><rect width="320" height="200" rx="14" fill="url(#g)"/><rect x="18" y="18" width="70" height="22" rx="11" fill="#5b4cf0"/><text x="53" y="33.5" text-anchor="middle" font-family="Arial" font-size="11" font-weight="700" fill="#fff">PROMPT</text>${lines.map((t, i) => `<text x="20" y="${84 + i * 26}" font-family="Arial" font-size="17" font-weight="700" fill="#1b2133">${esc2(t)}</text>`).join("")}<text x="20" y="176" font-family="Arial" font-size="12" fill="#5b6175">${esc2([TOOLS[it.tool]?.title, styleById(it.style)?.name, it.aspect].filter(Boolean).join(" · "))}</text></svg>`;
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+}
+function promptProject() {
+  const prompt = $("#prompt").value.replace(/\s+/g, " ").trim();
+  if (!prompt) throw new Error("Write a prompt first, then save it to Projects.");
+  const it = { kind: "prompt", prompt, negative: $("#negative").value.trim(), tool: state.tool, style: state.style, aspect: state.aspect, count: state.count, refMode: state.refMode, ...(state.reference ? { reference: state.reference } : {}) };
+  return { app: "ai-image", name: prompt.slice(0, 80), data: it, thumb: promptThumb(it) };
+}
+function openPromptProject(rec) {
+  const d = rec?.data;
+  if (!d?.prompt) throw new Error("That project could not be opened.");
+  usePrompt(d);
+  if (d.refMode) state.refMode = d.refMode;
+  setReference(d.reference && cleanReference(d.reference) ? d.reference : "");
+  $("#prompt").scrollIntoView?.({ block: "center" });
+  return true;
+}
+/* ---------- Design panel: Styles (the picture styles) and Layouts (picture shapes); template style ---------- */
+// Canva's Design panel tabs for the generator: Styles = the style list of the open tool, Layouts = the picture shapes.
+// "Apply this template style" takes a template's tool, style and shape and keeps your prompt.
+function renderDesignStyles(box) {
+  box._shown = () => renderDesignStyles(box); // the Design tab redraws each time it is shown (selection, theme)
+  box.replaceChildren();
+  const order = STYLE_ORDER[state.tool] || stylesFor(state.tool).map((s) => s.id);
+  for (const g of GROUP_ORDER[state.tool] || GROUP_ORDER.image) {
+    const ids = order.filter((id) => styleById(id)?.group === g);
+    if (!ids.length) continue;
+    box.append(h("h3", { class: "ds-h3" }, g));
+    const grid = h("div", { class: "ds-grid" });
+    for (const id of ids) {
+      const s = styleById(id), on = state.style === s.id;
+      grid.append(h("button", { type: "button", class: "ds-style" + (on ? " on" : ""), "data-design-style": s.id, "aria-pressed": String(on), title: s.hint,
+        onclick: () => { state.style = s.id; renderStyles(); renderDesignStyles(box); toast(`${s.name} style. Nothing is made until you press Generate.`); } },
+      h("span", { class: "swatch s-" + s.id, "aria-hidden": "true" }), h("span", {}, s.name)));
+    }
+    box.append(grid);
+  }
+}
+function renderDesignLayouts(box) {
+  box._shown = () => renderDesignLayouts(box); // the Design tab redraws each time it is shown (selection, theme)
+  box.replaceChildren(h("h3", { class: "ds-h3" }, "Picture shape"));
+  const grid = h("div", { class: "ds-grid" });
+  for (const a of ASPECTS) {
+    const r = a.w / a.h, w = r >= 1 ? 40 : Math.round(40 * r), hh = r >= 1 ? Math.round(40 / r) : 40, on = state.aspect === a.id;
+    grid.append(h("button", { type: "button", class: "ds-shape" + (on ? " on" : ""), "data-design-aspect": a.id, "aria-pressed": String(on), "aria-label": `${a.label} ${a.id}`,
+      onclick: () => { state.aspect = a.id; renderAspects(); renderDesignLayouts(box); } }, h("i", { style: `width:${w}px;height:${hh}px`, "aria-hidden": "true" }), h("span", {}, a.label), h("small", {}, `${a.id} · ${a.w}×${a.h}`)));
+  }
+  box.append(grid);
+}
+function applyPresetStyle(p) {
+  if (!p) throw new Error("That template was not found.");
+  if (p.tool && p.tool !== state.tool) switchTool(p.tool);
+  if (STYLES.some((x) => x.id === p.style)) state.style = p.style;
+  if (aspectById(p.aspect)) state.aspect = p.aspect;
+  renderStyles(); renderAspects(); renderReady();
+  toast(`${p.name}: its style and shape are set. Your prompt stays.`);
+  return true;
+}
 async function mountFrame() {
   let mod = null, gallery = null;
   try { mod = await import("../shared/editor-shell.js"); gallery = await import("./gallery.js"); } catch (e) { console.warn("Editor frame unavailable", e); return null; }
@@ -431,10 +554,14 @@ async function mountFrame() {
         { label: "Photo editor", group: "Works today", act: () => { location.href = "/design/photo/"; } },
       ],
       share: { download: [], link: () => location.origin + "/design/ai-image/?tool=" + state.tool },
-      templates: { gallery, tool: ["ai-image-generator", "ai-art-generator"], apply: async (id) => applyPreset(gallery.presetById(id)), placeholder: "Search prompt templates" },
+      templates: { gallery, tool: ["ai-image-generator", "ai-art-generator"], apply: async (id) => applyPreset(gallery.presetById(id)), applyStyle: (id) => applyPresetStyle(gallery.presetById(id)), placeholder: "Search prompt templates" },
+      design: { styles: (box) => renderDesignStyles(box), layouts: (box) => renderDesignLayouts(box) },
       panels: { history: { label: "History", icon: "notes", render: (box) => renderHistoryPanel(box), refresh: true } },
-      rail: ["templates", "history", "brand", "apps", "translate"],
-      insert: {},
+      // Canva's rail (Elements, Text, Brand, Uploads, Tools from the shared kit) + the prompt history.
+      rail: ["templates", "elements", "text", "brand", "uploads", "tools", "history", "projects", "apps", "translate"],
+      // Projects: a saved prompt (its tool, style, shape and reference) or a made picture opens its settings again.
+      projects: { save: async () => promptProject(), open: async (rec) => openPromptProject(rec) },
+      insert: INSERT,
       getText: () => $("#prompt").value,
       setText: (t) => { const p = $("#prompt"); p.value = String(t || "").slice(0, MAX_PROMPT); p.dispatchEvent(new Event("input")); },
       bottom: { notes: true, outline: null, timer: true, fullscreen: true, help: true, pages: null, zoom: null },
@@ -450,12 +577,14 @@ async function mountFrame() {
 window.adApp = {
   get state() { return { tool: state.tool, style: state.style, aspect: state.aspect, count: state.count, busy: state.busy, aiReady: aiReady(), lastRequest: state.lastRequest, lastError: state.lastError }; },
   generate,
-  gallery: () => listProjects("ai-image"),
+  gallery: async () => (await listProjects("ai-image")).filter(isPicture),
   buildRequest, savePrompt, prompts: readPrompts, usePrompt, setReference, get reference() { return state.reference; }, applyPreset: async (id) => applyPreset((await import("./gallery.js")).presetById(id)), get shell() { return shell; },
   // Round 3 (Canva Magic Media / Dream Lab parity): Graphics tool, Inspire me, prompt helper and tips, reference modes,
   // brand colours, follow-ups on a picture (more like this, change with words, boost resolution).
   switchTool, inspire: inspireMe, tips: () => promptTips($("#prompt").value), refine, moreLikeThis,
   setRefMode: (m) => { state.refMode = m; syncRefMode(); }, setUseBrand: (on) => { state.useBrand = !!on && !$("#useBrand").disabled; $("#useBrand").checked = state.useBrand; return state.useBrand; },
+  // Left-rail kit insert adapter: pictures become the reference, text goes into the prompt.
+  insert: INSERT, textPhrase, promptProject: () => promptProject(), openPromptProject: (r) => openPromptProject(r), design: { styles: (box) => renderDesignStyles(box), layouts: (box) => renderDesignLayouts(box) }, applyStyle: async (id) => applyPresetStyle((await import("./gallery.js")).presetById(id)),
   formRequest: () => buildRequest({ prompt: $("#prompt").value, negative: $("#negative").value, style: state.style, aspect: state.aspect, count: state.count, tool: state.tool, reference: state.reference, refMode: state.refMode, colors: state.useBrand ? loadBrand().colors : [] }),
   ready: null,
 };

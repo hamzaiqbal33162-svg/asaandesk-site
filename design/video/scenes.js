@@ -4,7 +4,8 @@
 // with the editor's own font metrics so the gallery thumbnail and the opened video put every word in the same place).
 // Units: a frame is F.W x F.H units with its shorter side = 1080 (the text clip size unit of the player).
 import { kit, rect, circle, pathEl, line, mix, isDark, esc, rng } from "../shared/tpl-kit.js";
-import { PHOTOS } from "../shared/photo-library.js";
+import { PHOTOS, isPerson } from "../shared/photo-library.js";
+import { faceBox } from "./people.js";
 import { CH, W as WIDTHS } from "./text-metrics.js";
 
 /**
@@ -85,7 +86,21 @@ const ori = (w, h) => (w > h * 1.2 ? "L" : h > w * 1.2 ? "P" : "S");
 const n1 = (v) => Math.round(v * 10) / 10;
 const pick = (o, v) => (typeof v === "object" && v && !Array.isArray(v) ? v[o] ?? v.S ?? v.L : v);
 const B = (l, t, r, b, ink, align = "left", v = "bottom", more = {}) => ({ l, t, r, b, ink, align, v, ...more });
-const photo = (k, g, i, x, y, w, h, o = {}) => k.photo(g.ph[i % g.ph.length], x, y, w, h, { size: g.size, ...o });
+// o.face ("up" | "down"): for a people photo in a full-frame scene with words over it, the face goes to 30% of the height (words
+// below it) or 62% (words above it), as far as the photo allows (zoom up to 1.4x, never past the photo's edges, so the whole
+// face stays in the frame); centred across. Other photos (and people without o.face) use the normal cover crop.
+const photo = (k, g, i, x, y, w, h, o = {}) => {
+  const p = g.ph[i % g.ph.length], { face, ...rest } = o;
+  if (face && isPerson(p) && p.w && p.h && !rest.clip) { const b = faceBox(p, x, y, w, h, 0.5, face === "up" ? 0.3 : 0.62); return k.photo(p, b.x, b.y, b.w, b.h, { size: g.size, ...rest, clip: rect(x, y, w, h, "#000") }); }
+  return k.photo(p, x, y, w, h, { size: g.size, ...rest });
+};
+/** A person's round photo (photo slot 4) with a white ring: the creator on end screens and outros, the customer on quote cards. */
+function avatar(k, g, cx, cy, r) {
+  if (!g.ph[4]) return "";
+  const m = Math.min(g.w, g.h);
+  return circle(cx, cy, r * 1.2, g.P.dark, ' opacity=".45"' + k.blur(m * 0.02)) + circle(cx, cy, r * 1.09, g.P.b) + photo(k, g, 4, cx - r, cy - r, r * 2, r * 2, { clip: circle(cx, cy, r, "#000") })
+    + circle(cx, cy, r, "none", ` stroke="#ffffff" stroke-width="${n1(m * 0.008)}"`);
+}
 const poly = (pts, fill, ex = "") => pathEl("M" + pts.map((p) => p.map(n1).join(" ")).join("L") + "Z", fill, ex);
 function stars(cx, cy, r, fill, n = 5, gap = 2.6) {
   let s = "";
@@ -97,18 +112,23 @@ function burst(cx, cy, r, fill, pts = 14, ex = "") { let d = ""; for (let i = 0;
 export const LOOKS = {
   // full-bleed photo, dark gradient from the bottom: words bottom-left
   full: {
-    draw: (k, g) => photo(k, g, 0, g.x, g.y, g.w, g.h) + k.scrim(g.x, g.y + g.h * 0.28, g.w, g.h * 0.72, g.P.dark, 0, 0.9) + k.scrim(g.x, g.y, g.w, g.h * 0.24, g.P.dark, 0, 0.4, "down")
+    draw: (k, g) => photo(k, g, 0, g.x, g.y, g.w, g.h, { face: "up" }) + k.scrim(g.x, g.y + g.h * 0.28, g.w, g.h * 0.72, g.P.dark, 0, 0.9) + k.scrim(g.x, g.y, g.w, g.h * 0.24, g.P.dark, 0, 0.4, "down")
       + (g.lo.bar ? rect(g.x + g.w * 0.07, g.y + g.h * 0.93, g.w * 0.12, Math.min(g.w, g.h) * 0.012, g.P.b) : ""),
     box: (o, lo) => lo.center ? B(0.09, 0.3, 0.91, 0.88, "#ffffff", "center") : pick(o, { L: B(0.07, 0.3, 0.72, 0.88, "#ffffff"), P: B(0.08, 0.38, 0.92, 0.88, "#ffffff"), S: B(0.08, 0.32, 0.9, 0.88, "#ffffff") }),
   },
-  // photo with a dark veil and vignette: centred words
+  // photo with a dark veil and vignette: centred words; lo.avatar: the creator's round photo above the words (outros)
   dim: {
-    draw: (k, g) => photo(k, g, 0, g.x, g.y, g.w, g.h) + rect(g.x, g.y, g.w, g.h, g.P.dark, 0, ' opacity=".42"') + rect(g.x, g.y, g.w, g.h, k.rad([[g.P.dark, 0], [g.P.dark, 0.75]], 0.5, 0.5, 0.75)),
-    box: (o) => pick(o, { L: B(0.12, 0.14, 0.88, 0.86, "#ffffff", "center", "center"), P: B(0.08, 0.18, 0.92, 0.82, "#ffffff", "center", "center"), S: B(0.09, 0.14, 0.91, 0.86, "#ffffff", "center", "center") }),
+    draw: (k, g) => {
+      const { x, y, w, h, lo } = g, o = ori(w, h), m = Math.min(w, h);
+      return photo(k, g, 0, x, y, w, h, { face: "up" }) + rect(x, y, w, h, g.P.dark, 0, ' opacity=".42"') + rect(x, y, w, h, k.rad([[g.P.dark, 0], [g.P.dark, 0.75]], 0.5, 0.5, 0.75))
+        + (lo.avatar ? avatar(k, g, x + w / 2, y + h * (o === "L" ? 0.22 : 0.2), m * (o === "P" ? 0.16 : 0.12)) : "");
+    },
+    box: (o, lo) => (lo.avatar ? pick(o, { L: B(0.12, 0.38, 0.88, 0.92, "#ffffff", "center", "center"), P: B(0.08, 0.33, 0.92, 0.88, "#ffffff", "center", "center"), S: B(0.09, 0.36, 0.91, 0.92, "#ffffff", "center", "center") })
+      : pick(o, { L: B(0.12, 0.14, 0.88, 0.86, "#ffffff", "center", "center"), P: B(0.08, 0.18, 0.92, 0.82, "#ffffff", "center", "center"), S: B(0.09, 0.14, 0.91, 0.86, "#ffffff", "center", "center") })),
   },
   // duotone: photo washed in the accent colour
   duo: {
-    draw: (k, g) => photo(k, g, 0, g.x, g.y, g.w, g.h) + rect(g.x, g.y, g.w, g.h, g.P.a, 0, ' opacity=".72" style="mix-blend-mode:multiply"') + rect(g.x, g.y, g.w, g.h, k.lin([[g.P.dark, 0.1], [g.P.dark, 0.72]], 90)),
+    draw: (k, g) => photo(k, g, 0, g.x, g.y, g.w, g.h, { face: "up" }) + rect(g.x, g.y, g.w, g.h, g.P.a, 0, ' opacity=".72" style="mix-blend-mode:multiply"') + rect(g.x, g.y, g.w, g.h, k.lin([[g.P.dark, 0.1], [g.P.dark, 0.72]], 90)),
     box: (o) => pick(o, { L: B(0.1, 0.14, 0.9, 0.86, "#ffffff", "center", "center"), P: B(0.08, 0.16, 0.92, 0.84, "#ffffff", "center", "center"), S: B(0.08, 0.14, 0.92, 0.86, "#ffffff", "center", "center") }),
   },
   // photo on one side, solid panel with the words on the other
@@ -156,14 +176,16 @@ export const LOOKS = {
     },
     box: (o) => pick(o, { L: B(0.07, 0.7, 0.93, 0.93, "#ffffff", "left", "center"), P: B(0.08, 0.7, 0.92, 0.94, "#ffffff", "left", "center"), S: B(0.07, 0.7, 0.93, 0.94, "#ffffff", "left", "center") }),
   },
-  // dimmed photo with a white card (quotes, reviews, messages)
+  // dimmed photo with a white card (quotes, reviews, messages); lo.avatar: the customer's round photo on the card's top edge
   card: {
     draw: (k, g) => {
-      const { x, y, w, h, P } = g, o = ori(w, h), m = Math.min(w, h), c = pick(o, { L: [0.14, 0.13, 0.72, 0.74], P: [0.08, 0.22, 0.84, 0.56], S: [0.09, 0.13, 0.82, 0.74] });
+      const { x, y, w, h, P, lo } = g, o = ori(w, h), m = Math.min(w, h), c = pick(o, { L: [0.14, 0.13, 0.72, 0.74], P: [0.08, 0.22, 0.84, 0.56], S: [0.09, 0.13, 0.82, 0.74] });
       const cx = x + w * c[0], cy = y + h * c[1], cw = w * c[2], chh = h * c[3];
-      return photo(k, g, 0, x, y, w, h) + rect(x, y, w, h, P.dark, 0, ' opacity=".45"') + rect(cx, cy, cw, chh, "#ffffff", m * 0.03, k.shadow(m * 0.02, m * 0.06, 0.35)) + `<g${k.clipRect(cx, cy, cw, chh, m * 0.03)}>` + rect(cx, cy, cw, m * 0.018, P.a) + `</g>`;
+      return photo(k, g, 0, x, y, w, h) + rect(x, y, w, h, P.dark, 0, ' opacity=".45"') + rect(cx, cy, cw, chh, "#ffffff", m * 0.03, k.shadow(m * 0.02, m * 0.06, 0.35)) + `<g${k.clipRect(cx, cy, cw, chh, m * 0.03)}>` + rect(cx, cy, cw, m * 0.018, P.a) + `</g>`
+        + (lo.avatar ? avatar(k, g, cx + cw / 2, cy, m * (o === "P" ? 0.12 : 0.1)) : "");
     },
-    box: (o, lo, P) => pick(o, { L: B(0.19, 0.18, 0.81, 0.82, P.dark, "center", "center"), P: B(0.13, 0.25, 0.87, 0.76, P.dark, "center", "center"), S: B(0.14, 0.17, 0.86, 0.83, P.dark, "center", "center") }),
+    box: (o, lo, P) => (lo.avatar ? pick(o, { L: B(0.19, 0.27, 0.81, 0.84, P.dark, "center", "center"), P: B(0.13, 0.3, 0.87, 0.77, P.dark, "center", "center"), S: B(0.14, 0.26, 0.86, 0.85, P.dark, "center", "center") })
+      : pick(o, { L: B(0.19, 0.18, 0.81, 0.82, P.dark, "center", "center"), P: B(0.13, 0.25, 0.87, 0.76, P.dark, "center", "center"), S: B(0.14, 0.17, 0.86, 0.83, P.dark, "center", "center") })),
   },
   // three-photo collage
   grid3: {
@@ -175,7 +197,7 @@ export const LOOKS = {
         return s + k.scrim(x, y + h * 0.3, w, h * 0.26, P.dark, 0, 0.55);
       }
       const bw = w * (o === "L" ? 0.6 : 0.62);
-      s += photo(k, g, 0, x, y, bw - gp / 2, h) + photo(k, g, 1, x + bw + gp / 2, y, w - bw - gp / 2, h / 2 - gp / 2) + photo(k, g, 2, x + bw + gp / 2, y + h / 2 + gp / 2, w - bw - gp / 2, h / 2 - gp / 2);
+      s += photo(k, g, 0, x, y, bw - gp / 2, h, { face: "up" }) + photo(k, g, 1, x + bw + gp / 2, y, w - bw - gp / 2, h / 2 - gp / 2) + photo(k, g, 2, x + bw + gp / 2, y + h / 2 + gp / 2, w - bw - gp / 2, h / 2 - gp / 2);
       return s + k.scrim(x, y + h * 0.35, bw, h * 0.65, P.dark, 0, 0.85);
     },
     box: (o) => pick(o, { L: B(0.05, 0.42, 0.56, 0.92, "#ffffff"), P: B(0.08, 0.8, 0.92, 0.97, "#ffffff", "left", "center"), S: B(0.05, 0.42, 0.58, 0.92, "#ffffff") }),
@@ -198,7 +220,7 @@ export const LOOKS = {
   neon: {
     draw: (k, g) => {
       const { x, y, w, h, P } = g, m = Math.min(w, h);
-      return rect(x, y, w, h, "#05060c") + photo(k, g, 0, x, y, w, h, { opacity: 0.42 }) + rect(x, y, w, h, k.rad([[P.a, 0.6], [P.a, 0]], 0.15, 0.1, 0.7)) + rect(x, y, w, h, k.rad([[P.b, 0.45], [P.b, 0]], 0.92, 0.95, 0.6))
+      return rect(x, y, w, h, "#05060c") + photo(k, g, 0, x, y, w, h, { opacity: 0.42, face: "up" }) + rect(x, y, w, h, k.rad([[P.a, 0.6], [P.a, 0]], 0.15, 0.1, 0.7)) + rect(x, y, w, h, k.rad([[P.b, 0.45], [P.b, 0]], 0.92, 0.95, 0.6))
         + line(x + w * 0.08, y + h * 0.9, x + w * 0.32, y + h * 0.9, P.b, m * 0.008, k.glow(P.b, m * 0.01));
     },
     box: (o) => pick(o, { L: B(0.1, 0.12, 0.9, 0.84, "#ffffff", "center", "center"), P: B(0.08, 0.14, 0.92, 0.84, "#ffffff", "center", "center"), S: B(0.08, 0.12, 0.92, 0.84, "#ffffff", "center", "center") }),
@@ -263,7 +285,7 @@ export const LOOKS = {
   story: {
     draw: (k, g) => {
       const { x, y, w, h, P, lo } = g, m = Math.min(w, h), n = lo.n || 3, cur = lo.i || 0, gp = m * 0.012, bw = (w - m * 0.08 - gp * (n - 1)) / n;
-      let s = photo(k, g, 0, x, y, w, h) + k.scrim(x, y, w, h * 0.2, "#000000", 0, 0.5, "down") + k.scrim(x, y + h * 0.4, w, h * 0.6, P.dark, 0, 0.88);
+      let s = photo(k, g, 0, x, y, w, h, { face: "up" }) + k.scrim(x, y, w, h * 0.2, "#000000", 0, 0.5, "down") + k.scrim(x, y + h * 0.4, w, h * 0.6, P.dark, 0, 0.88);
       for (let i = 0; i < n; i++) s += rect(x + m * 0.04 + i * (bw + gp), y + m * 0.03, bw, m * 0.008, "#ffffff", m * 0.004, i <= cur ? "" : ' opacity=".4"');
       const r = m * 0.04;
       return s + photo(k, g, 1, x + m * 0.04, y + m * 0.06, r * 2, r * 2, { clip: circle(x + m * 0.04 + r, y + m * 0.06 + r, r, "#000") }) + circle(x + m * 0.04 + r, y + m * 0.06 + r, r, "none", ` stroke="${P.b}" stroke-width="${n1(m * 0.006)}"`);
@@ -294,15 +316,20 @@ export const LOOKS = {
     },
     box: (o, lo, P) => pick(o, { L: B(0.05, 0.12, 0.47, 0.9, onBg(P.a), "left", "center"), P: B(0.07, 0.56, 0.93, 0.96, onBg(P.a), "left", "center"), S: B(0.05, 0.12, 0.47, 0.9, onBg(P.a), "left", "center") }),
   },
-  // four photo tiles with a centred word box
+  // four photo tiles with a centred word box; lo.avatar: the creator's round photo (photo 4) above the words (end screens)
   tiles: {
     draw: (k, g) => {
-      const { x, y, w, h, P } = g, m = Math.min(w, h), gp = m * 0.014, tw = (w - gp * 3) / 2, th = (h - gp * 3) / 2;
+      const { x, y, w, h, P, lo } = g, m = Math.min(w, h), gp = m * 0.014, tw = (w - gp * 3) / 2, th = (h - gp * 3) / 2;
       let s = rect(x, y, w, h, P.dark);
       [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(([i, j], q) => { s += photo(k, g, q, x + gp + i * (tw + gp), y + gp + j * (th + gp), tw, th, { rx: m * 0.018 }); });
-      return s + rect(x, y, w, h, k.rad([[P.dark, 0.7], [P.dark, 0]], 0.5, 0.5, 0.42));
+      s += rect(x, y, w, h, k.rad([[P.dark, 0.7], [P.dark, 0]], 0.5, 0.5, 0.42));
+      if (lo.avatar) {
+        const P0 = ori(w, h) === "P", r = m * (P0 ? 0.15 : 0.11), cx = x + w / 2, cy = y + h * (P0 ? 0.2 : 0.19);
+        s += circle(cx, cy, r * 1.22, P.dark, ' opacity=".55"' + k.blur(m * 0.02)) + circle(cx, cy, r * 1.09, P.b) + photo(k, g, 4, cx - r, cy - r, r * 2, r * 2, { clip: circle(cx, cy, r, "#000") }) + circle(cx, cy, r, "none", ` stroke="#ffffff" stroke-width="${n1(m * 0.008)}"`);
+      }
+      return s;
     },
-    box: (o) => B(0.1, 0.2, 0.9, 0.8, "#ffffff", "center", "center"),
+    box: (o, lo) => (lo.avatar ? B(0.1, o === "P" ? 0.32 : 0.34, 0.9, 0.9, "#ffffff", "center", "center") : B(0.1, 0.2, 0.9, 0.8, "#ffffff", "center", "center")),
   },
   // two photos side by side (or stacked) with a slanted divider
   versus: {
@@ -324,13 +351,15 @@ export const LOOKS = {
     },
     box: (o, lo, P) => pick(o, { L: B(0.06, 0.14, 0.6, 0.9, P.dark, "left", "center"), P: B(0.08, 0.13, 0.92, 0.48, P.dark, "left", "center"), S: B(0.06, 0.14, 0.56, 0.9, P.dark, "left", "center") }),
   },
-  // photo under a frosted glass card
+  // photo under a frosted glass card; lo.avatar: the customer's round photo on the card's top edge (testimonials)
   glass: {
     draw: (k, g) => {
-      const { x, y, w, h, P } = g, o = ori(w, h), m = Math.min(w, h), c = pick(o, { L: [0.17, 0.16, 0.66, 0.68], P: [0.07, 0.26, 0.86, 0.48], S: [0.1, 0.16, 0.8, 0.68] });
-      return photo(k, g, 0, x, y, w, h) + rect(x, y, w, h, k.lin([[P.dark, 0.5], [P.a, 0.42]], 30)) + rect(x + w * c[0], y + h * c[1], w * c[2], h * c[3], "#ffffff", m * 0.04, ` fill-opacity=".14" stroke="#ffffff" stroke-opacity=".6" stroke-width="${n1(m * 0.004)}"` + k.shadow(m * 0.02, m * 0.06, 0.25));
+      const { x, y, w, h, P, lo } = g, o = ori(w, h), m = Math.min(w, h), c = pick(o, { L: [0.17, 0.16, 0.66, 0.68], P: [0.07, 0.26, 0.86, 0.48], S: [0.1, 0.16, 0.8, 0.68] });
+      return photo(k, g, 0, x, y, w, h, { face: "up" }) + rect(x, y, w, h, k.lin([[P.dark, 0.5], [P.a, 0.42]], 30)) + rect(x + w * c[0], y + h * c[1], w * c[2], h * c[3], "#ffffff", m * 0.04, ` fill-opacity=".14" stroke="#ffffff" stroke-opacity=".6" stroke-width="${n1(m * 0.004)}"` + k.shadow(m * 0.02, m * 0.06, 0.25))
+        + (lo.avatar ? avatar(k, g, x + w / 2, y + h * c[1], m * (o === "P" ? 0.12 : 0.1)) : "");
     },
-    box: (o) => pick(o, { L: B(0.22, 0.2, 0.78, 0.8, "#ffffff", "center", "center"), P: B(0.12, 0.29, 0.88, 0.71, "#ffffff", "center", "center"), S: B(0.15, 0.2, 0.85, 0.8, "#ffffff", "center", "center") }),
+    box: (o, lo) => (lo.avatar ? pick(o, { L: B(0.22, 0.28, 0.78, 0.82, "#ffffff", "center", "center"), P: B(0.12, 0.35, 0.88, 0.72, "#ffffff", "center", "center"), S: B(0.15, 0.27, 0.85, 0.82, "#ffffff", "center", "center") })
+      : pick(o, { L: B(0.22, 0.2, 0.78, 0.8, "#ffffff", "center", "center"), P: B(0.12, 0.29, 0.88, 0.71, "#ffffff", "center", "center"), S: B(0.15, 0.2, 0.85, 0.8, "#ffffff", "center", "center") })),
   },
   // dark stage: circle photo under a spotlight
   spot: {
@@ -345,7 +374,7 @@ export const LOOKS = {
   confetti: {
     draw: (k, g) => {
       const { x, y, w, h, P } = g, m = Math.min(w, h), R = rng(String(g.seed) + "c"), cols = [P.a, P.b, "#ffffff", mix(P.a, P.b, 0.5)];
-      let s = photo(k, g, 0, x, y, w, h) + rect(x, y, w, h, k.lin([[P.dark, 0.35], [P.dark, 0.7]], 90));
+      let s = photo(k, g, 0, x, y, w, h, { face: "up" }) + rect(x, y, w, h, k.lin([[P.dark, 0.35], [P.dark, 0.7]], 90));
       for (let i = 0; i < 34; i++) { const cx = x + R() * w, cy = y + R() * h, z = m * (0.008 + R() * 0.012), c = cols[i % 4]; if (Math.abs(cx - x - w / 2) < w * 0.3 && Math.abs(cy - y - h / 2) < h * 0.22) continue; s += i % 3 ? rect(cx, cy, z * 2.4, z, c, 0, ` transform="rotate(${Math.round(R() * 180)} ${n1(cx)} ${n1(cy)})"`) : circle(cx, cy, z * 0.8, c); }
       return s;
     },
@@ -385,7 +414,7 @@ export const LOOKS = {
   },
   // poster: photo with a thin inset frame and words at the top
   poster: {
-    draw: (k, g) => { const m = Math.min(g.w, g.h); return photo(k, g, 0, g.x, g.y, g.w, g.h) + k.scrim(g.x, g.y, g.w, g.h * 0.62, g.P.dark, 0, 0.85, "down") + rect(g.x + m * 0.035, g.y + m * 0.035, g.w - m * 0.07, g.h - m * 0.07, "none", 0, ` stroke="#ffffff" stroke-opacity=".7" stroke-width="${n1(m * 0.004)}"`); },
+    draw: (k, g) => { const m = Math.min(g.w, g.h); return photo(k, g, 0, g.x, g.y, g.w, g.h, { face: "down" }) + k.scrim(g.x, g.y, g.w, g.h * 0.62, g.P.dark, 0, 0.85, "down") + rect(g.x + m * 0.035, g.y + m * 0.035, g.w - m * 0.07, g.h - m * 0.07, "none", 0, ` stroke="#ffffff" stroke-opacity=".7" stroke-width="${n1(m * 0.004)}"`); },
     box: (o) => pick(o, { L: B(0.07, 0.1, 0.75, 0.6, "#ffffff", "left", "top"), P: B(0.08, 0.07, 0.92, 0.5, "#ffffff", "left", "top"), S: B(0.08, 0.08, 0.92, 0.55, "#ffffff", "left", "top") }),
   },
   // soft mesh gradient page (type-led) with a small framed photo

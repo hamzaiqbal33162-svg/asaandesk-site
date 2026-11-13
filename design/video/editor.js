@@ -13,7 +13,8 @@ import { $, $$, esc, toast, downloadBlob, fmtTime, fmtBytes, baseName, progressB
 import { saveProject, listProjects, getProject, deleteProject, takeHandoff, uid } from "../shared/store.js";
 import { FONT_FAMILIES, ensureFont, loadBrand } from "../shared/brand.js";
 import * as G from "./gallery.js";
-import { sceneBlob, soundBlob, SOUNDS, SHAPES, STICKERS, TITLES } from "./builtins.js";
+import { sceneBlob, soundBlob, inlineImages, SOUNDS, TITLES } from "./builtins.js";
+import * as K from "./kitinsert.js";
 import * as CP from "./captions.js";
 import * as B from "./beats.js";
 
@@ -73,6 +74,12 @@ function buildBar(bar) {
     <button class="btn sq" id="bUndo" aria-label="Undo (Ctrl+Z)" title="Undo (Ctrl+Z)" disabled>${icon("undo")}</button>
     <button class="btn sq" id="bRedo" aria-label="Redo (Ctrl+Shift+Z)" title="Redo (Ctrl+Shift+Z)" disabled>${icon("redo")}</button>
     <span class="vx-psep" aria-hidden="true"></span>
+    <!-- Canva's order for a selected item: colour, Edit, then the clip tools; Projects and Export on the right -->
+    <input type="color" id="pColor" class="vx-pcolor" value="#ffffff" aria-label="Text colour" title="Text colour">
+    <button class="btn sm sq" id="pBold" aria-pressed="false" aria-label="Bold text" title="Bold text"><b>B</b></button>
+    <button class="btn sm vx-pedit" id="pEdit" title="Edit the selected clip">${icon("edit")}<span>Edit</span></button>
+    <label class="vx-pf" title="Add text at the playhead"><select id="pText" aria-label="Add text"><option value="">Add text…</option>${Object.entries(M.TEXT_STYLES).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join("")}</select></label>
+    <span class="vx-psep" aria-hidden="true"></span>
     <button class="btn sm vx-pb" id="pSplit" title="Split at the playhead (S)">${icon("split")}<span>Split</span></button>
     <button class="btn sm vx-pb" id="pTrimS" title="Trim: the selected clip starts at the playhead ([)"><span>Trim start</span></button>
     <button class="btn sm vx-pb" id="pTrimE" title="Trim: the selected clip ends at the playhead (])"><span>Trim end</span></button>
@@ -80,11 +87,6 @@ function buildBar(bar) {
     <label class="vx-pf" title="Speed of the selected clip"><select id="pSpeed" aria-label="Speed">${M.SPEEDS.map((v) => `<option value="${v}">${v}× speed</option>`).join("")}</select></label>
     <label class="vx-pf" title="Volume of the selected clip"><span>Volume</span><input type="range" id="pVol" min="0" max="2" step="0.05" value="1" aria-label="Volume"></label>
     <label class="vx-pf" title="Transition into the selected clip"><select id="pTrans" aria-label="Transition">${Object.entries(M.TRANSITIONS).map(([k, v]) => `<option value="${k}">${k === "none" ? "No transition" : esc(v)}</option>`).join("")}</select></label>
-    <span class="vx-psep" aria-hidden="true"></span>
-    <label class="vx-pf" title="Add text at the playhead"><select id="pText" aria-label="Add text"><option value="">Add text…</option>${Object.entries(M.TEXT_STYLES).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join("")}</select></label>
-    <input type="color" id="pColor" class="vx-pcolor" value="#ffffff" aria-label="Text colour" title="Text colour">
-    <button class="btn sm sq" id="pBold" aria-pressed="false" aria-label="Bold text" title="Bold text"><b>B</b></button>
-    <button class="btn sm vx-pedit" id="pEdit" title="Edit the selected clip">${icon("edit")}<span>Edit</span></button>
     <span class="vx-psep" aria-hidden="true"></span>
     <button class="btn sm" id="bProjects">Projects</button>
     <button class="btn primary sm" id="bExport">Export</button></div>`;
@@ -1306,15 +1308,16 @@ async function saveFrame() {
 
 // ---------- editor frame (shared shell: top bar, rail + side panel, pill toolbar, bottom bar) ----------
 // The old side panel (#side: media, text, audio, canvas, YouTube tabs) moves into the matching shell panel when it opens.
-const SIDE = { videos: "media", text: "text", audio: "audio", canvas: "canvas", youtube: "youtube" };
+const SIDE = { videos: "media", audio: "audio", canvas: "canvas", youtube: "youtube" };
 const hEl = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 async function mountFrame(params) {
   let mod;
   try { mod = await import("../shared/editor-shell.js"); } catch (e) { console.warn("Editor frame not available", e); return null; }
   const host = (extra) => ({ render: (el) => { el.append(hEl("div", "vxp-host")); extra?.(el); } });
+  // Elements and Text are the shared kit's panels (Canva's structure); these are the editor's own sections inside them.
   const panels = {
-    elements: { label: "Elements", icon: "elements", render: renderElementsPanel },
-    text: { label: "Text", icon: "text", ...host(renderTextExtras) },
+    elements: { title: "Colour scenes", kitLabel: "Colour scenes", render: renderElementsPanel },
+    text: { title: "Video text", render: renderTextExtras },
     audio: { label: "Audio", icon: "speak", ...host(renderSoundsPanel) },
     videos: { label: "Videos", icon: "video", ...host() },
     canvas: { label: "Canvas", icon: "resize", ...host() },
@@ -1358,25 +1361,14 @@ async function mountFrame(params) {
         { label: "Record screen or camera", group: "More video tools", act: () => { location.href = "/design/recorder/"; } },
       ],
       share: { download: exportItems, link: () => location.href },
-      templates: { gallery: G.galleryFor(galTool), tool: galTool, apply: applyTemplate, placeholder: S.yt ? "Search YouTube templates" : "Search video templates" },
+      // Design panel: a multi-scene template opens its detail (all scenes, one scene at the end of this video, its style); Layouts and Styles tabs
+      templates: { gallery: G.galleryFor(galTool), tool: galTool, apply: applyTemplate, applyPage: applyTemplatePage, applyStyle: applyTemplateStyle, placeholder: S.yt ? "Search YouTube templates" : "Search video templates" },
+      design: { layouts: (box) => renderDesignLayouts(box), styles: (box) => renderDesignStyles(box) },
       panels,
-      rail: ["templates", "elements", "text", "audio", "videos", "uploads", "captions", "animate", "magic", "brand", "projects", "apps", ...(S.yt ? ["youtube"] : [])],
-      insert: {
-        // a picture from Uploads / Brand logos: on top of the video (overlay track) when there is video, else a clip
-        image: async (src, name) => {
-          const b = await (await fetch(src)).blob(), f = new File([b], name || "Picture.png", { type: b.type || "image/png" });
-          if (!S.p.video.length) { await importFiles([f]); return; }
-          busy(+1, "Adding the picture…");
-          try { addPictureOverlay(await importOne(f, "image")); } catch (e) { showError(e); } finally { busy(-1); }
-        },
-        text: (str, style) => { const c = addTextStyle(style === "heading" || style === "h1" ? "title" : style === "subheading" || style === "h2" ? "subtitle" : "caption"); if (c && str) { c.text = String(str); changed({ history: false }); } },
-        color: (hex) => {
-          const f = S.sel && M.findClip(S.p, S.sel);
-          if (f?.track === "text") editClip((c) => { c.color = hex; });
-          else { checkpoint(); S.p.background = { mode: "color", color: hex }; changed(); toast("Background colour set. It shows where a clip doesn't fill the frame."); }
-        },
-        font: (family) => { const f = S.sel && M.findClip(S.p, S.sel); if (f?.track !== "text") { toast("Select a text on the timeline first."); return; } editClip((c) => { c.family = family; }); ensureFont(family).then(() => player.render()).catch(() => {}); },
-      },
+      // Canva's rail order (Design, Elements, Text, Brand, Uploads, Tools), then the video panels, Projects and Apps
+      rail: ["templates", "elements", "text", "brand", "uploads", "tools", "videos", "audio", "captions", "animate", "magic", ...(S.yt ? ["youtube"] : []), "projects", "apps"],
+      insert: api.insert,
+      captions: () => shell.openPanel("captions"), // the kit's Text > Dynamic text > Captions: real timed captions here
       projects: {
         save: async () => { await saveNow(); return { id: S.p.id, app: "video", name: S.p.name, data: S.p, thumb: snapshot(player, 240), duration: player.total }; },
         open: async (rec) => { location.href = `?project=${encodeURIComponent(rec.id)}${rec.data?.yt ? "&preset=youtube" : ""}`; },
@@ -1430,11 +1422,7 @@ async function applyTemplate(id) {
       if (i > 0) c.transition = { type: sc.tr?.type || "crossfade", dur: sc.tr?.dur ?? 0.5, ...(sc.tr?.dir ? { dir: sc.tr.dir } : {}) };
     }
     const lay = M.layoutVideo(S.p.video);
-    t.scenes.forEach((sc, i) => {
-      const e = lay[i]; if (!e) return;
-      // words come in one after another (template delay `at`, else 0.35 s apart) and stay to the end of their scene
-      (sc.texts || []).forEach((x, j) => { const { style, at, ...rest } = x, d = at ?? j * 0.35; M.addText(S.p, { style, ...rest, start: Math.round((e.start + 0.15 + d) * 100) / 100, dur: Math.max(0.8, Math.round((e.len - 0.3 - d) * 100) / 100) }); });
-    });
+    t.scenes.forEach((sc, i) => { if (lay[i]) sceneTexts(sc, lay[i]); });
     if (t.chapters) S.p.chapters = t.chapters.map((title, i) => ({ t: lay[i] ? Math.max(0, Math.round(lay[i].start)) : i * 3, title }));
     if (t.music) {
       const total = M.projectDuration(S.p);
@@ -1452,6 +1440,54 @@ async function applyTemplate(id) {
     return S.p;
   } catch (e) { showError(e); return null; }
   finally { busy(-1); }
+}
+
+/** A template scene's words on the timeline entry e: one after another (template delay `at`, else 0.35 s apart), each to the end of the scene. */
+function sceneTexts(sc, e) {
+  return (sc.texts || []).map((x, j) => { const { style, at, ...rest } = x, d = at ?? j * 0.35; return M.addText(S.p, { style, ...rest, start: Math.round((e.start + 0.15 + d) * 100) / 100, dur: Math.max(0.8, Math.round((e.len - 0.3 - d) * 100) / 100) }); });
+}
+/**
+ * One page (scene) of a video template added at the end of the current video, like Canva's template page grid: its
+ * picture in this video's size and its words timed to it. An empty video takes the template's shape. One undo step.
+ */
+async function applyTemplatePage(id, i = 0) {
+  const t = G.byId(id), sc = t?.scenes?.[i];
+  if (!sc) { toast("That page isn't in this template."); return null; }
+  player.pause();
+  const before = snap();
+  if (!S.p.video.length && !S.p.text.length) { S.p.preset = t.preset; S.presetChosen = true; }
+  busy(+1, "Adding the page…");
+  try {
+    const blob = await sceneBlob(sc, S.p.preset);
+    const m = await importOne(new File([blob], `${t.name} scene ${i + 1}.${blob.type === "image/jpeg" ? "jpg" : "png"}`, { type: blob.type }), "image");
+    const c = M.addVideoClip(S.p, m);
+    M.setTrim(S.p, c.id, { dur: sc.dur || 3 }); c.fit = "cover";
+    if (sc.kb && sc.kb !== "none") c.kb = sc.kb;
+    if (S.p.video.length > 1) c.transition = { type: sc.tr?.type || "crossfade", dur: sc.tr?.dur ?? 0.5, ...(sc.tr?.dir ? { dir: sc.tr.dir } : {}) };
+    const e = M.layoutVideo(S.p.video).at(-1);
+    sceneTexts(sc, e);
+    await loadFonts(S.p).catch(() => {});
+    checkpoint(before); S.sel = c.id; S.t = Math.max(0, e.start + 0.2);
+    changed();
+    toast(`Page ${i + 1} of ${t.name} added at the end of your video.`);
+    return c;
+  } catch (e) { restore(before); changed({ save: false }); showError(e); return null; }
+  finally { busy(-1); }
+}
+/** "Apply this template style": the template's colours and fonts on the current video's texts and background; the words stay. One undo step. */
+function applyTemplateStyle(id) {
+  const t = G.byId(id);
+  if (!t?.scenes) { toast("That template isn't for the video editor."); return null; }
+  const texts = t.scenes.flatMap((s) => s.texts || []), pal = t.scenes.find((s) => s.pal)?.pal;
+  const head = texts.find((x) => x.style === "title") || texts[0], body = texts.find((x) => x !== head && x.style !== "title") || head;
+  if (!head && !pal) { toast("This template has no style to apply."); return null; }
+  const before = snap();
+  K.styleTexts(S.p.text, { head: head && { family: head.family || t.font, color: head.color, bold: head.bold }, body: body && { family: body.family || t.font, color: body.color, bold: body.bold } });
+  if (pal) S.p.background = { mode: "color", color: pal.dark };
+  checkpoint(before); changed();
+  loadFonts(S.p).then(() => player.render()).catch(() => {});
+  toast(`${t.name} style applied: colours and fonts changed, your words kept.`);
+  return t;
 }
 
 /** Adds a colour scene (image clip) at the end of the video track. */
@@ -1490,6 +1526,167 @@ function addOverlay(o, { history = true } = {}) {
   S.sel = c.id; changed();
   return c;
 }
+// ---------- left-rail kit inserts (shared/panels/index.js): native timeline clips ----------
+// Graphics, stickers, shapes, charts, tables, frames, grids and drawings go on the overlay (upper) track as pictures (the
+// SVG drawn into a PNG), text becomes text clips, videos and sounds become real clips; all at the playhead, centred on
+// the drop point (a click = the centre of the frame). An empty video gets a blank white page first, like a new design.
+const frameOf = () => M.PRESETS[S.p.preset];
+const kitAt = (pt) => K.kitPos(pt, els.pv?.getBoundingClientRect?.());
+/** The frame at the playhead is a light page (a blank white page): dark text by default. */
+function lightAt() { const e = M.videoEntryAt(S.p, Math.min(S.t, Math.max(0, player.total - 0.01))); return !!(e && S.p.media[e.clip.mediaId]?.light); }
+async function srcBlob(src) {
+  if (src instanceof Blob) return src;
+  const s = String(src || "");
+  if (/^\s*<svg\b/i.test(s)) return new Blob([s], { type: "image/svg+xml" });
+  const r = await fetch(s); if (!r.ok) throw new Error("That file could not be loaded.");
+  return r.blob();
+}
+/** Draws an SVG into a PNG, sharp at about twice its size in the frame (long side 640 to 2000 px). */
+async function svgPng(markup, size) {
+  const long = Math.max(640, Math.min(2000, Math.max(size.w, size.h) * 2)), a = size.w / size.h;
+  const w = Math.round(a >= 1 ? long : long * a), h = Math.round(a >= 1 ? long / a : long);
+  const url = URL.createObjectURL(new Blob([K.svgSized(await inlineImages(markup), w, h)], { type: "image/svg+xml" }));
+  try {
+    const img = new Image(); img.decoding = "async"; img.src = url;
+    await img.decode().catch(() => { throw new Error("This graphic could not be drawn in this browser."); });
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    c.getContext("2d").drawImage(img, 0, 0, w, h);
+    return await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("This graphic could not be drawn in this browser."))), "image/png"));
+  } finally { URL.revokeObjectURL(url); }
+}
+/** A blank white page for an empty video (one 4 s picture clip), so a kit item has a frame to sit on. */
+async function blankPage() {
+  if (S.p.video.length) return null;
+  const blob = await sceneBlob({ bg: ["#ffffff", "#ffffff"], art: "none" }, S.p.preset);
+  const m = await importOne(new File([blob], "Blank page.png", { type: blob.type || "image/png" }), "image");
+  m.light = true;
+  const c = M.addVideoClip(S.p, m); c.fit = "cover";
+  return c;
+}
+/** Start and length of an overlay / text item added now: at the playhead, 4 s (or to the end of the video). */
+function slotNow(len = 4) {
+  const total = player.total, start = total > 0 && S.t < total - 0.2 ? S.t : 0;
+  return { start: Math.round(start * 1000) / 1000, dur: total > 0 ? Math.max(1, Math.min(len, total - start)) : len };
+}
+/** One kit insert = one undo step, then the new clip(s) selected and saved. */
+async function kitStep(label, fn) {
+  const before = snap();
+  busy(+1, label);
+  try {
+    const out = await fn();
+    const list = (Array.isArray(out) ? out : [out]).filter(Boolean);
+    if (!list.length) return false;
+    checkpoint(before);
+    S.sel = list[list.length - 1].id; S.multi = new Set(list.length > 1 ? list.map((c) => c.id) : []);
+    changed();
+    return Array.isArray(out) ? list : list[0];
+  } catch (e) { restore(before); changed({ save: false }); throw e; } // half-done (a blank page added, then a failure): back as it was
+  finally { busy(-1); }
+}
+/** A picture (Blob) on the overlay track at the drop point, size from the kit (rel, aspect). */
+async function kitPicture(blob, name, { rel, aspect, kind = "image" } = {}, pt) {
+  await blankPage();
+  const m = await importOne(new File([blob], name, { type: blob.type || "image/png" }), "image");
+  const a = aspect > 0 ? aspect : m.w > 0 && m.h > 0 ? m.w / m.h : 1;
+  const box = K.overlayBox(K.itemPx({ rel, aspect: a, kind }, frameOf()), frameOf(), kitAt(pt));
+  return M.addOverlay(S.p, m, { ...slotNow(), ...box, fadeIn: 0, fadeOut: 0 });
+}
+function kitTextClips(specs, pt) {
+  const { start, dur } = slotNow(3);
+  const fields = K.groupFields(specs, frameOf(), kitAt(pt), { families: FONT_FAMILIES, dark: lightAt() });
+  return fields.map((f) => {
+    const c = M.addText(S.p, { ...f, start, dur });
+    ensureFont(c.family, c.bold, c.italic).then(() => player.render()).catch(() => {});
+    return c;
+  });
+}
+async function audioBlobOf(spec) {
+  let t = spec?.track ?? spec?.src ?? spec?.url ?? spec?.blob;
+  if (typeof t === "function") t = await t(spec);
+  if (t && typeof t.render === "function") t = await t.render();
+  if (t instanceof Blob) return t;
+  if (t && typeof t.getChannelData === "function") return new Blob([audioBufferToWav(t)], { type: "audio/wav" });
+  if (typeof t === "string" && SOUNDS.some((s) => s.id === t)) return soundBlob(t);
+  if (typeof t === "string" && t) return srcBlob(t);
+  return null;
+}
+function kitInsert() {
+  const named = (n, ext) => `${String(n || "Element").replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || "Element"}.${ext}`;
+  const ins = {
+    // a photo or upload: the first scene of an empty video, else a picture on top at the drop point
+    image: async (src, name, pt) => {
+      const b = await srcBlob(src);
+      if (!S.p.video.length && !/svg/.test(b.type)) return (await importFiles([new File([b], name || "Picture.png", { type: b.type || "image/png" })])) || false;
+      const png = /svg/.test(b.type) ? await svgPng(await b.text(), K.itemPx({ aspect: K.svgAspect(await b.text()), kind: "image" }, frameOf())) : b;
+      return kitStep("Adding the picture…", () => kitPicture(png, named(name, /svg/.test(b.type) ? "png" : (b.type.split("/")[1] || "png").replace("jpeg", "jpg")), { kind: "image" }, pt));
+    },
+    svg: (markup, meta = {}, pt) => kitStep("Adding the graphic…", async () => {
+      const aspect = meta.aspect > 0 ? meta.aspect : K.svgAspect(markup), size = K.itemPx({ rel: meta.rel, aspect, kind: meta.kind || "svg" }, frameOf());
+      return kitPicture(await svgPng(markup, size), named(meta.name, "png"), { rel: meta.rel, aspect, kind: meta.kind || "svg" }, pt);
+    }),
+    drawing: (markup, { w, h, name } = {}, pt) => kitStep("Adding the drawing…", async () => {
+      const r = els.pv?.getBoundingClientRect?.(), pr = frameOf();
+      const aspect = w > 0 && h > 0 ? w / h : K.svgAspect(markup);
+      // the drawing keeps its size on screen: its width in preview px -> a fraction of the frame
+      const rel = w > 0 && h > 0 && r?.width > 0 ? (Math.max(w, h) / r.width) * pr.w / Math.min(pr.w, pr.h) : undefined;
+      return kitPicture(await svgPng(markup, K.itemPx({ rel, aspect, kind: "drawing" }, pr)), named(name || "Drawing", "png"), { rel, aspect, kind: "drawing" }, pt);
+    }),
+    text: (spec, pt) => {
+      if (typeof spec === "string") spec = { content: spec, role: { h1: "heading", title: "heading", heading: "heading", h2: "subheading", subheading: "subheading" }[pt] || "body" }, pt = undefined; // old form text(str, style)
+      return kitStep("Adding text…", async () => { await blankPage(); return kitTextClips([spec], pt)[0]; });
+    },
+    textGroup: (specs, pt) => kitStep("Adding text…", async () => { await blankPage(); return kitTextClips(specs, pt); }),
+    // a real video file: a clip at the end of the video (or the first clip), else picture-in-picture at the drop point;
+    // the kit's animated loops (SVG) can't play as video files here: they go on top as a still picture
+    video: async (spec = {}, pt) => {
+      const src = spec.src || spec.url || spec.blob;
+      let b = src ? await srcBlob(src).catch(() => null) : null;
+      if (b && !b.type && K.isVideoSrc(src)) b = new Blob([b], { type: "video/mp4" });
+      if (!b || !/^video\//.test(b.type)) {
+        const still = b && /^image\//.test(b.type) ? b : spec.poster ? await srcBlob(spec.poster).catch(() => null) : null;
+        if (!still) return false;
+        const markup = /svg/.test(still.type) ? await still.text() : "";
+        const r = await kitStep("Adding the clip…", async () => kitPicture(markup ? await svgPng(markup, K.itemPx({ rel: spec.rel, aspect: spec.aspect || K.svgAspect(markup), kind: "video" }, frameOf())) : still,
+          named(spec.name || "Clip", markup ? "png" : (still.type.split("/")[1] || "png").replace("jpeg", "jpg")), { rel: spec.rel, aspect: spec.aspect, kind: "video" }, pt));
+        toast("Added as a still picture: this animated element can't play inside an exported video yet.", 4200);
+        return r;
+      }
+      const f = new File([b], named(spec.name || "Video", (b.type.split("/")[1] || "mp4").split(";")[0].replace("quicktime", "mov")), { type: b.type || "video/mp4" });
+      if (!S.p.video.length) return (await importFiles([f])) || false;
+      return kitStep("Adding the video…", async () => {
+        const m = await importOne(f, "video");
+        const box = K.overlayBox(K.itemPx({ rel: spec.rel, aspect: m.w > 0 && m.h > 0 ? m.w / m.h : spec.aspect || 16 / 9, kind: "video" }, frameOf()), frameOf(), kitAt(pt));
+        return M.addOverlay(S.p, m, { start: slotNow().start, dur: m.duration || 4, ...box, fadeIn: 0, fadeOut: 0 });
+      });
+    },
+    // music and sound effects: a real clip on the audio track at the playhead
+    audio: (spec = {}) => kitStep(`Adding ${spec.name || "the sound"}…`, async () => {
+      const b = await audioBlobOf(spec);
+      if (!b) throw new Error("That sound could not be made in this browser.");
+      const m = await importOne(new File([b], named(spec.name || "Sound", /wav/.test(b.type) ? "wav" : (b.type.split("/")[1] || "wav").replace("mpeg", "mp3")), { type: b.type || "audio/wav" }), "audio");
+      const c = M.addAudioClip(S.p, m, { start: S.t < player.total - 0.1 ? S.t : 0 });
+      if (/music|track|bed/i.test(spec.kind || spec.category || "") || (m.duration || 0) > 12) c.volume = 0.6;
+      return c;
+    }),
+    // page numbers = the scene number, shown for the length of the scene at the playhead (bottom right)
+    pageNumber: (pt) => kitStep("Adding the page number…", async () => {
+      await blankPage();
+      const lay = M.layoutVideo(S.p.video), i = Math.max(0, lay.findIndex((e) => S.t >= e.start - 1e-3 && S.t < e.end)), e = lay[i] || lay[0];
+      const pos = pt ? kitAt(pt) : { x: 0.93, y: 0.92 };
+      const c = M.addText(S.p, { style: "caption", text: String(i + 1), size: 40, bold: true, bg: "", color: S.p.media[e.clip.mediaId]?.light ? "#1b2133" : "#ffffff", x: pos.x, y: pos.y,
+        start: Math.round(Math.max(0, e.start) * 1000) / 1000, dur: Math.max(M.MIN_LEN, Math.round(e.len * 1000) / 1000), animIn: "none", animOut: "none" });
+      return c;
+    }),
+    color: (hex) => {
+      const f = S.sel && M.findClip(S.p, S.sel);
+      if (f?.track === "text") editClip((c) => { c.color = hex; });
+      else { checkpoint(); S.p.background = { mode: "color", color: hex }; changed(); toast("Background colour set. It shows where a clip doesn't fill the frame."); }
+    },
+    font: (family) => { const f = S.sel && M.findClip(S.p, S.sel); if (f?.track !== "text") { toast("Select a text on the timeline first."); return; } editClip((c) => { c.family = family; }); ensureFont(family).then(() => player.render()).catch(() => {}); },
+  };
+  ins.video.files = true; // the kit records its animated loops into real WebM files for us (Elements › Videos)
+  return ins;
+}
 function previewSound(id, b) {
   try {
     const a = new Audio(URL.createObjectURL(soundBlob(id)));
@@ -1503,21 +1700,69 @@ const SCENES = [
   { name: "Night", bg: ["#0f172a", "#334155"], art: "grid" }, { name: "Mint", bg: ["#06d6a0", "#5ec8ff"], art: "blobs" },
   { name: "Bold red", bg: ["#ff3b3b", "#8b5cf6"], art: "burst" }, { name: "Paper", bg: ["#fdf2e9", "#f5c6a5"], art: "frame", accent: "#b5651d" },
 ];
+// ---------- Design panel: Layouts and Styles tabs (opts.design; Templates is the template gallery) ----------
+const frameShape = () => M.PRESETS[S.p.preset];
+const textsAtPlayhead = () => S.p.text.filter((c) => !c.cap && c.start <= S.t + 1e-3 && S.t < c.start + c.dur);
+/** A small picture of a text layout: a title bar and a line of words where the layout puts them. */
+function textLayoutSvg(l) {
+  const pos = K.layoutTexts([{ text: "T", size: 140 }, { text: "w", size: 70 }], M.PRESETS.youtube, l.id);
+  const bar = (p, w, h, o) => { const x = p.align === "left" ? p.x * 160 - 40 : p.x * 160 - w / 2; return `<rect x="${(x).toFixed(1)}" y="${(p.y * 90 - h / 2).toFixed(1)}" width="${w}" height="${h}" rx="2" fill="#fff" opacity="${o}"/>`; };
+  return `<svg viewBox="0 0 160 90" aria-hidden="true"><rect width="160" height="90" fill="#2b2f4a"/>${bar(pos[0], 80, 12, 1)}${bar(pos[1], 56, 7, 0.75)}</svg>`;
+}
+function renderDesignLayouts(box) {
+  const p = S.p;
+  box.innerHTML = `<h3 class="vxp-h">Video shape</h3><div class="vx-presets">${Object.values(M.PRESETS).map((pr) => `<button class="vx-preset${pr.id === p.preset ? " on" : ""}" data-dpreset="${pr.id}" aria-pressed="${pr.id === p.preset}"><i style="aspect-ratio:${pr.w}/${pr.h}"></i><span>${esc(pr.label)}</span><small>${pr.w}×${pr.h}</small></button>`).join("")}</div>
+    <h3 class="vxp-h">Words on screen</h3><p class="mx-hint">Moves the words showing at the playhead.</p>
+    <div class="vxp-grid two">${K.TEXT_LAYOUTS.map((l) => `<button class="vxp-scene" data-tlayout="${l.id}" aria-label="${esc(l.label)}"><span class="sw">${textLayoutSvg(l)}</span><small>${esc(l.label)}</small></button>`).join("")}</div>`;
+  box.onclick = (e) => {
+    const pb = e.target.closest("[data-dpreset]");
+    if (pb) { if (S.p.preset !== pb.dataset.dpreset) { const before = snap(); S.p.preset = pb.dataset.dpreset; S.presetChosen = true; checkpoint(before); changed(); sizeCanvas(); } renderDesignLayouts(box); return; }
+    const lb = e.target.closest("[data-tlayout]"); if (lb) applyTextLayout(lb.dataset.tlayout);
+  };
+}
+/** Design › Layouts: the words at the playhead placed by a text layout (one undo step). */
+function applyTextLayout(id) {
+  const list = textsAtPlayhead();
+  if (!list.length) { toast("Move the playhead to words on the timeline (or add text) first."); return null; }
+  const before = snap(), pos = K.layoutTexts(list, frameShape(), id);
+  list.forEach((c, i) => Object.assign(c, pos[i]));
+  checkpoint(before); changed();
+  return list;
+}
+function renderDesignStyles(box) {
+  box.innerHTML = `<h3 class="vxp-h">Colour palettes</h3><p class="mx-hint">Titles, words, text boxes and the background of the whole video.</p>
+    <div class="vxd-pals">${G.PALETTES.map((pl, i) => `<button class="vxd-pal" data-dpal="${i}" aria-label="Palette ${esc(pl.name)}" title="${esc(pl.name)}">${[pl.dark, pl.a, pl.b, pl.light].map((c) => `<i style="background:${c}"></i>`).join("")}<small>${esc(pl.name)}</small></button>`).join("")}</div>
+    <h3 class="vxp-h">Font sets</h3><div class="vxd-fonts">${K.FONT_SETS.map((f) => `<button class="vxd-font" data-dfont="${f.id}"><b style="font-family:${esc(FONT_FAMILIES[f.head].css)}">${esc(f.label)} heading</b><small style="font-family:${esc(FONT_FAMILIES[f.body].css)}">and body text</small></button>`).join("")}</div>`;
+  box.onclick = (e) => {
+    const pb = e.target.closest("[data-dpal]"); if (pb) { const pl = G.PALETTES[+pb.dataset.dpal]; applyVideoLook(K.paletteLook(pl), `${pl.name} colours`); return; }
+    const fb = e.target.closest("[data-dfont]"); if (fb) { const f = K.FONT_SETS.find((x) => x.id === fb.dataset.dfont); applyVideoLook({ head: { family: f.head }, body: { family: f.body } }, `${f.label} fonts`); }
+  };
+}
+/** Design › Styles: a palette or font set on every text of the video (+ the background colour); one undo step. */
+function applyVideoLook(look, name) {
+  if (!S.p.text.length && !look.bg) { toast("Add some text first: font sets change the words of your video."); return null; }
+  const before = snap();
+  K.styleTexts(S.p.text, look);
+  if (look.bg) S.p.background = { mode: "color", color: look.bg };
+  checkpoint(before); changed();
+  loadFonts(S.p).then(() => player.render()).catch(() => {});
+  toast(`${name} applied to your video${look.bg ? " (the background colour shows where a clip doesn't fill the frame)" : ""}.`);
+  return true;
+}
+
+// The shared kit (shared/panels/) draws Elements and Text; the video editor adds only what is its own: colour scenes
+// (a new page at the end of the video) in Elements, and animated video text styles and titles in Text.
 function renderElementsPanel(el) {
-  el.innerHTML = `<p class="mx-hint">Shapes, stickers and titles go on top of the video at the playhead. Colour scenes join the end of the video.</p>
-    <h3 class="vxp-h">Shapes</h3><div class="vxp-grid">${SHAPES.map((x) => `<button class="vxp-el" data-shape="${x.id}" aria-label="Add ${esc(x.label)}" title="${esc(x.label)}"><span style="color:${x.color};text-shadow:0 0 1px #0006">${esc(x.text)}</span></button>`).join("")}</div>
-    <h3 class="vxp-h">Stickers</h3><div class="vxp-grid two">${STICKERS.map((x) => `<button class="vxp-st" data-sticker="${x.id}" aria-label="Add sticker ${esc(x.label)}"><span style="color:${x.color};background:${x.bg || "#1b2133"}">${esc(x.text)}</span></button>`).join("")}</div>
-    <h3 class="vxp-h">Colour scenes</h3><div class="vxp-grid two">${SCENES.map((x, i) => `<button class="vxp-scene" data-scene="${i}" aria-label="Add scene ${esc(x.name)}"><span class="sw">${G.sceneSvg(x, 160, 90)}</span><small>${esc(x.name)}</small></button>`).join("")}</div>`;
-  el.addEventListener("click", (e) => {
-    const b = e.target.closest("button"); if (!b) return;
-    if (b.dataset.shape) { const x = SHAPES.find((s) => s.id === b.dataset.shape); addOverlay({ text: x.text, color: x.color, size: 200, bold: false, bg: "", animIn: "pop", animOut: "fade", y: 0.5 }); }
-    else if (b.dataset.sticker) { const x = STICKERS.find((s) => s.id === b.dataset.sticker); addOverlay({ text: x.text, color: x.color, bg: x.bg ? x.bg + "f0" : "", size: 72, bold: true, animIn: "pop", animOut: "fade", y: 0.2, x: 0.5 }); }
-    else if (b.dataset.scene) addScene(SCENES[+b.dataset.scene]);
-  });
+  el.innerHTML = `<h3 class="vxp-h">Colour scenes</h3><p class="mx-hint">A new page at the end of the video.</p>
+    <div class="vxp-grid two">${SCENES.map((x, i) => `<button class="vxp-scene" data-scene="${i}" aria-label="Add scene ${esc(x.name)}"><span class="sw">${G.sceneSvg(x, 160, 90)}</span><small>${esc(x.name)}</small></button>`).join("")}</div>`;
+  el.addEventListener("click", (e) => { const b = e.target.closest("[data-scene]"); if (b) addScene(SCENES[+b.dataset.scene]); });
 }
 function renderTextExtras(el) {
-  const box = hEl("div", "vxp-extra", `<h3 class="vxp-h">Text combinations</h3><div class="vxp-combos">${TITLES.map((x) => `<button class="vxp-combo" data-combo="${x.id}"><b>${esc(x.parts[0].text)}</b>${x.parts[1] ? `<small>${esc(x.parts[1].text)}</small>` : ""}<em>${esc(x.label)}</em></button>`).join("")}</div>`);
+  const box = hEl("div", "vxp-extra", `<h3 class="vxp-h">Video text styles</h3><p class="mx-hint">Animated text at the playhead.</p>
+    <div class="vx-styles">${Object.entries(M.TEXT_STYLES).map(([k, s]) => `<button class="vx-style vx-style-${k}" data-text="${k}"><span>${esc(s.label)}</span></button>`).join("")}</div>
+    <h3 class="vxp-h">Animated titles</h3><div class="vxp-combos">${TITLES.map((x) => `<button class="vxp-combo" data-combo="${x.id}"><b>${esc(x.parts[0].text)}</b>${x.parts[1] ? `<small>${esc(x.parts[1].text)}</small>` : ""}<em>${esc(x.label)}</em></button>`).join("")}</div>`);
   box.addEventListener("click", (e) => {
+    const s = e.target.closest("[data-text]"); if (s) { addTextStyle(s.dataset.text); return; }
     const b = e.target.closest("[data-combo]"); if (!b) return;
     const x = TITLES.find((t) => t.id === b.dataset.combo), before = snap();
     let last = null; x.parts.forEach((p) => { last = addOverlay({ ...M.TEXT_STYLES[p.style], ...p, style: undefined, label: undefined }, { history: false }); });
@@ -1848,6 +2093,7 @@ function renderPill(f) {
 // ---------- test hooks ----------
 const api = {
   state: S,
+  insert: kitInsert(), // the left-rail kit's insert adapter (also the shell's opts.insert)
   get project() { return S.p; },
   get player() { return player; },
   assets, model: M,
@@ -1855,7 +2101,7 @@ const api = {
   play: () => player.play(), pause: () => player.pause(),
   exportVideo: (o) => runExport(o), exportAudio: () => exportAudio(), get lastAudio() { return S.lastAudio; },
   get lastExport() { return S.lastExport; },
-  applyTemplate, get shell() { return shell; }, exportGif: (o) => exportGif(o), downloadSrt: () => downloadSrt(), addCaptionLines: (l, s) => addCaptionLines(l, s),
+  applyTemplate, applyTemplatePage, applyTemplateStyle, applyTextLayout, applyVideoLook, get shell() { return shell; }, exportGif: (o) => exportGif(o), downloadSrt: () => downloadSrt(), addCaptionLines: (l, s) => addCaptionLines(l, s),
   styleCaptions: (s) => styleCaptions(s), animateTexts: (a) => animateTexts(a), transitionAll: (t) => transitionAll(t), get lastGif() { return S.lastGif; },
   addPictureOverlay: (mediaId) => addPictureOverlay(S.p.media[mediaId]), addSound: (id) => addSound(id), addOverlay: (o) => addOverlay(o), addScene: (sc) => addScene(sc),
   save: saveNow,

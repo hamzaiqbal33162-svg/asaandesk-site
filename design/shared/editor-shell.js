@@ -72,6 +72,9 @@ const P = {
   mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4 7 8 6 8-6"/>',
   fit: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
   music: '<path d="M9 17.5V6l10-2v11.5"/><circle cx="6.8" cy="17.5" r="2.3"/><circle cx="16.8" cy="15.5" r="2.3"/>',
+  undo: '<path d="M8.5 5.5 4 10l4.5 4.5"/><path d="M4.5 10h9.5a5.5 5.5 0 0 1 0 11H11"/>',
+  redo: '<path d="M15.5 5.5 20 10l-4.5 4.5"/><path d="M19.5 10H10a5.5 5.5 0 0 0 0 11h3"/>',
+  spark: '<path class="f" d="M12 3.5l1.9 5.2 5.2 1.9-5.2 1.9L12 17.7l-1.9-5.2-5.2-1.9 5.2-1.9z"/><path class="f" d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
 };
 const icon = (n, cls = "") => `<svg class="ads-i ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${P[n] || ""}</svg>`;
 
@@ -229,12 +232,24 @@ export function mountShell(opts = {}) {
   const resizeB = opts.resize ? mk("ads-tb ads-desk", opts.resize.label || "Resize", null, opts.resize.label || "Resize", () => opts.resize.open?.(resizeB), { "data-ads": "resize" }) : null;
   const modeB = h("button", { type: "button", class: "ads-tb ads-desk ads-mode", "aria-label": "Editing mode", "aria-haspopup": "menu", "aria-expanded": "false", "data-ads": "mode", html: icon("pencil") + '<span class="ads-l">Editing</span>' + icon("chev", "ads-chev") });
   modeB.addEventListener("click", () => modeMenu(modeB));
+  // Undo / redo like Canva (white, no box). The editor's opts.undo / opts.redo when given, else the editor's own Ctrl+Z /
+  // Ctrl+Y keys. An editor that puts its own undo buttons in the bar (Studio's #undoBtn) hides these.
+  const keyCmd = (key, shift = false) => { const t = stageSlot?.isConnected ? stageSlot : document.body; t.dispatchEvent(new (window.KeyboardEvent || KeyboardEvent)("keydown", { key, code: "Key" + key.toUpperCase(), ctrlKey: true, metaKey: /Mac|iPhone|iPad/.test(navigator.platform || ""), shiftKey: shift, bubbles: true, cancelable: true })); };
+  const undoB = btn("ads-tb ads-ic ads-desk ads-undo", "Undo (Ctrl+Z)", "undo", "", () => { try { opts.undo ? opts.undo() : keyCmd("z"); } catch (e) { console.error(e); } }, { "data-ads": "undo" });
+  const redoB = btn("ads-tb ads-ic ads-desk ads-undo", "Redo (Ctrl+Y)", "redo", "", () => { try { opts.redo ? opts.redo() : keyCmd("y"); } catch (e) { console.error(e); } }, { "data-ads": "redo" });
   const save = h("span", { class: "ads-save", role: "status", "aria-live": "polite", "data-state": "saved", title: "Saved on this device", html: icon("cloudOk") + '<span class="ads-save-t">Saved on this device</span>' });
   const title = h("input", { class: "ads-title", type: "text", value: opts.title || "", placeholder: `Untitled design - ${kind}`, "aria-label": "Design title", spellcheck: "false", maxlength: "120" });
   let titleWas = title.value;
   title.addEventListener("focus", () => { titleWas = title.value; });
   title.addEventListener("keydown", (e) => { if (e.key === "Enter") title.blur(); if (e.key === "Escape") { title.value = titleWas; title.blur(); e.stopPropagation(); } });
   title.addEventListener("change", () => { const t = title.value.trim(); title.value = t; titleWas = t; opts.onTitle?.(t); });
+  // Where Canva shows "Try Pro": an honest pill. Everything in AsaanDesk is free (no trial, no card).
+  const freeB = mk("ads-tb ads-desk ads-free", "Everything in AsaanDesk is free", "spark", "All free", () => popover(freeB, (p) => {
+    p.append(h("div", { class: "ads-freepop" }, h("b", { text: "Everything in AsaanDesk is free" }),
+      h("ul", {}, h("li", { text: "Every template, photo, element and font" }), h("li", { text: "Every editor, tool and download format" }), h("li", { text: "No trial, no card, no sign-up" })),
+      h("p", { class: "ads-muted", text: "Your designs are saved on this device." }),
+      mk("ads-btn primary sm", "Close", "check", "Got it", () => closePop())));
+  }, { role: "dialog", label: "Everything is free", name: "all-free" }), { "data-ads": "all-free", "aria-haspopup": "dialog", "aria-expanded": "false" });
   const avatar = h("button", { type: "button", class: "ads-avatar ads-desk", "aria-label": "Your account", title: "You", "aria-haspopup": "menu", "aria-expanded": "false", text: "Y", "data-ads": "avatar" });
   avatar.addEventListener("click", () => avatarMenu(avatar));
   const insightsB = btn("ads-tb ads-sq ads-desk", "Design insights", "insights", "", () => insightsPop(insightsB), { "data-ads": "insights", "aria-haspopup": "dialog", "aria-expanded": "false" });
@@ -242,21 +257,59 @@ export function mountShell(opts = {}) {
   const cBadge = h("span", { class: "ads-badge", hidden: true }); commentsB.append(cBadge);
   const shareB = mk("ads-share", "Share", "share", "Share", () => sharePop(shareB), { "aria-haspopup": "dialog", "aria-expanded": "false", "data-ads": "share" });
   // opts.present = { label?, act(anchor) } adds a Present button next to Share (presentations, whiteboards).
-  // opts.present.items = [{ label, hint?, icon?, act }] turns Present into a menu (full screen, presenter view, record…).
+  // opts.present.items = [{ label, hint?, icon?, act }] adds Canva's "▾" next to Present with those ways to present
+  // (full screen, presenter view, record…); Present itself runs opts.present.act, else the first item.
+  const presentItems = opts.present?.items || [];
   const presentB = opts.present ? mk("ads-tb ads-desk ads-present", opts.present.label || "Present", "present", opts.present.label || "Present", () => {
-    const items = opts.present.items || [];
-    if (!items.length) { opts.present.act?.(presentB); return; }
-    popover(presentB, (p) => { for (const it of items) p.append(menuItem(it.label, () => it.act?.(presentB), { iconName: it.icon || "present", hint: it.hint })); }, { label: "Present", name: "present" });
+    if (opts.present.act) opts.present.act(presentB); else presentItems[0]?.act?.(presentB);
   }, { "data-ads": "present" }) : null;
+  const presentMoreB = opts.present && presentItems.length ? btn("ads-tb ads-desk ads-present-more", "More ways to present", "chev", "", () => popover(presentMoreB, (p) => {
+    for (const it of presentItems) p.append(menuItem(it.label, () => it.act?.(presentB), { iconName: it.icon || "present", hint: it.hint }));
+  }, { label: "Present", name: "present" }), { "data-ads": "present-more", "aria-haspopup": "menu", "aria-expanded": "false" }) : null;
+  if (presentB && presentMoreB) presentB.classList.add("ads-split");
   const inviteB = btn("ads-tb ads-sq ads-desk ads-invite", "Invite people", "invite", "", () => sharePop(shareB, true), { "data-ads": "invite" });
   const moreB = btn("ads-tb ads-sq ads-mob", "More options", "more", "", () => moreMenu(moreB), { "aria-haspopup": "menu", "aria-expanded": "false", "data-ads": "more" });
-  top.append(home, fileB, resizeB || "", modeB, h("span", { class: "ads-sep ads-desk", "aria-hidden": "true" }), save, h("span", { class: "ads-grow" }), title, avatar, inviteB, insightsB, commentsB, presentB || "", shareB, moreB);
+  top.append(home, fileB, resizeB || "", modeB, h("span", { class: "ads-sep ads-desk", "aria-hidden": "true" }), undoB, redoB, h("span", { class: "ads-sep ads-desk ads-sep2", "aria-hidden": "true" }), save, h("span", { class: "ads-grow" }), title, freeB, avatar, inviteB, insightsB, commentsB, presentB || "", presentMoreB || "", shareB, moreB);
+  const ownUndo = () => { const has = !!top.querySelector("#undoBtn, .st-undo"); undoB.hidden = redoB.hidden = has; };
+  const MO = window.MutationObserver; if (typeof MO === "function") new MO(ownUndo).observe(top, { childList: true });
 
   // ----- rail + panel
-  const known = (id) => !!appPanels[id] || ({ templates: !!opts.templates, brand: true, uploads: !!opts.insert?.image, projects: !!opts.projects, apps: true, translate: !!(opts.getText || opts.setText), comments: true, notes: true, outline: !!bottom.outline, versions: canVersions() }[id] ?? false);
+  // Canva-style left-rail panels from the shared kit (./panels/): Elements, Text and Tools in every editor, the same
+  // structure everywhere (only colours differ); the editor's own panel content (opts.panels.elements/text/tools) is
+  // shown inside the kit panel as an extra section. opts.kitPanels: false keeps an editor's own panels (escape hatch).
+  // Canva's rail in every editor (Aamir's recording, Nov 13): Design (Templates / Layouts / Styles tabs), Elements, Text,
+  // Brand, Uploads, Draw, Projects, Apps. Ids stay "templates" (Design) and "tools" (Draw) so editors and tests keep
+  // working; an editor whose own Tools panel is its main UI (opts.panels.tools.primary) keeps it as "Tools" and gets
+  // Draw as "draw"; other editors' own tools appear in the Apps panel. Translate leaves the rail (Apps / openPanel).
+  const ownToolsPanel = appPanels.tools;
+  const toolsPrimary = !!(ownToolsPanel && typeof ownToolsPanel === "object" && ownToolsPanel.primary);
+  const drawId = toolsPrimary ? "draw" : "tools";
+  const KIT_IDS = new Set(["elements", "text", drawId]);
+  const kitPanelOn = (id) => opts.kitPanels !== false && KIT_IDS.has(id) && !!opts.insert;
+  const designParts = () => ({ layouts: opts.design?.layouts || panelFn(appPanels.layouts), styles: opts.design?.styles || panelFn(appPanels.styles) });
+  function panelFn(a) { return !a ? null : typeof a === "function" ? a : typeof a.render === "function" ? a.render : null; }
+  const known = (id) => kitPanelOn(id) || (id === "tools" && toolsPrimary) || (id !== "tools" && !!appPanels[id]) || ({ templates: !!opts.templates || !!designParts().layouts || !!designParts().styles, brand: true, uploads: !!opts.insert?.image, projects: !!opts.projects, apps: true, translate: !!(opts.getText || opts.setText) || !!appPanels.translate, comments: true, notes: true, outline: !!bottom.outline, versions: canVersions() }[id] ?? false);
   function canVersions() { return !!(opts.versions || opts.projects?.save); }
-  const meta = (id) => { const a = appPanels[id]; const m = PANEL_META[id] || [id.charAt(0).toUpperCase() + id.slice(1).replace(/[-_]/g, " "), "apps"]; return { label: (a && a.label) || m[0], icon: (a && a.icon) || m[1] }; };
-  const railIds = (opts.rail ? [...opts.rail] : [...DEFAULT_RAIL, ...Object.keys(appPanels).filter((k) => !DEFAULT_RAIL.includes(k) && !OFF_RAIL.has(k))]).filter(known);
+  const meta = (id) => {
+    if (id === "templates") return { label: "Design", icon: "templates" };
+    if (id === drawId) return { label: "Draw", icon: "pencil" };
+    const a = appPanels[id]; const m = PANEL_META[id] || [id.charAt(0).toUpperCase() + id.slice(1).replace(/[-_]/g, " "), "apps"]; return { label: (a && a.label) || m[0], icon: (a && a.icon) || m[1] };
+  };
+  const CANVA_RAIL = ["templates", "elements", "text", "brand", "uploads", drawId, "projects", "apps"];
+  function canvaRail(list) {
+    const ids = [...new Set(list.filter((x) => x !== "translate" && x !== "design"))];
+    const extras = ids.filter((x) => !CANVA_RAIL.includes(x) && !(x === "tools" && toolsPrimary));
+    const out = [];
+    for (const c of CANVA_RAIL) {
+      if (c === "projects") out.push(...extras);
+      out.push(c);
+      if (c === "templates" && toolsPrimary) out.push("tools");
+    }
+    return out;
+  }
+  const railIds = canvaRail(opts.rail ? [...opts.rail] : [...DEFAULT_RAIL, ...Object.keys(appPanels).filter((k) => !DEFAULT_RAIL.includes(k) && !OFF_RAIL.has(k))]).filter(known);
+  // Old names: "design" = Templates, "draw" = the Draw panel (when it is the "tools" id).
+  const alias = (id) => (id === "design" ? "templates" : id === "draw" && drawId === "tools" ? "tools" : id);
   const railBtns = new Map();
   for (const id of railIds) {
     const m = meta(id);
@@ -287,6 +340,20 @@ export function mountShell(opts = {}) {
     b.replaceChildren();
     try {
       const a = appPanels[id];
+      if (id === "templates") { renderDesign(b); return; }
+      if (kitPanelOn(id)) {
+        // The Draw panel (kit "tools") never shows the editor's own tools: those are in the Apps panel.
+        const kitId = id === drawId ? "tools" : id, mine = id === drawId ? null : a;
+        const own = mine ? (box) => { const fn = typeof mine === "function" ? mine : mine.render; fn?.(box, shell); for (const el of box.querySelectorAll("[data-ads-drag]")) el.draggable = true; } : null;
+        const wait = h("p", { class: "ads-muted ads-kitwait", text: "Loading…" }); b.append(wait);
+        import("./panels/index.js").then((m) => { wait.remove(); m.renderKitPanel(kitId, b, { shell, opts, own, ownMeta: mine && typeof mine === "object" ? mine : {}, toast, openPanel: (x) => openPanel(x), closePanel: () => closePanel() }); for (const el of b.querySelectorAll("[data-ads-drag]")) el.draggable = true; })
+          .catch((e) => { console.error(e); wait.textContent = "This panel could not open. " + (e?.message || ""); });
+        return;
+      }
+      // Brand / Uploads / Projects / Apps: always the shared Canva-structured panels; the editor's own panel comes along
+      // as S.own (shown as a last section) and, in Apps, its own tools as S.ownTools.
+      const SHELL = { brand: "renderBrand", uploads: "renderUploads", projects: "renderProjects", apps: "renderApps" };
+      if (SHELL[id]) { lazyPanel(SHELL[id], b, { own: ownRender(a), ownTools: id === "apps" && !toolsPrimary ? ownRender(ownToolsPanel) : null }); return; }
       if (a) {
         const fn = typeof a === "function" ? a : a.render;
         if (typeof a === "object" && a.search) { const host = h("div", { class: "ads-shost" }); b.append(searchBox(typeof a.search === "string" ? a.search : `Search ${meta(id).label.toLowerCase()}`, host, a.searchItems), host); fn?.(host, shell); }
@@ -298,6 +365,7 @@ export function mountShell(opts = {}) {
     } catch (e) { console.error(e); b.append(h("p", { class: "ads-muted", text: "This panel could not open. " + (e?.message || "") })); }
   }
   function openPanel(id) {
+    id = alias(id);
     if (!id || !known(id)) return;
     const fresh = !bodies.has(id);
     const b = panelBody(id);
@@ -323,7 +391,7 @@ export function mountShell(opts = {}) {
     syncBottomButtons();
     opts.onPanel?.(null);
   }
-  function togglePanel(id) { if (active === id) closePanel(); else openPanel(id); }
+  function togglePanel(id) { id = alias(id); if (active === id) closePanel(); else openPanel(id); }
 
   // Bottom sheet drag (phones): drag the grip down to close it.
   let drag = null;
@@ -354,6 +422,8 @@ export function mountShell(opts = {}) {
     if (p.kind === "upload") { const it = await upTx("readonly", (st) => st.get(p.id)); if (it && ins.image) { await ins.image(it.data, it.name, pt); toast("Image added"); } return; }
     if (p.kind === "image" && ins.image) { await ins.image(p.src, p.name || "image", pt); toast("Image added"); return; }
     if (p.kind === "color" && ins.color) { await ins.color(p.value, pt); toast(`Colour ${p.value} applied`); return; }
+    // Items dragged from the shared panel kit (Elements / Text / Tools): the kit inserts them through opts.insert.
+    if (p.kind === "item" && p.data && typeof p.data === "object" && p.data.kit) { const m = await import("./panels/index.js"); await m.dropKit(p.data, pt, { shell, opts, toast }); return; }
     if (p.kind === "item") { if (opts.onDrop) await opts.onDrop(p.data, pt, p); else if (ins.item) await ins.item(p.data, pt); else toast("Click the item to add it."); }
   }
   shell.dragPayload = dragPayload;
@@ -892,16 +962,50 @@ export function mountShell(opts = {}) {
   async function loadGallery() { let g = opts.templates?.gallery; if (typeof g === "function") g = g(); if (g && typeof g.then === "function") g = await g; return g || { TEMPLATES: [], thumb: () => "" }; }
   // Handles thousands of templates: search (name, tags, theme, layout, section), filter chips, thumbnails drawn only
   // when a card comes near the screen, and pages of 40 (infinite scroll + "Load more").
+  // ----- Design panel (Canva): tabs Templates | Layouts | Styles. Layouts / Styles come from the editor
+  // (opts.design.layouts / .styles, or its own "layouts" / "styles" panels); tabs it does not have are left out.
+  function renderDesign(b) {
+    const { layouts, styles } = designParts();
+    const tabs = [];
+    if (opts.templates) tabs.push(["templates", "Templates", (el) => renderTemplates(el)]);
+    if (layouts) tabs.push(["layouts", "Layouts", (el) => layouts(el, shell)]);
+    if (styles) tabs.push(["styles", "Styles", (el) => styles(el, shell)]);
+    const bar = h("div", { class: "ads-dtabs", role: "tablist", "aria-label": "Design", "data-ads": "design-tabs" });
+    const panes = new Map();
+    const show = (k) => {
+      for (const [x, el] of panes) el.hidden = x !== k;
+      for (const t of bar.children) { const on = t.dataset.tab === k; t.classList.toggle("on", on); t.setAttribute("aria-selected", String(on)); t.tabIndex = on ? 0 : -1; }
+      const el = panes.get(k);
+      if (!el.dataset.ready) { el.dataset.ready = "1"; try { tabs.find((t) => t[0] === k)[2](el); } catch (e) { console.error(e); el.append(h("p", { class: "ads-muted", text: "This tab could not open." })); } }
+      el._shown?.();
+    };
+    for (const [k, label] of tabs) {
+      bar.append(h("button", { type: "button", class: "ads-dtab", role: "tab", "data-tab": k, "data-ads": "design-tab-" + k, text: label, onclick: () => show(k) }));
+      panes.set(k, h("div", { class: "ads-dpane", "data-tab": k, role: "tabpanel", "aria-label": label, hidden: true }));
+    }
+    if (tabs.length > 1) b.append(bar);
+    b.append(...panes.values());
+    b._shown = () => { for (const el of panes.values()) if (!el.hidden) el._shown?.(); };
+    b._redraw = () => panes.get("templates")?._redraw?.();
+    if (tabs.length) show(tabs[0][0]);
+  }
+
   function renderTemplates(b) {
     const T = opts.templates, PAGE = Math.max(8, T.pageSize || 40);
     const q = h("input", { type: "search", class: "ads-search-in", placeholder: T.placeholder || `Search ${kind} templates`, "aria-label": T.placeholder || "Search templates", "data-ads": "template-search" });
-    const chips = h("div", { class: "ads-chips", role: "group", "aria-label": "Filter templates", hidden: true });
+    // Canva: the filters sit behind a filter icon inside the search box and open as a popover (closed at first).
+    const chips = h("div", { class: "ads-chips ads-filterpop", role: "group", "aria-label": "Filter templates", hidden: true, "data-off": "1" });
     const count = h("p", { class: "ads-tcount", role: "status", "aria-live": "polite", "data-ads": "template-count" });
     const list = h("div", { class: "ads-tlist" }, h("p", { class: "ads-muted", text: "Loading templates…" }));
     const more = h("button", { type: "button", class: "ads-btn ads-block ads-more", "data-ads": "template-more", hidden: true });
-    const filterB = btn("ads-sbtn", "Show or hide filters", "fit", "", () => { chips.dataset.off = chips.dataset.off === "1" ? "" : "1"; chips.hidden = chips.dataset.off === "1" || !chips.children.length; filterB.setAttribute("aria-pressed", String(!chips.hidden)); }, { "data-ads": "template-filters", "aria-pressed": "true", hidden: true });
+    const filterB = btn("ads-sbtn", "Show or hide filters", "fit", "", () => { chips.dataset.off = chips.dataset.off === "1" ? "" : "1"; chips.hidden = chips.dataset.off === "1" || !chips.children.length; filterB.setAttribute("aria-pressed", String(!chips.hidden)); }, { "data-ads": "template-filters", "aria-pressed": "false", "aria-haspopup": "true", hidden: true });
     const back = h("div", { class: "ads-secback", hidden: true }, mk("ads-link", "Back to all templates", "left", "All templates", () => { secOnly = null; draw(); }, { "data-ads": "see-all-back" }), h("b", { class: "ads-sectitle" }));
-    b.append(h("label", { class: "ads-search", html: icon("search") }, q, filterB), chips, back, count, list, more);
+    // Template detail (Canva): ← name, "Apply all N pages", the pages, "Apply this template style", "More like this".
+    const detail = h("div", { class: "ads-tdetail", "data-ads": "template-detail", hidden: true });
+    const main = [];
+    b.append(h("div", { class: "ads-swrap" }, h("label", { class: "ads-search", html: icon("search") }, q, filterB), chips), back, count, list, more, detail);
+    main.push(b.firstChild, back, count, list, more);
+    document.addEventListener("pointerdown", (e) => { if (!chips.hidden && !chips.contains(e.target) && !filterB.contains(e.target)) { chips.dataset.off = "1"; chips.hidden = true; filterB.setAttribute("aria-pressed", "false"); } }, true);
     let gal = null, all = [], byId = new Map(), hay = new Map(), matches = [], shown = 0, lastSec = null, grid = null, searching = false;
     // Paged galleries (gallery.page(tool, { q, offset, limit, filters }) -> { items, total }) are asked page by page.
     let paged = false, pager = null, loading = false, gen = 0, total = 0, baseTotal = null, secOnly = null;
@@ -935,14 +1039,52 @@ export function mountShell(opts = {}) {
         }
       }
       dragPayload(c, { kind: "template", id: x.id, name: x.name });
-      c.addEventListener("click", async () => {
-        if (c.classList.contains("busy")) return;
-        c.classList.add("busy"); c.setAttribute("aria-busy", "true");
-        try { const r = await T.apply?.(x.id); if (r !== false) pushRecent(x.id); } catch (e) { console.error(e); toast(e?.message || "That template could not open."); }
-        finally { c.classList.remove("busy"); c.removeAttribute("aria-busy"); }
-      });
+      // Canva: a template with several pages opens its detail ("Apply all N pages" or one page); one page applies at once.
+      c.addEventListener("click", () => (np > 1 && !c.closest(".ads-tdetail") ? showDetail(x, np) : applyTemplate(x, c)));
       return c;
     };
+    async function applyTemplate(x, c) {
+      if (c?.classList.contains("busy")) return;
+      c?.classList.add("busy"); c?.setAttribute("aria-busy", "true");
+      try { const r = await T.apply?.(x.id); if (r !== false) pushRecent(x.id); } catch (e) { console.error(e); toast(e?.message || "That template could not open."); }
+      finally { c?.classList.remove("busy"); c?.removeAttribute("aria-busy"); }
+    }
+    function closeDetail() { detail.hidden = true; detail.replaceChildren(); for (const el of main) el.hidden = el === back ? !secOnly : el === more ? more.dataset.wasHidden === "1" : false; b._shown?.(); }
+    function showDetail(x, np) {
+      more.dataset.wasHidden = more.hidden ? "1" : "";
+      for (const el of main) el.hidden = true;
+      try { const n = +T.pageCount?.(x.id); if (n >= 1) np = Math.floor(n); } catch {}
+      // The editor's own page thumbnails (opts.templates.pageThumb) first, else the gallery's.
+      const pageThumb = (i) => { let svg = ""; try { svg = String(T.pageThumb?.(x.id, i, 320) || "") || (i === 0 ? thumbOf(x.id) : String(gal.thumbPage?.(x.id, i) || "")); } catch {} return svg; };
+      const head = h("div", { class: "ads-secback ads-dhead" }, mk("ads-link", "Back to templates", "left", "", () => closeDetail(), { "data-ads": "template-detail-back" }), h("b", { class: "ads-sectitle", text: x.name, title: x.name }));
+      const all = h("button", { type: "button", class: "ads-btn primary ads-block", "data-ads": "template-apply-all", text: `Apply all ${np} pages`, onclick: (e) => applyTemplate(x, e.currentTarget) });
+      const pages = h("div", { class: "ads-tgrid ads-tpages", role: "list", "aria-label": `Pages of ${x.name}` });
+      for (let i = 0; i < np; i++) {
+        const th = h("span", { class: "ads-tthumb", html: pageThumb(i) });
+        if (gal.THUMB_RATIO) th.style.aspectRatio = String(gal.THUMB_RATIO);
+        th.append(h("span", { class: "ads-tbadge", text: String(i + 1), "aria-hidden": "true" }));
+        const pb = h("button", { type: "button", class: "ads-tcard ads-tpage", role: "listitem", "data-ads": "template-page", "data-page": String(i), "aria-label": T.applyPage ? `Add page ${i + 1} of ${x.name}` : `Use ${x.name} (all pages)` }, th);
+        pb.addEventListener("click", async () => {
+          if (!T.applyPage) return applyTemplate(x, pb);
+          try { const r = await T.applyPage(x.id, i); if (r !== false) { pushRecent(x.id); toast(`Page ${i + 1} added`); } } catch (e) { console.error(e); toast(e?.message || "That page could not be added."); }
+        });
+        pages.append(pb);
+      }
+      const parts = [head, all, pages];
+      if (typeof T.applyStyle === "function") {
+        let st = null; try { st = gal.styleOf?.(x.id) || null; } catch {}
+        const sw = h("span", { class: "ads-stylesw", "aria-hidden": "true" }); for (const col of (st?.colors || []).slice(0, 5)) sw.append(h("i", { style: `background:${col}` }));
+        parts.push(h("section", { class: "ads-tsec", "data-section": "template-style" }, h("h3", { class: "ads-h3", text: "Apply this template style" }),
+          h("button", { type: "button", class: "ads-stylecard", "data-ads": "template-apply-style", onclick: async () => { try { const r = await T.applyStyle(x.id); if (r !== false) toast("Template style applied"); } catch (e) { toast(e?.message || "The style could not be applied."); } } },
+            sw, h("span", {}, h("b", { text: st?.name || x.name }), h("small", { text: st?.fonts?.join(" · ") || "Colours and fonts" })))));
+      }
+      const key = x.section || x.theme || x.layout;
+      const like = all_().filter((y) => y.id !== x.id && key && (y.section === key || y.theme === key || y.layout === key)).slice(0, 8);
+      if (like.length) { const g = h("div", { class: "ads-tgrid" }); for (const y of like) g.append(card(y)); parts.push(h("section", { class: "ads-tsec", "data-section": "more-like-this" }, h("h3", { class: "ads-h3", text: "More like this" }), g)); }
+      detail.replaceChildren(...parts); detail.hidden = false; scroll.scrollTop = 0;
+      all.focus?.();
+    }
+    const all_ = () => all;
     // First card "Create a blank <kind>" when the app gives templates.blank() (not counted as a template card).
     const blankCard = () => {
       const label = T.blankLabel || `Create a blank ${kind.toLowerCase()}`;
@@ -965,7 +1107,7 @@ export function mountShell(opts = {}) {
         for (const x of all) if (x[key] != null && !seen.has(x[key])) seen.set(x[key], x[key + "Name"] || pretty(x[key]));
         if (seen.size >= 2 && seen.size <= 80) groups.push({ key, label, options: [...seen].map(([value, l]) => ({ value, label: l })) });
       }
-      chips.replaceChildren(); chips.hidden = !groups.length; filterB.hidden = !groups.length;
+      chips.replaceChildren(); chips.hidden = !groups.length || chips.dataset.off === "1"; filterB.hidden = !groups.length;
       groups.forEach((g, gi) => {
         const row = h("div", { class: "ads-chiprow", role: "group", "aria-label": `${g.label} filter`, "data-filter": g.key });
         if (gi === 0) row.append(h("button", { type: "button", class: "ads-fchip on", "data-value": "", "aria-pressed": "true", text: "All", onclick: () => { for (const k of Object.keys(filt)) delete filt[k]; syncChips(); draw(); } }));
@@ -1064,69 +1206,19 @@ export function mountShell(opts = {}) {
     }).catch((e) => { console.error(e); list.replaceChildren(h("p", { class: "ads-muted", text: "Templates could not load. Please reload the page." })); });
   }
 
-  // ----- Brand panel (shared/brand.js kit)
-  function renderBrand(b) {
-    const kit = loadBrand(), ins = opts.insert || {};
-    b.append(h("p", { class: "ads-muted", text: `${kit.name}: your colours, fonts and logos, saved on this device.` }));
-    b.append(h("h3", { class: "ads-h3", text: "Colours" }));
-    const sw = h("div", { class: "ads-swatches" });
-    for (const c of kit.colors || []) { const s = h("button", { type: "button", class: "ads-swatch", style: `--c:${c}`, "aria-label": ins.color ? `Use colour ${c}` : `Copy colour ${c}`, title: c, "data-color": c, onclick: async () => { if (ins.color) { ins.color(c); toast(`Colour ${c} applied`); } else toast((await copyText(c)) ? `Copied ${c}` : c); } }); if (ins.color) dragPayload(s, { kind: "color", value: c }); sw.append(s); }
-    const pick = h("input", { type: "color", value: "#5b4cf0", "aria-label": "Pick a new brand colour", class: "ads-colorin" });
-    sw.append(h("label", { class: "ads-swatch ads-swadd", title: "Add a colour to your kit", html: icon("plus") }, pick));
-    pick.addEventListener("change", () => { const k = loadBrand(); if (!k.colors.includes(pick.value)) { k.colors = [...k.colors, pick.value].slice(-12); saveBrand(k); renderPanel("brand", b); toast("Colour added to your brand kit"); } });
-    b.append(sw);
-    if (ins.font) {
-      b.append(h("h3", { class: "ads-h3", text: "Fonts" }));
-      for (const [role, fam] of Object.entries(kit.fonts || {})) {
-        const f = FONT_FAMILIES[fam] || FONT_FAMILIES.sans;
-        b.append(h("button", { type: "button", class: "ads-fontbtn", style: `font-family:${f.css}`, "data-font": fam, onclick: () => { ins.font(fam, f.css); toast(`${f.label} applied`); } }, h("b", { text: role === "heading" ? "Heading" : "Body text" }), h("small", { text: f.label })));
-      }
-    }
-    if (ins.image) {
-      b.append(h("h3", { class: "ads-h3", text: "Logos" }));
-      const g = h("div", { class: "ads-tgrid" });
-      for (const l of kit.logos || []) { const lb = h("button", { type: "button", class: "ads-tcard", "aria-label": `Add logo ${l.name || ""}`, onclick: () => { ins.image(l.src, l.name || "logo"); toast("Logo added"); } }, h("span", { class: "ads-tthumb ads-contain" }, h("img", { src: l.src, alt: "" })), h("span", { class: "ads-tname", text: l.name || "Logo" })); dragPayload(lb, { kind: "image", src: l.src, name: l.name || "logo" }); g.append(lb); }
-      if (!(kit.logos || []).length) g.append(h("p", { class: "ads-muted", text: "No logos yet. Add them in the brand kit." }));
-      b.append(g);
-    }
-    b.append(h("a", { class: "ads-btn ads-block", href: "/product/brand", target: "_blank", rel: "noopener", html: icon("brand") + '<span class="ads-l">Edit brand kit</span>' }));
+  // ----- Brand, Uploads, Projects and Apps: Canva-structured panels in ./panels/shell-panels.js, loaded the first time
+  // one of them opens (keeps the editor's first load light). They get the shell's own helpers (S below).
+  const shellKit = () => ({ h, icon, mk, btn, popover, menuItem, menuHead, toast, opts, app, kind, shell, LS, rid, when, readUrl, upTx, dragPayload,
+    renderPanel, openPanel, closePanel, isMobile, copyText, saveToProjects, getProjectId: () => projectId, setProjectId: (id) => { projectId = id; vk = null; },
+    title: () => title.value || title.placeholder, APPS, loadBrand, saveBrand, FONT_FAMILIES, listProjects, saveProject, deleteProject, getProject });
+  function ownRender(a) { const fn = panelFn(a); return fn ? (box) => { fn(box, shell); for (const el of box.querySelectorAll("[data-ads-drag]")) el.draggable = true; } : null; }
+  function lazyPanel(name, b, extra = {}) {
+    const wait = h("p", { class: "ads-muted ads-kitwait", text: "Loading…" }); b.append(wait);
+    import("./panels/shell-panels.js").then((m) => { if (!b.contains(wait)) return; wait.remove(); m[name](b, { ...shellKit(), ...extra }); })
+      .catch((e) => { console.error(e); wait.textContent = "This panel could not open. " + (e?.message || ""); });
   }
-
-  // ----- Uploads panel
-  function renderUploads(b) {
-    const inp = h("input", { type: "file", accept: "image/*", multiple: true, class: "ads-file", "aria-label": "Choose images to upload", "data-ads": "upload-input" });
-    const drop = h("label", { class: "ads-drop" }, inp, h("span", { html: icon("uploads") }), h("b", { text: "Upload files" }), h("small", { text: "Images stay on this device. Drop them here or tap to choose." }));
-    const grid = h("div", { class: "ads-tgrid ads-uplist" });
-    b.append(drop, h("h3", { class: "ads-h3", text: "Your uploads" }), grid);
-    const draw = async () => {
-      let items = []; try { items = await upTx("readonly", (s) => s.getAll()); } catch {}
-      items = (items || []).sort((a, z) => z.added - a.added);
-      grid.replaceChildren();
-      if (!items.length) grid.append(h("p", { class: "ads-muted", text: "Nothing uploaded yet." }));
-      for (const it of items) {
-        const use = h("button", { type: "button", class: "ads-tcard", "aria-label": `Add ${it.name} to the design`, "data-upload": it.id }, h("span", { class: "ads-tthumb ads-contain" }, h("img", { src: it.data, alt: "" })), h("span", { class: "ads-tname", text: it.name }));
-        use.addEventListener("click", () => { try { opts.insert.image(it.data, it.name); toast("Image added"); } catch (e) { toast(e?.message || "Could not add the image."); } });
-        dragPayload(use, { kind: "upload", id: it.id, name: it.name });
-        const del = btn("ads-x", `Delete ${it.name}`, "trash", "", async () => { await upTx("readwrite", (s) => s.delete(it.id)); draw(); });
-        grid.append(h("div", { class: "ads-upitem" }, use, del));
-      }
-    };
-    const add = async (files) => {
-      let n = 0;
-      for (const f of files) {
-        if (!/^image\//.test(f.type)) { toast(`${f.name} is not an image`); continue; }
-        if (f.size > 15e6) { toast(`${f.name} is larger than 15 MB`); continue; }
-        try { const data = await readUrl(f); await upTx("readwrite", (s) => s.put({ id: rid(), name: f.name, type: f.type, data, added: Date.now() })); n++; } catch { toast("This browser could not keep the file."); }
-      }
-      if (n) toast(`${n} file${n > 1 ? "s" : ""} uploaded`);
-      draw();
-    };
-    inp.addEventListener("change", () => { add([...inp.files]); inp.value = ""; });
-    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("on"); });
-    drop.addEventListener("dragleave", () => drop.classList.remove("on"));
-    drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("on"); add([...(e.dataTransfer?.files || [])]); });
-    draw();
-  }
+  function renderBrand(b) { lazyPanel("renderBrand", b); }
+  function renderUploads(b) { lazyPanel("renderUploads", b); }
 
   // ----- Projects panel (shared/store.js)
   async function saveToProjects() {
@@ -1138,26 +1230,7 @@ export function mountShell(opts = {}) {
     if (active === "projects") renderPanel("projects", panelBody("projects"));
     return rec;
   }
-  function renderProjects(b) {
-    if (opts.projects.save) b.append(mk("ads-btn primary ads-block", "Save to projects", "projects", "Save to projects", () => saveToProjects().catch((e) => toast(e?.message || "Could not save.")), { "data-ads": "save-project" }));
-    const list = h("div", { class: "ads-plist" }, h("p", { class: "ads-muted", text: "Loading…" }));
-    b.append(h("h3", { class: "ads-h3", text: `Your ${kind.toLowerCase()} projects` }), list);
-    listProjects(app).then((items) => {
-      list.replaceChildren();
-      if (!items.length) list.append(h("p", { class: "ads-muted", text: "No saved projects yet. They stay on this device." }));
-      for (const r of items) {
-        const th = h("span", { class: "ads-pthumb" });
-        if (typeof r.thumb === "string" && r.thumb.startsWith("<svg")) th.innerHTML = r.thumb; else if (typeof r.thumb === "string" && r.thumb) th.append(h("img", { src: r.thumb, alt: "" })); else th.innerHTML = icon(meta("projects").icon);
-        const open = h("button", { type: "button", class: "ads-prow" + (r.id === projectId ? " on" : ""), "aria-label": `Open ${r.name || "project"}`, "data-project": r.id }, th, h("span", {}, h("b", { text: r.name || "Untitled" }), h("small", { text: when(r.updated) })));
-        open.addEventListener("click", async () => { try { await opts.projects.open?.(r); projectId = r.id; vk = null; toast(`Opened ${r.name || "project"}`); if (isMobile()) closePanel(); } catch (e) { toast(e?.message || "Could not open it."); } });
-        const del = btn("ads-x", `Delete ${r.name || "project"}`, "trash", "", async () => {
-          if (del.dataset.sure !== "1") { del.dataset.sure = "1"; del.classList.add("sure"); del.title = "Click again to delete"; setTimeout(() => { del.dataset.sure = ""; del.classList.remove("sure"); }, 3000); return; }
-          await deleteProject(r.id); if (projectId === r.id) projectId = null; renderPanel("projects", b);
-        });
-        list.append(h("div", { class: "ads-pitem" }, open, del));
-      }
-    }).catch(() => list.replaceChildren(h("p", { class: "ads-muted", text: "Projects need browser storage, which is turned off here." })));
-  }
+  function renderProjects(b) { lazyPanel("renderProjects", b); }
 
   // ----- Version history (own IndexedDB store; snapshots come from projects.save(), restore goes through the
   // app's own project record so every app reloads it the way it already opens projects)
@@ -1228,17 +1301,8 @@ export function mountShell(opts = {}) {
     return h("label", { class: "ads-search ads-psearch", html: icon("search") }, q);
   }
 
-  // ----- Apps panel
-  function renderApps(b) {
-    b.append(h("p", { class: "ads-muted", text: "Open another AsaanDesk design app in a new tab. This design stays open here." }));
-    const g = h("div", { class: "ads-apps" });
-    b.append(searchBox("Search apps", g));
-    for (const [id, name, sub, href, ic] of APPS) {
-      if (id === app) continue;
-      g.append(h("a", { class: "ads-app", href, target: "_blank", rel: "noopener", "data-app": id, html: `<span class="ads-appic">${icon(ic)}</span>` }, h("span", {}, h("b", { text: name }), h("small", { text: sub }))));
-    }
-    b.append(g);
-  }
+  // ----- Apps panel (./panels/shell-panels.js)
+  function renderApps(b) { lazyPanel("renderApps", b); }
 
   // ----- Translate panel (Chrome on-device Translator API; nothing is sent anywhere)
   function renderTranslate(b) {

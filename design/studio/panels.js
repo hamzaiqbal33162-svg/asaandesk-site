@@ -18,6 +18,7 @@ import { COLLAGE_LAYOUTS, applyCollage, collageRects, fillFrames } from "./colla
 import { PRODUCTS, SHIRT_COLORS, renderMockup, productFor } from "./mockup.js";
 import { vectorEnv } from "./exporter.js";
 import { startDraw, stopDraw, undoStroke, drawing } from "./draw.js";
+import { isPageNumber } from "./pagetools.js";
 import * as P2 from "./panels2.js";
 import * as P3 from "./panels3.js";
 import { EXTRA_KINDS } from "./chartsx.js";
@@ -45,7 +46,9 @@ export function setHost(x) { host = x; }
 const P2_IDS = ["styles", "layouts", "deckgen", "guides", "print", "qr", "caption"];
 export const SUBPANELS = ["resize", "animate", "translate", "mockup", "collage", "background", "layers", "magic", "draw", ...P2_IDS];
 /** Fills a shell panel body with one of our panels. */
+let toolsHost = null; // where the shell shows Studio's own tools (Apps › Tools for this design)
 export function renderInto(name, el) {
+  if (name === "tools") toolsHost = el;
   if (S.panel === "animate" && name !== "animate") E.stopPreview();
   if (name !== "draw" && drawing()) stopDraw(true);
   S.panel = name;
@@ -85,6 +88,8 @@ export function initPanels() {
   on("layers", () => { if (S.panel === "layers") renderSide(); });
   on("geometry", updateGeometryFields);
   on("uploads", () => { if (S.panel === "uploads") renderSide(); });
+  // Another design opened: its own tools differ (print, slides, logo, social…), so draw them again where they are shown.
+  on("opened", () => { if (host && toolsHost?.isConnected && S.design) { toolsHost.replaceChildren(); try { toolsPanel(toolsHost); } catch (e) { console.error(e); } } });
   on("pages", () => { renderProps(); if (["layers", "collage", "notes"].includes(S.panel)) renderSide(); });
   on("change", () => schedulePagebar());
   on("text", () => {});
@@ -158,8 +163,9 @@ export function renderSide() {
   }
   sideBody.innerHTML = "";
   sideBody.scrollTop = 0;
-  if (host && ["resize", "animate", "mockup", "collage", "background", "layers", "magic", "draw", ...P2_IDS].includes(S.panel)) sideBody.append(h("button.btn.small.ghost.st-backtools", { type: "button", text: "‹ All tools", on: { click: () => openPanel("tools") } }));
-  const f = { tools: toolsPanel, notes: notesPanel, draw: drawPanel, styles: P2.stylesPanel, layouts: P2.layoutsPanel, deckgen: P2.deckgenPanel, guides: P2.guidesPanel, print: (el) => P2.printPanel(el, { reopen: () => renderSide() }), qr: P2.qrPanel, caption: P2.captionPanel, templates: templatesPanel, elements: elementsPanel, text: textPanel, uploads: uploadsPanel, brand: brandPanel, background: backgroundPanel, layers: layersPanel, magic: magicPanel, resize: resizePanel, animate: animatePanel, translate: translatePanel, mockup: mockupPanel, collage: collagePanel }[S.panel];
+  if (host && ["resize", "animate", "mockup", "collage", "background", "layers", "magic", "draw", ...P2_IDS].includes(S.panel)) sideBody.append(h("button.btn.small.ghost.st-backtools", { type: "button", text: "‹ All tools", on: { click: () => openPanel("apps") } })); // Studio's tools are in Apps › Tools for this design
+  // In the editor frame, Elements and Text come from the shared panel kit (page number options: select a page number).
+  const f = { tools: toolsPanel, notes: notesPanel, draw: drawPanel, styles: P2.stylesPanel, layouts: P2.layoutsPanel, deckgen: P2.deckgenPanel, guides: P2.guidesPanel, print: (el) => P2.printPanel(el, { reopen: () => renderSide() }), qr: P2.qrPanel, caption: P2.captionPanel, templates: templatesPanel, elements: host ? null : elementsPanel, text: host ? null : textPanel, uploads: uploadsPanel, brand: brandPanel, background: backgroundPanel, layers: layersPanel, magic: magicPanel, resize: resizePanel, animate: animatePanel, translate: translatePanel, mockup: mockupPanel, collage: collagePanel }[S.panel];
   if (f) f(sideBody);
 }
 
@@ -339,6 +345,11 @@ function uploadsPanel(root) {
   root.append(up, drop, all.length ? sec("Your photos", grid) : h("div.st-emptystate", { html: `<svg width="72" height="56" viewBox="0 0 72 56" aria-hidden="true"><rect x="2" y="2" width="68" height="52" rx="10" fill="#efedff" stroke="#c9c3ff" stroke-width="2"/><path d="M10 46l16-18 12 12 8-8 16 14" fill="none" stroke="#8b80f5" stroke-width="3" stroke-linejoin="round"/><circle cx="50" cy="18" r="6" fill="#ffb199"/></svg><p>Your photos stay on this device. Add some to start.</p>` }));
 }
 
+/** Logo designs: keep the logo in the brand kit, put it on a business card or a mockup ("" when not a logo). */
+function thisLogoSection() {
+  if (S.design.preset.group !== "logo") return "";
+  return sec("This logo", h("p.st-hint", { text: "Keep this logo in your brand kit, or put it straight on a business card or a mockup." }), h("div.st-row.st-wrap", {}, btn("Save to brand kit", () => emit("logo-to-brand"), "small primary", { id: "logoToBrand" }), btn("Use on a business card", () => emit("logo-to-card"), "small", { id: "logoToCard" }), btn("See it on a mockup", () => openPanel("mockup"), "small", { id: "logoToMockup" }), btn("Find an icon", () => openPanel("elements", { cat: "icons" }), "small", { id: "logoIcons" })));
+}
 function brandPanel(root) {
   const b = loadBrand();
   const colors = h("div.st-swatches", { role: "group", "aria-label": "Brand colours" });
@@ -375,7 +386,7 @@ function brandPanel(root) {
     sec("Colours", colors),
     sec("Fonts", row("Headings", fontSel("heading"), useFont("heading")), row("Body text", fontSel("body"), useFont("body"))),
     sec("Logos", logos, addLogo),
-    S.design.preset.group === "logo" ? sec("This logo", h("p.st-hint", { text: "Keep this logo in your brand kit, or put it straight on a business card or a mockup." }), h("div.st-row.st-wrap", {}, btn("Save to brand kit", () => emit("logo-to-brand"), "small primary", { id: "logoToBrand" }), btn("Use on a business card", () => emit("logo-to-card"), "small", { id: "logoToCard" }), btn("See it on a mockup", () => openPanel("mockup"), "small", { id: "logoToMockup" }), btn("Find an icon", () => openPanel("elements", { cat: "icons" }), "small", { id: "logoIcons" }))) : null,
+    thisLogoSection(),
     apply,
   );
 }
@@ -479,9 +490,13 @@ function toolsPanel(root) {
   const print = P.unit !== "px", social = P.group === "social", slides = P.group === "presentation";
   root.append(
     slides ? sec("Slides", card("layouts", "Layouts", "Title, agenda, quote, timeline, team, chart and more.", sub("layouts")), card("deckgen", "Magic deck", "Slides from a topic or an outline (AI writes it when your browser has it).", sub("deckgen"))) : null,
-    P.group === "logo" ? sec("Logo", card("icons", "Icon library", "Search our icons and shapes for your logo mark.", () => openPanel("elements", { cat: "icons" })), card("brand", "Brand kit", "Save this logo, use it on a business card or a mockup.", () => openPanel("brand"))) : null,
+    P.group === "logo" ? sec("Logo", card("icons", "Icon library", "Search our icons and shapes for your logo mark.", () => openPanel("elements", { cat: "icons" })),
+      card("logo-brand", "Save to brand kit", "Keep this logo in your brand kit for every design.", () => emit("logo-to-brand")),
+      card("logo-card", "Use on a business card", "A two-sided business card with this logo on it.", () => emit("logo-to-card")),
+      card("logo-mockup", "See it on a mockup", "Your logo on a product.", () => openPanel("mockup")),
+      card("brand", "Brand kit", "Your colours, fonts and logos.", () => openPanel("brand"))) : null,
     sec("Style", card("styles", "Styles", "Our colour palettes and font pairs for the whole design.", sub("styles")), !slides ? card("layouts", "Layouts", "Add a ready-made layout to this page.", sub("layouts")) : null),
-    sec("Draw", card("draw", "Draw", "Pen, marker and highlighter right on the page.", sub("draw"))),
+    host ? null : sec("Draw", card("draw", "Draw", "Pen, marker and highlighter right on the page.", sub("draw"))),
     print ? sec("Print", card("print", "Print", "Print check, print options, print-ready PDF and print sheets.", sub("print")), card("qr", "QR code and barcode", "Links, contact cards (vCard) and Code 39 barcodes.", sub("qr")), card("guides", "Rulers and guides", "Rulers, margins, bleed, danger zone and column guides.", sub("guides")))
       : sec("Extras", social ? card("caption", "Caption and hashtags", "Write the caption, count hashtags and share.", sub("caption")) : null, card("qr", "QR code", "Add a QR code for a link or a contact card.", sub("qr")), card("guides", "Rulers and guides", "Rulers, margins and column guides.", sub("guides"))),
     sec("Design", card("background", "Background", "Colours, gradients and photo backgrounds.", sub("background")), card("layers", "Layers", "Reorder, hide and lock everything on the page.", sub("layers")), card("position", "Position", "Align, arrange, size and rotate the selection.", () => openProps("position"))),
@@ -944,6 +959,15 @@ function textProps(root, l) {
     P3.gradientSection("Text colour gradient", l, P3.textGradient.get, P3.textGradient.set, renderProps),
     magicWrite(l),
   );
+  // A page number (Text › Dynamic text › Page numbers): its options — format, which pages, place — like Canva's.
+  if (isPageNumber(l)) root.prepend(pageNumberOptions());
+}
+/** Page number options (format, which pages, place) for a selected page number. */
+function pageNumberOptions() {
+  const s = P3.pageNumbersSection();
+  const h3 = s.querySelector("h3"); if (h3) h3.textContent = "Page numbers";
+  s.querySelector("h4")?.remove();
+  return s;
 }
 function magicWrite(l) {
   const box = h("section.st-sec.st-mw", { id: "magicWrite" }, h("h3", { text: "Magic Write" }));

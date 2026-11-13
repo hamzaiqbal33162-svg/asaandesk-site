@@ -191,3 +191,11 @@ export function deviceVerdict(r) {
       : { what: "microphone", ok: false, text: "The microphone is on but we heard nothing. Speak while testing, check its mute switch and input volume, or choose another microphone." });
   return out;
 }
+
+/** Teleprompter script with kit text added at the end (a new paragraph; the lines of a group one per line); null = nothing to add. */
+export function appendScript(cur, lines) {
+  const add = (lines || []).map((x) => String(x ?? "").trim()).filter(Boolean).join("\n");
+  if (!add) return null;
+  const c = String(cur || "").replace(/\s+$/, "");
+  return c ? `${c}\n\n${add}` : add;
+}

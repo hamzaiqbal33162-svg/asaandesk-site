@@ -7,18 +7,20 @@
 //   photoPicker(topic, seed)          (w, h, hint) -> photo record, different photos inside one design
 //   stockImage(photo, w, h)           frame.image for a library photo, cover-cropped to a w × h frame
 //   thumbUrlOf(src)                   the small copy of a library photo (gallery thumbnails never load full size)
-import { pickPhoto, photoUrl, PHOTOS, PHOTO_BASE } from "../shared/photo-library.js";
+import { pickPhoto, pickPerson, wantsPeople, isPerson, focusCrop, photoUrl, PHOTOS, PEOPLE, PHOTO_BASE } from "../shared/photo-library.js";
 import { coverCrop } from "./shapes.js";
 import { walk } from "./model.js";
 
-const THUMB = new Map(PHOTOS.map((p) => [PHOTO_BASE + p.file, PHOTO_BASE + p.thumb]));
+const THUMB = new Map([...PHOTOS, ...PEOPLE].map((p) => [PHOTO_BASE + p.file, PHOTO_BASE + p.thumb]));
 /** URL of the thumbnail copy of a library photo (other sources unchanged). */
 export const thumbUrlOf = (src) => THUMB.get(src) || src;
 /** True for a photo that came from the library (uploading photos replaces these, like empty frames). */
 export const isStock = (img) => !!img?.stock;
 
-/** frame.image for a library photo, cover-cropped (with an optional focus 0..1 inside the spare area). */
+/** frame.image for a library photo, cover-cropped (with an optional focus 0..1 inside the spare area). People photos
+ *  are cropped around the face unless a focus is given. */
 export function stockImage(p, w, h, focus = null) {
+  if (!focus && isPerson(p)) return { src: photoUrl(p, "full"), nw: p.w, nh: p.h, crop: focusCrop(p, w, h), stock: true, person: true };
   const crop = coverCrop(p.w, p.h, w, h);
   if (focus) {
     if (focus.x != null && crop.w < 1) crop.x = (1 - crop.w) * focus.x;
@@ -85,11 +87,22 @@ export function photoPicker(topic, seed) {
   const used = new Set();
   const base = subjectOf(topic);
   const words = new Set(String(topic || "").toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3 && !/^(post|story|instagram|facebook|template|photo|photos|card|flyer|poster|print|design|with|your|from|this|that|social|thumbnail|banner|cover)$/.test(w)));
-  let i = 0;
+  let i = 0, nPeople = 0;
   return (w, h, hint = "") => {
-    const s = (hint && subjectOf(hint)) || base;
     const k = i++;
     const ar = w / Math.max(1, h), want = ar > 1.2 ? "land" : ar < 0.83 ? "port" : null;
+    // A person spot (team member, speaker, testimonial, model, doctor…): a people photo of that kind, different people
+    // inside one design, women and men in turn when the hint does not say which.
+    if (hint && wantsPeople(hint)) {
+      const kind = `${hint} ${topic}`;
+      // (the sex is ignored by pickPerson for group and couple photos)
+      const sexOpen = !/\b(?:woman|women|girl|lady|bride|man|men|boy|guy|groom)\b/i.test(hint);
+      const p = pickPerson(kind, `${seed}:${k}`, { exclude: [...used], landscape: want ? want === "land" : null, ...(sexOpen ? { sex: (hash(String(seed)) + nPeople) % 2 ? "m" : "f" } : {}) });
+      nPeople++;
+      used.add(p.id);
+      return p;
+    }
+    const s = (hint && subjectOf(hint)) || base;
     let list = poolFor(s);
     if (list.length < 3) { const p = pickPhoto(`${topic} ${hint}`, `${seed}:${k}`, { exclude: [...used], landscape: want ? want === "land" : null }); used.add(p.id); return p; }
     // The best themes first: keep the pool to the first ~10 photos so a subject's main photos lead.
@@ -107,7 +120,7 @@ export function photoPicker(topic, seed) {
 }
 
 /** True when the library has photos of people (team slides use them; otherwise they show initials). */
-export const hasPeople = () => PHOTOS.some((p) => p.theme === "people" || p.tags?.some((t) => /^(people|person|portrait|woman|man|team|headshot)$/.test(t)));
+export const hasPeople = () => PEOPLE.length > 0;
 
 /** Fills every empty photo frame of a design with a library photo (in place). Returns the number filled. */
 export function fillPhotos(design, topic, seed) {

@@ -1,0 +1,39 @@
+// Elements kit › Forms: form pieces drawn as SVG (fields, checkboxes, radios, toggles, buttons, ratings, whole form
+// cards) for mockups, web designs and printable forms. They are pictures of form controls, not live inputs.
+import { n, esc, rrect, ptsPath, starPts, svgDoc, FONT } from "./assets-svg.js";
+
+const A = "#5b4cf0", LINE = "#cfd3e0", TXT = "#262b3d", PH = "#9aa0b4";
+const t = (x, y, s, size = 12, fill = TXT, w = "normal", anchor = "start") => `<text x="${n(x)}" y="${n(y)}" font-family="${FONT}" font-size="${size}" font-weight="${w}" fill="${fill}" text-anchor="${anchor}">${esc(s)}</text>`;
+const field = (x, y, w, label, ph, h = 34) => (label ? t(x, y - 6, label, 11, "#4a5168", "bold") : "") + `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="7" fill="#fff" stroke="${LINE}" stroke-width="1.4"/>` + t(x + 11, y + h / 2 + 4, ph, 12, PH);
+const check = (x, y, on, label) => `<rect x="${x}" y="${y}" width="18" height="18" rx="4.5" fill="${on ? A : "#fff"}" stroke="${on ? A : LINE}" stroke-width="1.6"/>` + (on ? `<path d="M${x + 4.5} ${y + 9.5}L${x + 8} ${y + 13}L${x + 14} ${y + 5.5}" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>` : "") + t(x + 27, y + 13.5, label, 12.5);
+const radio = (x, y, on, label) => `<circle cx="${x + 9}" cy="${y + 9}" r="8.5" fill="#fff" stroke="${on ? A : LINE}" stroke-width="1.6"/>` + (on ? `<circle cx="${x + 9}" cy="${y + 9}" r="4.6" fill="${A}"/>` : "") + t(x + 27, y + 13.5, label, 12.5);
+const btn = (x, y, w, label, solid = true, h = 36) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${solid ? A : "#fff"}" stroke="${A}" stroke-width="1.6"/>` + t(x + w / 2, y + h / 2 + 4.5, label, 13, solid ? "#fff" : A, "bold", "middle");
+const toggle = (x, y, on) => `<rect x="${x}" y="${y}" width="44" height="24" rx="12" fill="${on ? A : "#d6d9e4"}"/><circle cx="${on ? x + 32 : x + 12}" cy="${y + 12}" r="9" fill="#fff"/>`;
+const cardBg = (w, h) => `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="14" fill="#fff" stroke="#e3e5ee" stroke-width="1.2"/>`;
+const F = (id, name, tags, w, h, body) => ({ id, name, tags: "form input field ui " + tags, svg: svgDoc(w, h, body, { px: Math.max(w, h) * 1.2 }) });
+const face = (cx, cy, mood, on) => { const col = on ? "#fcd34d" : "#eceef4", st = on ? "#b45309" : "#9aa0b4"; const mouth = mood > 0 ? `M${cx - 6} ${cy + 3}Q${cx} ${cy + 9} ${cx + 6} ${cy + 3}` : mood < 0 ? `M${cx - 6} ${cy + 7}Q${cx} ${cy + 1} ${cx + 6} ${cy + 7}` : `M${cx - 6} ${cy + 5}H${cx + 6}`; return `<circle cx="${cx}" cy="${cy}" r="14" fill="${col}"/><circle cx="${cx - 5}" cy="${cy - 3}" r="1.8" fill="${st}"/><circle cx="${cx + 5}" cy="${cy - 3}" r="1.8" fill="${st}"/><path d="${mouth}" fill="none" stroke="${st}" stroke-width="2" stroke-linecap="round"/>`; };
+
+export const FORM_ITEMS = [
+  F("text-field", "Text field", "text field name input", 240, 62, field(1, 22, 238, "Full name", "Enter your name")),
+  F("email-field", "Email field", "email field input address", 240, 62, field(1, 22, 238, "Email", "you@example.com")),
+  F("textarea", "Message box", "textarea message comment long text", 240, 112, field(1, 22, 238, "Message", "Write your message…", 88)),
+  F("checkbox", "Checkbox", "checkbox tick agree terms", 240, 24, check(2, 3, true, "I agree to the terms")),
+  F("checkbox-list", "Checkbox list", "checkbox list options multiple choice", 200, 92, check(2, 2, true, "Design") + check(2, 36, false, "Writing") + check(2, 70, true, "Marketing")),
+  F("radio", "Radio buttons", "radio buttons single choice options", 200, 92, radio(2, 2, false, "Small") + radio(2, 36, true, "Medium") + radio(2, 70, false, "Large")),
+  F("toggle-on", "Toggle, on", "toggle switch on enabled", 190, 30, toggle(2, 3, true) + t(58, 20, "Notifications", 12.5)),
+  F("toggle-off", "Toggle, off", "toggle switch off disabled", 190, 30, toggle(2, 3, false) + t(58, 20, "Dark mode", 12.5)),
+  F("button", "Button", "button submit primary call to action", 160, 40, btn(1, 2, 158, "Submit")),
+  F("button-outline", "Outline button", "button outline secondary", 160, 40, btn(1, 2, 158, "Learn more", false)),
+  F("dropdown", "Dropdown", "dropdown select menu choose", 240, 62, field(1, 22, 238, "Country", "Select an option") + `<path d="M218 34L224 40L230 34" fill="none" stroke="${PH}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`),
+  F("slider", "Slider", "slider range volume amount", 240, 44, t(1, 12, "Budget", 11, "#4a5168", "bold") + `<rect x="2" y="27" width="236" height="6" rx="3" fill="#e4e6f0"/><rect x="2" y="27" width="140" height="6" rx="3" fill="${A}"/><circle cx="142" cy="30" r="10" fill="#fff" stroke="${A}" stroke-width="3"/>`),
+  F("rating", "Star rating", "rating stars review score feedback", 170, 34, [0, 1, 2, 3, 4].map((i) => `<path d="${ptsPath(starPts(5, 17 + i * 34, 17, 15, 6.5))}" fill="${i < 4 ? "#f59e0b" : "#e4e6f0"}"/>`).join("")),
+  F("date-field", "Date field", "date picker calendar day", 240, 62, field(1, 22, 238, "Date", "DD / MM / YYYY") + `<rect x="210" y="31" width="16" height="15" rx="2.5" fill="none" stroke="${PH}" stroke-width="1.6"/><path d="M210 36.5H226M214 29V33M222 29V33" stroke="${PH}" stroke-width="1.6"/>`),
+  F("search-bar", "Search bar", "search bar find query", 240, 40, `<rect x="1" y="2" width="238" height="36" rx="18" fill="#f4f5f9" stroke="${LINE}" stroke-width="1.2"/><circle cx="21" cy="19" r="6" fill="none" stroke="${PH}" stroke-width="2"/><path d="M25.5 23.5L30 28" stroke="${PH}" stroke-width="2" stroke-linecap="round"/>` + t(38, 24, "Search", 12.5, PH)),
+  F("upload", "File upload", "upload file drop attach", 240, 110, `<rect x="2" y="2" width="236" height="106" rx="12" fill="#f8f7ff" stroke="${A}" stroke-width="1.6" stroke-dasharray="6 5"/><path d="M120 30V58M108 42L120 30L132 42" fill="none" stroke="${A}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>` + t(120, 78, "Drop files here", 12.5, TXT, "bold", "middle") + t(120, 95, "or click to browse", 11, PH, "normal", "middle")),
+  F("steps", "Progress steps", "steps progress wizard stages", 240, 56, [0, 1, 2].map((i) => `<circle cx="${30 + i * 90}" cy="18" r="14" fill="${i < 2 ? A : "#fff"}" stroke="${i < 2 ? A : LINE}" stroke-width="2"/>` + t(30 + i * 90, 23, String(i + 1), 13, i < 2 ? "#fff" : PH, "bold", "middle") + t(30 + i * 90, 50, ["Details", "Payment", "Done"][i], 11, i < 2 ? TXT : PH, "normal", "middle")).join("") + `<path d="M46 18H104" stroke="${A}" stroke-width="3"/><path d="M136 18H194" stroke="${LINE}" stroke-width="3"/>`),
+  F("signup-card", "Sign-up form", "sign up register form card newsletter", 260, 250, cardBg(260, 250) + t(22, 38, "Create your account", 16, TXT, "bold") + field(22, 70, 216, "Name", "Your name") + field(22, 136, 216, "Email", "you@example.com") + btn(22, 192, 216, "Sign up")),
+  F("login-card", "Log-in form", "log in login sign in password form card", 260, 250, cardBg(260, 250) + t(22, 38, "Welcome back", 16, TXT, "bold") + field(22, 70, 216, "Email", "you@example.com") + field(22, 136, 216, "Password", "••••••••") + btn(22, 192, 216, "Log in")),
+  F("contact-card", "Contact form", "contact form message card enquiry", 260, 300, cardBg(260, 300) + t(22, 38, "Get in touch", 16, TXT, "bold") + field(22, 70, 216, "Email", "you@example.com") + field(22, 136, 216, "Message", "How can we help?", 80) + btn(22, 244, 216, "Send message")),
+  F("yes-no", "Yes / No poll", "poll yes no vote question survey", 240, 90, t(2, 16, "Would you come again?", 13, TXT, "bold") + btn(2, 34, 112, "Yes") + btn(126, 34, 112, "No", false)),
+  F("emoji-feedback", "Emoji feedback", "emoji feedback mood smiley rating survey", 200, 40, face(20, 20, -1, false) + face(66, 20, 0, false) + face(112, 20, 1, true) + face(158, 20, 1, false) + `<path d="M180 20h1" stroke="none"/>`),
+];

@@ -9,10 +9,11 @@ import { listProjects } from "../shared/store.js";
 import { initSuggest } from "./suggest.js";
 import { initComments } from "./comments.js";
 import { initVersions } from "./versions.js";
+import { makeDocsInsert } from "./insert.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-const BAND = ["bg", "deco", "dc", "dc2", "pad", "minh", "rad", "bd", "bc"];
+const BAND = ["bg", "deco", "dc", "dc2", "pad", "minh", "rad", "bd", "bc", "pimg", "pfo"]; // pimg/pfo: a résumé's round portrait stays when the fill changes
 const TEXT_SWATCHES = ["#1b2133", "#ffffff", "#5b4cf0", "#2f80ff", "#14b8a6", "#16a34a", "#f59e0b", "#ff7a59", "#dc2626", "#db2777", "#7a5536", "#64748b"];
 const FILL_SWATCHES = ["", "#24453a", "#a7e8c5", "#12355b", "#dbeafe", "#4c1d95", "#ede9fe", "#0f766e", "#ccfbf1", "#fff7ed", "#fef3c7", "#fdf2f8", "#ff7a59", "#111827", "#f1f5f9", "#5b4cf0"];
 const HILITE_SWATCHES = ["#fff59d", "#bbf7d0", "#bae6fd", "#fbcfe8", "#fed7aa", "#e9d5ff"];
@@ -241,11 +242,13 @@ export function initUi(A) {
   function styleOf(b) {
     const t = b.querySelector("span,b,i,u,s") || b;
     const cs = getComputedStyle(t);
-    return { tag: b.tagName, band: bandOf(b), color: cs.color, font: cs.fontFamily, size: cs.fontSize, align: b.style.textAlign };
+    const { pimg, pfo, ...band } = bandOf(b); // a portrait photo is content, not style
+    return { tag: b.tagName, band, color: cs.color, font: cs.fontFamily, size: cs.fontSize, align: b.style.textAlign };
   }
   function pasteStyle(b, st) {
     A.change(() => {
-      writeBand(b, { ...st.band });
+      const own = bandOf(b);
+      writeBand(b, { ...st.band, ...(own.pimg ? { pimg: own.pimg, pfo: own.pfo } : {}) });
       if (st.align) b.style.textAlign = st.align;
       const span = document.createElement("span");
       span.style.color = st.color; span.style.fontFamily = st.font; span.style.fontSize = (parseFloat(st.size) * 0.75).toFixed(1) + "pt";
@@ -382,15 +385,17 @@ export function initUi(A) {
 
   /* ---------------- inserting things after the current block ---------------- */
   function currentTop() { return selBlock && selBlock.isConnected ? selBlock : topBlock(A.savedRange()?.startContainer) || editor.lastElementChild; }
-  function insertAfter(html, { selectText = false } = {}) {
+  // at: { block, before } puts the new blocks before / after that block (items dropped from the panels), else after
+  // the block you are in.
+  function insertAfter(html, { selectText = false, at = null } = {}) {
     let nodes = [];
     A.change(() => {
       const tmp = document.createElement("div");
       tmp.innerHTML = html;
       nodes = [...tmp.children];
-      const ref = currentTop();
+      const ref = at ? (at.block && at.block.isConnected ? at.block : null) : currentTop();
       const empty = ref && ref.matches("p") && !ref.textContent.trim() && !ref.querySelector("img");
-      if (ref && empty) ref.replaceWith(...nodes); else if (ref) ref.after(...nodes); else editor.append(...nodes);
+      if (ref && empty) ref.replaceWith(...nodes); else if (ref && at?.before) ref.before(...nodes); else if (ref) ref.after(...nodes); else editor.append(...nodes);
     });
     const last = nodes[nodes.length - 1];
     if (last) {
@@ -403,7 +408,12 @@ export function initUi(A) {
     return nodes;
   }
   const imgHtml = (svg, w, alt) => `<p class="imgp" style="text-align:center"><img src="${svgDataUrl(svg)}" alt="${escHtml(alt)}" style="width:${w}px"></p>`;
-  const insertImage = (src, name = "") => insertAfter(`<p class="imgp"><img src="${escHtml(src)}" alt="${escHtml(name)}" style="width:320px"></p>`);
+  // Insert adapter for the shared left-rail panels (Elements, Text, Tools): Docs blocks for every kit item (insert.js).
+  const kitInsert = makeDocsInsert({
+    A, editor, viewer, blockAt, currentTop, topBlock, select, escHtml, svgDataUrl, modelToHtml, FONT_FAMILIES, ensureFont,
+    insertAt: (html, o) => { const n = insertAfter(html, o); return n; },
+    setPageNumbers: (on) => A.setPageNumbers?.(on),
+  });
 
   /* ---------------- panels ---------------- */
   const sec = (el, title) => { const h = document.createElement("h3"); h.className = "dp-h"; h.textContent = title; el.append(h); const g = document.createElement("div"); g.className = "dp-grid"; el.append(g); return g; };
@@ -464,6 +474,12 @@ export function initUi(A) {
     g = sec(el, "Emoji");
     g.classList.add("emoji");
     for (const e of EMOJI) tile(g, { label: "Emoji " + e, html: `<span class="dp-emoji">${e}</span>`, data: { el: "emoji" }, onClick: () => { A.restoreSelection(); A.change(() => A.exec("insertText", e)); } });
+    // In the editor frame the shared kit's Elements panel has the shapes, lines, tables, charts and stickers (they insert
+    // as Docs blocks): this part keeps the document's own blocks (Canva Docs has them too).
+    if (shell) {
+      colorRow.remove();
+      for (const hd of [...el.querySelectorAll("h3.dp-h")]) if (["Shapes", "Lines and dividers", "Tables", "Charts", "Stickers"].includes(hd.textContent)) { hd.nextElementSibling?.remove(); hd.remove(); }
+    }
   }
 
   const PAIRS = [["serif-sans", "Serif headings + Sans body", "serif", "sans"], ["sans-serif", "Sans headings + Serif body", "sans", "serif"], ["cambria-calibri", "Cambria + Calibri", "cambria", "calibri"], ["calibri-cambria", "Calibri + Cambria", "calibri", "cambria"], ["mono-sans", "Mono headings + Sans body", "mono", "sans"], ["serif-serif", "Classic serif", "serif", "serif"]];
@@ -495,9 +511,38 @@ export function initUi(A) {
     add("h1", "Heading", "Add a heading", "t-h1"); add("h2", "Subheading", "Add a subheading", "t-h2"); add("h3", "Small heading", "Add a small heading", "t-h3");
     add("p", "Body text", "Add a little bit of body text", "t-p"); add("quote", "Quote", "“Add a quote”", "t-q"); add("bullet", "Bulleted list", "• Add a list item", "t-p");
     add("number", "Numbered list", "1. Add a step", "t-p"); add("band", "Coloured heading", "Add a coloured heading", "t-band");
+    // In the editor frame the kit's Text panel has the heading, subheading and body text styles.
+    if (shell) for (const b of [...g.querySelectorAll('[data-text="h1"],[data-text="h2"],[data-text="p"]')]) b.remove();
+    // Font pairs are in Design › Styles in the editor frame (Canva); here only without the frame.
+    if (!shell) fontPairs(el);
+  }
+  function fontPairs(el) {
     const g2 = sec(el, "Font pairs");
     g2.classList.add("one");
     for (const [id, label, h, b] of PAIRS) tile(g2, { label, wide: true, data: { pair: id }, html: `<span class="t-pair"><b style="font-family:${FONT_FAMILIES[h].css.replace(/"/g, "'")}">${escHtml(label.split(" + ")[0])}</b><span style="font-family:${FONT_FAMILIES[b].css.replace(/"/g, "'")}">Body text in ${escHtml(FONT_FAMILIES[b].label.replace(/ \(.*\)/, ""))}</span></span>`, onClick: () => applyPair(h, b) });
+  }
+  // Design › Styles (Canva): colour palettes for the headings and font pairs for the whole document.
+  const HEAD_PALETTES = [["forest", "Forest", "#24453a", "#3f6b5a"], ["harbour", "Harbour", "#12355b", "#2f80ff"], ["plum", "Plum", "#4c1d95", "#7c3aed"], ["coral", "Coral", "#9a3412", "#ff7a59"], ["lagoon", "Lagoon", "#0f766e", "#14b8a6"], ["espresso", "Espresso", "#3d2a1e", "#c99a4b"], ["royal", "Royal", "#1e3a8a", "#60a5fa"], ["rose", "Rose", "#9d174d", "#f472b6"], ["sunbeam", "Sunbeam", "#92400e", "#f59e0b"], ["slate", "Slate", "#334155", "#64748b"], ["ink", "Classic ink", "#1b2133", "#475569"], ["violet", "Violet", "#5b4cf0", "#8b80f5"]];
+  function applyHeadColors(dark, mid) {
+    const heads = $$("h1,h2,h3", editor).filter((x) => !x.closest(".band") && !x.matches(".band"));
+    if (!heads.length) { A.toast("Add a heading first: the palette colours your headings."); return; }
+    A.change(() => {
+      for (const hd of heads) {
+        for (const s of $$("[style]", hd)) s.style.color = "";
+        const span = document.createElement("span");
+        span.style.color = hd.tagName === "H3" ? mid : dark;
+        span.append(...hd.childNodes);
+        hd.append(span);
+      }
+    });
+    A.toast("Palette applied to the headings.");
+  }
+  function renderStyles(el) {
+    el.innerHTML = "";
+    el.classList.add("docs-panel");
+    const g = sec(el, "Colour palettes");
+    for (const [id, label, dark, mid] of HEAD_PALETTES) tile(g, { label: "Palette " + label, data: { palette: id }, html: `<span class="dp-pal"><i style="background:${dark}"></i><i style="background:${mid}"></i></span><small>${escHtml(label)}</small>`, onClick: () => applyHeadColors(dark, mid) });
+    fontPairs(el);
   }
   function counts() { const m = A.syncModel(); const txt = (editor.innerText || "").trim(); const words = txt ? txt.split(/\s+/).length : 0; return { words, chars: txt.replace(/\s/g, "").length, heads: $$("h1,h2,h3", editor).filter((h) => h.textContent.trim()).length, mins: Math.max(1, Math.round(words / 220)), blocks: m.blocks.length }; }
   function renderTools(el) {
@@ -782,17 +827,28 @@ export function initUi(A) {
           download: [{ label: "PDF", sized: true, act: (o) => A.doExport("pdf", o) }, { label: "Word (.docx)", sized: true, act: (o) => A.doExport("docx", o) }, { label: "Web page (.html)", act: () => A.doExport("html") }, { label: "Markdown (.md)", act: () => A.doExport("md") }, { label: "Plain text (.txt)", act: () => A.doExport("txt") }], link: () => location.href },
         templates: { gallery, tool: "docs", apply: async (id) => { const ok = await A.openTemplate(id); if (ok) { const t = gallery.templateMeta(id); A.toast(`“${t?.name || id}” is ready. Change any text.`); } return !!ok; }, placeholder: "Search Doc templates" },
         panels: {
-          elements: (el) => renderElements(el), text: (el) => renderText(el), tools: (el) => renderTools(el),
+          elements: { render: (el) => renderElements(el), kitLabel: "Document blocks" }, text: (el) => renderText(el), tools: (el) => renderTools(el),
           comments: { label: "Comments", icon: "comment", render: (el) => comments.renderPanel(el), refresh: true },
           suggestions: { label: "Suggestions", icon: "✎", render: (el) => suggest.renderPanel(el), refresh: true },
           versions: { label: "Version history", icon: "🕘", render: (el) => versions.renderPanel(el), refresh: true },
         },
         rail: ["templates", "elements", "text", "brand", "uploads", "tools", "projects", "apps", "translate"],
         insert: {
-          image: (src, name) => insertImage(src, name),
-          text: (str, style) => { const tag = /^h[1-3]$/.test(style || "") ? style : style === "heading" ? "h2" : "p"; insertAfter(`<${tag}>${escHtml(str)}</${tag}>`, { selectText: true }); },
+          ...kitInsert,
+          text: (spec, pt) => { if (typeof spec !== "string") return kitInsert.text(spec, pt); const style = pt; const tag = /^h[1-3]$/.test(style || "") ? style : style === "heading" ? "h2" : "p"; insertAfter(`<${tag}>${escHtml(spec)}</${tag}>`, { selectText: true }); },
           color: (hex) => { A.restoreSelection(); fire("textColor", hex); },
           font: (family) => { if (FONT_FAMILIES[family]) { A.restoreSelection(); fire("fontFamily", family); } },
+        },
+        magicWrite: () => A.openPanel("magic"),
+        // Design panel tab next to Templates: Styles (heading colour palettes and font pairs).
+        design: { styles: (el) => renderStyles(el) },
+        // Brand panel › Apply brand to the whole document: the brand's heading / body fonts and its main colour on headings.
+        applyBrand: (kit) => {
+          const k = kit || {}, cols = (k.colors || []).filter((c) => /^#[0-9a-f]{6}$/i.test(c) && !/^#(?:f{6}|0{6})$/i.test(c));
+          const did = [];
+          if (k.fonts && FONT_FAMILIES[k.fonts.heading || "sans"] && FONT_FAMILIES[k.fonts.body || "sans"]) { applyPair(k.fonts.heading || "sans", k.fonts.body || "sans"); did.push("brand fonts"); }
+          if (cols.length && $$("h1,h2,h3", editor).length) { applyHeadColors(cols[0], cols[1] || cols[0]); did.push("heading colours"); }
+          return did.length ? `Brand applied: ${did.join(" and ")}.` : "Nothing to change: add brand colours or fonts first.";
         },
         getText, setText,
         projects: { save: async () => { await A.flushSave(); const d = A.syncModel(); return { id: A.state.id, name: d.title, data: JSON.parse(JSON.stringify(d)), thumb: "" }; }, open: async (rec) => { if (rec?.data) A.setDoc(rec.data, { id: rec.id }); } },
@@ -833,6 +889,7 @@ export function initUi(A) {
       shell.slots.bottom.insertBefore(wb, grow || null);
     }
     window.adApp.shell = shell;
+    window.adApp.insert = kitInsert;
     Object.assign(window.adApp, { suggest, comments, versions });
     return shell;
   }
@@ -1053,5 +1110,5 @@ export function initUi(A) {
 
   fallbackPanels();
   const mounted = mount();
-  return { suggest, comments, versions, mounted, select, openSlash, chooseSlash, renderElements, renderText, renderTools, renderOutline, openMagicSwitch, presentationPdf, getSelBlock: () => selBlock, blockAction, placeOverlays };
+  return { insert: kitInsert, renderStyles, suggest, comments, versions, mounted, select, openSlash, chooseSlash, renderElements, renderText, renderTools, renderOutline, openMagicSwitch, presentationPdf, getSelBlock: () => selBlock, blockAction, placeOverlays };
 }

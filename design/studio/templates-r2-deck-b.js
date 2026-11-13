@@ -1,12 +1,15 @@
 // ROUND 2 layout batch (filled by a helper; see screens/canva-ref/STUDIO-LAYOUT-BRIEF.md). Pure module, no imports.
 // 20 presentation decks. Each one is its own design system: grid, type pairing, shape language, palette and photo
 // treatment, plus its own English content and speaker notes on every slide.
+import { castFor, member, face, KIND } from "./templates-faces.js";
+
 export default function add(k) {
   const { tpl, T, S, R, C, E, F, page, flow } = k;
   const { WHITE } = k.K;
   const P169 = "presentation-16x9", P43 = "presentation-4x3";
   // deck(id, title, preset, tags, build): build(W, H) returns [[background, layers, notes], ...].
-  const deck = (id, title, preset, tags, build) => tpl(id, title, preset, "presentation slides deck " + tags, (W, H) => build(W, H).map(([b, layers, notes]) => { const p = page(b, layers); p.notes = notes; return p; }));
+  let CAST = null; // the person picker of the deck being built (team portraits, avatars, quotes)
+  const deck = (id, title, preset, tags, build) => tpl(id, title, preset, "presentation slides deck " + tags, (W, H) => (CAST = castFor(id), build(W, H)).map(([b, layers, notes]) => { const p = page(b, layers); p.notes = notes; return p; }));
   // Centre a text layer vertically in the band y0..y0+h0.
   const vmid = (l, y0, h0) => { l.y = Math.round(y0 + (h0 - l.h) / 2); return l; };
   // Straight line between two points, drawn as a thin rotated rectangle.
@@ -111,7 +114,7 @@ export default function add(k) {
         big("WHO'S IN\nTHE ROOM.", 60, 110, 1100, { size: 110 }),
         ...[["Noor Haddad", "LEAD DESIGNER"], ["Tom Becker", "PRODUCT MANAGER"], ["Aiko Mori", "UX RESEARCHER"], ["Sam Okafor", "FRONT-END ENGINEER"]].flatMap(([n, r], i) => {
           const x = 72 + i * 450;
-          return [F(x, 360, 400, 400, { border: { width: 8, color: K0 }, name: "Portrait" }), R(x, 360, 84, 84, RED, { name: "Number tag" }), mono("0" + (i + 1), x, 384, 84, { size: 30, bold: true, align: "center" }), T(n, x, 790, 400, { size: 42, bold: true, color: K0 }), mono(r, x, 848, 400, { size: 22, color: GR })];
+          return [member(CAST, F(x, 360, 400, 400, { border: { width: 8, color: K0 }, name: "Portrait" }), n, r), R(x, 360, 84, 84, RED, { name: "Number tag" }), mono("0" + (i + 1), x, 384, 84, { size: 30, bold: true, align: "center" }), T(n, x, 790, 400, { size: 42, bold: true, color: K0 }), mono(r, x, 848, 400, { size: 22, color: GR })];
         }),
         body("Plus guests from support, marketing and payments.", 72, 960, 1200, { size: 28, color: GR }),
       ], "Quick round of names. Each person owns one part of the decision log, so say who to send follow-up questions to."],
@@ -214,7 +217,7 @@ export default function add(k) {
         ...top("OUR TEAM", "The people behind it"),
         ...[["Amara Lewis", "Director"], ["Jonah Pike", "Warehouse lead"], ["Priya Nair", "Volunteer coordinator"], ["Luis Ortega", "Farm partnerships"]].flatMap(([n, r], i) => {
           const x = 160 + i * 420;
-          return [...cut("ellipse", x, 320, 340, 340, COLS[i], { name: "Paper ring" }), F(x + 30, 350, 280, 280, { shape: "circle", name: "Portrait" }), T(n, x - 20, 700, 380, { family: "cambria", bold: true, size: 40, color: TEAL, align: "center" }), tx(r, x - 20, 756, 380, { size: 28, align: "center" })];
+          return [...cut("ellipse", x, 320, 340, 340, COLS[i], { name: "Paper ring" }), member(CAST, F(x + 30, 350, 280, 280, { shape: "circle", name: "Portrait" }), n, r), T(n, x - 20, 700, 380, { family: "cambria", bold: true, size: 40, color: TEAL, align: "center" }), tx(r, x - 20, 756, 380, { size: 28, align: "center" })];
         }),
         tx("Plus 310 volunteers who gave 18,000 hours.", 140, 900, 1640, { size: 34, align: "center", bold: true, color: TER }),
       ], "Four staff and a huge volunteer crew. Mention the volunteer hours: that's nine full-time jobs' worth of time."],
@@ -224,7 +227,7 @@ export default function add(k) {
         S("triangle", 420, 700, 140, 120, WHITE, { rot: 180, name: "Bubble tail" }),
         T("“", 300, 180, 200, { family: "cambria", bold: true, size: 200, color: MUS, lh: 0.8 }),
         hd("The fresh box means my kids eat the same food as their friends. It made us feel like part of the neighbourhood again.", 360, 350, 1200, { size: 56, italic: true, bold: false, lh: 1.3, align: "center" }),
-        F(600, 780, 140, 140, { shape: "circle", name: "Portrait" }),
+        face(CAST, F(600, 780, 140, 140, { shape: "circle", name: "Portrait" }), KIND.customer, { sex: "f" }),
         tx("Maria, a parent from Eastside", 770, 800, 800, { bold: true, color: TEAL }),
         tx("Fresh box family since 2025", 770, 846, 800, { size: 26 }),
       ], "Let this quote breathe. Maria agreed to be quoted by first name; always check before using a family's words."],
@@ -252,7 +255,8 @@ export default function add(k) {
     const hd = (s, x, y, w, o = {}) => T(s, x, y, w, { family: "sans", bold: true, size: 96, color: BL, lh: 0.98, ls: -2, ...o });
     const tx = (s, x, y, w, o = {}) => T(s, x, y, w, { family: "calibri", size: 32, color: NV, lh: 1.4, ...o });
     const lab = (s, x, y, w, o = {}) => T(s, x, y, w, { family: "sans", bold: true, size: 22, color: PK, ls: 5, ...o });
-    const duo = (x, y, w, h, back) => [R(x + 36, y + 36, w, h, back, { name: "Offset block" }), F(x, y, w, h, { name: "Photo" })];
+    // (who = [name, role]: a team member's portrait)
+    const duo = (x, y, w, h, back, who) => [R(x + 36, y + 36, w, h, back, { name: "Offset block" }), who ? member(CAST, F(x, y, w, h, { name: "Portrait" }), who[0], who[1]) : F(x, y, w, h, { name: "Photo" })];
     const logo = (x, y, c) => [C(x, y + 2, 60, 60, "none", { stroke: PK, sw: 13, name: "Logo ring" }), T("loop", x + 76, y, 300, { family: "sans", bold: true, size: 52, color: c })];
     return [
       [BL, [
@@ -312,7 +316,7 @@ export default function add(k) {
         hd("Built by people who clean for a living", 120, 140, 1600, { size: 72, color: WHITE }),
         ...[["Maya Chen", "CEO", "Ran operations at a 200-van cleaning company."], ["Dev Patel", "CTO", "Built logistics software for nine years."], ["Rosa Diaz", "Head chemist", "Formulated plant-based cleaners at scale."]].flatMap(([n, r, s], i) => {
           const x = 140 + i * 580;
-          return [...duo(x, 350, 440, 420, i === 1 ? BL : PK), hd(n, x, 850, 480, { size: 44 }), lab(r.toUpperCase(), x, 904, 480), tx(s, x, 940, 480, { size: 26 })];
+          return [...duo(x, 350, 440, 420, i === 1 ? BL : PK, [n, r]), hd(n, x, 850, 480, { size: 44 }), lab(r.toUpperCase(), x, 904, 480), tx(s, x, 940, 480, { size: 26 })];
         }),
       ], "Three founders, three skills: operations, software and chemistry. Mention that Rosa holds the formula patents."],
       [PK, [
@@ -403,7 +407,7 @@ export default function add(k) {
         hd("Your captains for FY27", 120, 150, 1600, { size: 80 }),
         ...[["Ana Ferreira", "North", "Coastal Foods, Harbor Markets"], ["James Holt", "West", "Biggest growth in FY26"], ["Mei Lin", "South", "Joined from Freshway"], ["Omar Saleh", "Export", "Opened 3 new countries"]].flatMap(([n, r, s], i) => {
           const x = 120 + i * 440;
-          return [F(x, 300, 380, 460, { name: "Portrait" }), tag(x, 790, 220, 56, LM), vmid(T(r.toUpperCase(), x + 30, 0, 160, { family: "calibri", bold: true, size: 24, color: CH, align: "center", ls: 3 }), 790, 56), hd(n, x, 868, 400, { size: 44, italic: false }), tx(s, x, 922, 400, { size: 26, color: LG })];
+          return [member(CAST, F(x, 300, 380, 460, { name: "Portrait" }), n, r), tag(x, 790, 220, 56, LM), vmid(T(r.toUpperCase(), x + 30, 0, 160, { family: "calibri", bold: true, size: 24, color: CH, align: "center", ls: 3 }), 790, 56), hd(n, x, 868, 400, { size: 44, italic: false }), tx(s, x, 922, 400, { size: 26, color: LG })];
         }),
       ], "Introduce the four regional leads. Each one runs a breakout tomorrow morning."],
       [LM, [
@@ -500,7 +504,7 @@ export default function add(k) {
         ...top("MISSION CREW", "Who did what"),
         ...[["Lina Ortega", "Lead scientist", "Built the light box and kept the lab log."], ["Kai Brennan", "Data and charts", "Measured every angle with a protractor app."], ["Mr. Adeyemi", "Mentor", "Science teacher, Room 12."]].flatMap(([n, r, s], i) => {
           const cx = 400 + i * 560;
-          return [ring(cx, 500, 210, ORB, 4), F(cx - 170, 330, 340, 340, { shape: "circle", name: "Portrait" }), planet(...at(cx, 500, 210, -45), 22, [COR, YEL, TQ][i]), T(n, cx - 240, 750, 480, { family: "sans", bold: true, size: 44, color: NAV, align: "center" }), lab(r.toUpperCase(), cx - 240, 812, 480, { align: "center" }), tx(s, cx - 220, 852, 440, { size: 28, align: "center" })];
+          return [ring(cx, 500, 210, ORB, 4), member(CAST, F(cx - 170, 330, 340, 340, { shape: "circle", name: "Portrait" }), n, r, { base: KIND.student }), planet(...at(cx, 500, 210, -45), 22, [COR, YEL, TQ][i]), T(n, cx - 240, 750, 480, { family: "sans", bold: true, size: 44, color: NAV, align: "center" }), lab(r.toUpperCase(), cx - 240, 812, 480, { align: "center" }), tx(s, cx - 220, 852, 440, { size: 28, align: "center" })];
         }),
       ], "Introduce the team and our mentor. Mention who did which job; judges like to know."],
       [BG, [
@@ -765,7 +769,7 @@ export default function add(k) {
         R(M0, 196, CW, 1, INK, { name: "Rule" }),
         ...[["Johannes Gutenberg", "INVENTOR", "Goldsmith from Mainz who built Europe's first movable-type press."], ["Johann Fust", "FINANCIER", "Lent Gutenberg money for the workshop, then took it over after a lawsuit."], ["Peter Schöffer", "PRINTER", "Gutenberg's assistant; later ran the press with Fust and printed in colour."], ["William Caxton", "MERCHANT & PRINTER", "Brought printing to England and printed The Canterbury Tales."]].flatMap(([n, r, s], i) => {
           const x = M0 + i * 238;
-          return [F(x, 214, 214, 260, { name: "Portrait" }), head(n, x, 488, 214, { size: 20 }), kick(r, x, 516, 214), body(s, x, 538, 214, { align: "left", size: 14 })];
+          return [member(CAST, F(x, 214, 214, 260, { name: "Portrait" }), n, r, { kind: "senior elderly man portrait", sex: "m" }), head(n, x, 488, 214, { size: 20 }), kick(r, x, 516, 214), body(s, x, 538, 214, { align: "left", size: 14 })];
         }),
       ], "Four people, four roles. Money mattered as much as invention: Fust's loan made the workshop possible."],
       [NP, [
@@ -889,7 +893,7 @@ export default function add(k) {
         ...title("Teaching team", 300),
         ...[["Dr. Elena Park", "Lecturer", "Office hours: Tue 2–4 pm"], ["Sam Whitaker", "Teaching assistant", "Lab help: Thu 3–5 pm"], ["Aisha Bello", "Peer tutor", "Drop-in: Fri 11 am–1 pm"]].flatMap(([n, r, s], i) => {
           const cx = 200 + i * 312;
-          return [ring(cx, 320, 110, [CY, CB, CP][i], 4), F(cx - 95, 225, 190, 190, { shape: "circle", name: "Portrait" }), hd(n, cx - 145, 452, 290, { size: 28, align: "center" }), note(r, cx - 145, 490, 290, { align: "center", size: 22 }), tx(s, cx - 145, 526, 290, { align: "center", size: 20, color: DIM })];
+          return [ring(cx, 320, 110, [CY, CB, CP][i], 4), member(CAST, F(cx - 95, 225, 190, 190, { shape: "circle", name: "Portrait" }), n, r), hd(n, cx - 145, 452, 290, { size: 28, align: "center" }), note(r, cx - 145, 490, 290, { align: "center", size: 22 }), tx(s, cx - 145, 526, 290, { align: "center", size: 20, color: DIM })];
         }),
         note("Email any of us; we reply within one working day.", 64, 620, 896, { align: "center", color: CK, size: 24 }),
       ], "Three people you can ask for help. Sam runs the Thursday lab; Aisha is a student who took the course last year."],
@@ -995,7 +999,7 @@ export default function add(k) {
         hd("Who's cooking with you", 140, 160, 1400, { size: 84 }),
         ...[["Giulia Rossi", "HEAD CHEF", PEA], ["Tom Hart", "PASTRY & DOUGH", SAG], ["Ines Moreno", "SAUCES & WINE", LAV]].flatMap(([n, r, c], i) => {
           const x = 220 + i * 540;
-          return [...wash(x + 180, 520, 230, c, i % 2 ? -1 : 1), F(x, 300, 360, 440, { shape: "circle", name: "Portrait" }), T(n, x - 60, 790, 480, { family: "serif", italic: true, size: 54, color: PLUM, align: "center" }), lab(r, x - 60, 866, 480, { align: "center" })];
+          return [...wash(x + 180, 520, 230, c, i % 2 ? -1 : 1), member(CAST, F(x, 300, 360, 440, { shape: "circle", name: "Portrait" }), n, r), T(n, x - 60, 790, 480, { family: "serif", italic: true, size: 54, color: PLUM, align: "center" }), lab(r, x - 60, 866, 480, { align: "center" })];
         }),
       ], "Three chefs, one per station. Giulia leads, Tom helps with dough and Ines runs the sauce station and the wine."],
       [BG, [
@@ -1096,7 +1100,7 @@ export default function add(k) {
         hd("Player awards", 140, 80, 1600, { size: 64 }),
         ...[["Maya Ito", "PLAYER OF THE SEASON", "9"], ["Sam Reyes", "TOP SCORER, 15 GOALS", "11"], ["Leo Park", "BEST DEFENDER", "4"], ["Ana Cruz", "MOST IMPROVED", "7"]].flatMap(([n, a, j], i) => {
           const x = 140 + i * 420;
-          return [F(x, 190, 340, 500, { name: "Portrait" }), C(x + 250, 630, 110, 110, RED, { stroke: PITCH, sw: 6, name: "Shirt number" }), vmid(T(j, x + 250, 0, 110, { family: "sans", bold: true, italic: true, size: 52, color: WHITE, align: "center" }), 630, 110), hd(n, x, 780, 380, { size: 50, italic: false }), led(a, x, 846, 380, { size: 24 })];
+          return [member(CAST, F(x, 190, 340, 500, { name: "Portrait" }), n, a), C(x + 250, 630, 110, 110, RED, { stroke: PITCH, sw: 6, name: "Shirt number" }), vmid(T(j, x + 250, 0, 110, { family: "sans", bold: true, italic: true, size: 52, color: WHITE, align: "center" }), 630, 110), hd(n, x, 780, 380, { size: 50, italic: false }), led(a, x, 846, 380, { size: 24 })];
         }),
       ], "Four awards, voted by the players. Call each winner up as their photo appears."],
       [PITCH, [
@@ -1196,7 +1200,7 @@ export default function add(k) {
         ...strip(0, 260, W, 420),
         ...[["Nadia Brooks", "FESTIVAL DIRECTOR"], ["Owen Hale", "PROGRAMMER"], ["Zara Quinn", "VOLUNTEER LEAD"], ["Felix Moreau", "TECH & PROJECTION"]].flatMap(([n, r], i) => {
           const x = 110 + i * 440;
-          return [F(x, 310, 380, 320, { name: "Portrait" }), hd(n, x, 720, 400, { size: 48 }), cap(r, x, 784, 400)];
+          return [member(CAST, F(x, 310, 380, 320, { name: "Portrait" }), n, r), hd(n, x, 720, 400, { size: 48 }), cap(r, x, 784, 400)];
         }),
         tx("And 62 volunteers who tore tickets, poured coffee and stacked chairs.", 120, 880, 1600, { color: MUT }),
       ], "Thank the core crew by name and the volunteers as a group. Ask the volunteers in the room to stand."],
@@ -1312,7 +1316,7 @@ export default function add(k) {
         hd("The navigators", 120, 90, 1400, { size: 72 }),
         ...[["Hana Okoro", "CEO", "Sets the destination"], ["Marc Duval", "COO", "Runs the fleet"], ["Lucía Ramos", "HEAD OF GROWTH", "Opens new cities"], ["Ben Achter", "CFO", "Keeps us fuelled"]].flatMap(([n, r, s], i) => {
           const x = 160 + i * 430;
-          return [C(x - 10, 330, 320, 320, WHITE, { stroke: INK, sw: 3, name: "Ring" }), F(x + 10, 350, 280, 280, { shape: "circle", name: "Portrait" }), ...pin(x + 150, 336, i % 2 ? INK : ROUTE, 0.8), hd(n, x - 40, 690, 380, { size: 40, align: "center" }), lab(r, x - 40, 744, 380, { align: "center" }), tx(s, x - 40, 780, 380, { size: 28, align: "center" })];
+          return [C(x - 10, 330, 320, 320, WHITE, { stroke: INK, sw: 3, name: "Ring" }), member(CAST, F(x + 10, 350, 280, 280, { shape: "circle", name: "Portrait" }), n, r), ...pin(x + 150, 336, i % 2 ? INK : ROUTE, 0.8), hd(n, x - 40, 690, 380, { size: 40, align: "center" }), lab(r, x - 40, 744, 380, { align: "center" }), tx(s, x - 40, 780, 380, { size: 28, align: "center" })];
         }),
       ], "The four people accountable for the route. Each one owns at least one milestone."],
       [MAP, [
@@ -1433,7 +1437,7 @@ export default function add(k) {
         tx("Five new hires this quarter, all in product and customer success.", 160, 300, 1000),
         ...[["Ana", "Backend"], ["Kofi", "Design"], ["Lea", "Success"], ["Max", "Mobile"], ["Yui", "Success"]].flatMap(([n, r], i) => {
           const x = 160 + i * 205;
-          return [F(x, 440, 170, 170, { shape: "circle", name: "Avatar" }), T(n, x - 10, 640, 190, { family: "sans", bold: true, size: 30, color: INK, align: "center" }), lab(r.toUpperCase(), x - 10, 684, 190, { align: "center" })];
+          return [member(CAST, F(x, 440, 170, 170, { shape: "circle", name: "Avatar" }), n, r), T(n, x - 10, 640, 190, { family: "sans", bold: true, size: 30, color: INK, align: "center" }), lab(r.toUpperCase(), x - 10, 684, 190, { align: "center" })];
         }),
         tx("Attrition this quarter: zero.", 160, 860, 1000, { color: EM, bold: true }),
         card(1260, 140, 540, 860),
@@ -1553,7 +1557,7 @@ export default function add(k) {
         hd("Your facilitators", 120, 100, 1400, { shadow: shadow(YL) }),
         ...[["Mo Adeyemi", "LEAD FACILITATOR", "Ran 200+ workshops; still can't draw hands."], ["June Park", "DESIGNER", "Prototypes everything in cardboard first."], ["Ravi Shah", "ENGINEER", "Believes every idea fits on a sticky note."]].flatMap(([n, r, s], i) => {
           const cx = 380 + i * 580, c = [PK, CY2, YL][i];
-          return [C(cx - 170 + 18, 270 + 18, 340, 340, c, { name: "Colour disc" }), F(cx - 170, 270, 340, 340, { shape: "circle", border: { width: 6, color: BK }, name: "Portrait" }), hd(n, cx - 260, 670, 520, { size: 48, align: "center" }), tag(r, cx - 260, 734, 520, { align: "center", color: PU }), tx(s, cx - 230, 780, 460, { size: 28, align: "center" })];
+          return [C(cx - 170 + 18, 270 + 18, 340, 340, c, { name: "Colour disc" }), member(CAST, F(cx - 170, 270, 340, 340, { shape: "circle", border: { width: 6, color: BK }, name: "Portrait" }), n, r), hd(n, cx - 260, 670, 520, { size: 48, align: "center" }), tag(r, cx - 260, 734, 520, { align: "center", color: PU }), tx(s, cx - 230, 780, 460, { size: 28, align: "center" })];
         }),
       ], "Three facilitators, one per table group. Wave when you need tape, markers or a second opinion."],
       [YL, [
@@ -1650,7 +1654,7 @@ export default function add(k) {
         hd("Who listened", 260, 180, 1400, { size: 64 }),
         ...[["Emi Tanaka", "LEAD RESEARCHER"], ["Daniel Osei", "PRODUCT DESIGNER"], ["Sara Lind", "PRODUCT MANAGER"]].flatMap(([n, r], i) => {
           const x = 380 + i * 460;
-          return [F(x, 320, 300, 520, { name: "Portrait" }), hd(n, x, 868, 360, { size: 40 }), lab(r, x, 930, 360)];
+          return [member(CAST, F(x, 320, 300, 520, { name: "Portrait" }), n, r), hd(n, x, 868, 360, { size: 40 }), lab(r, x, 930, 360)];
         }),
       ], "Three people ran every session: one interviewer, one note-taker, one observer."],
       [WA, [
@@ -1755,7 +1759,7 @@ export default function add(k) {
         hd("Board and leadership", 140, 150, 1400),
         ...[["Layla Haddad", "DIRECTOR"], ["Omar Nasser", "CHAIR OF THE BOARD"], ["Sofia Ruiz", "HEAD OF PROGRAMMES"], ["Karim Aziz", "FINANCE DIRECTOR"]].flatMap(([n, r], i) => {
           const x = 160 + i * 420;
-          return [arch(x, 270, 320, 440, i % 2 ? TERR : EMR), F(x + 70, 370, 180, 290, { shape: "rounded", radius: 90, name: "Portrait" }), hd(n, x - 20, 740, 360, { size: 38, align: "center" }), lab(r, x - 20, 790, 360, { align: "center" })];
+          return [arch(x, 270, 320, 440, i % 2 ? TERR : EMR), member(CAST, F(x + 70, 370, 180, 290, { shape: "rounded", radius: 90, name: "Portrait" }), n, r), hd(n, x - 20, 740, 360, { size: 38, align: "center" }), lab(r, x - 20, 790, 360, { align: "center" })];
         }),
       ], "The people who steer the foundation. All board members serve as volunteers."],
       [EMR, [
@@ -1864,7 +1868,7 @@ export default function add(k) {
         big("ON STAGE TODAY", 140, 110, 1600, { size: 100, color: YLW }),
         ...[["Ana Ruiz", "Chief executive"], ["Ben Cho", "Head of product"], ["Dev Okafor", "People & culture"], ["Mia Lund", "Host & Q&A"]].flatMap(([n, r], i) => {
           const cx = 300 + i * 440;
-          return [ring(cx, 530, 200, i % 2 ? PNK : YLW, 8), F(cx - 180, 350, 360, 360, { shape: "circle", name: "Portrait" }), star(cx + 110, 330, 76, i % 2 ? YLW : PNK), big(n, cx - 210, 780, 420, { size: 56, align: "center" }), ital(r, cx - 210, 846, 420, { size: 34, align: "center" })];
+          return [ring(cx, 530, 200, i % 2 ? PNK : YLW, 8), member(CAST, F(cx - 180, 350, 360, 360, { shape: "circle", name: "Portrait" }), n, r), star(cx + 110, 330, 76, i % 2 ? YLW : PNK), big(n, cx - 210, 780, 420, { size: 56, align: "center" }), ital(r, cx - 210, 846, 420, { size: 34, align: "center" })];
         }),
       ], "Today's speakers. Mia hosts and runs the Q&A, including anonymous questions from the stream."],
       [ORN, [
@@ -1958,7 +1962,7 @@ export default function add(k) {
         hd("Who's who", 160, 150, 1400),
         ...[["Nell Arden", "The narrator: sixteen, stubborn and brave."], ["Tomas Reyes", "The stranger who knows the sea too well."], ["Aunt Bea", "Runs the café and every rumour in town."]].flatMap(([n, s], i) => {
           const cx = 400 + i * 560;
-          return [C(cx - 190, 290, 380, 380, "none", { stroke: COR, sw: 6, name: "Sun ring" }), F(cx - 170, 310, 340, 340, { shape: "circle", name: "Portrait" }), hd(n, cx - 240, 700, 480, { size: 52, align: "center" }), tx(s, cx - 220, 776, 440, { align: "center", color: MUT })];
+          return [C(cx - 190, 290, 380, 380, "none", { stroke: COR, sw: 6, name: "Sun ring" }), member(CAST, F(cx - 170, 310, 340, 340, { shape: "circle", name: "Portrait" }), n, s, { base: KIND.young }), hd(n, cx - 240, 700, 480, { size: 52, align: "center" }), tx(s, cx - 220, 776, 440, { align: "center", color: MUT })];
         }),
       ], "The three people the story turns on. Use drawings or film stills; real photos of people aren't needed."],
       [["#ff9a6b", "#5b2a6e", 180], [
@@ -2055,11 +2059,12 @@ export default function add(k) {
         tx("Four people, one market, a lot of dumplings.", 60, 190, 1200, { color: G2 }),
         ...[["Lena Fox", "CREATIVE DIRECTOR"], ["Marco Bell", "PHOTOGRAPHER"], ["Aya Ono", "PRODUCT DESIGNER"], ["Will Grant", "DEVELOPER"]].flatMap(([n, r], i) => {
           const x = i * 482, w2 = 474;
-          return [ph(x, 300, w2, 476), R(x, 784, w2, 296, BK, { name: "Name cell" }), T(n, x + 40, 840, 400, { family: "sans", bold: true, size: 44, color: WHITE }), lab(r, x + 40, 900, 400)];
+          return [member(CAST, ph(x, 300, w2, 476), n, r), R(x, 784, w2, 296, BK, { name: "Name cell" }), T(n, x + 40, 840, 400, { family: "sans", bold: true, size: 44, color: WHITE }), lab(r, x + 40, 900, 400)];
         }),
       ], "The studio team. Black-and-white portraits keep the grid calm."],
       [WHITE, [
-        ph(0, 0, 956, H),
+        // (the client who is quoted, half the slide, like Canva's testimonial slides)
+        face(CAST, ph(0, 0, 956, H), KIND.business, { sex: "f" }),
         T("“", 1040, 140, 200, { family: "sans", bold: true, size: 220, color: BK, lh: 0.8 }),
         hd("People come for the photos and stay for the food. Our quiet Tuesday is now our busiest day.", 1040, 360, 780, { size: 56, lh: 1.15 }),
         R(1040, 760, 80, 6, BK, { name: "Rule" }),
@@ -2157,12 +2162,12 @@ export default function add(k) {
         px("PARTY MEMBERS", 120, 100, 1680, { size: 72, color: YL }),
         ...[["KAI", "DEVELOPER", 9], ["ROSA", "DESIGNER", 8], ["OMAR", "PRODUCT", 10], ["JEN", "SUPPORT", 7]].flatMap(([n, r, hp], i) => {
           const x = 120 + i * 430;
-          return [...pbox(x, 240, 400, 700, CRM, WHITE), F(x + 40, 280, 320, 320, { name: "Portrait" }), px(n, x + 40, 630, 320, { size: 52 }), px(r, x + 40, 700, 320, { size: 26, color: PL }), px("HP", x + 40, 760, 80, { size: 24, color: RD }), ...bar(x + 100, 760, 8, Math.round(hp * 0.8), RD, 24)];
+          return [...pbox(x, 240, 400, 700, CRM, WHITE), member(CAST, F(x + 40, 280, 320, 320, { name: "Portrait" }), n, r), px(n, x + 40, 630, 320, { size: 52 }), px(r, x + 40, 700, 320, { size: 26, color: PL }), px("HP", x + 40, 760, 80, { size: 24, color: RD }), ...bar(x + 100, 760, 8, Math.round(hp * 0.8), RD, 24)];
         }),
       ], "The team, as a game party. Everyone here built part of today's demo."],
       [CRM, [
         ...sprite(1500, 160, 20, HEART, { X: RD }),
-        F(160, 140, 300, 300, { name: "Portrait" }),
+        face(CAST, F(160, 140, 300, 300, { name: "Portrait" }), KIND.customer, { sex: "m" }),
         ...pbox(160, 560, 1600, 380, NV, NV),
         ...pbox(200, 500, 440, 92, RD, NV),
         vmid(px("PARENT, BETA", 200, 0, 440, { size: 32, color: WHITE, align: "center" }), 500, 92),

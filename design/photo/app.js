@@ -44,6 +44,7 @@ const ui = { split: false, splitAt: 0.5, before: false, brush: 36, brushDirty: f
   enhance: { ...ENHANCE_DEFAULTS }, stickerCat: "all", stickerQuery: "", lastEnhance: null, aiPrompt: "", zoom: 100, addFocus: "elements",
   brushFor: null, clickTol: 30, editTab: "adjust" };
 let shell = null, framePanel = null; // the shared editor frame (../shared/editor-shell.js) and its open side panel
+const kitOwn = {}; // the photo editor's own section inside the kit's Elements / Text panels (shared/panels/)
 let framing = false; // true from the moment the frame starts (it opens the first panel before mountShell returns)
 
 const putPix = (id, canvas, blob = null) => { pix.set(id, { full: canvas, prev: null, blob }); return id; };
@@ -548,10 +549,43 @@ const selOverlay = () => st?.overlays.find((o) => o.id === selId) || null;
 function updateOverlayUi() {
   const box = $("#sel");
   const o = selOverlay();
-  if (!o || view.mode !== "normal" || tool !== "add") { box.hidden = true; return; }
+  if (!o || view.mode !== "normal" || tool !== "add") { box.hidden = true; updateOvBar(null); return; }
   const b = overlayBox(o, view.photoW, view.photoH), s = view.scale;
   box.hidden = false;
   Object.assign(box.style, { left: (view.padL + b.cx - b.w / 2) * s + "px", top: (view.padT + b.cy - b.h / 2) * s + "px", width: b.w * s + "px", height: b.h * s + "px", transform: `rotate(${b.rot}deg)` });
+  updateOvBar(o, box);
+}
+/* Floating toolbar above the selected text, shape, sticker or picture, in Canva's order: colour, Edit, position
+ * (forward / backward); then transparency, duplicate, delete. Shown in the editor frame only. */
+let ovBarEl = null;
+function updateOvBar(o, box) {
+  if (!shell) return;
+  if (!ovBarEl) { ovBarEl = h("div", { class: "ov-bar", id: "ovBar", role: "toolbar", "aria-label": "Selected item", hidden: true }); document.body.append(ovBarEl); }
+  const bar = ovBarEl;
+  if (!o || !box || box.hidden || (drag && drag.kind !== "split") || document.body.classList.contains("ads-viewing")) { bar.hidden = true; return; }
+  const key = o.id + ":" + hist.past.length;
+  if (bar.dataset.for !== key) {
+    bar.dataset.for = key;
+    const i = st.overlays.indexOf(o), live = () => scheduleRender(), done = () => { commit(); renderPanel(); };
+    const kids = [];
+    const colorOf = o.type === "text" ? o.color : o.type === "shape" ? o.fill : o.type === "sticker" && o.recolor ? o.colors?.c1 || "#5b4cf0" : null;
+    if (colorOf && /^#[0-9a-f]{6}$/i.test(colorOf)) kids.push(h("label", { class: "ov-color", title: "Colour" }, h("input", { type: "color", value: colorOf, "aria-label": "Colour", "data-ov": "color",
+      oninput: (e) => { const v = e.target.value; if (o.type === "text") o.color = v; else if (o.type === "shape") o.fill = v; else { o.colors = { ...o.colors, c1: v }; prepareOverlays([o]).then(live); } live(); }, onchange: done })));
+    kids.push(h("button", { class: "btn", type: "button", "data-ov": "edit", title: o.type === "text" ? "Font, size, outline and box" : "Settings for this item", onclick: () => shell?.openPanel(o.type === "text" ? "text" : "elements") }, "Edit"));
+    kids.push(h("button", { class: "btn", type: "button", "data-ov": "forward", title: "Position: bring forward", "aria-label": "Bring forward", disabled: i === st.overlays.length - 1, onclick: () => { st.overlays.splice(i, 1); st.overlays.splice(i + 1, 0, o); done(); } }, "Forward"));
+    kids.push(h("button", { class: "btn", type: "button", "data-ov": "backward", title: "Position: send backward", "aria-label": "Send backward", disabled: i === 0, onclick: () => { st.overlays.splice(i, 1); st.overlays.splice(i - 1, 0, o); done(); } }, "Backward"));
+    kids.push(h("span", { class: "pill-sep", "aria-hidden": "true" }));
+    kids.push(h("label", { class: "ov-op", title: "Transparency" }, h("input", { type: "range", min: 5, max: 100, value: Math.round((o.opacity ?? 1) * 100), "aria-label": "Transparency", "data-ov": "opacity", oninput: (e) => { o.opacity = +e.target.value / 100; live(); }, onchange: done })));
+    kids.push(h("button", { class: "btn", type: "button", "data-ov": "duplicate", title: "Duplicate", "aria-label": "Duplicate", onclick: () => addOverlay({ ...cloneState(o), id: uid(), x: Math.min(0.95, o.x + 0.04), y: Math.min(0.95, o.y + 0.04) }) }, "Duplicate"));
+    kids.push(h("button", { class: "btn", type: "button", "data-ov": "delete", title: "Delete", "aria-label": "Delete", onclick: () => removeSelected() }, "Delete"));
+    bar.replaceChildren(...kids);
+  }
+  bar.hidden = false;
+  const r = box.getBoundingClientRect(), bw = bar.offsetWidth || 300, bh = bar.offsetHeight || 40;
+  // above the item (clear of its turn handle), never over the frame's floating toolbar; else under the item
+  const pill = document.querySelector(".ads-pill:not([hidden])")?.getBoundingClientRect(), minTop = Math.max(56, (pill && pill.height ? pill.bottom : 0) + 8);
+  const top = r.top - bh - 46 >= minTop ? r.top - bh - 46 : r.bottom + 14;
+  Object.assign(bar.style, { left: Math.max(8, Math.min(innerWidth - bw - 8, r.left + r.width / 2 - bw / 2)) + "px", top: Math.max(8, Math.min(innerHeight - bh - 8, top)) + "px" });
 }
 let drag = null;
 function onWrapDown(e) {
@@ -1391,8 +1425,13 @@ function addOverlay(o) {
   commit();
   renderPanel();
 }
+/** The photo editor's part of the kit's Text panel: the selected text's words, font, colour, outline and box. */
 function panelText() {
   const o = selOverlay();
+  if (shell) {
+    if (o?.type === "text") return [overlayProps(o)];
+    return [h("p", { class: "hint", id: "textHint" }, st.overlays.some((x) => x.type === "text") ? "Click a text on the photo to change its words, font, colour, outline and box here." : "Add a text from this panel, then change its words, font, colour, outline and box here.")];
+  }
   const brandFont = (k) => loadBrand().fonts?.[k] || "sans";
   const add = (props) => addOverlay(newOverlay("text", { family: brandFont("body"), ...props }));
   const out = [section("Text",
@@ -1410,16 +1449,17 @@ function panelAdd() {
   if (shell && ui.addFocus === "text") return panelText();
   const o = selOverlay();
   const out = [];
-  out.push(section("Add", h("div", { class: "row" },
+  // In the editor frame the kit's Elements panel adds shapes, graphics, stickers and photos; this part keeps what only the
+  // photo editor has: the selected item's settings and the frame round the photo itself.
+  if (!shell) out.push(section("Add", h("div", { class: "row" },
     h("button", { class: "btn", id: "addText", onclick: () => addOverlay(newOverlay("text", { family: loadBrand().fonts?.heading || "sans" })) }, "T  Text"),
     h("button", { class: "btn", onclick: () => addOverlay(newOverlay("shape", { shape: "rect", fill: loadBrand().colors?.[0] || "#5b4cf0" })) }, "◼  Shape"),
     h("button", { class: "btn", onclick: () => { ui.showStickers = !ui.showStickers; renderPanel(); } }, "★  Stickers")),
     h("div", { class: "chips" }, TEXT_STYLES.map((t) => chip(t.name, false, () => addOverlay(newOverlay("text", { ...t.props, text: t.id === "quote" ? "“Your words”" : "Your text" })))))));
   if (o) out.push(overlayProps(o));
   else if (st.overlays.length) out.push(h("p", { class: "hint" }, "Tap something you added to change it."));
-  if (shell) out.push(section("Shapes", h("div", { class: "chips" }, SHAPES.map((sh) => chip(sh.name, false, () => addOverlay(newOverlay("shape", { shape: sh.id, fill: loadBrand().colors?.[0] || "#5b4cf0" })), { "data-shape": sh.id })))));
-  if (ui.showStickers || shell) out.push(stickerPicker());
-  out.push(section("Frame", h("div", { class: "chips" }, FRAMES.map((f) => chip(f.name, st.frame.id === f.id, () => { st.frame.id = f.id; commit(); renderPanel(); }, { "data-frame": f.id }))),
+  if (ui.showStickers && !shell) out.push(stickerPicker());
+  out.push(section(shell ? "Photo frame" : "Frame", h("div", { class: "chips" }, FRAMES.map((f) => chip(f.name, st.frame.id === f.id, () => { st.frame.id = f.id; commit(); renderPanel(); }, { "data-frame": f.id }))),
     st.frame.id !== "none" ? h("div", { class: "row" },
       h("label", { class: "colour" }, "Colour ", h("input", { type: "color", value: st.frame.color, "aria-label": "Frame colour", oninput: (e) => { st.frame.color = e.target.value; scheduleRender(); }, onchange: () => commit() })),
       slider({ id: "fw", label: "Width", min: 0, max: 12, step: 0.5, value: st.frame.width, onInput: (v) => { st.frame.width = v; scheduleRender({ draft: true }); }, onChange: () => commit() })) : null));
@@ -1465,7 +1505,7 @@ function overlayProps(o) {
     h("button", { class: "btn", "aria-label": "Send backward", disabled: i === 0, onclick: () => { st.overlays.splice(i, 1); st.overlays.splice(i - 1, 0, o); commit(); renderPanel(); } }, "↓ Back"),
     h("button", { class: "btn", onclick: () => addOverlay({ ...cloneState(o), id: uid(), x: Math.min(0.95, o.x + 0.04), y: Math.min(0.95, o.y + 0.04) }) }, "Duplicate"),
     h("button", { class: "btn danger", id: "deleteOverlay", onclick: () => removeSelected() }, "Delete")));
-  return section(o.type === "text" ? "Text" : o.type === "shape" ? "Shape" : o.type === "image" ? "Grabbed object" : "Sticker", ...kids);
+  return section(o.type === "text" ? "Text" : o.type === "shape" ? "Shape" : o.type === "image" ? (o.pixId && o.name && o.name !== "Grabbed object" ? "Picture" : "Grabbed object") : "Sticker", ...kids);
 }
 function removeSelected() {
   const o = selOverlay();
@@ -2316,7 +2356,7 @@ function applyLook(t, imgs = {}) {
   st.filter = t.filter ? { id: t.filter[0], intensity: t.filter[1] } : { id: "none", intensity: 100 };
   if (t.frame) st.frame = { ...st.frame, ...t.frame };
   else if (t.kind === "look") st.frame = { ...st.frame, id: "none" };
-  if (t.aspect) { const f = frameDims(); st.geom.aspect = t.aspect; st.geom.crop = aspectCrop(f.w, f.h, aspectValue()); }
+  if (t.aspect) { const f = frameDims(); st.geom.aspect = t.aspect; st.geom.crop = (t.crop && tplPhoto === t.photo?.id) ? { ...t.crop } : aspectCrop(f.w, f.h, aspectValue()); } // a people template opens with its thumbnail's face crop
   ensureFx(st);
   st.fx = { ...st.fx, area: "all", duotone: t.duotone ? { id: t.duotone, amount: t.duotoneAmount ?? 100 } : null, invert: !!t.invert, opacity: t.opacity ?? 100 };
   st.overlays = st.overlays.filter((o) => !o.tpl);
@@ -2358,7 +2398,7 @@ async function applyTemplate(id) {
     st.bg.shadow = b.shadow || t.cutShadow ? { on: true, blur: 20, dist: 12, angle: 60, color: "#000000", alpha: 40, ...b.shadow } : null;
     st.bg.outline = b.outline || t.cutOutline ? { on: true, width: 8, color: "#ffffff", ...b.outline } : null;
     if (t.frame) st.frame = { ...st.frame, ...t.frame };
-    if (t.aspect) { const f = frameDims(); st.geom.aspect = t.aspect; st.geom.crop = aspectCrop(f.w, f.h, aspectValue()); }
+    if (t.aspect) { const f = frameDims(); st.geom.aspect = t.aspect; st.geom.crop = (t.crop && tplPhoto === t.photo?.id) ? { ...t.crop } : aspectCrop(f.w, f.h, aspectValue()); } // a people template opens with its thumbnail's face crop
     await templateFonts(t);
     st.overlays = st.overlays.filter((o) => !o.tpl);
     for (const o of templateOverlays(t)) st.overlays.push(o);
@@ -2419,12 +2459,310 @@ function flipPhoto(axis) {
   commit(); renderPanel();
 }
 const needPhoto = (fn) => (...a) => { if (!st) { toast("Open a photo or pick a template first."); return; } return fn(...a); };
-async function insertImage(src, name) {
+/* ---------- left-rail kit inserts (shared/panels: Elements, Text, Uploads, Brand, Tools → Draw) ----------
+ * Everything lands on the open photo as an overlay you can move, resize and turn: text overlays, shape overlays (every
+ * kit shape, paths too), site-library stickers, pictures (image overlays). A frame puts the photo itself in that shape.
+ * pt = {x, y, clientX, clientY} for a drop; nothing for a click = the middle of the photo part you can see. */
+const KIT_TEXT = { heading: 0.075, subheading: 0.045, body: 0.028, caption: 0.022 };
+const KIT_WORDS = { heading: "Add a heading", subheading: "Add a subheading", body: "Add a little bit of body text", caption: "Add a caption" };
+const KIT_SHAPES = new Set(["rect", "ellipse", "triangle", "line", "arrow", "star", "polygon", "heart"]);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+/** A FONT_FAMILIES key for a kit family (a key already, or a CSS font list). */
+function familyKey(f) {
+  if (!f) return null;
+  if (FONT_FAMILIES[f]) return f;
+  const s = String(f).toLowerCase();
+  for (const [k, v] of Object.entries(FONT_FAMILIES)) if (v.css.toLowerCase() === s || v.label.toLowerCase() === s) return k;
+  if (/mono|courier|consol/.test(s)) return "mono";
+  if (/cambria|caladea/.test(s)) return "cambria";
+  if (/calibri|carlito/.test(s)) return "calibri";
+  if ((/serif/.test(s) && !/sans/.test(s)) || /times|georgia|garamond|playfair|merriweather|lora|didot/.test(s)) return "serif";
+  return "sans";
+}
+const picDims = () => (view.photoW > 1 && view.photoH > 1 ? { W: view.photoW, H: view.photoH } : finishedSize());
+/** Drop point (or the middle of the visible photo) as fractions of the finished picture. */
+function kitPoint(pt) {
+  const wrap = $("#wrap"), r = wrap?.getBoundingClientRect?.();
+  if (!r || !(r.width > 0) || view.mode !== "normal") return { x: 0.5, y: 0.5 };
+  let cx, cy;
+  if (pt && Number.isFinite(pt.clientX) && Number.isFinite(pt.clientY)) { cx = pt.clientX; cy = pt.clientY; }
+  else {
+    const s = (shell?.slots?.stage || $("#photoWork"))?.getBoundingClientRect?.();
+    const L = Math.max(r.left, s?.left ?? -Infinity), T = Math.max(r.top, s?.top ?? -Infinity), R = Math.min(r.right, s?.right ?? Infinity), B = Math.min(r.bottom, s?.bottom ?? Infinity);
+    cx = R > L ? (L + R) / 2 : r.left + r.width / 2; cy = B > T ? (T + B) / 2 : r.top + r.height / 2;
+  }
+  const p = toPhoto({ clientX: cx, clientY: cy });
+  return { x: clamp(p.x / view.photoW, 0, 1), y: clamp(p.y / view.photoH, 0, 1) };
+}
+/** Box {x, y, w, h} (fractions) for an object whose longer side is rel × the picture's shorter side. */
+function kitBox(rel, aspect, pt, def = 0.3) {
+  const { W, H } = picDims(), S = Math.min(W, H), a = aspect > 0 && Number.isFinite(aspect) ? aspect : 1;
+  const L = (rel > 0 ? rel : def) * S;
+  let w = a >= 1 ? L : L * a, h = a >= 1 ? L / a : L;
+  const k = Math.min(1, (W * 0.98) / w, (H * 0.98) / h); w *= k; h *= k;
+  const c = kitPoint(pt), fw = w / W, fh = h / H;
+  return { x: clamp(c.x, fw / 2, 1 - fw / 2), y: clamp(c.y, fh / 2, 1 - fh / 2), w: fw, h: fh };
+}
+/** The kit adds to the open photo; with none open, a blank white 1080 × 1080 design starts first. */
+async function kitPhoto() {
+  if (st) return;
+  if (busy) throw new Error("Please wait a moment, then try again.");
+  if (mode !== "full") { mode = "full"; tool = "adjust"; setModeUi(); }
+  const c = makeCanvas(1080, 1080), x = c.getContext("2d");
+  x.fillStyle = "#ffffff"; x.fillRect(0, 0, 1080, 1080);
+  await openFile(new File([await toBlob(c, "image/png")], "Blank design.png", { type: "image/png" }));
+  if (!st) throw new Error("A blank design could not be started. Open a photo first.");
+}
+/** Adds overlays as one undo step, selects the first and shows it ready to move (the Add tool). */
+function kitAdd(list, focus = "elements") {
+  const arr = [].concat(list);
+  for (const o of arr) st.overlays.push(o);
+  selId = arr[0].id;
+  ui.addFocus = focus;
+  commit();
+  if (tool !== "add") setTool("add", { fromFrame: true }); else renderPanel();
+  scheduleRender();
+  return arr.length > 1 ? arr.map((o) => o.id) : arr[0].id;
+}
+const isSvgSrc = (src) => /^data:image\/svg\+xml/i.test(src) || /^\s*<svg[\s>]/i.test(src) || /\.svg(\?|#|$)/i.test(src);
+/** A picture (URL, data URL or SVG markup) as a canvas no longer than maxLong px; SVGs are drawn at that size. */
+async function pictureCanvas(src, maxLong = 1600, aspectHint = 0) {
+  if (/^\s*</.test(src)) src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(src);
+  if (isSvgSrc(src)) {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const a = aspectHint > 0 ? aspectHint : img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : svgAspect(decodeURIComponent(src.split(",").slice(1).join(","))) || 1;
+    const w = a >= 1 ? maxLong : Math.round(maxLong * a), h = a >= 1 ? Math.round(maxLong / a) : maxLong;
+    const c = makeCanvas(Math.max(1, w), Math.max(1, h));
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  }
   const blob = await (await fetch(src)).blob();
-  const file = new File([blob], name || "picture.png", { type: blob.type || "image/png" });
-  if (st && st.bg.removed && st.cutout) { await setBgImage(file); setTool("bg"); toast("Added as the new background."); return; }
-  if (st) await saveNow().catch(() => {});
-  await openFile(file);
+  const r = await decodeFile(blob, null, { maxSide: 4096 });
+  return scaleDown(r.canvas, maxLong);
+}
+/** Width ÷ height from an SVG's viewBox (or width/height). */
+function svgAspect(svg) {
+  const vb = /viewBox\s*=\s*["']\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(svg || "");
+  if (vb && +vb[1] > 0 && +vb[2] > 0) return +vb[1] / +vb[2];
+  const w = /\swidth\s*=\s*["']([\d.]+)/i.exec(svg || ""), hh = /\sheight\s*=\s*["']([\d.]+)/i.exec(svg || "");
+  return w && hh && +w[1] > 0 && +hh[1] > 0 ? +w[1] / +hh[1] : 0;
+}
+/** A picture overlay (image type: kept in the pixel store like Magic Grab pieces, saved with the project). */
+async function kitPicture(src, name, pt, { rel, aspect, def = 0.5, box } = {}) {
+  await kitPhoto();
+  const { W, H } = picDims();
+  const longPx = clamp(Math.round(Math.max(W, H) * 1.2), 256, 2000);
+  const c = await pictureCanvas(src, longPx, aspect);
+  const b = box || kitBox(rel, c.width / c.height, pt, def);
+  return kitAdd(newOverlay("image", { pixId: newPix(c), name: String(name || "Picture").slice(0, 80), ...b }));
+}
+/** Is the picture light around the point c (fractions)? Text without its own colour is dark there, else white. */
+function lightAt(c) {
+  try {
+    const v = $("#view"), x = v?.getContext("2d");
+    if (!x || !v.width || !v.height || view.mode !== "normal") return false;
+    const W = view.photoW, H = view.photoH, cx = view.padL + c.x * W, cy = view.padT + c.y * H, r = Math.max(4, Math.min(W, H) * 0.08);
+    const d = x.getImageData(Math.max(0, Math.round(cx - r)), Math.max(0, Math.round(cy - r)), Math.max(1, Math.round(r * 2)), Math.max(1, Math.round(r * 2))).data;
+    let s = 0, n = 0;
+    for (let i = 0; i < d.length; i += 16) if (d[i + 3] > 20) { s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; n++; }
+    return n > 0 && s / n > 170;
+  } catch { return false; }
+}
+function kitTextOverlay(spec, c, S, H) {
+  const role = KIT_TEXT[spec.role] ? spec.role : "body";
+  const px = (spec.rel > 0 ? spec.rel : KIT_TEXT[role]) * S;
+  const content = String(spec.content ?? KIT_WORDS[role]);
+  const p = { text: content, size: clamp(px / H, 0.008, 0.6), family: familyKey(spec.family) || loadBrand().fonts?.[role === "heading" ? "heading" : "body"] || "sans",
+    bold: spec.bold != null ? !!spec.bold : spec.weight ? spec.weight >= 600 : role === "heading" || role === "subheading", italic: !!spec.italic,
+    align: ["left", "center", "right"].includes(spec.align) ? spec.align : "center", x: c.x, y: c.y };
+  if (spec.color) { p.color = spec.color; p.shadow = false; }
+  else if (lightAt(c)) { p.color = "#1b2133"; p.shadow = false; } // on a light photo (or a blank design) dark text reads best
+  if (spec.letterSpacing) p.spacing = +spec.letterSpacing || 0;
+  if (spec.lineHeight) p.lineHeight = +spec.lineHeight || 0;
+  if (spec.uppercase) p.upper = true;
+  if (spec.stroke) p.outline = spec.stroke;
+  if (spec.background) p.bg = spec.background;
+  if (spec.name) p.name = spec.name;
+  return newOverlay("text", p);
+}
+/** Text overlays: one, or a group (font combinations) placed by dx/dy or stacked, centred on pt. */
+async function kitText(specs, pt) {
+  await kitPhoto();
+  const { W, H } = picDims(), S = Math.min(W, H), c = kitPoint(pt);
+  const list = specs.map((s) => (typeof s === "string" ? { content: s } : s || {}));
+  const placed = list.some((s) => Number.isFinite(s.dx) || Number.isFinite(s.dy));
+  const sizes = list.map((s) => ((s.rel > 0 ? s.rel : KIT_TEXT[s.role] || KIT_TEXT.body) * S * (s.lineHeight || 1.2) * String(s.content ?? "x").split("\n").length));
+  const total = sizes.reduce((a, b) => a + b, 0) + Math.max(0, list.length - 1) * 0.3 * (sizes[0] || 0) / 1.2;
+  let y = c.y * H - total / 2;
+  const out = list.map((s, i) => {
+    const at = placed ? { x: c.x + ((s.dx || 0) * S) / W, y: c.y + ((s.dy || 0) * S) / H } : { x: c.x, y: (y + sizes[i] / 2) / H };
+    if (!placed) y += sizes[i] + (0.3 * sizes[i]) / 1.2;
+    return kitTextOverlay(s, { x: clamp(at.x, 0.02, 0.98), y: clamp(at.y, 0.02, 0.98) }, S, H);
+  });
+  await prepareOverlays(out).catch(() => {});
+  return kitAdd(out, "text");
+}
+/** Kit shape spec → a native shape overlay (fill / edge colours, edge width stay editable). */
+async function kitShape(spec, pt) {
+  const kind = String(spec?.kind || "");
+  if (!KIT_SHAPES.has(kind) && !spec?.d) return false; // not a shape we can draw: the kit's SVG fallback adds it
+  await kitPhoto();
+  const vb = Array.isArray(spec.vb) ? spec.vb.map(Number) : typeof spec.vb === "string" ? spec.vb.trim().split(/[\s,]+/).map(Number) : null;
+  const aspect = spec.aspect || (vb && vb[2] > 0 && vb[3] > 0 ? vb[2] / vb[3] : kind === "line" ? 6 : kind === "arrow" ? 2 : 1);
+  const b = kitBox(spec.rel, aspect, pt, kind === "line" ? 0.4 : 0.3);
+  const { W, H } = picDims(), S = Math.min(W, H);
+  const p = { ...b, shape: KIT_SHAPES.has(kind) ? (kind === "rect" && spec.radius > 0 ? "rounded" : kind) : "path" };
+  if (p.shape === "path") { p.d = String(spec.d); p.vb = vb && vb.length === 4 ? vb : [0, 0, 100, 100]; }
+  if (kind === "polygon") p.sides = spec.sides || 6;
+  if (kind === "star" && spec.points) p.points = spec.points;
+  if (spec.radius > 0) p.radius = spec.radius > 1 ? spec.radius / Math.max(1, (vb && Math.min(vb[2], vb[3])) || 100) : spec.radius;
+  const stroke = spec.stroke && spec.stroke !== "none" ? spec.stroke : null;
+  p.fill = kind === "line" ? stroke || spec.fill || "#1b2133" : spec.fill || (stroke ? "none" : loadBrand().colors?.[0] || "#5b4cf0");
+  if (stroke) p.stroke = stroke;
+  if (spec.strokeWidth > 0) {
+    // stroke width in the shape's own units (viewBox), or px of a 100-unit box: as % of the picture's shorter side
+    const unit = (vb && Math.max(vb[2], vb[3])) || 100, longPx = Math.max(b.w * W, b.h * H);
+    p.strokeWidth = Math.round(((spec.strokeWidth / unit) * longPx / (S * 0.01)) * 100) / 100;
+  } else if (stroke && kind !== "line") p.strokeWidth = 1;
+  if (spec.dash) p.dash = Array.isArray(spec.dash) ? spec.dash.map(Number).filter((n) => n > 0) : [3, 2];
+  if (spec.arrow) p.arrow = spec.arrow === true ? "end" : spec.arrow;
+  if (spec.name) p.name = spec.name;
+  return kitAdd(newOverlay("shape", p));
+}
+/** Site-library elements become real stickers (recolourable); other vector art becomes a picture overlay. */
+async function kitSvg(markup, meta = {}, pt) {
+  await kitPhoto();
+  const id = meta.elementId;
+  if (id) {
+    const E = await elementsLib();
+    const el = E.ELEMENTS.find((e) => e.id === id);
+    if (el) {
+      const b = kitBox(meta.rel, meta.aspect || el.vb[0] / el.vb[1], pt, 0.3);
+      const o = newOverlay("sticker", { elId: el.id, ...b, colors: { ...(meta.colors || {}) }, recolor: !!el.recolor, name: el.name });
+      await stickerImage(o).catch(() => null);
+      return kitAdd(o);
+    }
+  }
+  return kitPicture(String(markup || ""), meta.name || "Graphic", pt, { rel: meta.rel, aspect: meta.aspect || svgAspect(markup), def: 0.3 });
+}
+// Frame shapes the photo itself can take (Elements → Frames puts the photo in that frame).
+const KIT_FRAMES = { rounded: "rounded", circle: "circle", ellipse: "circle", heart: "heart", star: "star", hexagon: "hexagon", diamond: "diamond", arch: "arch", blob: "blob" };
+async function kitFrame(spec) {
+  // device, film and instant-photo frames (a drawn body with photo windows): the kit adds their picture to place
+  if (!spec || spec.device || spec.screen || spec.screens || spec.svg) return false;
+  // an outline (d + vb) keeps its exact shape and proportions; a bare shape name uses the photo's own frame of that name
+  const id = spec.d ? "path" : KIT_FRAMES[spec.shape] || KIT_FRAMES[spec.kind] || null;
+  if (!id) return false;
+  await kitPhoto();
+  if (id === "path") {
+    const vb = (Array.isArray(spec.vb) ? spec.vb : String(spec.vb || "100 100").trim().split(/[\s,]+/)).map(Number);
+    st.frame = { ...st.frame, id, d: String(spec.d), vb: vb.length === 4 || vb.length === 2 ? vb : [100, 100], width: 0, name: spec.name || "Shape" };
+  } else st.frame = { ...st.frame, id };
+  commit(); renderPanel();
+  const name = id === "path" ? String(spec.name || "shape").toLowerCase() : FRAMES.find((f) => f.id === id)?.name.toLowerCase() || id;
+  toast(`Your photo is now in the ${name} frame. Undo takes it out.`);
+  return id;
+}
+/** A finished drawing (Tools → Draw) lands where it was drawn: svg in stage px, w × h, pt = its middle. */
+async function kitDrawing(svg, size = {}, pt) {
+  await kitPhoto();
+  const { W, H } = picDims();
+  const sw = +size.w || 0, sh = +size.h || 0;
+  let box = null;
+  if (sw > 0 && sh > 0 && pt && Number.isFinite(pt.clientX) && view.scale > 0) {
+    const c = kitPoint(pt), fw = Math.min(1, sw / view.scale / W), fh = Math.min(1, sh / view.scale / H);
+    box = { x: clamp(c.x, fw / 2, 1 - fw / 2), y: clamp(c.y, fh / 2, 1 - fh / 2), w: fw, h: fh };
+  }
+  return kitPicture(String(svg || ""), size.name || "Drawing", pt, { aspect: sw > 0 && sh > 0 ? sw / sh : svgAspect(svg), def: 0.6, box });
+}
+/** Uploads, photos and pictures: with no photo open the picture becomes the photo; else it is added on top. */
+async function insertImage(src, name, pt) {
+  if (!st) {
+    const blob = await (await fetch(src)).blob();
+    await openFile(new File([blob], name || "picture.png", { type: blob.type || "image/png" }));
+    if (!st) throw new Error("That picture could not be opened.");
+    return "photo";
+  }
+  return kitPicture(src, name, pt, { def: 0.5 });
+}
+function buildInsert() {
+  return {
+    image: (src, name, pt) => insertImage(src, name, pt),
+    shape: (spec, pt) => kitShape(spec || {}, pt),
+    svg: (markup, meta, pt) => kitSvg(markup, meta || {}, pt),
+    // text(spec, pt); the old form text(str, style) still works
+    text: (spec, pt) => kitText([typeof spec === "string" ? { content: spec, role: /^(h1|heading|title)$/.test(pt || "") ? "heading" : /^(h2|subheading)$/.test(pt || "") ? "subheading" : "body" } : spec || {}], typeof pt === "string" ? undefined : pt),
+    textGroup: (specs, pt) => kitText(Array.isArray(specs) && specs.length ? specs : [{}], pt),
+    frame: (spec, pt) => kitFrame(spec || {}, pt),
+    drawing: (svg, size, pt) => kitDrawing(svg, size || {}, pt),
+    color: (hex) => {
+      const o = selOverlay();
+      if (o?.type === "text") o.color = hex; else if (o?.type === "shape") o.fill = hex;
+      else if (st?.bg.removed) { st.bg.mode = "color"; st.bg.color = hex; }
+      else { toast("Select a text or shape first, or remove the background to colour it."); return; }
+      commit(); renderPanel();
+    },
+    font: (key) => { const o = selOverlay(); if (o?.type !== "text") { toast("Select a text first."); return; } if (FONT_FAMILIES[key]) { o.family = key; commit(); renderPanel(); } },
+  };
+}
+const kitInsert = buildInsert();
+
+/* ---------- Design panel (shell): Layouts = shapes for the whole photo, Styles = the filter looks; a template's style ---------- */
+function designLayouts(box) {
+  box.append(h("p", { class: "hint" }, "A shape for the whole photo. Crop moves it and fine-tunes it."));
+  box.append(h("div", { class: "design-grid" }, CROP_PRESETS.filter((c) => c.id !== "free").map((c) => {
+    const a = typeof c.aspect === "number" ? c.aspect : 4 / 3;
+    return h("button", { class: "dtile", "data-layout": c.id, title: c.label, onclick: () => {
+      if (!st) { toast("Open a photo or pick a template first."); return; }
+      if (busy) return;
+      st.geom.aspect = c.id;
+      const f = frameDims();
+      st.geom.crop = aspectCrop(f.w, f.h, aspectValue());
+      commit(); renderPanel();
+      toast(`Photo shape: ${c.label}`);
+    } }, h("span", { class: "dshape" + (c.aspect === "original" ? " orig" : ""), style: `aspect-ratio:${a.toFixed(4)}` }), h("span", {}, c.label));
+  })));
+}
+function designStyles(box) {
+  box.append(h("p", { class: "hint" }, "Looks for the whole photo. Change their strength in Edit → Filters."));
+  const grid = h("div", { class: "design-grid looks" });
+  let thumbs = null;
+  try { if (st) { const small = scaleDown(geoStage(VIEW_MAX(), true).c, 120); thumbs = { small, base: getData(small) }; } } catch { thumbs = null; }
+  for (const f of FILTERS) {
+    let pic = h("span", { class: "dlook", "aria-hidden": "true" });
+    if (thumbs) { const c = f.id === "none" ? thumbs.small : fromData(applyFilter(thumbs.base, f.id, 1)); const cv = makeCanvas(c.width, c.height); cv.getContext("2d").drawImage(c, 0, 0); pic = cv; }
+    grid.append(h("button", { class: "dtile", "data-style-filter": f.id, title: f.name, onclick: () => {
+      if (!st) { toast("Open a photo or pick a template first."); return; }
+      if (busy) return;
+      st.filter = { id: f.id, intensity: 100 };
+      commit(); renderPanel();
+      toast(f.id === "none" ? "Original look" : `${f.name} look`);
+    } }, pic, h("span", {}, f.name)));
+  }
+  box.append(grid);
+}
+/** "Apply this template style": the template's colour look (light, filter, duotone, frame) and its text font and
+ *  colour on your photo and your texts; your photo, crop and words stay. One undo step. */
+async function applyTemplateStyle(id) {
+  const t = GALLERY.templateById(id);
+  if (!t) throw new Error("That template was not found.");
+  if (!st) throw new Error("Open a photo first: the template's style goes on your photo.");
+  if (busy) throw new Error("Please wait: the photo is still being worked on.");
+  const tplText = (t.overlays || t.texts || []).find((o) => (o.type || "text") === "text");
+  if (!(t.adjust || t.filter || t.duotone || t.invert || t.frame || tplText)) throw new Error("This template changes the background or settings, not the style. Use the template itself.");
+  if (t.adjust || t.filter || t.duotone || t.invert) {
+    st.adjust = { ...NEUTRAL, ...(t.adjust || {}) };
+    st.filter = t.filter ? { id: t.filter[0], intensity: t.filter[1] } : { id: "none", intensity: 100 };
+    ensureFx(st);
+    st.fx = { ...st.fx, duotone: t.duotone ? { id: t.duotone, amount: t.duotoneAmount ?? 100 } : null, invert: !!t.invert };
+  }
+  if (t.frame) st.frame = { ...st.frame, ...t.frame };
+  if (tplText) for (const o of st.overlays) if (o.type === "text" && !o.tpl) Object.assign(o, { family: tplText.family || o.family, color: tplText.color || o.color, ...(tplText.outline !== undefined ? { outline: tplText.outline } : {}), ...(tplText.bg !== undefined ? { bg: tplText.bg } : {}), ...(tplText.shadow !== undefined ? { shadow: tplText.shadow } : {}) });
+  await prepareOverlays(st.overlays).catch(() => {});
+  commit(); renderPanel();
+  return true;
 }
 async function mountFrame() {
   let mod;
@@ -2445,8 +2783,14 @@ async function mountFrame() {
       h("button", { class: "btn", id: "pasteStyle", "aria-label": "Paste style", title: "Paste the copied style on this photo", disabled: !savedStyle(), onclick: pasteStyleNow }, "Paste style")),
     h("span", { class: "pill-sep", "aria-hidden": "true" }),
     $("#barActions"));
-  const panels = { tools: { label: "Tools", icon: "tools", render: renderToolsHub } };
-  for (const [id, d] of Object.entries(FRAME_PANELS)) panels[id] = { label: d.label, icon: id === "elements" || id === "text" ? id : icon(d.tool || id), refresh: true, render: (el) => attachToolPanel(el, id) };
+  // Elements, Text and Tools are the shared kit's Canva panels (shared/panels/); the photo editor adds its own part to each:
+  // Tools = every photo tool (first), Elements = the photo frame and the selected item, Text = the selected text's look.
+  // No label / icon on those three: the rail keeps the kit's names.
+  const panels = { tools: { title: "Photo tools", primary: true, render: renderToolsHub } };
+  for (const [id, d] of Object.entries(FRAME_PANELS)) {
+    if (id === "elements" || id === "text") { const t = id === "text" ? "Your text" : "Your photo"; panels[id] = { title: t, kitLabel: t, render: (el) => { kitOwn[id] = el; attachToolPanel(el, id); } }; }
+    else panels[id] = { label: d.label, icon: icon(d.tool || id), refresh: true, render: (el) => attachToolPanel(el, id) };
+  }
   const dl = (format) => needPhoto(() => doExport({ format, size: "original", quality: format === "png" ? undefined : 0.92 }));
   try {
     framing = true;
@@ -2473,29 +2817,25 @@ async function mountFrame() {
         { label: "Fit the photo on screen", group: "View", act: () => setZoom(100) },
       ],
       share: { download: [{ label: "PNG", act: dl("png") }, { label: "JPG", act: dl("jpg") }, { label: "WebP", act: dl("webp") }, { label: "PDF", act: dl("pdf") }], link: () => location.origin + location.pathname + (mode !== "full" ? "?mode=" + mode : "") },
-      templates: { gallery: galleryView, apply: applyTemplate, placeholder: "Search photo templates" },
+      templates: { gallery: galleryView, apply: applyTemplate, applyStyle: (id) => applyTemplateStyle(id), placeholder: "Search photo templates" },
+      // Design panel tabs next to Templates: Layouts (shapes for the whole photo) and Styles (the filter looks)
+      design: { layouts: (box) => designLayouts(box), styles: (box) => designStyles(box) },
       panels,
-      rail: ["templates", "edit", "elements", "text", "background", "tools", "uploads", "brand", "projects", "apps"],
+      rail: ["templates", "edit", "elements", "text", "brand", "uploads", "tools", "background", "projects", "apps"],
       initialPanel: params.get("template") ? "templates" : FIRST_PANEL[mode],
-      insert: {
-        image: (src, name) => insertImage(src, name).catch((e) => toast(e.message || "That picture could not be added.")),
-        text: needPhoto((str, style) => { const big = /^(h1|heading|title)$/.test(style || ""); ui.addFocus = "text"; addOverlay(newOverlay("text", { text: String(str || "Your text"), size: big ? 0.1 : style === "subheading" || style === "h2" ? 0.07 : 0.05, family: loadBrand().fonts?.[big ? "heading" : "body"] || "sans" })); setTool("add"); }),
-        color: (hex) => {
-          const o = selOverlay();
-          if (o?.type === "text") o.color = hex; else if (o?.type === "shape") o.fill = hex;
-          else if (st?.bg.removed) { st.bg.mode = "color"; st.bg.color = hex; }
-          else { toast("Select a text or shape first, or remove the background to colour it."); return; }
-          commit(); renderPanel();
-        },
-        font: (key) => { const o = selOverlay(); if (o?.type !== "text") { toast("Select a text first."); return; } if (FONT_FAMILIES[key]) { o.family = key; commit(); renderPanel(); } },
-      },
+      insert: kitInsert,
       projects: {
         save: async () => { if (!st) throw new Error("Open a photo first."); const pid = await saveNow(); shell.setProjectId?.(pid); const r = await getProject(pid); return { name: r.name, data: r.data, thumb: r.thumb }; },
         open: async (rec) => { if (!(await openProject(rec.id))) throw new Error("That project is not a photo, or it could not be opened."); },
       },
       bottom: { notes: true, outline: null, timer: true, fullscreen: true, help: true, pages: null, zoom: { get: () => ui.zoom, set: setZoom, min: 25, max: 400 } },
       shortcuts: [["Ctrl + Z / Ctrl + Shift + Z", "Undo and redo"], ["Hold \\", "See the original photo"], ["Delete", "Remove the selected text or sticker"], ["Arrow keys", "Move the selected text or sticker"]],
-      onPanel: (id) => { framePanel = id; if (id && id !== "crop" && tool === "crop" && st) setTool(mode === "full" ? "adjust" : mode, { fromFrame: true }); },
+      onPanel: (id) => {
+        framePanel = id;
+        if (id && id !== "crop" && tool === "crop" && st) setTool(mode === "full" ? "adjust" : mode, { fromFrame: true });
+        // the kit keeps Elements / Text drawn between visits: put the photo's own part (#panel) back in its section
+        if ((id === "elements" || id === "text") && kitOwn[id]?.isConnected && !kitOwn[id].contains(panelEl())) attachToolPanel(kitOwn[id], id);
+      },
     });
     document.body.classList.add("has-shell");
     return shell;
@@ -2568,7 +2908,7 @@ window.adApp = {
   enhance: (opts) => { Object.assign(ui.enhance, opts || {}); return runEnhance(); },
   aiEdit: runAiEdit,
   save: () => saveNow(),
-  pixels: (which = "pixels") => { const id = which === "orig" ? "orig" : st?.[which]; const c = id && getPix(id, "full"); return c ? { width: c.width, height: c.height, data: getData(c).data } : null; },
+  pixels: (which = "pixels") => { const id = which === "orig" ? "orig" : st?.[which] ?? (pix.has(which) ? which : null); const c = id && getPix(id, "full"); return c ? { width: c.width, height: c.height, data: getData(c).data } : null; },
   previewCanvas: () => $("#view"),
   applyTemplate, openSample,
   setAdjust: (a) => { st.adjust = { ...st.adjust, ...a }; commit(); renderPanel(); },
@@ -2592,6 +2932,11 @@ window.adApp = {
   get shell() { return shell; },
   get zoom() { return ui.zoom; },
   setZoom,
+  /** the left-rail kit's insert adapter (shared/panels/index.js): image, shape, svg, text, textGroup, frame, drawing… */
+  insert: kitInsert,
+  get selected() { return selId; },
+  /** Design panel: Layouts / Styles tabs and "Apply this template style" */
+  designLayouts, designStyles, applyTemplateStyle,
   ready: null,
 };
 

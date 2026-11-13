@@ -1,6 +1,7 @@
 // Export: one self-contained index.html (images inline as data: URLs), or a .zip with index.html + images/.
 // Pure: the zip function gets fflate's zipSync passed in, so Node tests can run it directly.
 import { renderSite, slugify, pageList, pageFile, normSettings, siteBase } from "./blocks.js";
+import { rememberPhotoData } from "./art.js";
 
 /** Single-file page: inline CSS, images as data: URLs, tiny inline script. Multi-page sites: the page open in the
  *  editor (or `page`); the ZIP has every page. */
@@ -67,6 +68,7 @@ export async function bundlePhotos(site, { fetch: fetchFn = (...args) => globalT
       if (/^https?:/.test(origin)) map.set(u, origin + u);
     }
   }));
+  rememberPhotoData(map); // people photos keep their face crop in the download
   return { site: replacePhotos(site, map), names, missing };
 }
 /** index.html with every photo inside (works offline). */

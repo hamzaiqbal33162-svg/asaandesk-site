@@ -8,6 +8,7 @@
 // Templates with structure (menus, lists, countdowns, tables, carousels…) keep their own layout (photos filled).
 import { textHeight, fitFontSize, textWidth } from "./textlayout.js";
 import { photoPicker, stockImage } from "./templates-photos.js";
+import { personHints, pickerFor } from "./templates-people.js";
 import { walk } from "./model.js";
 import { mix } from "./textfx.js";
 
@@ -343,7 +344,7 @@ export const PATTERNS = {
     L.push(K_poly(k, cx - d * 0.62, cy - d * 0.62, d * 1.24, "none", { stroke: st.acc, sw: Math.max(1.5, S * 0.005), name: "Diamond outline" }));
     L.push(K_poly(k, cx + sgn * d * 0.36 - d * 0.2, cy + d * 0.1, d * 0.4, st.acc, { name: "Diamond" }));
     L.push(k.photo(cx - d / 2, cy - d / 2, d, d, { shape: "diamond", hint: c.hint }));
-    L.push(k.photo(cx - sgn * d * 0.52 - d * 0.19, cy - d * 0.42, d * 0.38, d * 0.38, { shape: "diamond", hint: c.hint + " detail" }));
+    L.push(k.photo(cx - sgn * d * 0.52 - d * 0.19, cy - d * 0.42, d * 0.38, d * 0.38, { shape: "diamond", hint: c.hint2 ?? c.hint + " detail" }));
     const dots = k.sticker("deco-dots", g.X(W - m * 0.5 - S * 0.12, S * 0.12), m * 0.5, S * 0.12, { c1: st.acc, op: 0.5 });
     if (dots) L.push(dots);
     const col = k.column(parts(k, c, { x: box.x, ink, sub, headMax: S * 0.12, bar: true }), box, g.land || g.wide ? "center" : "top");
@@ -508,14 +509,14 @@ export const PATTERNS = {
       const gw = W * 0.56, gx = g.X(W - m * 0.7 - gw, gw), gy = m * 0.7, gh = H - m * 1.4;
       const bw = gw * 0.56;
       L.push(k.photo(g.mir ? gx + gw - bw : gx, gy, bw, gh, { shape: "rounded", radius: r, hint: c.hint }));
-      L.push(k.photo(g.mir ? gx : gx + bw + gap, gy, gw - bw - gap, (gh - gap) / 2, { shape: "rounded", radius: r, hint: c.hint + " detail" }));
-      L.push(k.photo(g.mir ? gx : gx + bw + gap, gy + (gh + gap) / 2, gw - bw - gap, (gh - gap) / 2, { shape: "rounded", radius: r, hint: c.hint + " people" }));
+      L.push(k.photo(g.mir ? gx : gx + bw + gap, gy, gw - bw - gap, (gh - gap) / 2, { shape: "rounded", radius: r, hint: c.hint2 ?? c.hint + " detail" }));
+      L.push(k.photo(g.mir ? gx : gx + bw + gap, gy + (gh + gap) / 2, gw - bw - gap, (gh - gap) / 2, { shape: "rounded", radius: r, hint: c.hint3 ?? c.hint + " people" }));
       box = { x: g.X(m, W - gw - m * 2.4), y: m, w: W - gw - m * 2.4, h: H - 2 * m };
     } else {
       const gh = H * (g.tall ? 0.48 : 0.5), gy = m * 0.7, gw = W - m * 1.4, bw = gw * 0.6;
       L.push(k.photo(g.mir ? m * 0.7 + gw - bw : m * 0.7, gy, bw, gh, { shape: "rounded", radius: r, hint: c.hint }));
-      L.push(k.photo(g.mir ? m * 0.7 : m * 0.7 + bw + gap, gy, gw - bw - gap, (gh - gap) / 2, { shape: "rounded", radius: r, hint: c.hint + " detail" }));
-      L.push(k.photo(g.mir ? m * 0.7 : m * 0.7 + bw + gap, gy + (gh + gap) / 2, gw - bw - gap, (gh - gap) / 2, { shape: "rounded", radius: r, hint: c.hint + " people" }));
+      L.push(k.photo(g.mir ? m * 0.7 : m * 0.7 + bw + gap, gy, gw - bw - gap, (gh - gap) / 2, { shape: "rounded", radius: r, hint: c.hint2 ?? c.hint + " detail" }));
+      L.push(k.photo(g.mir ? m * 0.7 : m * 0.7 + bw + gap, gy + (gh + gap) / 2, gw - bw - gap, (gh - gap) / 2, { shape: "rounded", radius: r, hint: c.hint3 ?? c.hint + " people" }));
       box = { x: m, y: gy + gh + m * 0.75, w: W - 2 * m, h: H - gy - gh - m * 1.6 };
     }
     L.push(...k.column(parts(k, c, { x: box.x, ink, sub: st.sub, headMax: S * 0.12, bar: true, subLines: 2 }), box, g.land || g.wide ? "center" : "top").layers);
@@ -536,12 +537,12 @@ export const PATTERNS = {
     if (g.land || g.wide || W / H > 0.9) {
       const w = H * (g.land || g.wide ? 0.56 : 0.4);
       pol(g.X(W * 0.5, w), H * 0.12, w, g.mir ? 6 : -6, c.hint);
-      pol(g.X(W * 0.5 + w * 0.62, w), H * 0.3, w, g.mir ? -5 : 5, c.hint);
+      pol(g.X(W * 0.5 + w * 0.62, w), H * 0.3, w, g.mir ? -5 : 5, c.hint2 ?? c.hint);
       box = { x: g.X(m, W * 0.46 - m), y: m, w: W * 0.46 - m, h: H - 2 * m };
     } else {
       const w = W * (g.tall ? 0.48 : 0.42);
       pol(g.X(m * 0.9, w), m * 1.1, w, g.mir ? 5 : -5, c.hint);
-      pol(g.X(W - m * 0.9 - w, w), m * 1.1 + w * 0.3, w, g.mir ? -4 : 4, c.hint + " detail");
+      pol(g.X(W - m * 0.9 - w, w), m * 1.1 + w * 0.3, w, g.mir ? -4 : 4, c.hint2 ?? c.hint + " detail");
       const top = m * 1.1 + w * 0.3 + w * 1.2 + m * 0.5;
       box = { x: m, y: top, w: W - 2 * m, h: H - top - m };
     }
@@ -719,6 +720,17 @@ export function redesign(meta, pages, W, H, K, n, preset, b = 0) {
   if (!c || !c.head) return null;
   const topic = `${meta.title} ${meta.tags.join(" ")}`;
   c.hint = meta.title.replace(/\b(post|story|flyer|poster|invitation|thumbnail|cover|banner|pin|status|card|template)\b/gi, " ").trim();
+  // Social posts, stories, covers and thumbnails: where Canva's templates show people, the photos show that kind of
+  // person (templates-people.js; second / third photo: a person or the template's subject). The others show their
+  // subject, also in a photo grid's third cell.
+  // (posters and invitations register their own person spots: templates-faces.js PRO_PRINT_PEOPLE)
+  const pp = personHints(meta.id);
+  if (pp) {
+    const base = c.hint;
+    c.hint = pp.main || base;
+    c.hint2 = "second" in pp ? pp.second || base + " detail" : c.hint;
+    c.hint3 = "third" in pp ? pp.third || base + " scene" : c.hint;
+  } else if (fam === "social") c.hint3 = c.hint + " scene";
   const list = candidates(fam, c);
   const pi = n % list.length, v = Math.floor(n / list.length);
   const pat = list[pi];
@@ -726,7 +738,7 @@ export function redesign(meta, pages, W, H, K, n, preset, b = 0) {
   const S = Math.min(W, H), a = W / H;
   const g = { c, W, H, S, b, st, v, mir: v % 2 === 1, land: a > 1.25 && a <= 2.2, wide: a > 2.2, tall: a < 0.62, m: r1(S * (fam === "invite" ? 0.08 : 0.07)) };
   g.X = (x, w) => (g.mir ? W - x - w : x);
-  g.k = kit(K, W, H, st, photoPicker(topic, meta.id), b);
+  g.k = kit(K, W, H, st, pp ? pickerFor(topic, meta.id) : photoPicker(topic, meta.id), b);
   g.k.boost = fam === "social" && g.land ? 1.3 : g.tall ? 1.18 : 1;
   const out = PATTERNS[pat](g);
   const page = K.page(out.bg, out.layers);

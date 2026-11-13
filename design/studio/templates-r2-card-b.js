@@ -1,8 +1,13 @@
 // ROUND 2 layout batch (filled by a helper; see screens/canva-ref/STUDIO-LAYOUT-BRIEF.md). Pure module, no imports.
 // 20 own business cards (front + back), one per profession, each a different composition.
 // Important text stays 10 px inside the trim; background shapes that touch an edge run 12 px past it (bleed).
+import { castFor, face, KIND } from "./templates-faces.js";
+
 export default function add(k) {
-  const { tpl, T, S, R, C, E, F, page } = k;
+  const { T, S, R, C, E, F, page } = k;
+  // Person spots show people photos of their kind (templates-faces.js): one person picker per template build.
+  let CAST = null;
+  const tpl = (id, title, preset, tags, build) => k.tpl(id, title, preset, tags, (W, H) => { CAST = castFor(id); return build(W, H); });
   const { INK, MUTED, WHITE } = k.K;
   const B = 12; // bleed past the trim for shapes that touch an edge
   const tags = (extra) => "business card visiting card contact " + extra;
@@ -291,7 +296,7 @@ export default function add(k) {
   tpl("makeup-palette-card-bc5", "Blush palette makeup artist business card", "business-card-vertical", tags("makeup artist beauty bridal mua cosmetics blush pink portrait photo vertical"), (W, H) => [
     page("#fbe9e4", [
       C(36, 32, 120, 120, "#f4cfc6", { name: "Photo backdrop" }),
-      F(44, 40, 104, 104, { shape: "circle", name: "Portrait photo" }),
+      face(CAST, F(44, 40, 104, 104, { shape: "circle", name: "Portrait photo" }), KIND.beauty + " portrait", { sex: "f" }),
       E("deco-sparkles", 146, 22, 26, { c1: "#c9a46a", c2: "#c9667a" }),
       T("Bella Moreau", 16, 170, W - 32, { size: 22, family: "serif", italic: true, color: "#5a2a35", align: "center" }),
       T("MAKEUP ARTIST", 16, 200, W - 32, { size: 8.5, bold: true, color: "#b4546a", align: "center", ls: 4 }),
@@ -492,7 +497,7 @@ export default function add(k) {
       page("#fff0f6", [
         R(-B, 20, W + 2 * B, 92, film, { name: "Film strip" }),
         group(6, 26, holes.length ? holes[holes.length - 1].x + 8 : 8, 80, holes, "Sprocket holes"),
-        ...[0, 1, 2].map((i) => F(fx + i * 94, 36, 80, 60, { name: "Booth photo" })),
+        ...[0, 1, 2].map((i) => face(CAST, F(fx + i * 94, 36, 80, 60, { name: "Booth photo" }), ["friends group selfie young", "couple love happy", "family parents mother father"][i], { group: i !== 1 })),
         T("SNAPBOX", 22, 124, 140, { size: 24, bold: true, color: film, ls: 1 }),
         T("Photo Booth Hire", 22, 154, 140, { size: 10, bold: true, color: pink }),
         T("Weddings · Parties · Launches\n+1 555 0115 822\nhello@example.com", W - 22 - 130, 126, 130, { size: 8, color: film, align: "right", lh: 1.5 }),

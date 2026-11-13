@@ -3,7 +3,10 @@
 // with a coloured header row, callout blocks, a story photo for newsletters / guides / brochures, and a footer.
 // gallery.js docLook(id) gives the same look the thumbnail is drawn from, so the card and the document match.
 import { normalizeDoc, cleanRuns } from "./model.js";
-import { photoUrl, photosFor } from "../shared/photo-library.js";
+import { photoUrl, photosFor, pickPerson, isPerson, objectPosition } from "../shared/photo-library.js";
+
+/** Face focus "x,y,width/height" of a people photo for a round portrait band (model.js pfo). */
+const pfoOf = (p) => `${p.fx ?? 0.5},${p.fy ?? 0.3},${(p.w / p.h).toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}`;
 
 const PHOTO = new Set(["shade", "split", "tint", "soft"]);
 // Layouts that read like stories get a second, wide photo inside the document.
@@ -39,12 +42,18 @@ export function proSkin(doc, k) {
     const h = B[hi];
     const photo = PHOTO.has(k.style) && k.photo ? photoUrl(k.photo, "full") : "";
     if (photo) {
-      Object.assign(h, { bg: dark ? P.dark : P.light, bgimg: photo, ov: k.style, pad: 34, minh: Math.max(h.minh || 0, 240) });
+      // People photos stay visible: docked at full height beside the title (or a lighter wash under a centred title),
+      // with the face kept in view.
+      const ov = isPerson(k.photo) ? (k.style === "tint" ? "tintl" : "dock") : k.style;
+      Object.assign(h, { bg: dark ? P.dark : P.light, bgimg: photo, ov, pad: 34, minh: Math.max(h.minh || 0, 240) });
+      if (isPerson(k.photo)) h.bgpos = objectPosition(k.photo);
       delete h.deco; delete h.dc; delete h.dc2;
       h.runs = heroRuns(h.runs, { titleColor: dark ? "#ffffff" : P.ink, otherColor: dark ? P.light : P.dark, kicker: k.kicker, kickerColor: dark ? P.light : P.mid });
     } else if (k.style === "band" || k.style === "avatar" || (!h.bg && k.style !== "plain" && k.style !== "bar")) {
       Object.assign(h, { bg: h.bg && h.bg !== "#ffffff" ? h.bg : P.dark, pad: Math.max(h.pad || 0, 28), minh: Math.max(h.minh || 0, 170) });
       if (!h.deco) { if (k.style === "avatar") Object.assign(h, { deco: "avatar", dc: P.mid, dc2: P.light }); else Object.assign(h, { deco: k.deco || "diamonds", dc: P.light, dc2: P.cream }); }
+      // Résumé / about-me: a round profile photo (a real person, cropped around the face) where the avatar was.
+      if (k.style === "avatar" && k.portrait) { delete h.deco; delete h.dc; delete h.dc2; Object.assign(h, { pimg: photoUrl(k.portrait, "full"), pfo: pfoOf(k.portrait) }); }
       const light = /^#f|^#e/i.test(h.bg);
       h.runs = heroRuns(h.runs, { titleColor: light ? P.ink : "#ffffff", otherColor: light ? P.dark : P.light, kicker: k.style === "avatar" ? "" : k.kicker, kickerColor: light ? P.mid : P.light });
     } else {
@@ -66,8 +75,12 @@ export function proSkin(doc, k) {
     } else if (b.type === "quote" && !b.bg) Object.assign(b, { bg: P.light, rad: 12, pad: 16 });
   }
   // 3. Story layouts: a second, wide photo at the end of the first section (before the second heading).
-  if (STORY.has(k.layout) && k.topic && B.length >= 6) {
-    const p2 = photosFor(k.topic, 2, k.id || k.layout)[1];
+  // A bar header has no photo band: when its card shows a person (press release, feature, team directory), that same
+  // person photo is the document's story photo, so the card and the document match.
+  const barPerson = k.style === "bar" && isPerson(k.photo);
+  if ((STORY.has(k.layout) || barPerson) && k.topic && B.length >= 6) {
+    // people layouts (newsletters, team and welcome docs, impact reports…) show people in the story photo too
+    const p2 = barPerson ? k.photo : k.people ? pickPerson(k.people, `${k.id || k.layout}:story`, { exclude: k.photo ? [k.photo.id] : [], landscape: true }) : photosFor(k.topic, 2, k.id || k.layout)[1];
     const heads = B.map((b, i) => (i > hi + 1 && /^h[23]$/.test(b.type) && B[i - 1].type !== "image" ? i : -1)).filter((i) => i >= 0);
     if (p2 && heads.length) B.splice(heads[0], 0, { type: "image", src: photoUrl(p2, "full"), alt: p2.title || "Photo", w: 600, align: "center" });
   }

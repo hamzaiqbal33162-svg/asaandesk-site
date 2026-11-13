@@ -1,13 +1,17 @@
 // ROUND 2 layout batch (see screens/canva-ref/STUDIO-LAYOUT-BRIEF.md): 20 presentation decks, each its own visual
 // system (grid, type pairing, shape language, palette, image treatment), 10 slides each with speaker notes.
-// Pure module, no imports: templates.js calls the default export with its helpers.
+// Pure module: templates.js calls the default export with its helpers. Team members show people photos of their kind
+// (templates-faces.js: woman or man by the name, doctor / teacher / chef… by the role).
+import { castFor, member, face, KIND } from "./templates-faces.js";
+
 export default function add(k) {
   const { tpl, T, S, R, C, E, F, page } = k;
   const WHITE = "#ffffff";
   /** Stacks layers downwards from y; a number between two items is the gap between them. */
   function flow(y, ...items) { const out = []; for (const it of items) { if (typeof it === "number") { y += it; continue; } if (!it) continue; it.y = y; y += it.h; out.push(it); } return out; }
   const SL = (b, layers, notes) => { const p = page(b, layers.flat(Infinity)); p.notes = notes; return p; };
-  const deck = (slug, title, tags, build) => tpl(slug + "-dk1", title, "presentation-16x9", "presentation slides deck " + tags, build);
+  let CAST = null; // the person picker of the deck being built
+  const deck = (slug, title, tags, build) => tpl(slug + "-dk1", title, "presentation-16x9", "presentation slides deck " + tags, (W, H) => { CAST = castFor(slug + "-dk1"); return build(W, H); });
   const pick = (v, i) => (Array.isArray(v) ? v[i % v.length] : v);
   /** Background texture (grid / ruled lines) is locked so it is not picked up by accident. */
   const lock = (l) => { l.locked = true; return l; };
@@ -112,7 +116,7 @@ export default function add(k) {
         out.push(kind === "rect" ? R(bx, by, d, d, c, bo) : kind === "diamond" ? S("polygon", bx, by, d, d, c, { ...bo, sides: 4 }) : kind === "triangle" ? S("triangle", bx, by, d, d, c, bo) : kind === "blob" ? E("shape-blob", bx - d * 0.08, by - d * 0.08, d * 1.16, { c1: c }) : C(bx, by, d, d, c, bo));
       }
       if (o.ring) out.push(C(fx - rg, y - rg, d + rg * 2, d + rg * 2, "none", { stroke: pick(o.ring, i), sw: o.rw || 4, name: "Ring" }));
-      out.push(F(fx, y, d, d, { shape: "circle", name: "Photo " + name, border: o.border ? { width: o.border.width, color: pick(o.border.color, i) } : undefined }));
+      out.push(member(CAST, F(fx, y, d, d, { shape: "circle", name: "Photo " + name, border: o.border ? { width: o.border.width, color: pick(o.border.color, i) } : undefined }), name, role, { base: o.who }));
       const al = o.align || "center", tx = al === "left" ? fx : x + slot * i + 8, tw = al === "left" ? x + slot * (i + 1) - fx - 16 : slot - 16;
       const top = y + d + (o.gap ?? 28) + (o.ring ? rg : 0);
       out.push(...flow(top,
@@ -758,7 +762,8 @@ export default function add(k) {
     const logo = (x, y, dark) => [R(x, y, 64, 64, BLUE, { radius: 12, name: "Logo mark" }), mid(c("N", x, 0, 64, { size: 40, bold: true, color: WHITE, align: "center" }), y + 32), mid(c("NORTHWIND LOGISTICS", x + 84, 0, 600, { size: 24, bold: true, color: dark ? WHITE : NAVY, ls: 3 }), y + 32)];
     const P = [];
     P.push(SL(WHITE, [
-      R(0, 0, 1100, 1080, NAVY, { name: "Panel" }), F(1100, 0, 820, 1080, { name: "Photo" }),
+      // (a business woman on the right half, like Canva's corporate report covers)
+      R(0, 0, 1100, 1080, NAVY, { name: "Panel" }), face(CAST, F(1100, 0, 820, 1080, { name: "Photo" }), KIND.business, { sex: "f" }),
       logo(120, 120, true),
       flow(360, c("Q3 2026\nQuarterly Report", 120, 0, 900, { size: 100, bold: true, color: WHITE, lh: 1.05 }), 30, c("Results for July to September 2026", 120, 0, 900, { size: 36, color: "#c7dbf7" })),
       R(120, 760, 120, 8, BLUE, { name: "Accent" }),
@@ -1444,7 +1449,7 @@ export default function add(k) {
     P.push(SL(PAPER, [
       sc("Your guides", 160, 100, 1600, { size: 80, color: BLUE }),
       team(160, 330, 1600, [["Isla Moreau", "Hiking guide"], ["Callum Reid", "Kayak instructor"], ["Nina Brandt", "Local food expert"]],
-        { d: 300, ring: RED, rg: 10, rw: 6, border: { width: 8, color: BLUE }, nf: "serif", ni: true, ns: 48, nc: BROWN, rf: "mono", rs: 26, rc: RED, gap: 40 }),
+        { d: 300, ring: RED, rg: 10, rw: 6, border: { width: 8, color: BLUE }, nf: "serif", ni: true, ns: 48, nc: BROWN, rf: "mono", rs: 26, rc: RED, gap: 40, who: KIND.traveller }),
     ], "Introduce the three guides. Isla has walked this coast for fifteen years."));
     P.push(SL(BLUE, [
       R(260, 170, 1400, 740, PAPER, { rot: -2, name: "Postcard" }),
@@ -1705,7 +1710,7 @@ export default function add(k) {
       a("Thank you", 160, 280, 1100, { size: 140, ls: -4 }),
       dim(160, 520, 1000, "HALDEN ARCHITECTS"),
       [["Email", "ingrid@haldenarchitects.com"], ["Phone", "+46 8 555 0193"], ["Project", "haldenarchitects.com/lakeside"]].map(([l1, v1], i) => [m(l1.toUpperCase(), 160, 600 + i * 80, 200, { size: 20, color: BLUE }), m(v1, 380, 596 + i * 80, 800, { size: 28, color: INK })]),
-      F(1340, 300, 420, 480, { name: "Model photo" }), cross(1340, 300, 420, 480, 30),
+      F(1340, 300, 420, 480, { name: "Building mock-up photo" }), cross(1340, 300, 420, 480, 30),
       E("arrow-up", 1540, 860, 30, { c1: INK }), m("N", 1525, 820, 60, { size: 22, bold: true, align: "center", color: INK }),
     ], "Thank the panel. Next step is the planning pre-application meeting in May."));
     return P;

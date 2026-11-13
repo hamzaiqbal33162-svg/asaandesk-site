@@ -6,7 +6,7 @@
 // real text layers, so the layer list, Replace picture, the text panel, the exports and "Open in Studio" all work on it.
 // Thumbnails show the finished design next to its layers pulled apart in 3D (background, pictures, text).
 import { imageLayer, newId, LINE_HEIGHT, baselineOffset } from "./build.js";
-import { PHOTOS, photoUrl } from "../shared/photo-library.js";
+import { PHOTOS, photoUrl, pickPerson, isPerson, coverBox } from "../shared/photo-library.js";
 
 const TOOL = "magic-layers";
 const COUNT = 64; // Canva has no Magic Layers template type: one of each base layout, then more themes/colours (the generator can make many more)
@@ -125,7 +125,38 @@ function choose(words, seed, exclude = []) {
   return list.length ? list[hashStr(String(seed)) % list.length] : null;
 }
 function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-function photosOf(id, theme, n = 4) { const out = []; for (let i = 0; i < n; i++) out.push(choose(PHOTO_WORDS[theme] || "city", `${id}:${i}`, out.map((p) => p?.id))); return out; }
+/* ---------- people (shared people library): who each theme's person is (`person`: the name in its copy, `sex` matches
+   it; `job`: the job on its hiring post), and `scene`: the people its posters and posts show, like Canva's */
+const WHO = {
+  school: { person: "teacher woman school portrait", sex: "f", job: "teacher woman school", scene: "students class teacher school" },
+  shop: { person: "business man smiling portrait", sex: "m", job: "young man smiling portrait" },
+  clinic: { person: "doctor man medical portrait", sex: "m", job: "nurse medical clinic", scene: "doctor nurse medical clinic" },
+  restaurant: { person: "chef cook kitchen", sex: "m", job: "chef cook kitchen" },
+  wedding: { person: "wedding couple bride groom", job: "young woman smiling portrait", scene: "wedding couple bride groom" },
+  fitness: { person: "fitness trainer coach woman", sex: "f", job: "fitness trainer gym", scene: "fitness gym workout trainer" },
+  tech: { person: "business man professional portrait", sex: "m", job: "woman laptop work", scene: "team startup laptop colleagues" },
+  travel: { person: "traveler woman travel", sex: "f", job: "traveler travel adventure" },
+  ngo: { person: "woman smiling portrait", sex: "f", job: "volunteer community team", scene: "team hands together community" },
+  realestate: { person: "realtor agent man", sex: "m", job: "realtor agent real estate" },
+  beauty: { person: "beauty skincare woman", sex: "f", job: "salon hair stylist beauty", scene: "beauty skincare woman" },
+  cafe: { person: "barista man", sex: "m", job: "barista cafe coffee" },
+};
+// Picture slots that always show a person: the business card's portrait, the job ad's new hire, the reviewer's avatar, the
+// webinar speaker, the profile banner's avatar and the video host.
+const PERSON_SLOTS = { card: { 0: "person" }, hiring: { 0: "job" }, testimonial: { 1: "person" }, webinar: { 0: "person" }, linkedin: { 1: "person" }, ytthumb: { 1: "person" } };
+// Layouts whose main photo (slot 0) is a featured photo: themes with a `scene` show their people there (the photo grid in
+// two of its four photos); thin header bands, products and signs keep the theme's photo.
+const SCENE_LAYOUTS = new Set(["poster", "flyer", "quote", "social", "cover", "invite", "savedate", "event", "listing", "tag", "festival", "story", "grid", "countdown", "workshop", "banner", "thankyou", "fundraiser", "ticket", "bookcover", "album"]);
+function photosOf(id, theme, n = 4, layout = "") {
+  const out = [], W = WHO[theme], slots = PERSON_SLOTS[layout] || {};
+  const scene = W?.scene && SCENE_LAYOUTS.has(layout) ? (layout === "grid" ? [0, 3] : [0]) : [];
+  for (let i = 0; i < n; i++) {
+    const ex = out.map((p) => p?.id), seed = `${id}:${i}`;
+    const who = !W ? null : slots[i] === "person" ? [W.person, W.sex] : slots[i] === "job" ? [W.job, null] : scene.includes(i) ? [W.scene, null] : null;
+    out.push(who ? pickPerson(who[0], seed, { exclude: ex, sex: who[1] }) : choose(PHOTO_WORDS[theme] || "city", seed, ex));
+  }
+  return out;
+}
 // the photo in a picture: a token the thumbnail ("thumb" file) and the opened design ("full" file) fill in
 const IMG = (slot, x, y, w, h, ex = "") => `<image href="{IMG${slot}}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"${ex}/>`;
 /** Gradient wash over a photo (stops: [[offset, colour, opacity], …]), vertical or horizontal. */
@@ -397,14 +428,24 @@ function spec(id) {
   if (cacheSpec.has(rid)) return cacheSpec.get(rid);
   const c = parse(rid);
   if (!c) return null;
-  const s = { id: rid, name: nameOf(c.l, c.p, c.t), layout: c.l.id, photos: photosOf(rid, c.t.id), ...c.l.build(c.p, c.t) };
+  const s = { id: rid, name: nameOf(c.l, c.p, c.t), layout: c.l.id, photos: photosOf(rid, c.t.id, 4, c.l.id), ...c.l.build(c.p, c.t) };
   if (cacheSpec.size > 200) cacheSpec.clear();
   cacheSpec.set(rid, s);
   return s;
 }
 const safeId = (id) => id.replace(/[^a-z0-9-]/gi, "-");
-/** Unique ids ({P}) and the real photos ({IMGn}: the small file for thumbnails, the full one for the opened design). */
-const uniq = (body, p, photos = [], size = "full") => body.replace(/\{P\}/g, p).replace(/\{IMG(\d)\}/g, (_, i) => photoUrl(photos[+i] || photos[0], size));
+/** Unique ids ({P}) and the real photos ({IMGn}: the small file for thumbnails, the full one for the opened design).
+ * People photos are cropped around the face (coverBox) instead of from the centre, in thumbnails and opened designs alike. */
+const IMG_RE = /<image href="\{IMG(\d)\}" x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)" preserveAspectRatio="xMidYMid slice"([^>]*?)\/>/g;
+const r1 = (v) => String(Math.round(v * 10) / 10);
+const uniq = (body, p, photos = [], size = "full") => body.replace(/\{P\}/g, p)
+  .replace(IMG_RE, (m, i, x, y, w, h, ex) => {
+    const ph = photos[+i] || photos[0];
+    if (!isPerson(ph) || !(+w > 0 && +h > 0)) return m;
+    const b = coverBox(ph, +w, +h);
+    return `<svg x="${x}" y="${y}" width="${w}" height="${h}" overflow="hidden"><image href="{IMG${i}}" x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" preserveAspectRatio="none"${ex}/></svg>`;
+  })
+  .replace(/\{IMG(\d)\}/g, (_, i) => photoUrl(photos[+i] || photos[0], size));
 /** The SVG (as text) of one picture layer of a sample. */
 export const partSvg = (d, part, i, size = "full") => svgDoc(part.w, part.h, uniq(part.body, `${safeId(d.id)}-${i}-`, d.photos, size));
 

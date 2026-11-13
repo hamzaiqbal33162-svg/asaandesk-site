@@ -9,8 +9,8 @@
 //   "mockup-<layout>…", "print-<layout>…", "resize-|animate-|translate-<layout>…"  same design opened in a tool mode
 // thumb(id) and build(id) make the design from the id on demand (nothing is pre-built for templates not on screen).
 //   TEMPLATES: [{ id, name, tool, section, tags, preset, pages, href, mode? }]
-import { listTemplates, getTemplate, templateThumbSvg, makeDeck, DECK_PARTS, PRO_LOOKS } from "./templates.js";
-import { colorSlots } from "./brandkit.js";
+import { listTemplates, getTemplate, templateThumbSvg, templateSvg, makeDeck, DECK_PARTS, PRO_LOOKS } from "./templates.js";
+import { colorSlots, mainColors } from "./brandkit.js";
 import { walk } from "./model.js";
 import { textHeight, layoutText } from "./textlayout.js";
 import { presetPx } from "./presets.js";
@@ -519,6 +519,29 @@ export function animatedBadge(W, H) {
     `<path d="M${x + s * 0.4} ${y + s * 0.3}L${x + s * 0.72} ${y + s / 2}L${x + s * 0.4} ${y + s * 0.7}Z" fill="#ffffff"/></g>`;
 }
 /** Self-contained SVG string (own artwork, generic fonts, no image files) of a template's first page. */
+// Design panel template detail: page thumbnails and the template's style (read-only, so one built copy is reused).
+let peekCache = { id: null, b: null };
+const peek = (id) => (peekCache.id === id ? peekCache.b : (peekCache = { id, b: build(id) }).b);
+const FAMILY_NAME = { sans: "Sans", serif: "Serif", mono: "Mono", calibri: "Calibri style", cambria: "Cambria style" };
+/** Thumbnail of page i of a template. */
+export function thumbPage(id, i = 0, maxPx = 320) {
+  if (!i) return thumb(id, maxPx);
+  const b = peek(id);
+  if (!b || !b.design.pages[i]) return "";
+  const size = presetPx(b.design.preset), width = size.w >= size.h ? maxPx : (maxPx * size.w) / size.h;
+  return templateSvg({ id: String(id).replace(/[^a-z0-9-]/gi, "-"), design: b.design }, { width: Math.round(width * 100) / 100, pageIndex: i });
+}
+/** A template's style ("Apply this template style"): { name, colors (main colours, most used first), fonts: [heading, body] }. */
+export function styleOf(id) {
+  const b = peek(id);
+  if (!b) return null;
+  const colors = mainColors(b.design).slice(0, 5);
+  const texts = b.design.pages.flatMap((p) => [...walk(p.layers)].map(([l]) => l)).filter((l) => l.type === "text");
+  const big = Math.max(0, ...texts.map((x) => x.text.size));
+  const most = (list) => { const m = new Map(); for (const x of list) m.set(x.text.family, (m.get(x.text.family) || 0) + 1); return [...m.entries()].sort((p, q) => q[1] - p[1])[0]?.[0]; };
+  const heading = most(texts.filter((x) => x.text.size >= big * 0.6)) || "sans", body = most(texts.filter((x) => x.text.size < big * 0.6)) || heading;
+  return { name: b.title || "Template style", colors, fonts: [FAMILY_NAME[heading] || heading, FAMILY_NAME[body] || body], heading, body };
+}
 export function thumb(id, maxPx = 320) {
   const b = build(id);
   if (!b) return "";

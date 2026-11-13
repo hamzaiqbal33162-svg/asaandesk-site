@@ -5,7 +5,7 @@ import { $, $$, esc, toast, downloadBlob } from "../video/ui.js";
 import { aiReady } from "../shared/config.js";
 import { onlineAi, comingSoon } from "../shared/ai.js";
 import { putHandoff, saveProject, listProjects, deleteProject } from "../shared/store.js";
-import { TOOLS, TOOL_IDS, OFFLINE_LINKS, toolFromQuery, validate, buildRequest, resultMedia, fileNameFor, extForMime, promptWarnings, scriptTips, addPhrase } from "./tools.js";
+import { TOOLS, TOOL_IDS, OFFLINE_LINKS, toolFromQuery, validate, buildRequest, resultMedia, fileNameFor, extForMime, promptWarnings, scriptTips, addPhrase, addKitText, DESIGN_KEYS } from "./tools.js";
 /** What a tool makes, in words: "video", "music", "voice", "sound effect". */
 const noun = (t) => (t.kind === "video" ? "video" : t.id === "music" ? "music" : t.id === "sfx" ? "sound effect" : "voice");
 
@@ -392,6 +392,57 @@ function downloadResult() {
   toast(state.ready ? "Generate something first." : `${TOOLS[state.tool].title} is coming soon, so there is no result to download yet.`, 4000);
 }
 const projThumb = () => { const t = gallery?.TEMPLATES.find((x) => x.prompt === prompt.value); return t ? gallery.thumb(t.id) : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"><rect width="320" height="200" rx="14" fill="#5b4cf0"/><text x="20" y="100" font-family="system-ui,Arial" font-size="20" font-weight="700" fill="#fff">${esc(TOOLS[state.tool].title)}</text><text x="20" y="128" font-family="system-ui,Arial" font-size="12" fill="#fff" opacity=".85">${esc(prompt.value.trim().slice(0, 40))}</text></svg>`; };
+// ---------- left-rail kit inserts (shared/panels/index.js) ----------
+// The design here is the prompt: kit text is added to the prompt box (within the tool's length), a picture becomes the
+// optional reference picture where the tool has one (AI video). Nothing is generated or faked by inserting.
+function kitPrompt(specs) {
+  if (prompt.readOnly) throw new Error("Switch to Editing to change the prompt.");
+  const t = TOOLS[state.tool];
+  const next = addKitText(state.tool, prompt.value, specs.map((s) => (typeof s === "string" ? s : s?.uppercase ? String(s?.content ?? "").toUpperCase() : s?.content)));
+  if (next === null) return false;
+  prompt.value = next; state.forms[state.tool][t.field] = next;
+  prompt.dispatchEvent(new Event("input", { bubbles: true }));
+  prompt.focus();
+  return true;
+}
+const kitIns = {
+  text: (spec) => kitPrompt([spec]),
+  textGroup: (specs) => kitPrompt(specs || []),
+  image: (src, name) => {
+    const t = TOOLS[state.tool], ref = (t.extras || []).find((x) => x.type === "image");
+    if (!ref) throw new Error(`${t.title} works from words. A picture can be the reference for the AI video generator.`); // at once, not a rejected promise
+    return kitReference(ref, src, name);
+  },
+};
+// ---------- Design panel: Styles and Layouts tabs = the tool's own pickers (style, genre, voice… / shape, length…) ----------
+function renderDesignPart(el, part) {
+  el.replaceChildren();
+  const t = TOOLS[state.tool], keys = (DESIGN_KEYS[state.tool]?.[part] || []).filter((k) => t.options[k]);
+  if (!keys.length) { el.append(el.ownerDocument.createElement("p")); el.lastChild.className = "am-pnote"; el.lastChild.textContent = part === "layouts" ? `${t.title} has no layouts. Pick its style in Styles.` : `${t.title} has no styles.`; return; }
+  for (const k of keys) {
+    const o = t.options[k], h3 = el.ownerDocument.createElement("h3"); h3.className = "am-ph3"; h3.textContent = o.label; el.append(h3);
+    for (const c of o.choices) {
+      const b = el.ownerDocument.createElement("button"); b.type = "button"; b.className = "am-tool" + (String(state.forms[state.tool][k]) === String(c.value) ? " on" : "");
+      b.dataset.design = `${k}:${c.value}`; b.setAttribute("aria-pressed", String(String(state.forms[state.tool][k]) === String(c.value)));
+      b.append(el.ownerDocument.createElement("b")); b.firstChild.textContent = c.label;
+      b.addEventListener("click", () => { state.forms[state.tool][k] = c.value; renderOptions(); syncPill(); renderDesignPart(el, part); toast(`${o.label}: ${c.label}`); });
+      el.append(b);
+    }
+  }
+}
+
+/** A picture as the tool's optional reference picture (AI video): kept on this device until Generate. */
+async function kitReference(ref, src, name) {
+  const b = src instanceof Blob ? src : await (await fetch(String(src))).blob();
+  if (!/^image\//.test(b.type)) throw new Error("Please pick a picture.");
+  if (b.size > 8 * 1048576) throw new Error("Please pick a picture under 8 MB.");
+  const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error("That picture could not be read.")); r.readAsDataURL(b); });
+  state.forms[state.tool][ref.key] = { name: String(name || "Reference picture").slice(0, 80), dataUrl };
+  renderOptions();
+  toast("Reference picture set. It stays on this device until you generate.");
+  return true;
+}
+
 async function mountAiShell() {
   let mod;
   try { mod = await import("../shared/editor-shell.js"); } catch (e) { console.warn("Editor frame not available", e); return null; }
@@ -414,7 +465,10 @@ async function mountAiShell() {
       aitools: { label: "AI tools", icon: "elements", render: (b) => renderTools(b), refresh: true },
       status: { label: "AI status", icon: "insights", render: (b) => renderStatus(b), refresh: true },
     },
-    rail: ["templates", "aitools", "status", "projects", "apps", "translate"],
+    // Canva's rail (Elements, Text, Tools from the shared kit), then the AI panels
+    rail: ["templates", "elements", "text", "brand", "uploads", "tools", "aitools", "status", "projects", "apps", "translate"],
+    insert: kitIns,
+    design: { styles: (el) => renderDesignPart(el, "styles"), layouts: (el) => renderDesignPart(el, "layouts") }, // Design › Styles / Layouts: the tool's own pickers
     getText: () => prompt.value,
     setText: (str) => { prompt.value = String(str || ""); prompt.dispatchEvent(new Event("input")); },
     projects: {
@@ -451,7 +505,7 @@ const shellReady = mountAiShell().then(async (s) => {
   return s;
 });
 renderCreations().catch(() => {});
-window.adApp = { state, setTool, fillExample, generate, tools: TOOLS, applyTemplate, shellReady, get shell() { return shell; },
+window.adApp = { state, setTool, fillExample, generate, tools: TOOLS, applyTemplate, shellReady, get shell() { return shell; }, insert: kitIns,
   // Round 3 (Canva AI audio / video clip parity): sound effects, prompt helpers + notes, device voice, Your creations.
   notes: () => renderNotes(), say, stopSay, creations: () => listProjects(CAPP), renderCreations,
   addPhrase: (phrase) => { prompt.value = addPhrase(state.tool, prompt.value, phrase); prompt.dispatchEvent(new Event("input")); return prompt.value; } };

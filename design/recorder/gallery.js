@@ -1,14 +1,16 @@
 // Recording layout templates for the online video recorder (pure module: no DOM). Used by the editor's Templates panel
 // and by the intro page. Pictures follow Canva's pattern: a realistic shared screen (slides, dashboard, website, code…
-// with real library photos), the camera bubble with the presenter and its ring colour, a branded background, bold title.
+// with real library photos), the camera bubble with a real presenter photo (shared people library) and its ring colour, a
+// branded background, bold title.
 // GENERATOR: hand-made recording LAYOUTS (what to record, camera bubble size and corner, sound, countdown)
 // x own colour PALETTES (thumbnail colours and the camera bubble ring in the recording)
 // x content THEMES (purpose with its own title and talking points shown while you record).
 // Ids encode the combination: "<layout>~p<NN>~<theme>", e.g. "slides-talk~p07~lesson". A bare layout id
 // ("slides-talk") still works (palette p01, the layout's first theme). Thumbnails are small SVG strings made on demand.
 
-import { kit, rect, circle, pathEl, mix, esc, hash, icon } from "../shared/tpl-kit.js";
+import { kit, rect, circle, pathEl, mix, esc, icon } from "../shared/tpl-kit.js";
 import { photoPool, onBg } from "../video/scenes.js";
+import { cast, faceBox } from "../video/people.js";
 
 const GROUP = { both: "Screen and camera", camera: "Camera", screen: "Screen", audio: "Sound only" };
 
@@ -142,7 +144,7 @@ export function setupOf(id) {
 }
 
 // ---------- Pictures: a finished recording frame in Canva's pattern (branded background, a realistic screen with real
-// library photos, the camera bubble with its ring colour, bold title, REC chip). thumb = 320 x 200 card (small photos);
+// library photos, the camera bubble with a real presenter photo and its ring colour, bold title, REC chip). thumb = 320 x 200 card (small photos);
 // preview = the same picture with full-size photos, shown on the recorder's stage when the template is opened.
 const n1 = (v) => Math.round(v * 10) / 10;
 const CORNER = { bl: [0.09, 0.82], br: [0.91, 0.82], tl: [0.09, 0.2], tr: [0.91, 0.2] };
@@ -159,29 +161,24 @@ const TOPIC = { lesson: "education classroom", "product-demo": "tech workspace",
   recipe: "food restaurant kitchen", "fitness-class": "fitness sport", "coding-walkthrough": "tech workspace keyboard", "homework-help": "education books", "real-estate-tour": "interior architecture",
   "travel-vlog": "travel mountains", "podcast-episode": "abstract celebration lights", "customer-onboarding": "workspace meeting office", "book-review": "education books library",
   "music-practice": "celebration abstract lights", "game-review": "tech city night", "movie-review": "city night", "job-application": "meeting office", "thank-you": "celebration flowers", "daily-journal": "nature sky" };
-const SKIN = ["#f1c7a5", "#d9a37e", "#b97d57", "#8d5a3b"], HAIR = ["#2b1d16", "#4a3426", "#151515", "#6b4a2e"];
 const deep = (c, t = 0.55) => mix(c, "#0b1020", t);
-/** A presenter in a round (or rounded) camera frame: real photo of a room behind an illustrated person, ring colour. */
-function bubble(k, cx, cy, r, { room, ring, shirt, seed, size, square = false, label = "", bare = null }) {
-  const h = hash(seed), skin = SKIN[h % 4], hair = HAIR[(h >>> 3) % 4], style = (h >>> 6) % 3;
-  const clip = square ? rect(cx - r, cy - r, r * 2, r * 2, "#000", r * 0.28) : circle(cx, cy, r, "#000");
-  // bare = [x, y, w, h]: the presenter fills a camera frame (camera-only layouts) instead of sitting in a bubble
-  let s = bare ? `<g${k.clipRect(...bare, 10)}>` : circle(cx, cy + r * 0.06, r * 1.04, "#000000", ' opacity=".25"' + k.blur(r * 0.08)) + `<g${k.clip(clip)}>` + k.photo(room, cx - r, cy - r, r * 2, r * 2, { size }) + rect(cx - r, cy - r, r * 2, r * 2, k.lin([["#0b1020", 0.05], ["#0b1020", 0.45]], 90));
-  const hx = cx, hy = cy - r * 0.08, hr = r * 0.3;
-  s += pathEl(`M${n1(cx - r * 0.78)} ${n1(cy + r * 1.05)}C${n1(cx - r * 0.74)} ${n1(cy + r * 0.38)} ${n1(cx - r * 0.42)} ${n1(cy + r * 0.3)} ${n1(cx)} ${n1(cy + r * 0.3)}C${n1(cx + r * 0.42)} ${n1(cy + r * 0.3)} ${n1(cx + r * 0.74)} ${n1(cy + r * 0.38)} ${n1(cx + r * 0.78)} ${n1(cy + r * 1.05)}Z`, k.lin([shirt, deep(shirt, 0.35)], 90));
-  s += rect(hx - hr * 0.32, hy + hr * 0.7, hr * 0.64, hr * 0.7, deep(skin, 0.12), hr * 0.2);
-  if (style === 1) s += pathEl(`M${n1(hx - hr * 1.12)} ${n1(hy + hr * 1.5)}C${n1(hx - hr * 1.3)} ${n1(hy - hr * 0.6)} ${n1(hx - hr * 0.7)} ${n1(hy - hr * 1.25)} ${n1(hx)} ${n1(hy - hr * 1.25)}C${n1(hx + hr * 0.7)} ${n1(hy - hr * 1.25)} ${n1(hx + hr * 1.3)} ${n1(hy - hr * 0.6)} ${n1(hx + hr * 1.12)} ${n1(hy + hr * 1.5)}Z`, hair);
-  if (style === 2) s += pathEl(`M${n1(hx - hr * 1.25)} ${n1(hy + hr * 1.9)}C${n1(hx - hr * 1.45)} ${n1(hy - hr * 0.9)} ${n1(hx - hr * 0.6)} ${n1(hy - hr * 1.35)} ${n1(hx)} ${n1(hy - hr * 1.35)}C${n1(hx + hr * 0.6)} ${n1(hy - hr * 1.35)} ${n1(hx + hr * 1.45)} ${n1(hy - hr * 0.9)} ${n1(hx + hr * 1.25)} ${n1(hy + hr * 1.9)}Z`, deep(shirt, 0.15));
-  s += `<ellipse cx="${n1(hx)}" cy="${n1(hy)}" rx="${n1(hr * 0.86)}" ry="${n1(hr)}" fill="${k.lin([mix(skin, "#ffffff", 0.12), deep(skin, 0.1)], 90)}"/>`;
-  if (style === 0) s += pathEl(`M${n1(hx - hr * 0.9)} ${n1(hy - hr * 0.1)}C${n1(hx - hr * 0.95)} ${n1(hy - hr * 1.15)} ${n1(hx + hr * 0.95)} ${n1(hy - hr * 1.2)} ${n1(hx + hr * 0.9)} ${n1(hy - hr * 0.15)}C${n1(hx + hr * 0.5)} ${n1(hy - hr * 0.62)} ${n1(hx - hr * 0.4)} ${n1(hy - hr * 0.62)} ${n1(hx - hr * 0.9)} ${n1(hy - hr * 0.1)}Z`, hair);
-  if (style === 1) s += pathEl(`M${n1(hx - hr * 0.88)} ${n1(hy)}C${n1(hx - hr * 0.9)} ${n1(hy - hr * 1.1)} ${n1(hx + hr * 0.9)} ${n1(hy - hr * 1.15)} ${n1(hx + hr * 0.88)} ${n1(hy)}C${n1(hx + hr * 0.4)} ${n1(hy - hr * 0.7)} ${n1(hx - hr * 0.2)} ${n1(hy - hr * 0.45)} ${n1(hx - hr * 0.88)} ${n1(hy)}Z`, hair);
-  if (style === 2) s += pathEl(`M${n1(hx - hr * 0.9)} ${n1(hy + hr * 0.2)}C${n1(hx - hr * 0.95)} ${n1(hy - hr * 1.2)} ${n1(hx + hr * 0.95)} ${n1(hy - hr * 1.2)} ${n1(hx + hr * 0.9)} ${n1(hy + hr * 0.2)}C${n1(hx + hr * 0.8)} ${n1(hy - hr * 0.55)} ${n1(hx - hr * 0.8)} ${n1(hy - hr * 0.55)} ${n1(hx - hr * 0.9)} ${n1(hy + hr * 0.2)}Z`, deep(shirt, 0.15));
-  s += circle(hx - hr * 0.3, hy + hr * 0.05, hr * 0.07, "#1f1713") + circle(hx + hr * 0.3, hy + hr * 0.05, hr * 0.07, "#1f1713") + pathEl(`M${n1(hx - hr * 0.25)} ${n1(hy + hr * 0.42)}Q${n1(hx)} ${n1(hy + hr * 0.62)} ${n1(hx + hr * 0.25)} ${n1(hy + hr * 0.42)}`, "none", ` stroke="#7a3b2e" stroke-width="${n1(hr * 0.08)}" stroke-linecap="round"`);
-  if (bare) return s + `</g>`;
-  s += `</g>` + (square ? rect(cx - r, cy - r, r * 2, r * 2, "none", r * 0.28, ` stroke="${ring}" stroke-width="${n1(Math.max(2, r * 0.09))}"`) : circle(cx, cy, r, "none", ` stroke="${ring}" stroke-width="${n1(Math.max(2, r * 0.09))}"`));
+// The presenter (a real people photo from the shared library, video/people.js kinds) per content theme; DUO = the two people of
+// the two-person chat. Women and men in turn across the templates (cast() with the template id as seed).
+const PRESENTER = { lesson: "teacher", "product-demo": "business", "sales-pitch": "business", "team-update": "business", "support-reply": "business", recipe: "chef",
+  "fitness-class": "trainer", "coding-walkthrough": "developer", "homework-help": "teacher", "real-estate-tour": "realtor", "travel-vlog": "traveller", "podcast-episode": "host",
+  "customer-onboarding": "business", "book-review": "reader", "music-practice": "musician", "game-review": "gamer", "movie-review": "creator", "job-application": "headshot",
+  "thank-you": "customer", "daily-journal": "creator" };
+const DUO = { "game-review": "gamers", lesson: "tutoring", "homework-help": "tutoring" };
+/** A presenter in a round (or rounded) camera bubble: a real people photo cropped around the face (zoomed in a little), ring colour. */
+function bubble(k, cx, cy, r, { who, ring, size, square = false, label = "" }) {
+  const clip = square ? rect(cx - r, cy - r, r * 2, r * 2, "#000", r * 0.28) : circle(cx, cy, r, "#000"), z = r * 1.25;
+  let s = circle(cx, cy + r * 0.06, r * 1.04, "#000000", ' opacity=".25"' + k.blur(r * 0.08)) + k.photo(who, cx - z, cy - z, z * 2, z * 2, { size, clip });
+  s += square ? rect(cx - r, cy - r, r * 2, r * 2, "none", r * 0.28, ` stroke="${ring}" stroke-width="${n1(Math.max(2, r * 0.09))}"`) : circle(cx, cy, r, "none", ` stroke="${ring}" stroke-width="${n1(Math.max(2, r * 0.09))}"`);
   if (label) s += k.pill(cx, cy + r * 0.78, label, { size: Math.max(5.5, r * 0.16), fill: "#ffffff", color: "#111827", anchor: "middle" }).svg;
   return s;
 }
+/** A people photo filling a camera frame (x, y, w, h) with the face at (tx, ty): talking-head layouts. */
+const framed = (k, p, x, y, w, h, size, tx = 0.5, ty = 0.42) => { const b = faceBox(p, x, y, w, h, tx, ty); return k.photo(p, b.x, b.y, b.w, b.h, { size, clip: rect(x, y, w, h, "#000") }); };
 const T_ = (x, y, str, size, fill, o = "") => `<text x="${n1(x)}" y="${n1(y)}" font-family="${o.includes("mono") ? "'Courier New',monospace" : "Arial,Helvetica,sans-serif"}" font-size="${n1(size)}" font-weight="${o.includes("w4") ? 400 : 800}" fill="${fill}"${o.includes("mid") ? ' text-anchor="middle"' : o.includes("end") ? ' text-anchor="end"' : ""}>${esc(str)}</text>`;
 const lines = (x, y, w, n, c, gap = 7, h = 3) => Array.from({ length: n }, (_, i) => rect(x, y + i * gap, w * (i % 3 === 2 ? 0.62 : i % 2 ? 0.86 : 1), h, c, h / 2)).join("");
 /** The screen being shared (x, y, w, h), drawn as a real app window with photos and words of the theme. */
@@ -236,7 +233,8 @@ function screen(k, kind, x, y, w, h, o) {
       + k.photo(p(0), X + W * 0.04, Y + H * 0.06, W * 0.34, H * 0.36, { size, rx: 5 }) + T_(X + W * 0.06, Y + H * 0.36, title, m * 0.055, "#ffffff");
   } else if (kind === "chat") {
     s += rect(X, Y, W, H, dark ? "#0f172a" : "#f8fafc") + rect(X, Y, W * 0.3, H, dark ? "#111827" : "#ffffff");
-    [0, 1, 2].forEach((i) => { s += k.photo(p(i), X + W * 0.03, Y + H * (0.08 + i * 0.22), m * 0.14, m * 0.14, { size, clip: circle(X + W * 0.03 + m * 0.07, Y + H * (0.08 + i * 0.22) + m * 0.07, m * 0.07, "#000") }) + rect(X + W * 0.03 + m * 0.18, Y + H * (0.12 + i * 0.22), W * 0.12, H * 0.035, soft, 2); });
+    // the conversations list: each customer's round profile photo (people photos, o.chat)
+    [0, 1, 2].forEach((i) => { s += k.photo(o.chat?.[i] || p(i), X + W * 0.03, Y + H * (0.08 + i * 0.22), m * 0.14, m * 0.14, { size, clip: circle(X + W * 0.03 + m * 0.07, Y + H * (0.08 + i * 0.22) + m * 0.07, m * 0.07, "#000") }) + rect(X + W * 0.03 + m * 0.18, Y + H * (0.12 + i * 0.22), W * 0.12, H * 0.035, soft, 2); });
     [["Hi! My order has not arrived.", 0], ["Sorry about that. Let me check.", 1], ["It ships today, here is the link.", 1]].forEach(([t, me], i) => { const bw = W * 0.5, bx = me ? X + W * 0.46 : X + W * 0.34; s += rect(bx, Y + H * (0.1 + i * 0.27), bw, H * 0.17, me ? a : dark ? "#1f2937" : "#e5e7eb", H * 0.07) + T_(bx + W * 0.025, Y + H * (0.21 + i * 0.27), t, Math.min(m * 0.05, bw / (t.length * 0.55)), me ? "#ffffff" : ink, "w4"); });
   } else if (kind === "doc") {
     s += rect(X, Y, W, H, dark ? "#1f2937" : "#e5e7eb") + rect(X + W * 0.18, Y + H * 0.05, W * 0.64, H * 1.2, "#ffffff", 2, k.shadow(2, 6, 0.2));
@@ -252,12 +250,14 @@ function screen(k, kind, x, y, w, h, o) {
   return s + `</g>`;
 }
 function micArt(k, kind, x, y, w, h, o) {
-  const { a, b, title, ph, size } = o, m = Math.min(w, h);
+  const { a, b, title, ph, size, cover } = o, m = Math.min(w, h);
   let s = rect(x, y, w, h, "#ffffff", 10, ' fill-opacity=".1" stroke="#ffffff" stroke-opacity=".35"');
   const cw = Math.min(h * 0.86, w * 0.42), cx = x + w * 0.05, cy = y + (h - cw) / 2;
-  s += rect(cx, cy, cw, cw, "#000000", 8, k.shadow(4, 10, 0.4)) + k.photo(ph[0], cx, cy, cw, cw, { size, rx: 8 }) + rect(cx, cy, cw, cw, k.lin([[a, 0.15], [deep(a, 0.4), 0.85]], 90), 8);
+  // the show's cover: the host(s) for podcasts, radio and webinars (o.cover, a people photo), the theme's photo otherwise
+  s += rect(cx, cy, cw, cw, "#000000", 8, k.shadow(4, 10, 0.4)) + (cover ? `<g${k.clipRect(cx, cy, cw, cw, 8)}>${framed(k, cover, cx, cy, cw, cw, size, 0.5, 0.36)}</g>` : k.photo(ph[0], cx, cy, cw, cw, { size, rx: 8 })) + rect(cx, cy, cw, cw, k.lin([[a, 0.15], [deep(a, 0.4), 0.85]], 90), 8);
   s += T_(cx + cw * 0.08, cy + cw * 0.2, kind === "book" ? "AUDIOBOOK" : kind === "radio" ? "ON AIR" : "PODCAST", cw * 0.08, b) + T_(cx + cw * 0.08, cy + cw * 0.86, "EP. 12", cw * 0.11, "#ffffff");
-  if (kind === "duomic") [0, 1].forEach((i) => { s += icon("mic", cx + cw * (0.22 + i * 0.32), cy + cw * 0.34, cw * 0.26, "#ffffff", 2.4); });
+  if (cover) s += circle(cx + cw * 0.84, cy + cw * 0.84, cw * 0.12, a) + icon(kind === "radio" ? "music" : "mic", cx + cw * 0.84 - cw * 0.08, cy + cw * 0.84 - cw * 0.08, cw * 0.16, "#ffffff", 2.4); // small badge, the faces stay clear
+  else if (kind === "duomic") [0, 1].forEach((i) => { s += icon("mic", cx + cw * (0.22 + i * 0.32), cy + cw * 0.34, cw * 0.26, "#ffffff", 2.4); });
   else s += icon(kind === "book" ? "quote" : kind === "radio" ? "music" : "mic", cx + cw * 0.3, cy + cw * 0.3, cw * 0.4, "#ffffff", 2.4);
   const tx = cx + cw + w * 0.05, tw = x + w - tx - w * 0.04;
   s += T_(tx, y + h * 0.3, title, Math.min(h * 0.13, tw / Math.max(5, title.length * 0.6)), "#ffffff") + k.wave(tx, y + h * 0.44, tw, h * 0.26, "#ffffff", { bars: 34, played: 0.45, playedFill: b }) + rect(tx, y + h * 0.8, tw, 3, "#ffffff", 1.5, ' opacity=".3"') + rect(tx, y + h * 0.8, tw * 0.45, 3, b, 1.5) + T_(tx, y + h * 0.93, "12:48", m * 0.07, "#ffffff", "w4") + T_(tx + tw, y + h * 0.93, "28:10", m * 0.07, "#ffffff", "w4end");
@@ -269,29 +269,37 @@ function art(id, size, salt) {
   const [lid, lname, st] = c.layout, [, , a, b, dk] = c.palette, [tid, , title, points] = c.theme;
   const k = kit(`${c.layout[0]}~${c.pi}~${tid}`, salt), ph = photoPool(TOPIC[tid] || "workspace office", 4, id), room = photoPool("interior workspace office home", 3, id + "r");
   const kind = ART[lid] || (st.mode === "camera" ? "talk" : st.mode === "audio" ? "mic" : "web"), base = dk ? deep(a, 0.78) : deep(a, 0.55);
+  // the people in this picture: the presenter (camera bubble or frame; a woman when the name tag says "Sara"), the two people of a
+  // two-person chat, the customers in a chat list, the hosts on a podcast / radio / webinar cover
+  const host = PRESENTER[tid] || "business", COVER = { "podcast-audio": "me", "radio-show": "me", "webinar-audio": "me", "two-mic-podcast": "duo" }, spots = [];
+  if (st.mode === "both" || (st.mode === "camera" && kind !== "duo") || COVER[lid] === "me") spots.push(["me", kind === "intro" ? host + ":f" : host]);
+  if (kind === "duo" || COVER[lid] === "duo") spots.push(["duo", DUO[tid] || "podcast"]);
+  if (kind === "chat") spots.push(["c0", "customer"], ["c1", "customer"], ["c2", "customer"]);
+  const who = cast(spots, id);
   let s = rect(0, 0, 320, 200, k.lin([base, deep(b, 0.5)], 35)) + circle(300, 10, 90, a, ' opacity=".35"' + k.blur(18)) + circle(20, 200, 70, b, ' opacity=".28"' + k.blur(16)) + rect(250, 150, 60, 44, k.dots("#ffffff", 8, 0.9, 0.3));
   const rec = rect(258, 10, 52, 16, "#0b0d14", 8, ' fill-opacity=".55"') + circle(267, 18, 3.5, "#ef4444") + T_(274, 21.5, "REC 0:12", 7.5, "#ffffff");
   const tsize = Math.min(19, 220 / Math.max(6, title.length * 0.62));
   const head = T_(16, 26, title, tsize, "#ffffff") + T_(16, 37, lname.toUpperCase(), 6.5, mix(b, "#ffffff", 0.4));
-  if (st.mode === "audio") return k.svg(320, 200, s + head + micArt(k, kind, 16, 50, 288, 136, { a, b, title: points[0], ph, size }) + rec);
+  if (st.mode === "audio") return k.svg(320, 200, s + head + micArt(k, kind, 16, 50, 288, 136, { a, b, title: points[0], ph, size, cover: who[COVER[lid]] }) + rec);
   if (st.mode === "camera") {
     const fx = 16, fy = 46, fw = 288, fh = 142;
-    s += rect(fx, fy, fw, fh, "#000000", 10, k.shadow(5, 14, 0.4)) + `<g${k.clipRect(fx, fy, fw, fh, 10)}>` + k.photo(room[0], fx, fy, fw, fh, { size }) + rect(fx, fy, fw, fh, k.lin([["#0b1020", 0.1], ["#0b1020", 0.5]], 90));
-    const fr = [fx, fy, fw, fh];
-    if (kind === "duo") s += bubble(k, fx + fw * 0.32, fy + fh * 0.58, 62, { ring: a, shirt: a, seed: id + "1", size, bare: fr }) + bubble(k, fx + fw * 0.68, fy + fh * 0.6, 60, { ring: b, shirt: b, seed: id + "2", size, bare: fr });
-    else if (kind !== "room") s += bubble(k, fx + fw * (kind === "notes" || kind === "question" ? 0.3 : 0.5), fy + fh * 0.6, 74, { ring: a, shirt: a, seed: id, size, bare: fr });
+    // the camera frame: the presenter (or the two people) filling it, cropped around the face; left of the notes / question card
+    s += rect(fx, fy, fw, fh, "#000000", 10, k.shadow(5, 14, 0.4)) + `<g${k.clipRect(fx, fy, fw, fh, 10)}>`;
+    if (kind === "room") s += k.photo(room[2], fx, fy, fw, fh, { size, opacity: 1 });
+    else s += framed(k, who[kind === "duo" ? "duo" : "me"], fx, fy, fw, fh, size, kind === "notes" || kind === "question" ? 0.28 : 0.5, 0.4);
+    s += rect(fx, fy, fw, fh, k.lin([["#0b1020", 0.05], ["#0b1020", 0.5]], 90));
     if (kind === "notes") s += rect(fx + fw * 0.56, fy + fh * 0.12, fw * 0.4, fh * 0.76, "#0b1020", 8, ' fill-opacity=".72"') + T_(fx + fw * 0.6, fy + fh * 0.26, "TELEPROMPTER", 6.5, b) + points.map((pt, i) => T_(fx + fw * 0.6, fy + fh * (0.42 + i * 0.16), pt.length > 24 ? pt.slice(0, 23) + "…" : pt, 7.6, i ? "#cbd5e1" : "#ffffff", i ? "w4" : "")).join("");
     if (kind === "question") s += rect(fx + fw * 0.58, fy + fh * 0.18, fw * 0.36, fh * 0.42, "#ffffff", 8, k.shadow(3, 8, 0.3)) + T_(fx + fw * 0.76, fy + fh * 0.36, "Question 1", 8, a, "mid") + T_(fx + fw * 0.76, fy + fh * 0.5, "Tell us about you", 7.5, "#111827", "mid");
-    if (kind === "room") s += k.photo(room[2], fx, fy, fw, fh, { size, opacity: 1 }) + rect(fx, fy, fw, fh, k.lin([["#0b1020", 0.05], ["#0b1020", 0.5]], 90)) + bubble(k, fx + fw * 0.86, fy + fh * 0.72, 26, { room: room[1], ring: a, shirt: a, seed: id, size });
+    if (kind === "room") s += bubble(k, fx + fw * 0.86, fy + fh * 0.72, 26, { who: who.me, ring: a, size });
     const name = kind === "intro" ? "Hi, I'm Sara · Designer" : points[0];
     s += rect(fx + 12, fy + fh - 34, Math.min(200, 14 + name.length * 4.9), 14, "#ffffff", 3) + T_(fx + 18, fy + fh - 24, name, 8, "#111827") + rect(fx + 12, fy + fh - 19, 80, 10, a, 2) + T_(fx + 16, fy + fh - 11.5, lname, 6.5, onBg(a)) + `</g>`;
     return k.svg(320, 200, s + head + rec);
   }
   const sx = 16, sy = 46, sw = 288, sh = 142;
-  s += screen(k, kind, sx, sy, sw, sh, { a, b, title, points, ph, size, dark: !!dk });
+  s += screen(k, kind, sx, sy, sw, sh, { a, b, title, points, ph, size, dark: !!dk, chat: [who.c0, who.c1, who.c2] });
   if (st.mode === "both") {
     const r = BUBBLE[st.bubbleSize] || BUBBLE.M, [fx, fy] = CORNER[st.bubblePos] || CORNER.bl, cx = sx + sw * fx + (fx < 0.5 ? r * 0.2 : -r * 0.2), cy = sy + sh * fy + (fy < 0.5 ? r * 0.25 : -r * 0.1);
-    s += bubble(k, Math.max(r + 4, Math.min(316 - r, cx)), Math.max(r + 4, Math.min(196 - r, cy)), r, { room: room[0], ring: a, shirt: b, seed: id, size });
+    s += bubble(k, Math.max(r + 4, Math.min(316 - r, cx)), Math.max(r + 4, Math.min(196 - r, cy)), r, { who: who.me, ring: a, size });
   }
   return k.svg(320, 200, s + head + rec);
 }

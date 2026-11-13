@@ -199,7 +199,7 @@ function drawImageLayer(ctx, l, env) {
 function drawFrame(ctx, l, env) {
   const f = l.frame;
   ctx.save();
-  const path = P2D(framePath(f.shape, l.w, l.h, f.radius));
+  const path = P2D(framePath(f.shape, l.w, l.h, f.radius, f));
   ctx.clip(path);
   const img = f.image?.src ? env.images?.get(f.image.src) : null;
   if (img) drawCropped(ctx, img, f.image.crop, l.w, l.h);

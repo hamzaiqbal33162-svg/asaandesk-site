@@ -4,8 +4,8 @@
 // SVG "look" (watercolour, pencil, clay, anime, flat poster, duotone, truck art…) inside a layout (prompt card, poster,
 // framed print, phone story, sketchbook, before/after…), with the prompt and style shown. They are style examples made
 // from stock photos, never pictures made by AsaanDesk AI. design(id, "full") draws the same design with full-size photos.
-import { kit, PAL, fit, text, headline, rect, circle, pathEl, line, icon, isDark, mix as mix6, hash, pickPhoto } from "../shared/tpl-kit.js";
-import { PHOTOS } from "../shared/photo-library.js";
+import { kit, PAL, fit, text, headline, rect, circle, pathEl, line, icon, isDark, mix as mix6, hash, pickPhoto, pickPerson } from "../shared/tpl-kit.js";
+import { PHOTOS, isPerson } from "../shared/photo-library.js";
 import { styleById } from "./gen.js";
 import { look } from "./looks.js";
 
@@ -19,13 +19,13 @@ const LIST = [
   P("social-story", "Story background", "ai-image-generator", "For social media", "minimal", "9:16", "Soft pastel flowers and gentle gradients, plenty of empty space for text", ["story", "background", "social"], ["cosmos-flowers", "lavender-field"], "New Season", "pink flowers pastel"),
   P("blog-header", "Blog header", "ai-image-generator", "For social media", "minimal", "16:9", "A desk with a laptop and a latte in soft light, simple two-colour illustration", ["blog", "header", "work"], ["latte-white-desk", "ballpoint-pen-notebook"], "Plan A Calmer Week", "latte desk laptop workspace"),
   P("app-icon", "3D icon", "ai-image-generator", "For social media", "3d", "1:1", "A cute 3D globe icon with rounded shapes, studio light, plain background", ["icon", "3d", "app"], ["blue-marble-earth"], "Globe", "globe earth planet"),
-  P("portrait-anime", "Anime avatar", "ai-image-generator", "People and characters", "anime", "1:1", "A cheerful latte with heart art as a cafe profile picture, anime style, bright colours", ["avatar", "profile", "anime", "cafe"], ["latte-heart", "espresso-cup-top-view"], "Morning Bean", "latte heart art"),
+  { ...P("portrait-anime", "Anime avatar", "ai-image-generator", "People and characters", "anime", "1:1", "A cheerful young barista smiling at the camera as a cafe profile picture, anime style, bright colours", ["avatar", "profile", "anime", "cafe"], ["latte-heart", "espresso-cup-top-view"], "Morning Bean", "latte heart art"), person: "barista woman smiling" },
   P("kids-book", "Storybook scene", "ai-image-generator", "People and characters", "watercolour", "3:2", "A big tree on a hill at sunset with birds flying home, storybook illustration", ["kids", "story", "book"], ["sunset-tree-silhouette"], "The Sunset Tree", "sunset tree silhouette"),
   P("truck-peacock", "Truck art kingfisher", "ai-art-generator", "Folk and pattern art", "truck-art", "4:5", "A bright blue kingfisher on a branch, framed by painted flowers and bold borders", ["truck art", "bird", "folk"], ["kingfisher-bird"], "Bright Wings", "kingfisher bird"),
   P("truck-rickshaw", "Painted steam train", "ai-art-generator", "Folk and pattern art", "truck-art", "16:9", "A steam train crossing a stone bridge, covered in painted flowers, mirror dots and bold borders", ["train", "travel", "colour"], ["steam-train-bridge"], "Happy Journey", "train steam railway"),
   P("watercolour-city", "Watercolour city", "ai-art-generator", "Paintings", "watercolour", "3:2", "A grand old mosque with domes and minarets, in soft watercolour washes", ["city", "painting", "architecture"], ["badshahi-mosque-night"], "Old City", "mosque lahore"),
   P("watercolour-flowers", "Flower painting", "ai-art-generator", "Paintings", "watercolour", "4:5", "A loose bunch of pink and white cosmos flowers, watercolour on paper", ["flowers", "painting", "gift"], ["cosmos-flowers", "orange-gazania-flower"], "Spring Bloom", "cosmos pink flowers bouquet"),
-  P("pencil-portrait", "Pencil sketch", "ai-art-generator", "Sketches", "pencil", "4:5", "A pair of elegant evening heels, detailed fashion pencil sketch", ["sketch", "fashion", "drawing"], ["black-evening-heels", "brown-horse-meadow"], "Evening Edit", "heels evening shoes"),
+  { ...P("pencil-portrait", "Pencil sketch", "ai-art-generator", "Sketches", "pencil", "4:5", "A fashion model in an elegant evening outfit, detailed fashion pencil sketch", ["sketch", "fashion", "drawing", "portrait"], ["black-evening-heels", "brown-horse-meadow"], "Evening Edit", "heels evening shoes"), person: "fashion model woman outfit style" },
   P("pencil-building", "Building sketch", "ai-art-generator", "Sketches", "pencil", "3:2", "A modern office tower with rows of glass windows, architectural pencil drawing", ["architecture", "sketch", "office"], ["modern-office-building", "chain-bridge-night"], "Tower Study", "building modern architecture office"),
   P("minimal-poster", "Minimal poster", "ai-art-generator", "Modern art", "minimal", "4:5", "The sun rising over calm water, minimal poster with two colours", ["poster", "minimal", "wall art"], ["sunrise-over-sea"], "First Light", "sunrise sun sea"),
   P("clay-animals", "Clay animals", "ai-art-generator", "Modern art", "3d", "1:1", "A cute clay cat sitting in green grass, soft 3D clay look", ["3d", "cute", "kids"], ["tabby-white-cat"], "Clay Pals", "cat kitten"),
@@ -125,6 +125,8 @@ export function photosWanting(want) {
   return best;
 }
 const photoOf = (x, i = 0) => {
+  // presets that describe a person (avatar, portrait) show a people photo of that kind (cropped around the face)
+  if (x.person) { const first = pickPerson(x.person, x.id); return i ? pickPerson(x.person, `${x.id}:${i}`, { exclude: [first.id] }) : first; }
   const best = photosWanting(x.want), have = best.length ? best : (x.ph || []).map((id) => PBY.get(id)).filter(Boolean);
   return have.length ? have[(hash(x.id) + i) % have.length] : pickPhoto(x.tags.join(" "), x.id + ":" + i);
 };
@@ -144,8 +146,8 @@ function ctxOf(x, size) {
   const st = styleById(x.style)?.name || "Photo";
   return { k, x, lk, comp, pal, size, fx, ph: photoOf(x), ph2: photoOf(x, 1), st, styleLabel: lk === "colourpencil" ? "Colour pencil" : st, look: (name, oo = {}) => look(k, name, { ...o, ...oo }) };
 }
-/** Styled photo in a box (cover crop). */
-const pic = (c, x, y, w, h, o = {}) => c.k.photo(o.photo || c.ph, x, y, w, h, { size: c.size, ex: o.fx ?? c.fx, rx: o.rx || 0, clip: o.clip || "", align: o.align || "xMidYMid" });
+/** Styled photo in a box (cover crop; people photos around the face). */
+const pic = (c, x, y, w, h, o = {}) => c.k.photo(o.photo || c.ph, x, y, w, h, { size: c.size, ex: o.fx ?? c.fx, rx: o.rx || 0, clip: o.clip || "", align: isPerson(o.photo || c.ph) ? null : o.align || "xMidYMid" });
 /** Glass prompt bar: sparkle, the prompt in one line, round go button. */
 function promptBar(c, x, y, w, { dark = false, h = 24 } = {}) {
   const { k, pal } = c;

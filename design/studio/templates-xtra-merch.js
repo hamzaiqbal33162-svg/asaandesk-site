@@ -271,6 +271,8 @@ export default function add(k) {
     T("Nadia R. · Lahore", 160, 870, 760, { size: 36, bold: true, color: PINE, align: "center" }),
   ])]);
   tpl("tips-cover-story-x2", "Tips carousel cover story", "instagram-story", "instagram story tips carousel guide how to swipe", (W, H) => [page(SAND, [
+    // The creator's photo in a ringed circle at the top (Canva's tip story covers show who shares the tips).
+    C(790, 50, 220, 220, WHITE, { name: "Photo ring" }), F(800, 60, 200, 200, { shape: "circle", name: "Creator photo" }),
     T("5 TIPS", 80, 300, 920, { size: 220, bold: true, color: COR, lh: 1 }),
     T("to save money every month", 80, 560, 920, { size: 96, bold: true, color: INK, lh: 1.1 }),
     ...[0, 1, 2].map((i) => R(80, 980 + i * 140, 920, 110, WHITE, { radius: 55, name: "Tip pill" })),

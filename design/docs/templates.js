@@ -286,7 +286,7 @@ export const DESIGNED = [
     ]),
   },
   {
-    id: "resume", name: "Resume", desc: "Header with an illustrated avatar, profile, experience table and skills.",
+    id: "resume", name: "Resume", desc: "Header with a round profile photo, profile, experience table and skills.",
     build: () => doc("Resume", [
       hero({ bg: "#12355b", deco: "avatar", dc: "#2f80ff", dc2: "#9cc3ff", minh: 140, pad: 22 }, look("Sana Malik", { color: "#ffffff", size: 30 }), look("Product Designer · Karachi", { color: "#cfe3ff", size: 13 })),
       p("sana.malik@example.com · +92 300 0000000 · portfolio.example.com"),

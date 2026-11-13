@@ -1,7 +1,7 @@
 // Whiteboard templates, part A: brainstorming, planning and mapping boards (own layouts and wording).
 // Each builder returns board objects on a 1280 × 800 board (see templates-kit.js).
 import { W, H, M, TOP, BOT, A, TI, N, NOTES, INK, GREY, SOFT, LINE, WHITE, th, tv, who, cap, low, nameOf, roleOf,
-  txt, shape, note, pill, tag, link, line, pen, icon, badge, avatar, photo, board, panel, notesIn, columns, table, bar, fitSize } from "./templates-kit.js";
+  txt, shape, note, pill, tag, link, line, pen, icon, badge, avatar, photo, personPhoto, themePeople, board, panel, notesIn, columns, table, bar, fitSize } from "./templates-kit.js";
 
 const PI = Math.PI;
 const dot = (x, y, c = A[4], d = 18) => shape(x, y, d, d, { kind: "ellipse", fill: c, stroke: WHITE, sw: 2 });
@@ -139,7 +139,9 @@ export const BUILDERS_A = {
     const out = board({ name: T, title: T, sub: "The year we want, in pictures and a few big words", icon: "star", acc: 4, chip: "Review each month", people: 0 });
     const tiles = [["travel mountains adventure", "Travel more"], ["fitness sport run", "Run a 10K"], ["books education library", "Read 24 books"], ["office business city", "Open shop no. 2"], ["flowers nature garden", "Grow a garden"], ["coffee food", "Slow mornings"]];
     const used = [];
-    tiles.forEach(([topic, cap0], i) => { const x = 56 + (i % 3) * 286, y = 182 + Math.floor(i / 3) * 296; out.push(...photo(x, y, 262, 210, topic, { slot: i, caption: th([cap0], i)[0], used, exclude: used.slice() })); });
+    // Like Canva's vision boards, some pictures show people living the goal (a traveller, a runner); the rest places and things.
+    const who2 = [themePeople("traveler woman trip"), themePeople("fitness woman gym workout")];
+    tiles.forEach(([topic, cap0], i) => { const x = 56 + (i % 3) * 286, y = 182 + Math.floor(i / 3) * 296, o = { slot: i, caption: th([cap0], i)[0], used, exclude: used.slice() }; out.push(...(i < 2 ? personPhoto(x, y, 262, 210, who2[i], o) : photo(x, y, 262, 210, topic, o))); });
     out.push(txt(918, 178, 320, "Grow.", 64, { bold: true, color: A[4] }), txt(918, 258, 320, "Rest.", 64, { bold: true, color: A[0] }), txt(918, 338, 320, "Give.", 64, { bold: true, color: A[2] }));
     out.push(...notesIn({ x: 918, y: 420, w: 322, h: 330 }, th(["Save PKR 500k", "Walk 8,000 steps a day", "One new skill each quarter", "Call home every Sunday"], 2), { cols: 2, color: [N.pink, N.yellow, N.mint, N.sky], size: 20 }));
     return out;
@@ -347,10 +349,11 @@ export const BUILDERS_A = {
   "family-tree"() {
     const T = tv("The Malik family", (t) => `${t}: family tree`);
     const out = board({ name: T, title: T, sub: "Three generations, with birthdays to remember", icon: "heart", acc: 4, chip: "Since 1958", people: 0 });
-    const P = (x, y, name, info, c) => { const a = avatar(x, y, 84, name, c, { sw: 4 }); return [a, txt(x - 40, y + 92, 164, name, 19, { bold: true, align: "center" }), txt(x - 40, y + 118, 164, info, 15, { color: GREY, align: "center" })]; };
-    const g1 = [P(470, 176, "Rashid Malik", "b. 1958", A[0]), P(726, 176, "Nasreen Malik", "b. 1961", A[4])];
-    const g2 = [P(250, 360, "Imran Malik", "b. 1984", A[1]), P(450, 360, "Sana Imran", "b. 1987", A[3]), P(830, 360, "Ayesha Tariq", "b. 1989", A[2]), P(1030, 360, "Tariq Aziz", "b. 1985", A[5])];
-    const g3 = [P(150, 572, "Zara", "b. 2012", A[3]), P(350, 572, "Ali", "b. 2015", A[1]), P(550, 572, "Hamza", "b. 2019", A[0]), P(830, 572, "Noor", "b. 2016", A[4]), P(1030, 572, "Musa", "b. 2020", A[2])];
+    // Photos by generation: grandparents, parents, children (same circles and rings as before).
+    const P = (x, y, name, info, c, kind) => { const a = avatar(x, y, 84, name, c, { sw: 4, kind }); return [a, txt(x - 40, y + 92, 164, name, 19, { bold: true, align: "center" }), txt(x - 40, y + 118, 164, info, 15, { color: GREY, align: "center" })]; };
+    const g1 = [P(470, 176, "Rashid Malik", "b. 1958", A[0], "senior elderly"), P(726, 176, "Nasreen Malik", "b. 1961", A[4], "senior elderly")];
+    const g2 = [P(250, 360, "Imran Malik", "b. 1984", A[1], "smiling casual"), P(450, 360, "Sana Imran", "b. 1987", A[3], "smiling casual"), P(830, 360, "Ayesha Tariq", "b. 1989", A[2], "smiling casual"), P(1030, 360, "Tariq Aziz", "b. 1985", A[5], "smiling casual")];
+    const g3 = [P(150, 572, "Zara", "b. 2012", A[3], "child kids girl"), P(350, 572, "Ali", "b. 2015", A[1], "child kids boy"), P(550, 572, "Hamza", "b. 2019", A[0], "child kids boy"), P(830, 572, "Noor", "b. 2016", A[4], "child kids girl"), P(1030, 572, "Musa", "b. 2020", A[2], "child kids boy")];
     out.push(...g1.flat(), ...g2.flat(), ...g3.flat());
     out.push(line(554, 218, 726, 218, { stroke: A[4], sw: 4 }), line(640, 218, 640, 318, { stroke: "#9aa1b5", sw: 3 }), line(292, 318, 1072, 318, { stroke: "#9aa1b5", sw: 3 }), line(292, 318, 292, 360, { stroke: "#9aa1b5", sw: 3 }), line(1072, 318, 1072, 360, { stroke: "#9aa1b5", sw: 3 }));
     out.push(line(334, 402, 450, 402, { stroke: A[4], sw: 4 }), line(914, 402, 1030, 402, { stroke: A[4], sw: 4 }));
@@ -377,9 +380,11 @@ export const BUILDERS_A = {
     const T = tv("Summer collection mood board", (t) => `${t}: mood board`);
     const out = board({ name: T, title: T, sub: "Light, warm and relaxed: the look and feel we want", icon: "palette", acc: 3, chip: "Season 2027", people: 0 });
     const used = [];
-    out.push(...photo(56, 184, 420, 280, "sea beach summer travel", { slot: 0, used, card: 8 }));
+    // Like Canva's style / bridal mood boards: a person in the look (traveller on the beach, a fashion model) beside
+    // places, colours and textures.
+    out.push(...personPhoto(56, 184, 420, 280, themePeople("traveler woman hat summer holiday"), { slot: 0, used, card: 8 }));
     out.push(...photo(500, 184, 260, 280, "flowers nature colour", { slot: 1, used, exclude: used.slice(), card: 8 }));
-    out.push(...photo(56, 492, 260, 260, "textures fashion style", { slot: 2, used, exclude: used.slice(), card: 8 }));
+    out.push(...personPhoto(56, 492, 260, 260, themePeople("fashion model woman style outfit"), { slot: 2, used, exclude: used.slice(), card: 8 }));
     out.push(...photo(340, 492, 420, 260, "sky travel sunset", { slot: 3, used, exclude: used.slice(), card: 8 }));
     out.push(txt(800, 178, 440, "Colours", 22, { bold: true }));
     [["#f4a261", "Sun"], ["#2a9d8f", "Lagoon"], ["#e9c46a", "Sand"], ["#264653", "Night"], ["#e76f51", "Coral"]].forEach(([c, n], i) => out.push(shape(800 + i * 88, 214, 76, 76, { kind: "ellipse", fill: c, stroke: WHITE, sw: 3 }), txt(796 + i * 88, 296, 84, n, 14, { align: "center", color: GREY })));

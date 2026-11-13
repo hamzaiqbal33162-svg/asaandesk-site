@@ -4,7 +4,7 @@ import { $, $$, esc, toast, downloadBlob, fmtTime, fmtBytes, baseName, progressB
 import { probeVideo, seekTo, once, keptSegments, exportTrimmedWebM } from "./mediakit.js";
 import { trimArgs, trimCopyArgs, cutMiddleArgs, trimMuteArgs, inputName } from "./ffcmd.js";
 import { runFFmpeg } from "./ffmpeg.js";
-import { mountToolFrame, trimRange } from "./toolframe.js";
+import { mountToolFrame, trimRange, oneVideoInsert, videoThumb } from "./toolframe.js";
 import { byId } from "./gallery.js";
 
 const FPS = 30, MIN = 0.1, LIMIT_MB = 200;
@@ -111,7 +111,23 @@ async function frameUp(root, params) {
     ],
     share: { download: [{ label: "Trimmed video", act: () => (T.last?.blob ? downloadBlob(T.last.blob, T.last.name) : T.file ? run() : toast("Choose a video first.")) }], link: () => location.href.split("?")[0] + "?mode=trim" },
     apply: applyPreset, placeholder: "Search ready-made cuts",
-    panels: { tools: { label: "Tools", icon: "tools", refresh: true, render: (el) => {
+    // the trimmer's own controls lead the kit's Tools panel (its main UI); the rail is Canva's (toolframe.js)
+    insert: api.insert,
+    // Projects: the chosen video with its selection and settings (kept on this device)
+    projects: {
+      save: async () => {
+        if (!T.file) throw new Error("Choose a video first, then save it to Projects.");
+        return { name: T.file.name.replace(/\.[^.]+$/, ""), data: { blob: T.file, name: T.file.name, type: T.file.type, start: T.start, end: T.end, mode: T.mode, format: T.format, audio: T.audio }, thumb: videoThumb(E.tmVideo) };
+      },
+      open: async (rec) => {
+        const d = rec?.data;
+        if (!d?.blob) throw new Error("This project has no video in it.");
+        await load(new File([d.blob], d.name || "Video", { type: d.type || d.blob.type }));
+        if (!T.file) throw new Error("That video could not be opened.");
+        await api.setRange(d.start ?? 0, d.end ?? dur()); setMode(d.mode); setFormat(d.format); setAudio(d.audio);
+      },
+    },
+    panels: { tools: { title: "Trim", primary: true, refresh: true, render: (el) => {
       const p = (t) => { const x = document.createElement("p"); x.className = "mx-hint"; x.textContent = t; return x; };
       el.append(p(T.file ? `${T.file.name} · ${fmtTime(dur(), true)}. Selection ${fmtTime(T.start, true)} to ${fmtTime(T.end, true)}.` : "Choose a video, then set the start and end."));
       const row = document.createElement("div"); row.className = "mx-row";
@@ -119,7 +135,6 @@ async function frameUp(root, params) {
         presetBtn("Keep the sound", () => setAudio("keep")), presetBtn("Mute the sound", () => setAudio("mute")));
       el.append(row, p("Keys on a handle: arrows move one frame, Shift + arrows one second, Page Up / Down five seconds."));
     } } },
-    rail: ["templates", "tools", "apps"],
     shortcuts: [["← / →", "Move a handle one frame"], ["Shift + ← / →", "Move a handle one second"], ["Page Up / Down", "Move a handle five seconds"]],
   });
   syncPill();
@@ -366,7 +381,7 @@ function showResult(r) {
 }
 
 const api = {
-  mode: "trim", state: T, load, setMode, setFormat, setAudio, applyTemplate: (id) => applyPreset(id), get shell() { return T.shell; }, openInEditor: () => openInEditor(),
+  mode: "trim", state: T, load, insert: oneVideoInsert((f) => load(f), { hint: "The trimmer cuts one video. Add pictures, text and graphics in the video editor: File > Edit this clip in the video editor." }), setMode, setFormat, setAudio, applyTemplate: (id) => applyPreset(id), get shell() { return T.shell; }, openInEditor: () => openInEditor(),
   setRange: async (s, e) => { await setHandle(1, e, false); await setHandle(0, s, false); update(); },
   export: run,
   get last() { return T.last; },

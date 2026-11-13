@@ -156,8 +156,8 @@ export function layerContent(l, env = {}) {
     case "frame": {
       const f = l.frame, cid = ids("c");
       const inner = f.image?.src ? imageMarkup(f.image.src, f.image.crop, l.w, l.h, { urlOf: env.urlOf }) : placeholder(l.w, l.h, env.editor ? "Drop a photo" : "", env);
-      const border = f.border && f.border.width > 0 ? `<path d="${framePath(f.shape, l.w, l.h, f.radius)}" fill="none" stroke="${f.border.color}" stroke-width="${n(f.border.width * 2)}" clip-path="url(#${cid})"/>` : "";
-      return `<defs><clipPath id="${cid}"><path d="${framePath(f.shape, l.w, l.h, f.radius)}"/></clipPath></defs><g clip-path="url(#${cid})">${inner}</g>${border}`;
+      const border = f.border && f.border.width > 0 ? `<path d="${framePath(f.shape, l.w, l.h, f.radius, f)}" fill="none" stroke="${f.border.color}" stroke-width="${n(f.border.width * 2)}" clip-path="url(#${cid})"/>` : "";
+      return `<defs><clipPath id="${cid}"><path d="${framePath(f.shape, l.w, l.h, f.radius, f)}"/></clipPath></defs><g clip-path="url(#${cid})">${inner}</g>${border}`;
     }
     case "chart": {
       const prims = env.chartPrims ? env.chartPrims(l.chart.spec, l.w, l.h) : null;

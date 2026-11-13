@@ -5,7 +5,7 @@ import { PALETTES, THEMES } from "./variants.js";
 import { objectBounds, objectPrims, primsToSvg, rotTransform } from "./render.js";
 import { unionRect } from "./geometry.js";
 import { byIdOf } from "./model.js";
-import { PHOTOS, photoUrl } from "../shared/photo-library.js";
+import { ALL_PHOTOS, photoUrl } from "../shared/photo-library.js";
 
 const SECTION = {
   brainstorm: "Brainstorm and ideas", mindmap: "Brainstorm and ideas", affinity: "Brainstorm and ideas", "empathy-map": "Brainstorm and ideas", venn: "Brainstorm and ideas",
@@ -127,8 +127,8 @@ export const TOTAL = TEMPLATES.length;
 
 // Thumbnails are built on demand from the id and a few hundred are kept.
 const cache = new Map();
-// Template photos: the small file in thumbnails (never the full-size photo).
-const THUMB_OF = new Map(PHOTOS.map((p) => [photoUrl(p, "full"), photoUrl(p, "thumb")]));
+// Template photos (places and people): the small file in thumbnails (never the full-size photo).
+const THUMB_OF = new Map(ALL_PHOTOS.map((p) => [photoUrl(p, "full"), photoUrl(p, "thumb")]));
 /** Self-contained 320 × 200 SVG preview of a template: the real board, frames without their name labels. */
 export function thumb(id) {
   if (cache.has(id)) return cache.get(id);

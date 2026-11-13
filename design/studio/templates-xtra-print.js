@@ -1,8 +1,13 @@
 // AsaanDesk Studio: more own print base layouts (business cards, invitations, flyers, brochures, posters, labels).
 // Pure module. templates.js calls the default export with its helpers (tpl, T, R, C, S, E, F, page, flow, K).
 // All text, colours and layouts are our own; artwork is plain shapes and our own stickers.
+import { castFor, face, KIND } from "./templates-faces.js";
+
 export default function addXtraPrint(k) {
-  const { tpl, T, R, C, S, E, F, page, flow } = k;
+  const { T, R, C, S, E, F, page, flow } = k;
+  // Person spots show people photos of their kind (templates-faces.js): one person picker per template build.
+  let CAST = null;
+  const tpl = (id, title, preset, tags, build) => k.tpl(id, title, preset, tags, (W, H) => { CAST = castFor(id); return build(W, H); });
   const { INK, MUTED, TEA, AMB, ROS, WHITE, GOLD, NAVY } = k.K;
 
   /* ================= Business cards (front + back) ================= */
@@ -36,7 +41,7 @@ export default function addXtraPrint(k) {
   ]);
   tpl("photo-half-business-card", "Photo half business card", "business-card-eu", "business card photo picture portrait stylist salon personal", (W, H) => [
     page(WHITE, [
-      F(W / 2, 0, W / 2, H, { name: "Portrait photo" }),
+      face(CAST, F(W / 2, 0, W / 2, H, { name: "Portrait photo" }), KIND.beauty + " portrait", { sex: "f" }),
       T("Sofia Marin", 16, 36, W / 2 - 24, { size: 19, bold: true, color: INK }),
       T("Hair stylist", 16, 62, W / 2 - 24, { size: 11, family: "serif", italic: true, color: ROS }),
       T("+1 555 0181 512\nsofia@marinstudio.com\nmarinstudio.com", 16, 100, W / 2 - 24, { size: 9, color: INK, lh: 1.6 }),

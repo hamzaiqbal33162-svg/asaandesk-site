@@ -1,8 +1,13 @@
 // AsaanDesk Studio: more own print templates (business cards, invitations, flyers, brochures, posters, labels).
 // Pure module. templates.js calls the default export with its helpers (tpl, T, R, C, S, E, F, page, flow, K).
 // All text, colours and layouts are our own; artwork is plain shapes and our own stickers.
+import { castFor, face, KIND } from "./templates-faces.js";
+
 export default function addPrintTemplates(k) {
-  const { tpl, T, R, C, S, E, F, page, flow } = k;
+  const { T, R, C, S, E, F, page, flow } = k;
+  // Person spots show people photos of their kind (templates-faces.js): one person picker per template build.
+  let CAST = null;
+  const tpl = (id, title, preset, tags, build) => k.tpl(id, title, preset, tags, (W, H) => { CAST = castFor(id); return build(W, H); });
   const { INK, MUTED, IND, COR, TEA, AMB, ROS, WHITE, GOLD, NAVY } = k.K;
 
   /* ================= Business cards (front + back) ================= */
@@ -232,11 +237,11 @@ export default function addPrintTemplates(k) {
   const tri = (W, pad = 34) => ({ p3: W / 3, pad, cw: W / 3 - pad * 2 });
   const insidePanels = (W, H, items, color, ink, icons) => {
     const { p3, pad, cw } = tri(W);
-    return items.flatMap(([h, b], i) => [
+    return items.flatMap(([h, b, who], i) => [
       E(icons[i], i * p3 + pad, 60, 50, { c1: color }),
       T(h, i * p3 + pad, 128, cw, { size: 28, bold: true, color: ink }),
       T(b, i * p3 + pad, 176, cw, { size: 16, color: ink, lh: 1.55 }),
-      F(i * p3 + pad, H - 330, cw, 260, { shape: "rounded", radius: 16, name: "Photo" }),
+      who ? face(CAST, F(i * p3 + pad, H - 330, cw, 260, { shape: "rounded", radius: 16, name: "Photo" }), who) : F(i * p3 + pad, H - 330, cw, 260, { shape: "rounded", radius: 16, name: "Photo" }),
     ]);
   };
   tpl("travel-agency-brochure", "Travel agency brochure", "brochure-trifold-a4", "brochure trifold travel agency tours holiday trips vacation", (W, H) => {
@@ -273,7 +278,7 @@ export default function addPrintTemplates(k) {
         flow(320, T("Bright Smile Dental", 2 * p3 + pad, 0, cw, { size: 42, bold: true, color: WHITE, align: "center", lh: 1.1 }), 16,
           T("Gentle care for the whole family", 2 * p3 + pad, 0, cw, { size: 20, color: "#ccfbf1", align: "center" })),
       ]),
-      page("#f0fdfa", insidePanels(W, H, [["Gentle care", "Modern tools and a calm clinic make every visit easy, even for nervous patients."], ["For kids", "Fun first visits, sealants and fluoride to keep young smiles healthy."], ["Book a visit", "Call or walk in. New patients get a free check-up and cleaning."]], TEA, INK, ["icon-heart", "face-happy", "icon-calendar"])),
+      page("#f0fdfa", insidePanels(W, H, [["Gentle care", "Modern tools and a calm clinic make every visit easy, even for nervous patients.", KIND.doctor], ["For kids", "Fun first visits, sealants and fluoride to keep young smiles healthy.", KIND.child], ["Book a visit", "Call or walk in. New patients get a free check-up and cleaning."]], TEA, INK, ["icon-heart", "face-happy", "icon-calendar"])),
     ];
   });
   tpl("real-estate-brochure", "Real estate brochure", "brochure-trifold-letter", "brochure trifold real estate property homes apartments sale", (W, H) => {

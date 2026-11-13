@@ -5,21 +5,22 @@
 // shared library (CC0 / public domain). Each structure has three card designs (studio card, captions, script page).
 import { kit, fit as fitT, text, headline, rect, circle, pathEl, line, icon, isDark, mix as mix6, textW, pickPhoto, hash } from "../shared/tpl-kit.js";
 import { PHOTOS } from "../shared/photo-library.js";
+import { cast } from "../video/people.js";
 
-/** Content themes: who the script is for, with matching words. */
+/** Content themes: who the script is for, with matching words; who = the theme's person (the name in the scripts) as a people kind. */
 const THEMES = [
-  { key: "shop", label: "Shop", org: "Corner Store", aud: "shoppers", offer: "twenty percent off all shoes", product: "the new everyday backpack", place: "store", event: "the Weekend Mega Sale", when: "this Saturday and Sunday", cta: "Come in today or order online", topic: "choosing the right backpack", hours: "nine to nine, every day", person: "Omar" },
-  { key: "clinic", label: "Clinic", org: "Green Leaf Clinic", aud: "patients", offer: "free blood pressure checks", product: "online appointment booking", place: "clinic", event: "Health Check Day", when: "next Tuesday from nine to five", cta: "Book your visit on our website", topic: "simple habits for a healthy heart", hours: "nine to six, Monday to Saturday", person: "Dr. Amina" },
-  { key: "school", label: "School", org: "Bright Path School", aud: "parents and students", offer: "a free trial week for new students", product: "the new science lab", place: "school", event: "the Annual Science Fair", when: "this Friday at ten in the morning", cta: "Visit our website to sign up", topic: "how plants make their food", hours: "eight to two, Monday to Friday", person: "Ms. Lina" },
-  { key: "restaurant", label: "Restaurant", org: "Olive and Thyme", aud: "food lovers", offer: "a free dessert with every family meal", product: "our new lunch menu", place: "restaurant", event: "Live Music Night", when: "every Thursday at eight", cta: "Reserve your table tonight", topic: "how we bake our bread every morning", hours: "noon to eleven", person: "Chef Marco" },
-  { key: "fitness", label: "Fitness", org: "PeakFit Gym", aud: "members", offer: "your first month for half price", product: "the new morning workout class", place: "gym", event: "Fitness Challenge Week", when: "starting next Monday", cta: "Sign up at the front desk", topic: "warming up the right way", hours: "six in the morning to ten at night", person: "Coach Nina" },
-  { key: "realestate", label: "Real estate", org: "Keystone Homes", aud: "home buyers", offer: "no agent fees this month", product: "three-bedroom homes near the park", place: "show home", event: "our Open House", when: "Saturday from ten to four", cta: "Call us to book a viewing", topic: "five questions to ask before you buy", hours: "nine to six", person: "Daniel" },
-  { key: "tech", label: "Tech startup", org: "Nimbus Apps", aud: "early users", offer: "three months of Pro for free", product: "the Nimbus task planner", place: "app", event: "Product Launch Live", when: "on Wednesday at five", cta: "Download the app today", topic: "staying focused at work", hours: "around the clock, online", person: "Jamie from Nimbus" },
-  { key: "charity", label: "Charity", org: "Helping Hands Trust", aud: "volunteers and supporters", offer: "every donation matched this week", product: "the clean water project", place: "community centre", event: "the Charity Fun Run", when: "on Sunday at seven in the morning", cta: "Donate or volunteer on our website", topic: "how one well changes a village", hours: "nine to five", person: "Grace" },
-  { key: "travel", label: "Travel", org: "Blue Horizon Travel", aud: "travellers", offer: "early-bird prices on summer trips", product: "the seven-day mountain tour", place: "travel desk", event: "the Travel Expo", when: "this weekend at the city hall", cta: "Book your seat on our website", topic: "packing light for long trips", hours: "ten to eight", person: "Leila" },
-  { key: "cafe", label: "Cafe", org: "Morning Bean Cafe", aud: "coffee lovers", offer: "buy one, get one free on Mondays", product: "our new caramel cold brew", place: "cafe", event: "a Latte Art Class", when: "on Saturday afternoon", cta: "Stop by on your way to work", topic: "brewing better coffee at home", hours: "seven to seven", person: "Mia" },
-  { key: "wedding", label: "Wedding", org: "Ever After Weddings", aud: "couples", offer: "a free planning session", product: "our garden venue package", place: "venue", event: "the Wedding Open House", when: "on Sunday from eleven", cta: "Book a visit with our planners", topic: "planning a stress-free wedding day", hours: "ten to seven", person: "Sophie" },
-  { key: "salon", label: "Beauty salon", org: "Glow Studio", aud: "guests", offer: "ten percent off your first visit", product: "the new hair spa treatment", place: "studio", event: "Bridal Beauty Day", when: "next Sunday", cta: "Book online in one minute", topic: "caring for your hair in summer", hours: "ten to eight, Tuesday to Sunday", person: "Zoe" },
+  { key: "shop", label: "Shop", org: "Corner Store", aud: "shoppers", offer: "twenty percent off all shoes", product: "the new everyday backpack", place: "store", event: "the Weekend Mega Sale", when: "this Saturday and Sunday", cta: "Come in today or order online", topic: "choosing the right backpack", hours: "nine to nine, every day", person: "Omar", who: "business:m" },
+  { key: "clinic", label: "Clinic", org: "Green Leaf Clinic", aud: "patients", offer: "free blood pressure checks", product: "online appointment booking", place: "clinic", event: "Health Check Day", when: "next Tuesday from nine to five", cta: "Book your visit on our website", topic: "simple habits for a healthy heart", hours: "nine to six, Monday to Saturday", person: "Dr. Amina", who: "doctor:f" },
+  { key: "school", label: "School", org: "Bright Path School", aud: "parents and students", offer: "a free trial week for new students", product: "the new science lab", place: "school", event: "the Annual Science Fair", when: "this Friday at ten in the morning", cta: "Visit our website to sign up", topic: "how plants make their food", hours: "eight to two, Monday to Friday", person: "Ms. Lina", who: "teacher:f" },
+  { key: "restaurant", label: "Restaurant", org: "Olive and Thyme", aud: "food lovers", offer: "a free dessert with every family meal", product: "our new lunch menu", place: "restaurant", event: "Live Music Night", when: "every Thursday at eight", cta: "Reserve your table tonight", topic: "how we bake our bread every morning", hours: "noon to eleven", person: "Chef Marco", who: "chef:m" },
+  { key: "fitness", label: "Fitness", org: "PeakFit Gym", aud: "members", offer: "your first month for half price", product: "the new morning workout class", place: "gym", event: "Fitness Challenge Week", when: "starting next Monday", cta: "Sign up at the front desk", topic: "warming up the right way", hours: "six in the morning to ten at night", person: "Coach Nina", who: "trainer:f" },
+  { key: "realestate", label: "Real estate", org: "Keystone Homes", aud: "home buyers", offer: "no agent fees this month", product: "three-bedroom homes near the park", place: "show home", event: "our Open House", when: "Saturday from ten to four", cta: "Call us to book a viewing", topic: "five questions to ask before you buy", hours: "nine to six", person: "Daniel", who: "realtor:m" },
+  { key: "tech", label: "Tech startup", org: "Nimbus Apps", aud: "early users", offer: "three months of Pro for free", product: "the Nimbus task planner", place: "app", event: "Product Launch Live", when: "on Wednesday at five", cta: "Download the app today", topic: "staying focused at work", hours: "around the clock, online", person: "Jamie from Nimbus", who: "developer:m" },
+  { key: "charity", label: "Charity", org: "Helping Hands Trust", aud: "volunteers and supporters", offer: "every donation matched this week", product: "the clean water project", place: "community centre", event: "the Charity Fun Run", when: "on Sunday at seven in the morning", cta: "Donate or volunteer on our website", topic: "how one well changes a village", hours: "nine to five", person: "Grace", who: "customer:f" },
+  { key: "travel", label: "Travel", org: "Blue Horizon Travel", aud: "travellers", offer: "early-bird prices on summer trips", product: "the seven-day mountain tour", place: "travel desk", event: "the Travel Expo", when: "this weekend at the city hall", cta: "Book your seat on our website", topic: "packing light for long trips", hours: "ten to eight", person: "Leila", who: "traveller:f" },
+  { key: "cafe", label: "Cafe", org: "Morning Bean Cafe", aud: "coffee lovers", offer: "buy one, get one free on Mondays", product: "our new caramel cold brew", place: "cafe", event: "a Latte Art Class", when: "on Saturday afternoon", cta: "Stop by on your way to work", topic: "brewing better coffee at home", hours: "seven to seven", person: "Mia", who: "barista:f" },
+  { key: "wedding", label: "Wedding", org: "Ever After Weddings", aud: "couples", offer: "a free planning session", product: "our garden venue package", place: "venue", event: "the Wedding Open House", when: "on Sunday from eleven", cta: "Book a visit with our planners", topic: "planning a stress-free wedding day", hours: "ten to seven", person: "Sophie", who: "business:f" },
+  { key: "salon", label: "Beauty salon", org: "Glow Studio", aud: "guests", offer: "ten percent off your first visit", product: "the new hair spa treatment", place: "studio", event: "Bridal Beauty Day", when: "next Sunday", cta: "Book online in one minute", topic: "caring for your hair in summer", hours: "ten to eight, Tuesday to Sunday", person: "Zoe", who: "beauty:f" },
 ];
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -194,11 +195,11 @@ function captionLines(k, x, y, lines, size, hiCol, lh = 1.08, fill = "#fff", hiI
   });
   return s;
 }
-/** One voiceover card. o = { id, key, name, theme (object), script, colors: [a, b], rate, pitch, voice, language, speed, ai };
+/** One voiceover card. o = { id, key, name, theme (object), script, colors: [a, b], rate, pitch, voice, language, speed, ai, voiceStyle, voiceSex };
  * v: 0 studio card, 1 captions on a photo, 2 script page (text to speech); 3 voice persona, 4 radio spot, 5 podcast cover (AI voice). */
 export function voiceArt(o, v = 0, size = "thumb") {
   const k = kit(o.id, size === "full" ? "full" : "v" + v);
-  const [a, b] = o.colors, ph = themePhoto(o.theme.key, o.id), [label, kind] = MOTIF[o.key] || [o.name.toUpperCase(), "play"];
+  const [a, b] = o.colors, ph = narratorOf(o, v) || themePhoto(o.theme.key, o.id), [label, kind] = MOTIF[o.key] || [o.name.toUpperCase(), "play"];
   const org = o.theme.org, secs = secondsOf(o.script, o.rate || o.speed), ex = excerpt(o.script, v === 0 || v === 3 ? 58 : 78);
   const pic = (x, y, w, h, opt = {}) => k.photo(ph, x, y, w, h, { size, ...opt });
   const chipC = (x, y, lab, fill, color, anchor = "start", stroke = "") => k.pill(x, y, lab, { size: 6.4, fill, color, weight: 700, anchor, stroke });
@@ -261,6 +262,22 @@ export function voiceArt(o, v = 0, size = "thumb") {
     s += pathEl("M218 176l-7 5 7 5zM212 176h-2v10h2z", "#0f172a") + circle(253, 181, 11, a, k.shadow(3, 6, 0.3)) + pathEl("M249.5 175.5L258.5 181L249.5 186.5Z", "#fff") + pathEl("M288 176l7 5-7 5zM294 176h2v10h-2z", "#0f172a");
   }
   return k.svg(W, H, s);
+}
+// The narrator: a people photo (shared library, video/people.js kinds) on the cards of scripts someone speaks or is about:
+// podcast hosts, guides, teachers, creators, birthday and congratulations cards, coaches, news readers, customer stories,
+// hiring teams, phone greetings. "self" = the theme's own person (the name in the script: Dr. Amina, Chef Marco…). The captions
+// card (v 1) keeps its scene photo; the AI voice persona card (v 3) always shows a person. AI voice cards show a woman or a man
+// like the chosen voice (o.voiceSex), unless the script names the speaker ("I'm Chef Marco").
+const NARRATOR = { "podcast-intro": "self", interview: "self", tour: "self", lesson: "self", "video-outro": "self", explainer: "self", tip: "self", quiz: "self",
+  "welcome-member": "self", birthday: "self", congrats: "self", news: "speaker", workout: "trainer", testimonial: "customer", hiring: "team",
+  "phone-welcome": "business", voicemail: "business", motivation: "customer" };
+const NAMED = new Set(["podcast-intro", "tour"]), STYLE_KIND = { news: "speaker", storyteller: "senior" };
+export function narratorOf(o, v) {
+  const n = NARRATOR[o.key];
+  if (v === 1 || (!n && !(o.ai && v === 3))) return null;
+  let kind = n === "self" ? o.theme.who || "customer" : n || STYLE_KIND[o.voiceStyle] || "headshot";
+  if (o.ai && o.voiceSex && !NAMED.has(o.key)) kind = kind.split(":")[0] + ":" + o.voiceSex;
+  return cast([["n", kind]], o.id).n || null;
 }
 const VARIANT = (t) => (Number(String(t.palette || "p01").slice(1)) - 1) % 3; // palette p01 -> 0, p02 -> 1, p03 -> 2 …
 const normOf = (t) => ({ id: t.id, key: t.structure || String(t.layout).replace(/-(studio|captions|page)$/, ""), name: t.layoutName, theme: TBY[t.theme], script: t.script, colors: t.colors, rate: t.rate, pitch: t.pitch });

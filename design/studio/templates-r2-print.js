@@ -1,8 +1,14 @@
 // ROUND 2 layout batch (filled by a helper; see screens/canva-ref/STUDIO-LAYOUT-BRIEF.md). Pure module, no imports.
 // 60 own print layouts: 15 flyers, 15 posters, 15 invitations, 15 brochures (ids end in "-pr2").
 // Text stays 12 px inside the page; shapes and photos that touch an edge run 12 px past it (print bleed).
+import { castFor, face, member, KIND } from "./templates-faces.js";
+
 export default function add(k) {
-  const { tpl, T, S, R, C, E, F, page, flow } = k;
+  const { T, S, R, C, E, F, page, flow } = k;
+  // Person spots (candidate, teacher, agent, trainer, speakers, couples…) show people photos of their kind: one picker
+  // per template, so a design never shows the same person twice.
+  let CAST = null;
+  const tpl = (id, title, preset, tags, build) => k.tpl(id, title, preset, tags, (W, H) => { CAST = castFor(id); return build(W, H); });
   const { INK, MUTED, WHITE } = k.K;
   const EDGE = 12;
 
@@ -75,7 +81,7 @@ export default function add(k) {
     const pledges = [["icon-users", "Smaller classes", "Hire 40 new teachers and cap classes at 25 pupils."], ["icon-location", "Safer routes", "Crossings, lights and cycle lanes near every school."], ["icon-document", "Open budgets", "Every school spend published online, every term."]];
     return [page(WHITE, [
       r(0, 0, 360, 640, NV, { name: "Name panel" }),
-      f(360, 0, 440, 640, { name: "Candidate photo" }),
+      face(CAST, f(360, 0, 440, 640, { name: "Candidate photo" }), KIND.business, { sex: "f" }),
       r(0, 640, 800, 16, RD, { name: "Stripe" }),
       col(70,
         t("VOTE", 40, 0, 290, { size: 96, bold: true, color: WHITE, lh: 0.95 }), 6,
@@ -101,7 +107,7 @@ export default function add(k) {
     const rows = [["Beginners", "Mon 7 pm"], ["Improvers", "Wed 7 pm"], ["Social night", "Fri 9 pm"]];
     return [page(["#4c0519", "#be123c", 160], [
       c(180, 60, 440, 440, "#fbbf24", { name: "Photo ring" }),
-      f(195, 75, 410, 410, { shape: "circle", name: "Dancers photo" }),
+      face(CAST, f(195, 75, 410, 410, { shape: "circle", name: "Dancers photo" }), "couple love happy dance"),
       e("deco-sparkles", 610, 60, 110, { c1: "#fde68a", c2: WHITE }),
       e("deco-sparkle", 90, 380, 70, { c1: "#fde68a" }),
       t("Salsa", 40, 505, 720, { size: 150, family: "serif", italic: true, bold: true, color: "#fde68a", align: "center", lh: 1 }),
@@ -165,7 +171,7 @@ export default function add(k) {
       t("LEARN TO PLAY", 60, 70, 420, { size: 26, bold: true, color: "#b45309", ls: 8 }),
       t("Piano\nlessons", 60, 110, 420, { size: 104, family: "serif", bold: true, color: INK, lh: 0.95 }),
       c(490, 70, 270, 270, "#f59e0b", { name: "Photo ring" }),
-      f(505, 85, 240, 240, { shape: "circle", name: "Teacher photo" }),
+      face(CAST, f(505, 85, 240, 240, { shape: "circle", name: "Teacher photo" }), KIND.teacher, { sex: "f" }),
       t("with Miss Elena Park · 12 years of teaching", 60, 350, 680, { size: 24, family: "serif", italic: true, color: "#57534e" }),
       ...levels.flatMap(([a, p], i) => [
         c(64, 427 + i * 70, 24, 24, "#f59e0b", { name: "Dot" }),
@@ -236,7 +242,7 @@ export default function add(k) {
       ]),
       r(0, 850, 800, h - 850, NV, { name: "Agent strip" }),
       c(48, 875, 134, 134, "#f8fafc", { name: "Photo ring" }),
-      f(55, 882, 120, 120, { shape: "circle", name: "Agent photo" }),
+      face(CAST, f(55, 882, 120, 120, { shape: "circle", name: "Agent photo" }), "realtor agent real estate property home", { sex: "m" }),
       t("Daniel Reyes", 205, 882, 310, { size: 32, bold: true, color: WHITE }),
       t("Your local property expert", 205, 924, 310, { size: 18, color: "#cbd5e1" }),
       t("555 0148 · danielreyes.homes", 205, 956, 320, { size: 18, bold: true, color: "#fca5a5" }),
@@ -270,7 +276,7 @@ export default function add(k) {
     const LI = "#a3e635";
     const steps = [["Body scan and goal plan", "Know your starting point"], ["3 sessions a week", "Strength, mobility and cardio"], ["Simple meal guide", "Real food, no fad diets"], ["Weekly check-ins", "Track progress and adjust"]];
     return [page("#0a0a0a", [
-      f(0, 0, 360, h, { name: "Trainer photo" }),
+      face(CAST, f(0, 0, 360, h, { name: "Trainer photo" }), KIND.fitness, { sex: "m" }),
       r(360, 0, 14, h, LI, { name: "Stripe" }),
       c(36, 36, 140, 140, LI, { name: "Offer badge" }),
       colm(36, 140, t("20%", 46, 0, 120, { size: 40, bold: true, color: "#0a0a0a", align: "center", lh: 1.05 }), t("off month one", 46, 0, 120, { size: 15, bold: true, color: "#0a0a0a", align: "center" })),
@@ -354,7 +360,7 @@ export default function add(k) {
       r(500, 104, 60, 4, GD, { name: "Rule" }),
       ...spk.flatMap(([n, ro], i) => [
         c(510 + i * 200, 140, 160, 160, "#fde68a", { name: "Photo ring" }),
-        f(518 + i * 200, 148, 144, 144, { shape: "circle", name: "Speaker photo" }),
+        member(CAST, f(518 + i * 200, 148, 144, 144, { shape: "circle", name: "Speaker photo" }), n, ro),
         t(n, 500 + i * 200, 318, 180, { size: 22, bold: true, color: INK, align: "center" }),
         t(ro, 500 + i * 200, 350, 180, { size: 16, color: MUTED, align: "center", lh: 1.3 }),
       ]),
@@ -435,7 +441,7 @@ export default function add(k) {
     const RD = "#ef4444";
     const cls = [["BOXING BASICS", "Mon · Wed 6 pm"], ["SPARRING", "Tue · Thu 7 pm"], ["KIDS CLUB", "Saturday 10 am"], ["OPEN GYM", "Daily 6 am – 10 pm"]];
     return [page("#111111", [
-      f(0, 0, 800, 640, { name: "Boxer photo" }),
+      face(CAST, f(0, 0, 800, 640, { name: "Boxer photo" }), KIND.fitness + " boxing", { sex: "m" }),
       r(-100, 496, 1000, 24, RD, { rot: -8, name: "Red stripe" }),
       r(-100, 520, 1000, 260, "#111111", { rot: -8, name: "Dark band" }),
       t("TRAIN", 50, 596, 700, { size: 140, bold: true, color: WHITE, lh: 0.9 }),
@@ -922,8 +928,8 @@ export default function add(k) {
     const nums = [["40", "years married"], ["3", "children"], ["5", "grandchildren"], ["1", "very old car"]];
     const front = page("#fff7f5", [
       t("FORTY YEARS", 40, 46, 400, { size: 16, bold: true, color: RU, align: "center", ls: 8 }),
-      c(48, 88, 184, 184, "#f3d4d9", { name: "Photo ring" }), f(56, 96, 168, 168, { shape: "circle", name: "Then photo" }),
-      c(248, 88, 184, 184, "#f3d4d9", { name: "Photo ring" }), f(256, 96, 168, 168, { shape: "circle", name: "Now photo" }),
+      c(48, 88, 184, 184, "#f3d4d9", { name: "Photo ring" }), face(CAST, f(56, 96, 168, 168, { shape: "circle", name: "Then photo" }), "couple love young engagement"),
+      c(248, 88, 184, 184, "#f3d4d9", { name: "Photo ring" }), face(CAST, f(256, 96, 168, 168, { shape: "circle", name: "Now photo" }), "senior couple elderly grandparents"),
       e("icon-heart", 222, 162, 36, { c1: RU }),
       r(90, 258, 100, 32, RU, { radius: 16, name: "Year pill" }), tm("1986", 90, 258, 100, 32, { size: 15, bold: true, color: WHITE, align: "center", ls: 2 }),
       r(290, 258, 100, 32, RU, { radius: 16, name: "Year pill" }), tm("2026", 290, 258, 100, 32, { size: 15, bold: true, color: WHITE, align: "center", ls: 2 }),
@@ -1398,6 +1404,7 @@ export default function add(k) {
       ["Facials", [["Signature facial", "$70", "60 min · Cleanse, mask and a face massage."], ["Hydrating facial", "$80", "60 min · For dry or tired skin."], ["Express glow", "$40", "30 min · A fast refresh before an event."], ["Teen facial", "$45", "45 min · Gentle care for young skin."], ["Brow shape and tint", "$25", "20 min · A clean, natural shape."], ["Lash lift", "$55", "45 min · Lifted lashes for six weeks."]]],
       ["Hair and nails", [["Cut and finish", "$55", "Wash, cut and blow-dry."], ["Colour from", "$85", "Full colour or roots, with a gloss."], ["Balayage from", "$140", "Soft, sun-kissed highlights."], ["Classic manicure", "$30", "Shape, cuticle care and polish."], ["Gel pedicure", "$45", "Lasts up to three weeks."], ["Bridal hair trial", "$70", "Try your look before the big day."]]],
     ];
+    const SPA = { Massage: ["woman spa wellness skincare towel"], Facials: ["woman skincare cosmetics cream serum"], "Hair and nails": ["salon hair hairdresser stylist beauty", { group: true }] };
     const outside = page(BG, [
       t("Give the gift of calm", 28, 56, P - 56, { size: 28, family: "serif", bold: true, color: DK, lh: 1.15 }),
       r(48, 166, P - 96, 160, SGD, { radius: 14, name: "Gift card" }),
@@ -1428,7 +1435,7 @@ export default function add(k) {
         const x0 = g * P, mid = g === 1;
         const nameC = mid ? WHITE : DK, priceC = mid ? "#f5deb3" : GDT, descC = mid ? "#e7efe8" : "#57534e";
         return [
-          f(x0 + 28, 40, P - 56, 150, { shape: "rounded", radius: 12, name: title + " photo" }),
+          face(CAST, f(x0 + 28, 40, P - 56, 150, { shape: "rounded", radius: 12, name: title + " photo" }), ...(SPA[title] || [KIND.beauty])),
           t(title, x0 + 28, 212, P - 56, { size: 28, family: "serif", bold: true, color: nameC }),
           r(x0 + 28, 256, 40, 2, mid ? "#f5deb3" : GD, { name: "Rule" }),
           ...items.flatMap(([n, p, d], i) => [t(n, x0 + 28, 280 + i * 72, P - 162, { size: 16, bold: true, color: nameC }), t(p, x0 + P - 128, 280 + i * 72, 100, { size: 16, bold: true, color: priceC, align: "right" }), t(d, x0 + 28, 304 + i * 72, P - 56, { size: 12.5, color: descC, lh: 1.4 })]),
@@ -1520,7 +1527,7 @@ export default function add(k) {
       t("Speakers", P + 40, 40, P - 80, { size: 28, bold: true, color: DK }),
       ...spk.flatMap(([n, ro], i) => {
         const x = P + 40 + (i % 3) * 152, y = 96 + Math.floor(i / 3) * 226;
-        return [c(x + 20, y, 100, 100, "#e0e7ff", { name: "Photo ring" }), f(x + 26, y + 6, 88, 88, { shape: "circle", name: "Speaker photo" }), t(n, x, y + 112, 140, { size: 15, bold: true, color: INK, align: "center" }), t(ro, x, y + 134, 140, { size: 12, color: "#4b5563", align: "center", lh: 1.35 })];
+        return [c(x + 20, y, 100, 100, "#e0e7ff", { name: "Photo ring" }), member(CAST, f(x + 26, y + 6, 88, 88, { shape: "circle", name: "Speaker photo" }), n, ro), t(n, x, y + 112, 140, { size: 15, bold: true, color: INK, align: "center" }), t(ro, x, y + 134, 140, { size: 12, color: "#4b5563", align: "center", lh: 1.35 })];
       }),
       t("Breakout rooms · 1:30 pm", P + 40, 556, P - 80, { size: 17, bold: true, color: DK }),
       ...rooms.flatMap(([rm, top], i) => [r(P + 40, 588 + i * 38, P - 80, 32, i % 2 ? WHITE : SOFT, { radius: 6, name: "Room row" }), tm(rm, P + 52, 588 + i * 38, 86, 32, { size: 13, bold: true, color: AC }), tm(top, P + 150, 588 + i * 38, P - 200, 32, { size: 13, color: INK })]),
@@ -1541,7 +1548,7 @@ export default function add(k) {
       t("Beach 400 m · Seacliff Primary 700 m · Train station 1.2 km · Village shops 5 minutes on foot", 40, 506, P - 80, { size: 13.5, color: INK, lh: 1.5 }),
       r(40, 590, P - 80, 160, SAND, { radius: 12, name: "Agent card" }),
       c(58, 610, 124, 124, NV, { name: "Photo ring" }),
-      f(64, 616, 112, 112, { shape: "circle", name: "Agent photo" }),
+      face(CAST, f(64, 616, 112, 112, { shape: "circle", name: "Agent photo" }), "realtor agent real estate property home", { sex: "f" }),
       t("Grace Liu", 204, 618, 270, { size: 22, bold: true, color: NV }),
       t("Sales agent, Harbour & Co.", 204, 648, 270, { size: 13, color: "#4b5563" }),
       t("555 0189\ngrace@harbourco.homes", 204, 676, 270, { size: 14, bold: true, color: NV, lh: 1.5 }),
@@ -1817,7 +1824,7 @@ export default function add(k) {
       t("New roles every month at fernway.io/careers", P + 40, 724, P - 80, { size: 13.5, bold: true, color: GR }),
       t("What we value", 2 * P + 40, 50, P - 80, { size: 30, bold: true, color: DK }),
       ...values.flatMap(([hd, sb], i) => [r(2 * P + 40, 112 + i * 102, 6, 84, GR, { name: "Bar" }), t(hd, 2 * P + 60, 112 + i * 102, P - 100, { size: 17, bold: true, color: DK }), t(sb, 2 * P + 60, 138 + i * 102, P - 100, { size: 13.5, color: INK, lh: 1.45 })]),
-      f(2 * P + 40, 530, P - 80, 220, { shape: "rounded", radius: 12, name: "Office photo" }),
+      face(CAST, f(2 * P + 40, 530, P - 80, 220, { shape: "rounded", radius: 12, name: "Office photo" }), KIND.team, { group: true }),
     ]);
     return [outside, inside];
   });
@@ -1879,7 +1886,7 @@ export default function add(k) {
       t("Meet the teachers", 2 * P + 40, 50, P - 80, { size: 30, bold: true, color: PU }),
       ...teachers.flatMap(([n, ins, bio], i) => {
         const y = 108 + i * 150;
-        return [c(2 * P + 40, y, 110, 110, "#ede9fe", { name: "Photo ring" }), f(2 * P + 46, y + 6, 98, 98, { shape: "circle", name: "Teacher photo" }), t(n, 2 * P + 170, y + 8, P - 210, { size: 18, bold: true, color: INK }), t(ins, 2 * P + 170, y + 34, P - 210, { size: 13, bold: true, color: MG }), t(bio, 2 * P + 170, y + 56, P - 210, { size: 13, color: INK, lh: 1.45 })];
+        return [c(2 * P + 40, y, 110, 110, "#ede9fe", { name: "Photo ring" }), member(CAST, f(2 * P + 46, y + 6, 98, 98, { shape: "circle", name: "Teacher photo" }), n, ins, { base: KIND.teacher }), t(n, 2 * P + 170, y + 8, P - 210, { size: 18, bold: true, color: INK }), t(ins, 2 * P + 170, y + 34, P - 210, { size: 13, bold: true, color: MG }), t(bio, 2 * P + 170, y + 56, P - 210, { size: 13, color: INK, lh: 1.45 })];
       }),
       t("All our teachers are qualified and background checked.", 2 * P + 40, 724, P - 80, { size: 13, italic: true, color: "#475569" }),
     ]);

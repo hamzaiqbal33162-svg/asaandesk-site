@@ -532,7 +532,10 @@ function renderTextPanel(el) {
     }
     el.append(box);
   }
-  const h3 = document.createElement("h3"); h3.className = "vo-ph3"; h3.textContent = "Tidy up"; el.append(h3);
+}
+/** The script tools (own section of the kit's Tools panel): tidy up the words. */
+function renderScriptTools(el) {
+  const h3 = document.createElement("h3"); h3.className = "vo-ph3"; h3.textContent = "Tidy up the script"; el.append(h3);
   const box = document.createElement("div"); box.className = "vo-snips";
   const tools = [
     ["Emphasize selection", "Puts a short pause around the selected words", () => { const s = scriptEl.selectionStart, e = scriptEl.selectionEnd; if (s === e) { toast("Select some words in the script first."); return; } insertAtCursor(" … " + scriptEl.value.slice(s, e).trim() + " … "); }],
@@ -586,6 +589,41 @@ function thumbSvg() {
   const words = esc(scriptEl.value.trim().split(/\s+/).slice(0, 6).join(" ") || "Empty script");
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"><rect width="320" height="200" rx="14" fill="#5b4cf0"/><text x="20" y="60" font-family="system-ui,Arial" font-size="20" font-weight="700" fill="#fff">${esc(titleNow())}</text><text x="20" y="92" font-family="system-ui,Arial" font-size="13" fill="#fff" opacity=".85">${words}</text>${Array.from({ length: 24 }, (_, i) => `<rect x="${20 + i * 11}" y="${150 - (8 + (i * 7) % 26) / 2}" width="6" height="${8 + (i * 7) % 26}" rx="3" fill="#fff" opacity=".8"/>`).join("")}</svg>`;
 }
+// ---------- Design › Styles: reading styles set the speed and pitch (like the sliders in the toolbar) ----------
+function renderReadingStyles(el) {
+  el.replaceChildren();
+  const h3 = document.createElement("h3"); h3.className = "vo-ph3"; h3.textContent = "Reading styles"; el.append(h3);
+  const p = document.createElement("p"); p.className = "vo-pnote"; p.textContent = "Sets the speed and pitch of the voice. Pick the voice itself in Voices."; el.append(p);
+  const box = document.createElement("div"); box.className = "vo-snips";
+  for (const s of VT.READING_STYLES) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "vo-snip"; b.dataset.rstyle = s.id;
+    const on = Math.abs(state.rate - s.rate) < 0.01 && Math.abs(state.pitch - s.pitch) < 0.01;
+    b.setAttribute("aria-pressed", String(on));
+    b.innerHTML = "<b></b><small></small>"; b.querySelector("b").textContent = s.label; b.querySelector("small").textContent = `${s.hint} · speed ${s.rate.toFixed(1)}×, pitch ${s.pitch.toFixed(1)}`;
+    b.addEventListener("click", () => { state.rate = s.rate; state.pitch = s.pitch; showSettings(); saveSettings(); renderReadingStyles(el); toast(`${s.label}: speed ${s.rate.toFixed(1)}×, pitch ${s.pitch.toFixed(1)}`); });
+    box.append(b);
+  }
+  el.append(box);
+}
+
+// ---------- left-rail kit inserts (shared/panels/index.js) ----------
+// The design here is the script, so kit text is written into the script at the cursor: a heading or subheading as its
+// own paragraph, font combinations as their lines. Pictures, graphics and sounds can't be read aloud: they say so.
+/** Writes kit text into the script at the cursor (VT.scriptInsert: headings and groups as their own paragraph). */
+function kitScript(specs) {
+  if (scriptEl.readOnly) throw new Error("Switch to Editing to change the script.");
+  const at = scriptEl.selectionStart ?? scriptEl.value.length;
+  const add = VT.scriptInsert(scriptEl.value.slice(0, at), scriptEl.value.slice(scriptEl.selectionEnd ?? at), specs);
+  if (!add) return false;
+  insertAtCursor(add);
+  return true;
+}
+const kitIns = {
+  text: (spec) => kitScript([spec]),
+  textGroup: (specs) => kitScript(specs || []),
+  image: () => { throw new Error("A voiceover is words read aloud, so pictures and graphics can't go in it. Add it to a video with File > Add as captions to the video editor."); },
+};
+
 async function mountVoiceShell() {
   let mod;
   try { mod = await import("../shared/editor-shell.js"); } catch (e) { console.warn("Editor frame not available", e); return null; }
@@ -608,12 +646,16 @@ async function mountVoiceShell() {
     ],
     share: { download: [{ label: "Script (.txt)", act: downloadScript }, { label: "Captions (.srt)", act: downloadCaptions }, { label: "Your recording (WAV)", act: downloadRecording }], link: () => location.origin + "/design/voice/" },
     templates: gallery ? { gallery, tool: "text-to-speech", apply: (id) => applyTemplate(id), placeholder: "Search voice script templates" } : null,
+    // Elements, Text and Draw are the shared kit's (Canva's structure); the script snippets and tidy-up tools are this
+    // editor's own section inside Text (snippets and tidy-up); the kit's Draw stays as it is.
     panels: {
-      text: (el) => renderTextPanel(el),
+      text: { title: "Script snippets", render: (el) => { renderTextPanel(el); renderScriptTools(el); } },
       voices: { label: "Voices", icon: "speak", render: (el) => renderVoicesPanel(el), refresh: true },
       record: { label: "Record", icon: "record", render: (el) => renderRecordPanel(el), refresh: true },
     },
-    rail: ["templates", "text", "voices", "record", "projects", "apps", "translate"],
+    rail: ["templates", "elements", "text", "brand", "uploads", "tools", "voices", "record", "projects", "apps", "translate"],
+    design: { styles: (el) => renderReadingStyles(el) }, // Design › Styles: reading styles (speed + pitch)
+    insert: kitIns,
     getText: () => scriptEl.value,
     setText: (str) => setScript(str),
     projects: {
@@ -645,5 +687,5 @@ const shellReady = mountVoiceShell().then(async (s) => {
   if (tid) { const t = await applyTemplate(tid).catch(() => null); if (t) s?.pushRecent(tid); }
   return s;
 });
-Object.assign(window.adApp, { applyTemplate, setScript, insertAtCursor, shellReady });
+Object.assign(window.adApp, { applyTemplate, setScript, insertAtCursor, shellReady, insert: kitIns });
 Object.defineProperty(window.adApp, "shell", { get: () => shell, configurable: true });

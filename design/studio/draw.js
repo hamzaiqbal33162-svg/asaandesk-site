@@ -27,21 +27,35 @@ export function startDraw(opts = {}) {
   layer.addEventListener("pointerdown", (e) => {
     e.preventDefault(); e.stopPropagation();
     layer.setPointerCapture(e.pointerId);
+    // Eraser (the panels' Draw tools): strokes under the pointer go away.
+    if (st.pen.erase) { st.erasing = true; eraseAt(E.toPage(e.clientX, e.clientY)); return; }
     st.cur = { ...st.pen, pts: [E.toPage(e.clientX, e.clientY)] };
+    delete st.cur.erase;
     st.strokes.push(st.cur);
     redraw();
   });
-  layer.addEventListener("pointermove", (e) => { if (!st?.cur) return; e.preventDefault(); st.cur.pts.push(E.toPage(e.clientX, e.clientY)); redraw(); });
-  const up = () => { if (st) st.cur = null; };
+  layer.addEventListener("pointermove", (e) => { if (st?.erasing) { e.preventDefault(); eraseAt(E.toPage(e.clientX, e.clientY)); return; } if (!st?.cur) return; e.preventDefault(); st.cur.pts.push(E.toPage(e.clientX, e.clientY)); redraw(); });
+  const up = () => { if (st) { st.cur = null; st.erasing = false; } };
   layer.addEventListener("pointerup", up);
   layer.addEventListener("pointercancel", up);
   document.body.classList.add("st-drawing");
 }
+function eraseAt([x, y]) {
+  const r = Math.max(6, (st.pen.size || 8) * 1.5);
+  const before = st.strokes.length;
+  const segDist = ([ax, ay], [bx, by]) => { const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L)) : 0; return Math.hypot(ax + t * dx - x, ay + t * dy - y); };
+  const near = (s) => (s.pts.length === 1 ? Math.hypot(s.pts[0][0] - x, s.pts[0][1] - y) : Math.min(...s.pts.slice(1).map((p, i) => segDist(s.pts[i], p)))) <= r + s.size / 2;
+  st.strokes = st.strokes.filter((s) => !near(s));
+  if (st.strokes.length !== before) redraw();
+}
+const glowOf = (s) => (s.glow ? s.size * 1.6 : 0);
 function paint(ctx, strokes, toX, toY, k) {
   for (const s of strokes) {
     ctx.save();
     ctx.globalAlpha = s.alpha;
     ctx.strokeStyle = s.color; ctx.fillStyle = s.color;
+    // Glow pen: a soft halo of the same colour around the line.
+    if (s.glow) { ctx.shadowColor = s.color; ctx.shadowBlur = glowOf(s) * k; }
     ctx.lineWidth = s.size * k; ctx.lineCap = "round"; ctx.lineJoin = "round";
     ctx.beginPath();
     s.pts.forEach(([x, y], i) => (i ? ctx.lineTo(toX(x), toY(y)) : ctx.moveTo(toX(x), toY(y))));
@@ -68,7 +82,7 @@ export function stopDraw(keep = true) {
   document.body.classList.remove("st-drawing");
   if (!keep || !strokes.length) return null;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const s of strokes) for (const [x, y] of s.pts) { const r = s.size / 2 + 2; x0 = Math.min(x0, x - r); y0 = Math.min(y0, y - r); x1 = Math.max(x1, x + r); y1 = Math.max(y1, y + r); }
+  for (const s of strokes) for (const [x, y] of s.pts) { const r = s.size / 2 + 2 + glowOf(s); x0 = Math.min(x0, x - r); y0 = Math.min(y0, y - r); x1 = Math.max(x1, x + r); y1 = Math.max(y1, y + r); }
   const w = Math.max(4, x1 - x0), hh = Math.max(4, y1 - y0), k = Math.min(2, 4096 / Math.max(w, hh));
   const c = document.createElement("canvas");
   c.width = Math.ceil(w * k); c.height = Math.ceil(hh * k);

@@ -1,12 +1,13 @@
 // AsaanDesk code generator: pick a widget, change its settings, see it live, copy or download the code.
 // Templates run fully in the browser (offline). "Describe with AI" uses AsaanDesk AI only when it is switched on.
-import { WIDGETS, widgetById, normalize, renderWidget, warnings, PHOTO_SITE } from "./widgets.js";
+import { WIDGETS, widgetById, normalize, renderWidget, warnings, PHOTO_SITE, FONT_CHOICES } from "./widgets.js";
 import { photoOf, photoUrl } from "./photos.js";
 import { loadBrand } from "../shared/brand.js";
 import { aiReady } from "../shared/config.js";
 import { onlineAi, comingSoon } from "../shared/ai.js";
 import { saveProject, getProject, putHandoff } from "../shared/store.js";
-import { cleanOwn, wrapDoc, titleOf, codeStats, sizeWarning, versionLabel, siteFromWidget } from "./own.js";
+import { cleanOwn, wrapDoc, titleOf, codeStats, sizeWarning, versionLabel, siteFromWidget, MAX_OWN } from "./own.js";
+import { textHtml, groupHtml, imageHtml, svgHtml, tableHtml, gridHtml, videoHtml, audioHtml, spliceBody } from "./kit-html.js";
 
 const $ = (id) => document.getElementById(id);
 const SAVE_ID = "code-generator-settings";
@@ -152,9 +153,22 @@ function restoreSnap(json) {
     else { recompute(); buildForm(); update({ immediate: true }); }
   } finally { H.busy = false; H.key = ""; }
 }
-function undoCode() { if (!H.past.length) return false; H.future.push(snap()); restoreSnap(H.past.pop()); syncUndo(); return true; }
-function redoCode() { if (!H.future.length) return false; H.past.push(snap()); restoreSnap(H.future.pop()); syncUndo(); return true; }
-function syncUndo() { for (const id of ["undoCodeBtn", "verUndoBtn"]) { const b = $(id); if (b) b.disabled = !H.past.length; } for (const id of ["redoCodeBtn", "verRedoBtn"]) { const b = $(id); if (b) b.disabled = !H.future.length; } }
+// "My code" has its own steps for things added from the left-rail panels (typing keeps the box's own Ctrl+Z).
+const OH = { past: [], future: [] };
+const ownSteps = () => state.mode === "own" && (OH.past.length || OH.future.length);
+function undoCode() {
+  if (state.mode === "own" && OH.past.length) { OH.future.push(state.own.html); setOwn(OH.past.pop(), { mode: false }); syncUndo(); return true; }
+  if (!H.past.length) return false; H.future.push(snap()); restoreSnap(H.past.pop()); syncUndo(); return true;
+}
+function redoCode() {
+  if (state.mode === "own" && OH.future.length) { OH.past.push(state.own.html); setOwn(OH.future.pop(), { mode: false }); syncUndo(); return true; }
+  if (!H.future.length) return false; H.past.push(snap()); restoreSnap(H.future.pop()); syncUndo(); return true;
+}
+function syncUndo() {
+  const u = ownSteps() ? OH.past.length : H.past.length, r = ownSteps() ? OH.future.length : H.future.length;
+  for (const id of ["undoCodeBtn", "verUndoBtn"]) { const b = $(id); if (b) b.disabled = !u; }
+  for (const id of ["redoCodeBtn", "verRedoBtn"]) { const b = $(id); if (b) b.disabled = !r; }
+}
 const VKEY = "asaandesk-code-versions";
 const readVersions = () => { try { const v = JSON.parse(localStorage.getItem(VKEY) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
 const writeVersions = (list) => { try { localStorage.setItem(VKEY, JSON.stringify(list.slice(0, 40))); return true; } catch { toast("This browser could not save the version (storage is full)."); return false; } };
@@ -804,6 +818,139 @@ function renderToolsPanel(box) {
     head("Code view"), b("Full page code", () => $("viewPage").click(), "page"), b("Snippet for your own site", () => $("viewSnippet").click(), "snippet"),
     head("Preview size"), b("Desktop preview", () => $("devDesktop").click(), "desktop"), b("Phone preview", () => $("devPhone").click(), "phone"));
 }
+/* ---------------------------------------------------------------- insert adapter (left-rail kit) */
+// The shared Elements / Text / Tools panels insert through opts.insert. Here they become real HTML in "My code" (see
+// kit-html.js), added before </body> and selected in the code box. A widget template that is open moves into My code
+// first (its options stay in Templates); code that was already in My code is kept as a version.
+const PAGE_NO_MSG = "A web page has no page numbers. Add a text instead.";
+const isPageNo = (x) => /^page number$/i.test(String(x?.name ?? x ?? ""));
+function addHtml(snippet, what) {
+  if (!snippet) return false;
+  let note = "";
+  if (state.mode !== "own") {
+    const fromWidget = state.mode === "templates" || !state.own.html.trim();
+    if (fromWidget) {
+      const w = widgetById(state.widget);
+      const page = renderWidget(state.widget, state.opts).page;
+      if (state.own.html.trim() && state.own.html !== page) {
+        const v = { id: "v" + Date.now().toString(36), t: Date.now(), mode: "own", name: "My code (before a template moved in)", html: state.own.html };
+        writeVersions([v, ...readVersions()]); refreshVersions();
+      }
+      state.own.html = page;
+      note = `The ${w?.name || "widget"} code is now in My code with your ${what}. Its options stay in Templates.`;
+    }
+  }
+  const at = spliceBody(state.own.html, snippet);
+  if (at.html.length > MAX_OWN) throw new Error("That would make the code too big (2 MB at most).");
+  OH.past.push(state.own.html); if (OH.past.length > 60) OH.past.shift(); OH.future = [];
+  if (!setOwn(at.html, { mode: true })) { OH.past.pop(); return false; }
+  const ta = $("ownCode");
+  try { ta.setSelectionRange(at.start, at.end); ta.scrollTop = Math.max(0, ta.scrollHeight * (at.start / Math.max(1, at.html.length)) - 40); } catch {}
+  syncUndo();
+  toast(note || `${what[0].toUpperCase() + what.slice(1)} added at the end of your code.`);
+  return true;
+}
+async function blobToDataUrl(b) { return await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(r.error); r.readAsDataURL(b); }); }
+const INSERT = {
+  image: async (src, name) => {
+    if (isPageNo(name)) throw new Error(PAGE_NO_MSG);
+    let s = src instanceof Blob ? await blobToDataUrl(src) : String(src || "");
+    if (/^blob:/.test(s)) s = await blobToDataUrl(await (await fetch(s)).blob());
+    return addHtml(imageHtml(s, name, 0.6), "picture");
+  },
+  svg: (markup, meta = {}) => addHtml(svgHtml(markup, meta), meta.kind === "chart" ? "chart" : meta.kind === "drawing" ? "drawing" : "graphic"),
+  text: (spec, style) => {
+    const s = typeof spec === "string" || spec == null ? { content: spec ?? "", role: style === "heading" || style === "h1" ? "heading" : style === "subheading" || style === "h2" ? "subheading" : "body" } : spec;
+    if (isPageNo(s)) throw new Error(PAGE_NO_MSG);
+    return addHtml(textHtml(s), s.role === "heading" ? "heading" : s.role === "subheading" ? "subheading" : "text");
+  },
+  textGroup: (specs) => addHtml(groupHtml(specs), "font combination"),
+  table: (spec) => addHtml(tableHtml(spec), "table"),
+  grid: (spec) => addHtml(gridHtml(spec), "layout grid"),
+  video: async (spec = {}) => {
+    let s = { ...spec };
+    if (s.src instanceof Blob || /^blob:/.test(String(s.src || ""))) {
+      const b = s.src instanceof Blob ? s.src : await (await fetch(s.src)).blob();
+      if (b.size > 1.5e6) throw new Error("That video is too big to put inside the code (1.5 MB at most). Put it online and use its link.");
+      s.src = await blobToDataUrl(b);
+    }
+    const html = videoHtml(s);
+    return html ? addHtml(html, "video") : false; // not playable on a web page: the kit falls back to its poster picture
+  },
+  audio: async (spec = {}) => {
+    let src = spec.src || spec.url || spec.track;
+    if (src instanceof Blob || /^blob:/.test(String(src || ""))) {
+      const b = src instanceof Blob ? src : await (await fetch(src)).blob();
+      if (b.size > 1.5e6) throw new Error("That sound is too big to put inside the code (1.5 MB at most).");
+      src = await blobToDataUrl(b);
+    }
+    const html = audioHtml(src, spec.name || "Sound");
+    if (!html) throw new Error("Add a sound file (MP3, WAV or OGG) from Uploads to put a player in your code.");
+    return addHtml(html, "sound");
+  },
+  pageNumber: () => { throw new Error(PAGE_NO_MSG); },
+};
+/* ---------------------------------------------------------------- Design panel: Styles tab, template style */
+// Every widget template shares the same Style options (main colour, background, text colour, font, corners), so Canva's
+// Styles tab and "Apply this template style" change those on the open widget (one undo step), keeping its words.
+const STYLE_KEYS = ["accent", "bg", "text", "font", "corners"];
+const CODE_PALETTES = [
+  ["Violet", "#5b4cf0", "#ffffff", "#1f2440"], ["Ocean", "#2563eb", "#f5f9ff", "#0f1e3d"], ["Teal", "#0f9488", "#f2fbf9", "#123b3a"],
+  ["Saffron", "#d9480f", "#fff8ef", "#3b2314"], ["Rose", "#e11d48", "#fff5f7", "#3a1020"], ["Forest", "#15803d", "#f3faf4", "#13301d"],
+  ["Gold", "#b45309", "#fffbeb", "#3a2a0a"], ["Coral", "#ff7a59", "#fff7f3", "#3b1d14"], ["Slate", "#334155", "#f8fafc", "#0f172a"],
+  ["Night", "#a78bfa", "#0f1222", "#e9ebf5"], ["Mint night", "#10b981", "#0b1f1a", "#e7fff6"], ["Royal", "#7c3aed", "#faf5ff", "#2e1065"],
+];
+function setWidgetStyle(patch, msg) {
+  if (state.mode === "own") throw new Error("Styles change a widget template. My code is your own HTML: change its colours in the code.");
+  const w = widgetById(state.widget), keys = new Set(w.options.map((o) => o.key));
+  const use = Object.entries(patch).filter(([k, v]) => keys.has(k) && v != null && v !== "");
+  if (!use.length) throw new Error("This widget has no style options to change.");
+  remember();
+  for (const [k, v] of use) setValue(k, null, null, v);
+  buildForm(); update({ immediate: true });
+  if (state.mode !== "templates") setMode("templates");
+  if (msg) toast(msg);
+  return true;
+}
+function applyTemplateStyle(id) {
+  const st = gallery$?.starter?.(id);
+  if (!st) throw new Error("That template was not found.");
+  const src = normalize(st.widget, st.raw || {}, brand, Date.now(), { tz });
+  return setWidgetStyle(Object.fromEntries(STYLE_KEYS.map((k) => [k, src[k]])), "Template style applied: colours, font and corners. Your words stay.");
+}
+function renderDesignStyles(box) {
+  box._shown = () => renderDesignStyles(box); // the Design tab redraws each time it is shown (selection, theme)
+  box.replaceChildren();
+  const o = state.opts || {}, mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+  if (state.mode === "own") box.append(mk("p", "cg-hint", "Styles change a widget template's colours and fonts. My code is your own HTML."));
+  box.append(mk("h3", "cg-h3", "Colour palettes"));
+  const grid = mk("div", "cg-palgrid");
+  for (const [name, accent, bg, text] of CODE_PALETTES) {
+    const b = mk("button", "cg-pal" + (o.accent === accent && o.bg === bg ? " on" : ""));
+    b.type = "button"; b.dataset.palette = name; b.title = name; b.setAttribute("aria-label", `Use the ${name} colours`);
+    b.innerHTML = `<span class="dots"><i style="background:${escHtml(bg)}"></i><i style="background:${escHtml(accent)}"></i><i style="background:${escHtml(text)}"></i></span><small>${escHtml(name)}</small>`;
+    b.addEventListener("click", () => { try { setWidgetStyle({ accent, bg, text }, `${name} colours`); renderDesignStyles(box); } catch (e) { toast(e.message); } });
+    grid.append(b);
+  }
+  box.append(grid, mk("h3", "cg-h3", "Fonts"));
+  const fonts = mk("div", "cg-chips");
+  for (const [k, label] of FONT_CHOICES) {
+    const b = mk("button", "cg-chip" + (o.font === k ? " on" : ""), label.replace(/ \(.*\)$/, ""));
+    b.type = "button"; b.dataset.font = k;
+    b.addEventListener("click", () => { try { setWidgetStyle({ font: k }, `${label.replace(/ \(.*\)$/, "")} font`); renderDesignStyles(box); } catch (e) { toast(e.message); } });
+    fonts.append(b);
+  }
+  box.append(fonts, mk("h3", "cg-h3", "Corners"));
+  const corners = mk("div", "cg-chips");
+  for (const [k, label] of [["square", "Square"], ["soft", "Soft"], ["round", "Round"]]) {
+    const b = mk("button", "cg-chip" + (o.corners === k ? " on" : ""), label);
+    b.type = "button"; b.dataset.corners = k;
+    b.addEventListener("click", () => { try { setWidgetStyle({ corners: k }, `${label} corners`); renderDesignStyles(box); } catch (e) { toast(e.message); } });
+    corners.append(b);
+  }
+  box.append(corners);
+}
+let gallery$ = null; // the gallery module once the frame loaded it (template style)
 /** Opens a gallery starter: the widget with its starting options (a fresh copy, like a new design). */
 function applyStarter(st) {
   if (!st || !widgetById(st.widget)) throw new Error("That template was not found.");
@@ -815,7 +962,7 @@ function applyStarter(st) {
 }
 async function mountFrame() {
   let mod = null, gallery = null;
-  try { mod = await import("../shared/editor-shell.js"); gallery = await import("./gallery.js"); } catch (e) { console.warn("Editor frame unavailable", e); return null; }
+  try { mod = await import("../shared/editor-shell.js"); gallery = await import("./gallery.js"); gallery$ = gallery; } catch (e) { console.warn("Editor frame unavailable", e); return null; }
   try {
     const bar = document.createElement("div");
     bar.className = "cg-bar"; bar.id = "codeBar";
@@ -850,10 +997,13 @@ async function mountFrame() {
         { label: "Open an .html file…", act: () => $("ownFile").click() },
       ],
       share: { download: [{ label: "HTML file", act: () => download() }, { label: "Copy the code", act: () => copyCode(), icon: "copy" }, { label: "Open in a new tab", act: () => openInTab(), icon: "eye" }], link: () => location.origin + "/design/code/?w=" + state.widget },
-      templates: { gallery, tool: "code-generator", apply: async (id) => applyStarter(gallery.starter?.(id) || (widgetById(id) ? { widget: id, raw: {} } : null)), placeholder: "Search widget templates" },
-      panels: { tools: (box) => renderToolsPanel(box), versions: { label: "Versions", icon: "reset", render: (box) => renderVersionsPanel(box), refresh: true } },
-      rail: ["templates", "tools", "versions", "brand", "projects", "apps"],
-      insert: {},
+      templates: { gallery, tool: "code-generator", apply: async (id) => applyStarter(gallery.starter?.(id) || (widgetById(id) ? { widget: id, raw: {} } : null)), applyStyle: (id) => applyTemplateStyle(id), placeholder: "Search widget templates" },
+      design: { styles: (box) => renderDesignStyles(box) }, // Design panel: Styles tab (no page layouts for a widget)
+      // Elements / Text / Tools are the shared kit panels; the code tools are this editor's main controls, so they stay
+      // first inside Tools (primary). No `label`: it would rename the rail button.
+      panels: { tools: { title: "Code tools", render: (box) => renderToolsPanel(box), primary: true }, versions: { label: "Versions", icon: "reset", render: (box) => renderVersionsPanel(box), refresh: true } },
+      rail: ["templates", "elements", "text", "brand", "uploads", "tools", "versions", "projects", "apps"],
+      insert: INSERT,
       projects: {
         save: async () => ({ name: state.mode === "own" ? titleOf(state.own.html) || "My code" : widgetById(state.widget)?.name || "Widget", data: { widget: state.widget, raw: JSON.parse(JSON.stringify(state.raw)), mode: state.mode === "own" ? "own" : "templates", own: state.own.html } }),
         open: async (rec) => {
@@ -902,6 +1052,8 @@ window.adApp = {
   // Round 3 (Canva Code parity): My code, numbered versions with Copy code, Preview, Publish as a website.
   setOwn: (text) => setOwn(text), own: () => state.own.html, copyVersion, versionCode: (id) => versionCode(readVersions().find((x) => x.id === id)),
   openPreview, toNewWebsite, siteFromWidget,
+  // Left-rail kit insert adapter (Elements, Text, Tools): items become real HTML in My code.
+  insert: INSERT, applyTemplateStyle: (id) => applyTemplateStyle(id), design: { styles: (box) => renderDesignStyles(box) },
 };
 
 async function init() {

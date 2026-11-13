@@ -4,8 +4,21 @@
 // shadows as draw.js) and the frame (polaroid, mat, film, floating card, shape frames). Also the "pop" backdrops the
 // background remover puts behind a cut-out (drawn at the photo's own aspect, so the editor and the thumbnail match).
 import { photoUrl } from "../shared/tpl-kit.js";
+import { isPerson, coverBox } from "../shared/photo-library.js";
 
 const n = (v) => String(Math.round(v * 100) / 100);
+/** A photo filling a w × h box at x, y. `crop` {x, y, w, h} (fractions of the photo, as the editor's crop) draws that
+ * part; people photos with face: true are cropped around the face (coverBox); the rest (and every photo the editor
+ * opens with its own centre crop) cover-crop from the centre, like the editor does. */
+export function photoImg(photo, x, y, w, h, size, { face = false, crop = null, ex = "" } = {}) {
+  const url = photoUrl(photo, size);
+  if (!url) return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="#8c95a8"${ex}/>`;
+  if ((crop || (face && isPerson(photo))) && w > 0 && h > 0) {
+    const b = crop ? { x: (-crop.x * w) / crop.w, y: (-crop.y * h) / crop.h, w: w / crop.w, h: h / crop.h } : coverBox(photo, w, h);
+    return `<svg x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" overflow="hidden"${ex}><image href="${url}" x="${n(b.x)}" y="${n(b.y)}" width="${n(b.w)}" height="${n(b.h)}" preserveAspectRatio="none"/></svg>`;
+  }
+  return `<image href="${url}" x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" preserveAspectRatio="xMidYMid slice"${ex}/>`;
+}
 export const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 // the editor's fonts (shared/brand.js FONT_FAMILIES); thumbnails fall back to the same metric-compatible system fonts
 export const FAM = {
@@ -62,12 +75,12 @@ export function lookFilter(t, fid, extraBlur = 0) {
   return parts.length === 2 && !sepia && Math.abs(sat - 1) < 0.01 && Math.abs(s - 1) < 0.01 && Math.abs(off + warm) < 0.005 && !green && !pink ? "" : `<filter id="${fid}" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">${parts.join("")}</filter>`;
 }
 
-/** The photo (cover crop) with the template's look and vignette, in a W×H box at x, y. */
-export function lookPhoto(k, t, photo, x, y, W, H, size, { extraBlur = 0, clip = "" } = {}) {
+/** The photo (cover crop; face: true crops people photos around the face) with the template's look and vignette, in a
+ * W×H box at x, y. */
+export function lookPhoto(k, t, photo, x, y, W, H, size, { extraBlur = 0, clip = "", face = false, crop = null } = {}) {
   const fid = k.id("lf"), f = lookFilter(t, fid, extraBlur);
   if (f) k.defs.push(f);
-  const url = photoUrl(photo, size);
-  const img = url ? `<image href="${url}" x="${n(x)}" y="${n(y)}" width="${n(W)}" height="${n(H)}" preserveAspectRatio="xMidYMid slice"/>` : `<rect x="${n(x)}" y="${n(y)}" width="${n(W)}" height="${n(H)}" fill="#8c95a8"/>`;
+  const img = photoImg(photo, x, y, W, H, size, { face, crop });
   let s = `<g${f ? ` filter="url(#${fid})"` : ""}${clip}>${img}</g>`;
   const v = t.adjust?.vignette || 0;
   if (v > 0) s += `<rect x="${n(x)}" y="${n(y)}" width="${n(W)}" height="${n(H)}" fill="${k.rad([["#000", 0], ["#000", 0], ["#000", Math.min(0.85, v / 90)]], 0.5, 0.5, 0.75)}"${clip}/>`;

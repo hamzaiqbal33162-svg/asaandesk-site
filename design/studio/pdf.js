@@ -52,8 +52,8 @@ function roundRectPts(w, h, r, seg = 10) {
   arc(w - r, r, -90); arc(w - r, h - r, 0); arc(r, h - r, 90); arc(r, r, 180);
   return pts;
 }
-export function clipOutline(kind, w, h, radius = 0) {
-  const pts = frameOutline(kind, w, h);
+export function clipOutline(kind, w, h, radius = 0, f = null) {
+  const pts = frameOutline(kind, w, h, f);
   if (pts) return pts;
   if (kind === "circle") return ellipsePts(w / 2, h / 2, w / 2, h / 2);
   if (kind === "rounded") return roundRectPts(w, h, radius || Math.min(w, h) * 0.12);
@@ -195,11 +195,11 @@ export async function buildPdf(design, opts = {}, env = {}) {
     const f = l.frame;
     if (f.image?.src) {
       const img = await embedSrc(f.image.src);
-      clipTo(p, l, clipOutline(f.shape, l.w, l.h, f.radius));
+      clipTo(p, l, clipOutline(f.shape, l.w, l.h, f.radius, f));
       drawCropped(p, l, img, f.image.crop, l.w, l.h);
       p.pushOperators(popGraphicsState());
-    } else await prims(p, l, [{ d: framePath(f.shape, l.w, l.h, f.radius), fill: "#ecebfb" }]);
-    if (f.border && f.border.width > 0) await prims(p, l, [{ d: framePath(f.shape, l.w, l.h, f.radius), stroke: f.border.color, sw: f.border.width, fill: "none" }]);
+    } else await prims(p, l, [{ d: framePath(f.shape, l.w, l.h, f.radius, f), fill: "#ecebfb" }]);
+    if (f.border && f.border.width > 0) await prims(p, l, [{ d: framePath(f.shape, l.w, l.h, f.radius, f), stroke: f.border.color, sw: f.border.width, fill: "none" }]);
   }
 
   async function drawBackground(p, bg) {
@@ -263,7 +263,7 @@ export async function buildPdf(design, opts = {}, env = {}) {
     for (const l of flatLayers(pg.layers)) {
       if (l.type === "text") await drawText(p, l);
       else if (l.type === "shape") { const pr = shapePrims(l.shape, l.w, l.h); if ((hasGradient(l.shape.gradient) || pr.some((x) => x.dash)) && env.rasterLayer) await rasterBox(p, l); else await prims(p, l, pr); }
-      else if (l.type === "element") { if ((l.element.flipX || l.element.flipY) && env.rasterLayer) await rasterBox(p, l); else await prims(p, l, elementPrims(l.element), l.w / l.element.vb[0], l.h / l.element.vb[1]); }
+      else if (l.type === "element") { if ((l.element.flipX || l.element.flipY || l.element.parts?.some((x) => x.dash)) && env.rasterLayer) await rasterBox(p, l); else await prims(p, l, elementPrims(l.element), l.w / l.element.vb[0], l.h / l.element.vb[1]); }
       else if (l.type === "chart") await prims(p, l, extraChartPrims(l.chart.spec, l.w, l.h) || charts.chartPrims(l.chart.spec, l.w, l.h));
       else if (l.type === "table") await prims(p, l, withFills(l.table, tables.tablePrims(l.table, l.w, l.table.size || 16, tableMeasure(l.table.size || 16))));
       else if (l.type === "image") await drawImageLayer(p, l);

@@ -25,8 +25,10 @@ export async function sceneBlob(scene, presetId) {
 }
 const photoData = new Map();
 /** Replaces /pdf-editor/photos/… hrefs with data URLs of the decoded photos (a missing photo leaves its colour box). */
-async function inlinePhotos(svg) {
-  const urls = [...new Set([...svg.matchAll(/href="(\/pdf-editor\/photos\/[^"]+)"/g)].map((m) => m[1]))];
+/** Every same-origin picture an SVG links to (href="/….png|jpg|webp|gif|svg") put in as a data URL (left-rail kit graphics). */
+export const inlineImages = (svg) => inlinePhotos(svg, /href="(\/[^"]+\.(?:png|jpe?g|webp|gif|svg|avif)(?:\?[^"]*)?)"/gi);
+async function inlinePhotos(svg, re = /href="(\/pdf-editor\/photos\/[^"]+)"/g) {
+  const urls = [...new Set([...svg.matchAll(re)].map((m) => m[1]))];
   await Promise.all(urls.filter((u) => !photoData.has(u)).map(async (u) => {
     let d = "";
     try {
@@ -38,7 +40,7 @@ async function inlinePhotos(svg) {
     } catch { d = ""; }
     if (d) photoData.set(u, d); // a failed photo is tried again next time
   }));
-  return svg.replace(/href="(\/pdf-editor\/photos\/[^"]+)"/g, (m, u) => (photoData.get(u) ? `href="${photoData.get(u)}"` : 'href=""'));
+  return svg.replace(re, (m, u) => (photoData.get(u) ? `href="${photoData.get(u)}"` : 'href=""'));
 }
 
 // ---------- sounds (mono 22.05 kHz WAV) ----------

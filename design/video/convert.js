@@ -3,7 +3,7 @@ import { $, $$, esc, toast, downloadBlob, fmtTime, fmtBytes, baseName, progressB
 import { probeVideo } from "./mediakit.js";
 import { convertArgs, remuxArgs, isPlainMp4, inputName, QUALITY } from "./ffcmd.js";
 import { runFFmpeg, ffmpegState } from "./ffmpeg.js";
-import { mountToolFrame } from "./toolframe.js";
+import { mountToolFrame, oneVideoInsert, videoThumb } from "./toolframe.js";
 import { takeHandedFile } from "./trim.js";
 import { byId } from "./gallery.js";
 
@@ -74,14 +74,28 @@ async function frameUp(root, params) {
     ],
     share: { download: [{ label: "MP4 video", act: () => (C.last?.blob ? downloadBlob(C.last.blob, C.last.name) : C.file ? run() : toast("Choose a video first.")) }], link: () => location.href.split("?")[0] + "?mode=convert" },
     apply: applyPreset, placeholder: "Search ready-made settings",
-    panels: { tools: { label: "Tools", icon: "tools", refresh: true, render: (el) => {
+    // the converter's own controls lead the kit's Tools panel (its main UI); the rail is Canva's (toolframe.js)
+    insert: api.insert,
+    // Projects: the chosen video with its MP4 settings (kept on this device)
+    projects: {
+      save: async () => {
+        if (!C.file) throw new Error("Choose a video first, then save it to Projects.");
+        return { name: C.file.name.replace(/\.[^.]+$/, ""), data: { blob: C.file, name: C.file.name, type: C.file.type, quality: C.quality, height: C.height }, thumb: videoThumb(E.cvFileCard?.querySelector("video")) };
+      },
+      open: async (rec) => {
+        const d = rec?.data;
+        if (!d?.blob) throw new Error("This project has no video in it.");
+        await load(new File([d.blob], d.name || "Video", { type: d.type || d.blob.type }));
+        setQuality(d.quality); setHeight(d.height);
+      },
+    },
+    panels: { tools: { title: "Convert to MP4", primary: true, refresh: true, render: (el) => {
       const p = document.createElement("p"); p.className = "mx-hint";
       p.textContent = C.file ? `${C.file.name} · ${fmtBytes(C.file.size)}. ${QUALITY[C.quality].label}, ${C.height ? C.height + "p" : "same size"}.` : "Choose a video. MOV, WebM, MKV, AVI and more become MP4 (H.264 + AAC).";
       const b = document.createElement("button"); b.type = "button"; b.className = "btn sm"; b.textContent = "Choose video"; b.onclick = () => E.cvFile.click();
       const n = document.createElement("p"); n.className = "mx-hint"; n.textContent = ffmpegState.loaded ? "The MP4 engine is ready." : "The first time, the MP4 engine (about 31 MB) downloads from unpkg.com.";
       el.append(p, b, n);
     } } },
-    rail: ["templates", "tools", "apps"],
   });
   syncPill();
   const tpl = params?.get("template");
@@ -184,4 +198,6 @@ function show(r) {
   $("#cvDl").onclick = () => downloadBlob(r.blob, r.name);
   E.cvResult.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
-const api = { mode: "convert", state: C, load, setQuality, setHeight, export: run, applyTemplate: (id) => applyPreset(id), get shell() { return C.shell; }, openInEditor: () => openInEditor(), get last() { return C.last; } };
+const api = { mode: "convert", state: C, load, setQuality,
+  // a video or an animated GIF from Uploads opens as the video to convert; other pictures and graphics explain where they go
+  insert: oneVideoInsert((f) => load(f), { accept: (f) => f.type === "image/gif" || /\.gif$/i.test(f.name), hint: "The converter turns one video (or GIF) into an MP4. Add pictures, text and graphics in the video editor: File > More video tools." }), setHeight, export: run, applyTemplate: (id) => applyPreset(id), get shell() { return C.shell; }, openInEditor: () => openInEditor(), get last() { return C.last; } };

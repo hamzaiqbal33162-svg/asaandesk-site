@@ -3,7 +3,14 @@
 // belongs, real photos from the shared library as "photo:<id>" values). Thumbnails are small finished previews of that
 // widget in a browser or phone frame, drawn with the shared template kit (library "thumb" photos only).
 import { kit, text, fit, rect, circle, line, mix, isDark, esc } from "../shared/tpl-kit.js";
-import { photoOf, photoFor, photoUrl } from "./photos.js";
+import { photoOf, photoFor, photoUrl, personFor } from "./photos.js";
+
+// People (shared people library) where a widget shows people, as "photo:<id>" values: team photos, reviewers' avatars,
+// the link page's owner, the contact person, a wedding couple, a team and a class. Faces match the names (Ayesha: a woman).
+const people = (seed, list) => { const out = []; for (const [kind, sex] of list) out.push(personFor(kind, `${seed}:${out.length}`, { sex, exclude: out })); return out; };
+const TEAM_PICS = people("team", [["business woman founder portrait", "f"], ["business man portrait", "m"], ["business woman headshot professional portrait", "f"], ["young man smiling portrait", "m"]]);
+const REVIEW_PICS = people("testimonials", [["smiling woman customer portrait", "f"], ["smiling man customer portrait", "m"], ["smiling woman customer portrait", "f"]]);
+const SALON_PICS = people("testimonials~rose", [["smiling woman customer portrait", "f"], ["smiling woman customer portrait", "f"], ["smiling woman customer portrait", "f"], ["smiling woman customer portrait", "f"]]);
 
 // Every widget id (same order as widgets.js); a template id is "<widget>" or "<widget>~<look>".
 const WIDGET_IDS = ["countdown", "pricing", "faq", "contact", "whatsapp", "slider", "testimonials", "qr", "hours", "calculator", "tipzakat", "linkbio", "quiz", "timer", "flashcards", "converter", "hero", "product", "menu", "booking", "team", "stats", "newsletter"];
@@ -41,11 +48,16 @@ const PRESETS = {
   product: { look: "forest", raw: { image: "@cardamom spice" } },
   menu: { look: "gold", raw: { image: "@naan bread" } },
   booking: { look: "coral", raw: { image: "@restaurant dinner coffee espresso" } },
-  team: { look: "indigo", raw: {} },
-  stats: { look: "indigo", raw: { style: "photo", eyebrow: "Since 2015", image: "@modern office building", title: "Trusted by teams across Pakistan" } },
+  team: { look: "indigo", raw: { items: [
+    { image: TEAM_PICS[0], name: "Ayesha Khan", role: "Founder", bio: "Twelve years in hotel kitchens before opening her own.", link: "" },
+    { image: TEAM_PICS[1], name: "Omar Siddiqui", role: "Operations", bio: "Keeps every order on time and suppliers honest.", link: "" },
+    { image: TEAM_PICS[2], name: "Sara Malik", role: "Customer care", bio: "Answers your WhatsApp messages, usually within minutes.", link: "" },
+    { image: TEAM_PICS[3], name: "Bilal Ahmed", role: "Delivery lead", bio: "Knows every street of the city by heart.", link: "" },
+  ] } },
+  stats: { look: "indigo", raw: { style: "photo", eyebrow: "Since 2015", image: personFor("team office colleagues", "stats", { group: true }), title: "Trusted by teams across Pakistan" } },
   newsletter: { look: "plum", raw: { image: "@fruit fruits fresh" } },
   countdown: { look: "coral", raw: { eyebrow: "Summer sale", image: "@dresses boutique fashion", title: "Our big sale ends in" } },
-  "countdown~night": { raw: { eyebrow: "New batch", image: "@classroom lecture education", title: "Classes start in", note: "Seats are limited to 30 students.", button: "Reserve a seat" } },
+  "countdown~night": { raw: { eyebrow: "New batch", image: personFor("students class university", "countdown~night", { group: true }), title: "Classes start in", note: "Seats are limited to 30 students.", button: "Reserve a seat" } },
   pricing: { look: "indigo", raw: {} },
   "pricing~mint": { raw: { lead: "Clear prices, no surprises. Reports on WhatsApp the same day.", currency: "Rs", badge: "Most booked", plans: [
     { name: "General visit", price: "1,500", period: "/visit", features: "15 minutes with a doctor\nPrescription on WhatsApp\nFollow-up in 7 days", button: "Book a visit", link: "#book", best: false },
@@ -59,12 +71,16 @@ const PRESETS = {
     { q: "How do parents get report cards?", a: "Report cards are shared on the parent app and at the parent-teacher meeting each term." },
     { q: "Can my child join in the middle of the year?", a: "Yes, if a seat is free. We arrange a short assessment first." },
   ] } },
-  testimonials: { look: "indigo", raw: { eyebrow: "Reviews", layout: "grid" } },
+  testimonials: { look: "indigo", raw: { eyebrow: "Reviews", layout: "grid", items: [
+    { quote: "Fast delivery and the food was still warm. We order every Friday now.", name: "Sana R.", role: "Lahore", rating: 5, image: REVIEW_PICS[0] },
+    { quote: "They fixed my phone screen in one hour. Fair price and friendly staff.", name: "Bilal A.", role: "Karachi", rating: 5, image: REVIEW_PICS[1] },
+    { quote: "Clear prices and quick replies on WhatsApp. I recommend them to friends.", name: "Hina K.", role: "Islamabad", rating: 4, image: REVIEW_PICS[2] },
+  ] } },
   "testimonials~rose": { raw: { eyebrow: "4.9 on Google", layout: "slider", items: [
-    { quote: "Best haircut I have had in years. They listened and the colour is perfect.", name: "Mehwish T.", role: "Lahore", rating: 5 },
-    { quote: "Calm salon, spotless tools and they always run on time.", name: "Zainab K.", role: "Karachi", rating: 5 },
-    { quote: "My bridal makeup lasted the whole night. Thank you!", name: "Areeba S.", role: "Islamabad", rating: 5 },
-    { quote: "Friendly staff and fair prices. I book every month.", name: "Noor F.", role: "Lahore", rating: 4 },
+    { quote: "Best haircut I have had in years. They listened and the colour is perfect.", name: "Mehwish T.", role: "Lahore", rating: 5, image: SALON_PICS[0] },
+    { quote: "Calm salon, spotless tools and they always run on time.", name: "Zainab K.", role: "Karachi", rating: 5, image: SALON_PICS[1] },
+    { quote: "My bridal makeup lasted the whole night. Thank you!", name: "Areeba S.", role: "Islamabad", rating: 5, image: SALON_PICS[2] },
+    { quote: "Friendly staff and fair prices. I book every month.", name: "Noor F.", role: "Lahore", rating: 4, image: SALON_PICS[3] },
   ] } },
   slider: { look: "indigo", raw: { ratio: "16/9", slides: [
     { image: "@hunza valley", caption: "Hunza in spring", alt: "Hunza valley with mountains" },
@@ -78,12 +94,12 @@ const PRESETS = {
   ] } },
   hours: { look: "sand", raw: { title: "Opening hours", image: "@espresso coffee cup" } },
   "hours~mint": { raw: { image: "@tea plantation", note: "Fresh chai all day. Kitchen closes 30 minutes earlier." } },
-  contact: { look: "indigo", raw: { title: "Let's talk", image: "@coworking office interior" } },
-  "contact~rose": { raw: { lead: "Please reply by 20 December so we can save your seat.", subject: "RSVP for the wedding", phone: false, button: "Send my reply", image: "@wedding rings celebration" } },
+  contact: { look: "indigo", raw: { title: "Let's talk", image: personFor("support call center headset", "contact", { group: true }) } },
+  "contact~rose": { raw: { lead: "Please reply by 20 December so we can save your seat.", subject: "RSVP for the wedding", phone: false, button: "Send my reply", image: personFor("wedding couple bride groom", "contact~rose") } },
   whatsapp: { look: "forest", raw: {} },
   qr: { look: "indigo", raw: {} },
-  linkbio: { look: "coral", raw: { cover: "@naan bread" } },
-  "linkbio~rose": { raw: { name: "Hira Studio", bio: "Hand-made candles and gifts.\nShips across Pakistan.", cover: "@lavender field flowers", links: [
+  linkbio: { look: "coral", raw: { cover: "@naan bread", avatar: personFor("south asian woman smiling portrait", "linkbio", { sex: "f" }) } },
+  "linkbio~rose": { raw: { name: "Hira Studio", bio: "Hand-made candles and gifts.\nShips across Pakistan.", cover: "@lavender field flowers", avatar: personFor("young woman smiling portrait", "linkbio~rose", { sex: "f" }), links: [
     { label: "Shop the new collection", url: "https://example.com/shop" }, { label: "Order on WhatsApp", url: "https://wa.me/?text=Hi!" },
     { label: "Gift boxes for weddings", url: "https://example.com/gifts" }, { label: "Follow on Instagram", url: "https://example.com/instagram" },
   ] } },
@@ -145,6 +161,16 @@ const photoize = (v, seed) => {
   return v;
 };
 /** { widget, raw } for a template id: the widget to open and the option values to start from. */
+/** A template's style for the editor's "Apply this template style" card: its colours, font and corners. */
+const FONT_NAMES = { system: "System", sans: "Sans", serif: "Serif", mono: "Mono", calibri: "Calibri style", cambria: "Cambria style" };
+export function styleOf(id) {
+  const st = starter(id);
+  if (!st) return null;
+  const r = st.raw || {};
+  const colors = [r.accent, r.bg, r.text].filter((c) => /^#[0-9a-f]{3,8}$/i.test(String(c || "")));
+  if (!colors.length) return null;
+  return { name: "Template style", colors, fonts: [FONT_NAMES[r.font] || "Theme font", r.corners ? `${r.corners[0].toUpperCase()}${r.corners.slice(1)} corners` : ""].filter(Boolean) };
+}
 export function starter(id) {
   const s = String(id || ""), parts = s.split("~"), [w, look] = parts;
   if (!WIDGET_IDS.includes(w) || parts.length > 2 || (parts.length === 2 && !LOOKS[look])) return null;
@@ -279,14 +305,16 @@ const ART = {
       return s;
     });
   },
-  team(k, c) {
+  team(k, c, o) {
     return browserScene(k, c, "nimbus.pk/team", (R) => {
       let s = pill(R.x + R.w / 2 - 20, R.y + 12, "Our people", c.soft, c.a, 4.8) + T1(R.x + R.w / 2, R.y + 40, "Meet the team", { size: 16, weight: 900, fill: c.ink, anchor: "middle", ls: -0.4 });
-      [["Ayesha Khan", "FOUNDER"], ["Omar Siddiqui", "OPERATIONS"], ["Sara Malik", "CUSTOMER CARE"], ["Bilal Ahmed", "DELIVERY LEAD"]].forEach(([n, r], i) => {
+      const items = o.items?.length ? o.items.slice(0, 4).map((x) => [x.name, String(x.role || "").toUpperCase(), thumbPhoto(x.image)]) : [["Ayesha Khan", "FOUNDER"], ["Omar Siddiqui", "OPERATIONS"], ["Sara Malik", "CUSTOMER CARE"], ["Bilal Ahmed", "DELIVERY LEAD"]];
+      items.forEach(([n, r, p], i) => {
         const x = R.x + 12 + i * 69, y = R.y + 54;
         s += k.card(x, y, 62, 100, { fill: c.bg, rx: 9, sh: [4, 10, 0.18], stroke: c.line });
         s += `<g${k.clipRect(x, y, 62, 30, 9)}>` + rect(x, y, 62, 30, k.lin([c.a, c.a2], 135)) + rect(x, y, 62, 30, k.dots("#ffffff", 6, 0.6, 0.3)) + `</g>`;
-        s += circle(x + 31, y + 32, 15, "#ffffff") + circle(x + 31, y + 32, 13, k.lin([c.a2, c.a], 135)) + T1(x + 31, y + 36, n.split(" ").map((w) => w[0]).join(""), { size: 9, weight: 900, fill: c.on, anchor: "middle" });
+        s += circle(x + 31, y + 32, 15, "#ffffff") + (p ? k.photo(p, x + 18, y + 19, 26, 26, { clip: circle(x + 31, y + 32, 13, "#000") })
+          : circle(x + 31, y + 32, 13, k.lin([c.a2, c.a], 135)) + T1(x + 31, y + 36, n.split(" ").map((w) => w[0]).join(""), { size: 9, weight: 900, fill: c.on, anchor: "middle" }));
         s += T1(x + 31, y + 60, n, { size: 5.8, weight: 800, fill: c.ink, anchor: "middle" }) + T1(x + 31, y + 68, r, { size: 3.8, weight: 800, fill: c.a, anchor: "middle", ls: 0.3 });
         s += text(x + 31, y + 79, fit(BIOS[i], 52, { size: 4.3, min: 3.5, maxLines: 3 }).lines, { size: 4.3, fill: c.muted, anchor: "middle", font: F, lh: 1.35 });
       });
@@ -353,7 +381,9 @@ const ART = {
         s += k.card(x, y, cw, 92, { fill: c.bg, rx: 9, sh: [5, 12, 0.16], stroke: c.line }) + T1(x + cw - 8, y + 24, "“", { size: 26, weight: 900, fill: c.a, opacity: 0.18, anchor: "end", font: "Georgia,serif" });
         s += stars(x + 8, y + 14, t.rating || 5, 6.5);
         s += text(x + 8, y + 28, fit(t.quote, cw - 16, { size: 6, min: 5, maxLines: 4 }).lines, { size: 6, weight: 600, fill: c.ink, font: F, lh: 1.4 });
-        s += line(x + 8, y + 68, x + cw - 8, y + 68, c.line, 0.6) + circle(x + 15, y + 80, 6.5, k.lin([c.a, c.a2], 135)) + T1(x + 15, y + 82.3, t.name.split(" ").map((w) => w[0]).join("").slice(0, 2), { size: 5, weight: 900, fill: c.on, anchor: "middle" });
+        const face = thumbPhoto(t.image);
+        s += line(x + 8, y + 68, x + cw - 8, y + 68, c.line, 0.6) + (face ? k.photo(face, x + 8.5, y + 73.5, 13, 13, { clip: circle(x + 15, y + 80, 6.5, "#000") })
+          : circle(x + 15, y + 80, 6.5, k.lin([c.a, c.a2], 135)) + T1(x + 15, y + 82.3, t.name.split(" ").map((w) => w[0]).join("").slice(0, 2), { size: 5, weight: 900, fill: c.on, anchor: "middle" }));
         s += T1(x + 25, y + 79, t.name, { size: 5.5, weight: 800, fill: c.ink }) + T1(x + 25, y + 86, t.role || "", { size: 4.6, fill: c.muted });
       });
       if (slider) s += [-1, 1].map((d) => circle(R.x + R.w / 2 + d * 12, R.y + 155, 7, c.bg, ` stroke="${c.line}"`) + T1(R.x + R.w / 2 + d * 12, R.y + 158, d < 0 ? "‹" : "›", { size: 9, weight: 900, fill: c.ink, anchor: "middle" })).join("");
@@ -444,7 +474,9 @@ const ART = {
       const p = thumbPhoto(o.cover);
       let s = rect(S.x, S.y, S.w, S.h, k.lin([mix(c.a, c.bg, 0.78), c.bg], 160));
       if (p) s += k.photo(p, S.x + 6, S.y + 14, S.w - 12, 48, { rx: 8 });
-      s += circle(S.x + S.w / 2, S.y + 64, 15, c.bg) + circle(S.x + S.w / 2, S.y + 64, 13, k.lin([c.a, c.a2], 135)) + T1(S.x + S.w / 2, S.y + 68, (o.name || "Ayesha's Kitchen").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase(), { size: 9, weight: 900, fill: c.on, anchor: "middle" });
+      const face = thumbPhoto(o.avatar);
+      s += circle(S.x + S.w / 2, S.y + 64, 15, c.bg) + (face ? k.photo(face, S.x + S.w / 2 - 13, S.y + 51, 26, 26, { clip: circle(S.x + S.w / 2, S.y + 64, 13, "#000") })
+        : circle(S.x + S.w / 2, S.y + 64, 13, k.lin([c.a, c.a2], 135)) + T1(S.x + S.w / 2, S.y + 68, (o.name || "Ayesha's Kitchen").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase(), { size: 9, weight: 900, fill: c.on, anchor: "middle" }));
       s += T1(S.x + S.w / 2, S.y + 90, fit(o.name || "Ayesha's Kitchen", S.w - 10, { size: 8, maxLines: 1 }).lines[0], { size: 8, weight: 900, fill: c.ink, anchor: "middle" });
       const links = (o.links || [{ label: "See our menu" }, { label: "Order on WhatsApp" }, { label: "Photos of our food" }, { label: "Find us on the map" }]).slice(0, 4);
       links.forEach((l, i) => { const y = S.y + 100 + i * 19; s += rect(S.x + 8, y, S.w - 16, 14, i ? c.bg : k.lin([c.a, c.a2], 0), 7, i ? ` stroke="${c.line}"` : "") + T1(S.x + S.w / 2, y + 9.3, fit(l.label, S.w - 26, { size: 5.5, maxLines: 1 }).lines[0], { size: 5.5, weight: 800, fill: i ? c.ink : c.on, anchor: "middle" }); });

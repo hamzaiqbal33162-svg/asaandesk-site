@@ -106,7 +106,7 @@ export function layerProblems(l, path = "layer") {
     need(typeof e.id === "string" && Array.isArray(e.vb) && e.vb.length === 2 && Array.isArray(e.parts) && e.parts.length > 0, "element");
   } else if (l.type === "chart") need(l.chart?.spec && Array.isArray(l.chart.spec.series), "chart.spec");
   else if (l.type === "table") need(Array.isArray(l.table?.cells), "table.cells");
-  else if (l.type === "frame") need(["rect", "circle", "rounded", "heart", "star", "hexagon", "triangle", "diamond", "arch", "blob"].includes(l.frame?.shape), "frame.shape");
+  else if (l.type === "frame") need(["rect", "circle", "rounded", "heart", "star", "hexagon", "triangle", "diamond", "arch", "blob"].includes(l.frame?.shape) || (l.frame?.shape === "path" && Array.isArray(l.frame.pts) && l.frame.pts.length >= 3), "frame.shape");
   else if (l.type === "group") {
     need(Array.isArray(l.children) && l.children.length > 0, "group.children");
     (l.children || []).forEach((c, i) => bad.push(...layerProblems(c, `${path}.children[${i}]`)));

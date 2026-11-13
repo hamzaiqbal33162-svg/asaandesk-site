@@ -1,7 +1,12 @@
 // AsaanDesk Studio: 30 more own print layouts (10 flyers, 10 posters, 10 invitations), each its own composition.
 // Pure module (no imports). templates.js calls the default export with its helpers. Own text, colours, shapes only.
+import { castFor, face, member, KIND } from "./templates-faces.js";
+
 export default function addXtra4Print(k) {
-  const { tpl, T, S, R, C, E, F, page } = k;
+  const { T, S, R, C, E, F, page } = k;
+  // Person spots show people photos of their kind (templates-faces.js): one person picker per template build.
+  let CAST = null;
+  const tpl = (id, title, preset, tags, build) => k.tpl(id, title, preset, tags, (W, H) => { CAST = castFor(id); return build(W, H); });
   const { INK, MUTED, WHITE } = k.K;
   // Every layout is drawn in a reference space 800 units wide (480 for invitations) and scaled to the real page.
   const kit = (W, H, ref = 800) => {
@@ -237,7 +242,7 @@ export default function addXtra4Print(k) {
       t("Two days of talks on AI, web and cloud", 60, 200, 680, { size: 32, color: "#94a3b8" }),
       ...names.flatMap((n, i) => {
         const x = 60 + (i % 2) * 360, y = 300 + Math.floor(i / 2) * 330;
-        return [f(x, y, 220, 220, { shape: "circle", name: "Speaker photo" }), t(n, x, y + 235, 320, { size: 30, bold: true, color: WHITE }), t("Speaker", x, y + 275, 320, { size: 22, color: "#38bdf8" })];
+        return [member(CAST, f(x, y, 220, 220, { shape: "circle", name: "Speaker photo" }), n, "Speaker"), t(n, x, y + 235, 320, { size: 30, bold: true, color: WHITE }), t("Speaker", x, y + 275, 320, { size: 22, color: "#38bdf8" })];
       }),
       r(60, 1000, 680, 4, "#38bdf8", { name: "Rule" }),
       t("9–10 November · Expo Centre · devcon.example", 60, 1030, 680, { size: 28, color: "#cbd5e1" }),

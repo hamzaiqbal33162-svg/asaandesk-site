@@ -186,6 +186,27 @@ export function addPhrase(toolId, text, phrase) {
   return (p ? `${p.replace(/[,.;\s]+$/, "")}, ${add}` : add[0].toUpperCase() + add.slice(1)).slice(0, t.max);
 }
 
+/** Design panel tabs for each tool: which of its own option pickers are its Styles and its Layouts (the same choices as the form). */
+export const DESIGN_KEYS = {
+  video: { styles: ["style"], layouts: ["aspect", "duration"] },
+  music: { styles: ["genre", "mood"], layouts: ["use", "duration"] },
+  voice: { styles: ["voice", "tone"], layouts: [] },
+  sfx: { styles: ["place", "intensity"], layouts: ["duration"] },
+};
+
+/**
+ * The prompt with left-rail kit text added (words: the kit texts' contents): the voice tool's script gets them on new
+ * lines, the other prompts as sentences; kept to the tool's length. null = nothing to add.
+ */
+export function addKitText(toolId, text, words) {
+  const t = TOOLS[toolId], add = (words || []).map((w) => String(w ?? "").trim()).filter(Boolean);
+  if (!t || !add.length) return null;
+  const voice = t.id === "voice", cur = String(text || "").replace(/\s+$/, "");
+  const joined = add.map((w, i) => (voice || i === add.length - 1 || /[.!?]$/.test(w) ? w : w + ".")).join(voice ? "\n" : " ");
+  const sep = !cur ? "" : voice ? "\n" : /[.!?]$/.test(cur) ? " " : ". ";
+  return (cur + sep + joined).slice(0, t.max);
+}
+
 /** Problems with a form (empty list = OK). form: { prompt|text, ...options } */
 export function validate(toolId, form = {}) {
   const tool = TOOLS[toolId];

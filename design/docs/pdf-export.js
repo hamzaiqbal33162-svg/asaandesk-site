@@ -3,7 +3,7 @@
 // Everything is passed in, so this file runs in the browser and in Node tests:
 //   PDFLib, writeLines, pickWriter (from fontmatch.js), rasterize? (browser canvas, for scripts the fonts
 //   lack, e.g. Urdu), loadImage? (browser: converts non PNG/JPEG images).
-import { PAGE_SIZES, HEADING_PT, runsText } from "./model.js";
+import { PAGE_SIZES, HEADING_PT, runsText, portraitGeom } from "./model.js";
 import { dataUrlBytes, imageSize } from "./docx-export.js";
 import { DECOS, decoSvg, svgDataUrl } from "./decos.js";
 
@@ -185,10 +185,11 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
 
   /** A coloured block: background rectangle (+ our decoration picture), text inside with padding. */
   async function bandParagraph(toks, blk, lh) {
-    const b = blk.band, pad = (b.pad ?? 14) * 0.75, deco = !b.bgimg && b.deco && DECOS[b.deco];
+    const b = blk.band, pad = (b.pad ?? 14) * 0.75, deco = !b.bgimg && !b.pimg && b.deco && DECOS[b.deco];
     const decoLeft = deco && deco.pos === "left";
     const minH = (b.minh || 0) * 0.75;
-    const padL = decoLeft ? Math.max(82, minH * 0.95) : Math.max(pad, 13.5), padR = b.bgimg && (b.ov === "split" || b.ov === "soft") ? blk.width * 0.44 : deco && !decoLeft ? Math.max(90, minH * 1.3) : Math.max(pad, 13.5);
+    const pg = b.pimg && !b.bgimg ? portraitGeom(b.minh) : null; // round portrait (px → pt below)
+    const padL = pg ? (pg.X + pg.D + 24) * 0.75 : decoLeft ? Math.max(82, minH * 0.95) : Math.max(pad, 13.5), padR = b.bgimg && (b.ov === "split" || b.ov === "soft" || b.ov === "dock") ? blk.width * 0.44 : deco && !decoLeft ? Math.max(90, minH * 1.3) : Math.max(pad, 13.5);
     const innerW = Math.max(40, blk.width - padL - padR);
     const lines = await wrap(toks, innerW, blk.size);
     const textH = lines.reduce((a, l) => a + l.size * lh, 0);
@@ -202,13 +203,34 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
       try {
         const got = await loadImage(b.bgimg);
         const img = await out.embedPng(got.bytes);
-        const by = H - top - h, k = Math.max(blk.width / img.width, h / img.height), iw = img.width * k, ih = img.height * k;
+        const by = H - top - h, dockW = (h * img.width) / img.height, dock = b.ov === "dock" && dockW <= blk.width;
+        const k = Math.max(blk.width / img.width, h / img.height), iw = dock ? dockW : img.width * k, ih = dock ? h : img.height * k;
+        // focus (CSS background-position %, people photos: the face) or the centre; docked: full height at the right
+        const [fx, fy] = /^[\d.]+% [\d.]+%$/.test(b.bgpos || "") ? b.bgpos.split(" ").map((v) => parseFloat(v) / 100) : [0.5, 0.5];
         page.pushOperators(PDFLib.pushGraphicsState(), PDFLib.rectangle(blk.x, by, blk.width, h), PDFLib.clip(), PDFLib.endPath());
-        page.drawImage(img, { x: blk.x + (blk.width - iw) / 2, y: by + (h - ih) / 2, width: iw, height: ih });
+        page.drawImage(img, { x: dock ? blk.x + blk.width - iw : blk.x + (blk.width - iw) * fx, y: dock ? by : by + (h - ih) * (1 - fy), width: iw, height: ih });
         page.pushOperators(PDFLib.popGraphicsState());
         const c = b.ov === "soft" ? [255, 255, 255] : rgbOf(b.bg || "#1b2133"), col = rgb(c[0] / 255, c[1] / 255, c[2] / 255);
-        if (b.ov === "tint") page.drawRectangle({ x: blk.x, y: by, width: blk.width, height: h, color: col, opacity: 0.66 });
-        else { const steps = 12; for (let i = 0; i < steps; i++) { const f = i / steps, a = b.ov === "split" || b.ov === "soft" ? (f < 0.44 ? 0.97 : Math.max(0, 0.97 - (f - 0.44) * 1.8)) : 0.94 - f * 0.74; page.drawRectangle({ x: blk.x + f * blk.width, y: by, width: blk.width / steps + 0.5, height: h, color: col, opacity: a }); } }
+        if (b.ov === "tint" || b.ov === "tintl") page.drawRectangle({ x: blk.x, y: by, width: blk.width, height: h, color: col, opacity: b.ov === "tint" ? 0.66 : 0.5 });
+        else { const steps = 12; for (let i = 0; i < steps; i++) { const f = i / steps, a = b.ov === "dock" ? (f < 0.4 ? 1 : Math.max(0, 1 - (f - 0.4) * 5)) : b.ov === "split" || b.ov === "soft" ? (f < 0.44 ? 0.97 : Math.max(0, 0.97 - (f - 0.44) * 1.8)) : 0.94 - f * 0.74; if (a > 0) page.drawRectangle({ x: blk.x + f * blk.width, y: by, width: blk.width / steps + 0.5, height: h, color: col, opacity: a }); } }
+      } catch { /* the band colour stays when the photo cannot be read */ }
+    }
+    if (pg && loadImage && PDFLib.pushGraphicsState && PDFLib.clip && PDFLib.moveTo && PDFLib.appendBezierCurve) {
+      // Round portrait: the photo cropped around the face, clipped to a circle, with a thin light ring.
+      try {
+        const got = await loadImage(b.pimg);
+        const img = await out.embedPng(got.bytes);
+        const D = pg.D * 0.75, R = D / 2, cx = blk.x + pg.X * 0.75 + R, cy = H - top - h / 2, K = 0.5523 * R;
+        const [fx, fy] = String(b.pfo || "0.5,0.3").split(",").map(Number);
+        const k = Math.max(D / img.width, D / img.height), iw = img.width * k, ih = img.height * k;
+        const ox = Math.max(0, Math.min(iw - D, fx * iw - R)), oy = Math.max(0, Math.min(ih - D, (fy + 0.06) * ih - R));
+        page.pushOperators(PDFLib.pushGraphicsState(), PDFLib.moveTo(cx + R, cy),
+          PDFLib.appendBezierCurve(cx + R, cy + K, cx + K, cy + R, cx, cy + R), PDFLib.appendBezierCurve(cx - K, cy + R, cx - R, cy + K, cx - R, cy),
+          PDFLib.appendBezierCurve(cx - R, cy - K, cx - K, cy - R, cx, cy - R), PDFLib.appendBezierCurve(cx + K, cy - R, cx + R, cy - K, cx + R, cy),
+          PDFLib.closePath(), PDFLib.clip(), PDFLib.endPath());
+        page.drawImage(img, { x: cx - R - ox, y: cy + R + oy - ih, width: iw, height: ih });
+        page.pushOperators(PDFLib.popGraphicsState());
+        page.drawEllipse({ x: cx, y: cy, xScale: R + 1.2, yScale: R + 1.2, borderColor: rgb(1, 1, 1), borderWidth: 2.2, borderOpacity: 0.88 });
       } catch { /* the band colour stays when the photo cannot be read */ }
     }
     if (deco && loadImage && !b.bgimg) {
@@ -265,7 +287,7 @@ export async function modelToPdf(doc, { PDFLib, writeLines, pickWriter, rasteriz
     coverNext = page;
   }
 
-  const textBlk = (b, extra = {}) => ({ band: b.bg || b.deco ? b : null, size: baseSize, family: docFont, bold: false, italic: false, color: INK, align: b.align, dir: b.dir, lineHeight: b.lineHeight, lsp: b.lsp || 0, x: M + (b.indent || 0) * 36, width: CW - (b.indent || 0) * 36, ...extra });
+  const textBlk = (b, extra = {}) => ({ band: b.bg || b.deco || b.pimg ? b : null, size: baseSize, family: docFont, bold: false, italic: false, color: INK, align: b.align, dir: b.dir, lineHeight: b.lineHeight, lsp: b.lsp || 0, x: M + (b.indent || 0) * 36, width: CW - (b.indent || 0) * 36, ...extra });
 
   const blocks = doc.blocks || [];
   const counters = [], kinds = [];

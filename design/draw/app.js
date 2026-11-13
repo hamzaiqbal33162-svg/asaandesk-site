@@ -1407,15 +1407,8 @@ function stampShape(id, { outline = stampOutline } = {}) {
   addRecent(state.color);
   return true;
 }
-function renderElementsPanel(box) {
-  const svgOf = (d) => `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${d}"/></svg>`;
-  const outline = el("label", { class: "check" }, el("input", { type: "checkbox", id: "stampOutline", onchange: (e) => { stampOutline = e.target.checked; grid.classList.toggle("outline", stampOutline); } }), " Outline only");
-  const grid = el("div", { class: "stamp-grid" }, STAMPS.map(([id, label, d]) => el("button", { type: "button", class: "stamp", "data-stamp": id, title: `Add a ${label.toLowerCase()}`, "aria-label": `Add a ${label.toLowerCase()}`, html: svgOf(d), onclick: () => { if (stampShape(id)) toast(`${label} added in the current colour`); } })));
-  const draw = (kind, label) => el("button", { type: "button", class: "btn sm", "data-draw-shape": kind, text: label, onclick: () => { state.settings.shape.kind = kind; setTool("shape"); toast("Drag on the canvas to draw it."); } });
-  box.append(
-    el("p", { class: "muted small", text: "Shapes go in the middle of the selected layer, in the colour you picked." }), outline, grid,
-    el("h3", { class: "panel-h3", text: "Draw your own" }), el("div", { class: "row wrap" }, draw("line", "Line"), draw("rect", "Box"), draw("ellipse", "Circle")));
-}
+// (Elements in the editor frame is the shared kit's panel: its shapes land on layers of their own, see kitShape.
+//  stampShape stays for the stamp API and tests: a shape painted into the selected layer.)
 
 /* Text: ready-made text styles written in the middle of the canvas, or the Text tool to place it yourself. */
 async function insertText(str, { size = 64, bold = false, font = state.settings.text.font } = {}) {
@@ -1436,13 +1429,12 @@ async function insertText(str, { size = 64, bold = false, font = state.settings.
   addRecent(color);
   return true;
 }
+/** Draw's part of the kit's Text panel: the Text tool (tap the canvas and type) and the font it writes with. The kit
+ *  adds headings, body text and font combinations (each on a layer of its own). */
 function renderTextPanel(box) {
-  const styles = [["Add a heading", 120, true, "heading"], ["Add a subheading", 72, true, "subheading"], ["Add a little body text", 44, false, "body"]];
   box.append(
     el("button", { type: "button", class: "btn primary block", "data-text-tool": "1", text: "Type on the canvas", onclick: () => { setTool("text"); toast("Tap the canvas where the text should go, type, then press Enter."); } }),
-    el("h3", { class: "panel-h3", text: "Default text styles" }),
-    ...styles.map(([label, size, bold, kind]) => el("button", { type: "button", class: `text-style ${kind}`, "data-text-style": kind, text: label, onclick: async () => { if (await insertText(label.replace(/^Add an? (little )?/, "").replace(/^./, (c) => c.toUpperCase()), { size, bold })) toast("Text added. Undo removes it."); } })),
-    el("h3", { class: "panel-h3", text: "Fonts" }),
+    el("p", { class: "muted small", text: "Font for the Text tool:" }),
     el("div", { class: "font-list" }, Object.entries(FONT_FAMILIES).map(([k, f]) => el("button", { type: "button", class: "font-pick", "data-font": k, style: `font-family:${f.css}`, text: f.label, onclick: () => { state.settings.text.font = k; fontSel.value = k; saveSettings(); ensureFont(k, false).catch(() => {}); toast(`Font: ${f.label}`); } }))));
 }
 function renderBrushesPanel(box) {
@@ -1456,11 +1448,240 @@ function renderBrushesPanel(box) {
 }
 function renderLayersPanel(box) { box.append($("#layersPanel")); }
 
-async function insertPicture(src, name) {
-  const blob = typeof src === "string" ? dataUrlToBlob(src) : src;
-  const f = typeof File === "function" ? new File([blob], name || "Picture", { type: blob.type || "image/png" }) : Object.assign(blob, { name: name || "Picture" });
-  await importImage(f);
+/* ---------- left-rail kit inserts (shared/panels: Elements, Text, Uploads, Brand, Tools → Draw) ----------
+ * Draw's objects are layers: every item from the kit lands on a new layer of its own (named after it), drawn at the drop
+ * point (or the middle of the canvas you can see), so it can be moved (Select and move), hidden, faded, merged or deleted,
+ * and one Undo takes it away. The kit's Draw tools use Draw's own brushes (opts.draw). */
+const KIT_TEXT = { heading: 0.075, subheading: 0.045, body: 0.028, caption: 0.022 };
+const KIT_WORDS = { heading: "Add a heading", subheading: "Add a subheading", body: "Add a little bit of body text", caption: "Add a caption" };
+function familyKey(f) {
+  if (!f) return null;
+  if (FONT_FAMILIES[f]) return f;
+  const s = String(f).toLowerCase();
+  for (const [k, v] of Object.entries(FONT_FAMILIES)) if (v.css.toLowerCase() === s || v.label.toLowerCase() === s) return k;
+  if (/mono|courier|consol/.test(s)) return "mono";
+  if (/cambria|caladea/.test(s)) return "cambria";
+  if (/calibri|carlito/.test(s)) return "calibri";
+  if ((/serif/.test(s) && !/sans/.test(s)) || /times|georgia|garamond|playfair|merriweather|lora|didot/.test(s)) return "serif";
+  return "sans";
 }
+/** Drop point (or the middle of the part of the canvas you can see) in drawing px. */
+function kitPoint(pt) {
+  const d = state.doc;
+  if (pt && Number.isFinite(pt.clientX) && Number.isFinite(pt.clientY)) { const p = screenToDoc(pt.clientX, pt.clientY); return { x: clamp(p.x, 0, d.w), y: clamp(p.y, 0, d.h) }; }
+  const r = stageRect(), a = docToScreen(0, 0), b = docToScreen(d.w, d.h);
+  const L = Math.max(a.x, r.left), T = Math.max(a.y, r.top), R = Math.min(b.x, r.left + r.width), B = Math.min(b.y, r.top + r.height);
+  if (!(R > L && B > T)) return { x: d.w / 2, y: d.h / 2 };
+  const p = screenToDoc((L + R) / 2, (T + B) / 2);
+  return { x: clamp(p.x, 0, d.w), y: clamp(p.y, 0, d.h) };
+}
+/** Box in drawing px: the longer side is rel × the canvas's shorter side, centred on pt and kept on the canvas. */
+function kitBox(rel, aspect, pt, def = 0.3) {
+  const d = state.doc, S = Math.min(d.w, d.h), a = aspect > 0 && Number.isFinite(aspect) ? aspect : 1, L = (rel > 0 ? rel : def) * S;
+  let w = a >= 1 ? L : L * a, h = a >= 1 ? L / a : L;
+  const k = Math.min(1, d.w / w, d.h / h); w *= k; h *= k;
+  const c = kitPoint(pt);
+  return { x: clamp(c.x - w / 2, 0, d.w - w), y: clamp(c.y - h / 2, 0, d.h - h), w, h };
+}
+function svgAspect(svg) {
+  const vb = /viewBox\s*=\s*["']\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(svg || "");
+  if (vb && +vb[1] > 0 && +vb[2] > 0) return +vb[1] / +vb[2];
+  const w = /\swidth\s*=\s*["']([\d.]+)/i.exec(svg || ""), h = /\sheight\s*=\s*["']([\d.]+)/i.exec(svg || "");
+  return w && h && +w[1] > 0 && +h[1] > 0 ? +w[1] / +h[1] : 0;
+}
+/** A new layer above the selected one with fn(ctx) drawn on it: one undo step; it becomes the selected layer. */
+function kitLayer(name, fn) {
+  const d = state.doc;
+  if (d.layers.length >= 50) throw new Error("A drawing can have up to 50 layers. Merge or delete some first.");
+  const l = makeLayer(String(name || "Element").replace(/\s+/g, " ").trim().slice(0, 40) || "Element");
+  l.ctx.save(); fn(l.ctx); l.ctx.restore();
+  layerOp(() => { d.layers = insertAt(d.layers, l, activeIndex() + 1); d.active = l; }, d.w * d.h * 4);
+  markChanged(l);
+  return l.id;
+}
+/** A picture (URL, data URL, SVG markup or Blob) decoded for drawing. */
+async function kitImage(src) {
+  let blob = src;
+  if (typeof src === "string") {
+    if (/^\s*</.test(src)) blob = new Blob([src], { type: "image/svg+xml" });
+    else if (/^data:[^,]*;base64,/i.test(src)) blob = dataUrlToBlob(src);
+    else if (/^data:/.test(src)) blob = new Blob([decodeURIComponent(src.slice(src.indexOf(",") + 1))], { type: /^data:([^;,]+)/.exec(src)?.[1] || "image/svg+xml" });
+    else blob = await (await fetch(src)).blob();
+  }
+  return decodeImage(blob);
+}
+async function kitPicture(src, name, pt, { rel, aspect, def = 0.5, box } = {}) {
+  const img = await kitImage(src);
+  const a = aspect > 0 ? aspect : img.width > 0 && img.height > 0 ? img.width / img.height : 1;
+  const b = box || kitBox(rel, a, pt, def);
+  try { return kitLayer(name || "Picture", (x) => { x.imageSmoothingQuality = "high"; x.drawImage(img, Math.round(b.x), Math.round(b.y), Math.round(b.w), Math.round(b.h)); }); }
+  finally { img.close?.(); }
+}
+const svgMarkupOf = (src) => { if (/^\s*</.test(src)) return src; const m = /^data:image\/svg\+xml[^,]*,(.*)$/is.exec(src || ""); if (!m) return ""; try { return /;base64/i.test(src.slice(0, src.indexOf(","))) ? atob(m[1]) : decodeURIComponent(m[1]); } catch { return ""; } };
+/** Path of a kit shape in a w × h box at 0,0 (on ctx); false when the kind is unknown. */
+function kitShapePath(x, spec, w, h) {
+  const k = spec.kind, hw = w / 2, hh = h / 2;
+  x.beginPath();
+  if (spec.d && !["rect", "ellipse", "line"].includes(k)) {
+    if (typeof Path2D !== "function") return false;
+    const vb = (Array.isArray(spec.vb) ? spec.vb : String(spec.vb || "0 0 100 100").trim().split(/[\s,]+/)).map(Number);
+    return { path: new Path2D(spec.d), vb: vb.length === 4 && vb[2] > 0 && vb[3] > 0 ? vb : [0, 0, 100, 100] };
+  }
+  const poly = (pts) => { pts.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py))); x.closePath(); };
+  switch (k) {
+    case "rect": { const r = Math.min(hw, hh, (spec.radius > 0 ? (spec.radius <= 1 ? spec.radius * Math.min(w, h) : spec.radius) : 0)); if (r > 0 && x.roundRect) x.roundRect(0, 0, w, h, r); else x.rect(0, 0, w, h); break; }
+    case "ellipse": x.ellipse(hw, hh, hw, hh, 0, 0, Math.PI * 2); break;
+    case "triangle": poly([[hw, 0], [w, h], [0, h]]); break;
+    case "line": x.moveTo(0, hh); x.lineTo(w, hh); break;
+    case "arrow": { const t = Math.min(h, w * 0.35), sh = h * 0.18; poly([[0, hh - sh], [w - t, hh - sh], [w - t, 0], [w, hh], [w - t, h], [w - t, hh + sh], [0, hh + sh]]); break; }
+    case "star": { const n = Math.max(3, Math.round(spec.points || 5)), inner = n === 5 ? 0.45 : 0.55; poly(Array.from({ length: n * 2 }, (_, i) => { const a = -Math.PI / 2 + (i * Math.PI) / n, r = i % 2 ? inner : 1; return [hw + Math.cos(a) * hw * r, hh + Math.sin(a) * hh * r]; })); break; }
+    case "polygon": { const n = Math.max(3, Math.round(spec.sides || 6)); poly(Array.from({ length: n }, (_, i) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / n; return [hw + Math.cos(a) * hw, hh + Math.sin(a) * hh]; })); break; }
+    case "heart": x.moveTo(hw, h); x.bezierCurveTo(-w * 0.05, h * 0.55, w * 0.05, -h * 0.02, hw, h * 0.27); x.bezierCurveTo(w * 0.95, -h * 0.02, w * 1.05, h * 0.55, hw, h); x.closePath(); break;
+    default: return false;
+  }
+  return true;
+}
+/** Kit shapes are drawn crisp on their own layer, in their own colours (the picked colour when they have none). */
+function kitShape(spec = {}, pt) {
+  const known = ["rect", "ellipse", "triangle", "line", "arrow", "star", "polygon", "heart"].includes(spec.kind);
+  if (!known && !spec.d) return false; // the kit adds its picture instead
+  if (spec.d && !known && typeof Path2D !== "function") return false;
+  const vb = Array.isArray(spec.vb) ? spec.vb : spec.vb ? String(spec.vb).trim().split(/[\s,]+/).map(Number) : null;
+  const aspect = spec.aspect || (vb && vb[2] > 0 && vb[3] > 0 ? vb[2] / vb[3] : spec.kind === "line" ? 6 : spec.kind === "arrow" ? 2 : 1);
+  const b = kitBox(spec.rel, aspect, pt, spec.kind === "line" ? 0.4 : 0.3);
+  const stroke = spec.stroke && spec.stroke !== "none" ? spec.stroke : null;
+  const fill = spec.kind === "line" ? null : spec.fill && spec.fill !== "none" ? spec.fill : stroke ? null : state.color;
+  const S = Math.min(state.doc.w, state.doc.h), unit = (vb && Math.max(vb[2], vb[3])) || 100;
+  const lw = spec.strokeWidth > 0 ? (spec.strokeWidth / unit) * Math.max(b.w, b.h) : spec.kind === "line" || !fill ? Math.max(2, S * 0.008) : 0;
+  return kitLayer(spec.name || ({ rect: "Rectangle", ellipse: "Circle" }[spec.kind] || spec.kind || "Shape").replace(/^./, (c) => c.toUpperCase()), (x) => {
+    x.translate(b.x, b.y);
+    const p = kitShapePath(x, spec, b.w, b.h);
+    if (spec.dash && x.setLineDash) x.setLineDash((Array.isArray(spec.dash) ? spec.dash : [3, 2]).map((n) => n * Math.max(1, lw)));
+    if (p && p.path) {
+      x.scale(b.w / p.vb[2], b.h / p.vb[3]); x.translate(-p.vb[0], -p.vb[1]);
+      if (fill) { x.fillStyle = fill; x.fill(p.path); }
+      if (lw > 0) { x.lineWidth = lw / Math.sqrt((b.w / p.vb[2]) * (b.h / p.vb[3])); x.lineJoin = x.lineCap = "round"; x.strokeStyle = stroke || state.color; x.stroke(p.path); }
+      return;
+    }
+    if (fill) { x.fillStyle = fill; x.fill(); }
+    if (lw > 0) { x.lineWidth = lw; x.lineJoin = x.lineCap = "round"; x.strokeStyle = stroke || fill || state.color; x.stroke(); }
+    if (spec.kind === "line" && spec.arrow) {
+      const s = Math.max(lw * 3, 8), col = stroke || state.color, ends = spec.arrow === "both" ? [1, -1] : spec.arrow === "start" ? [-1] : [1];
+      x.setLineDash?.([]); x.fillStyle = col;
+      for (const dd of ends) { const tip = dd > 0 ? b.w : 0; x.beginPath(); x.moveTo(tip, b.h / 2); x.lineTo(tip - dd * s, b.h / 2 - s * 0.6); x.lineTo(tip - dd * s, b.h / 2 + s * 0.6); x.closePath(); x.fill(); }
+    }
+  });
+}
+/** Writes kit texts (one, or a font combination) on one new layer: real fonts, colours, spacing, outline and box. */
+async function kitText(specs, pt) {
+  const d = state.doc, S = Math.min(d.w, d.h), c = kitPoint(pt);
+  const list = specs.map((s) => (typeof s === "string" ? { content: s } : s || {}));
+  const placed = list.some((s) => Number.isFinite(s.dx) || Number.isFinite(s.dy));
+  const items = list.map((s) => {
+    const role = KIT_TEXT[s.role] ? s.role : "body", px = Math.max(6, (s.rel > 0 ? s.rel : KIT_TEXT[role]) * S);
+    const text = String(s.content ?? KIT_WORDS[role]), bold = s.bold != null ? !!s.bold : s.weight ? s.weight >= 600 : role !== "body" && role !== "caption";
+    const family = familyKey(s.family) || state.settings.text.font || "sans";
+    return { s, px, lines: (s.uppercase ? text.toUpperCase() : text).split("\n"), bold, family, lh: px * (s.lineHeight > 0.5 && s.lineHeight < 4 ? s.lineHeight : 1.2), ls: (+s.letterSpacing || 0) * px };
+  });
+  await Promise.all(items.map((it) => ensureFont(it.family, it.bold, !!it.s.italic).catch(() => null)));
+  let y = c.y - items.reduce((a, it, i) => a + it.lh * it.lines.length + (i ? it.px * 0.3 : 0), 0) / 2;
+  const name = items.map((it) => it.lines.join(" ")).join(" · ").slice(0, 40) || "Text";
+  return kitLayer(name, (x) => {
+    for (const [i, it] of items.entries()) {
+      const s = it.s;
+      x.save();
+      x.font = `${s.italic ? "italic " : ""}${it.bold ? 700 : 400} ${it.px}px ${fontCss(it.family)}`;
+      if ("letterSpacing" in x) x.letterSpacing = it.ls ? it.ls.toFixed(2) + "px" : "0px";
+      const widths = it.lines.map((l) => x.measureText(l || " ").width), wmax = Math.max(...widths);
+      const align = ["left", "center", "right"].includes(s.align) ? s.align : "center";
+      const cy = placed ? c.y + (s.dy || 0) * S : (y += i ? it.px * 0.3 : 0) + (it.lh * it.lines.length) / 2;
+      if (!placed) y += it.lh * it.lines.length;
+      const cx = c.x + (placed ? (s.dx || 0) * S : 0), top = cy - (it.lh * it.lines.length) / 2;
+      const ax = align === "left" ? cx - wmax / 2 : align === "right" ? cx + wmax / 2 : cx;
+      if (s.background) { const pad = it.px * 0.35; x.fillStyle = s.background; x.fillRect(cx - wmax / 2 - pad, top - pad * 0.6, wmax + pad * 2, it.lh * it.lines.length + pad * 1.2); }
+      x.textAlign = align; x.textBaseline = "middle"; x.fillStyle = s.color || state.color;
+      it.lines.forEach((line, j) => {
+        const ly = top + it.lh * (j + 0.5);
+        if (s.stroke) { x.lineJoin = "round"; x.lineWidth = Math.max(1, (+s.strokeWidth || 0.06) * it.px); x.strokeStyle = s.stroke; x.strokeText(line, ax, ly); }
+        x.fillText(line, ax, ly);
+      });
+      x.restore();
+    }
+  });
+}
+async function kitSvg(markup, meta = {}, pt) {
+  const svg = String(markup || "");
+  return kitPicture(svg, meta.name || "Graphic", pt, { rel: meta.rel, aspect: meta.aspect || svgAspect(svg) || 1, def: 0.3 });
+}
+async function kitDrawing(svg, size = {}, pt) {
+  const sw = +size.w || 0, sh = +size.h || 0;
+  let box = null;
+  if (sw > 0 && sh > 0 && pt && Number.isFinite(pt.clientX)) {
+    const z = state.cam.zoom || 1, c = kitPoint(pt), w = Math.min(state.doc.w, sw / z), h = Math.min(state.doc.h, sh / z);
+    box = { x: clamp(c.x - w / 2, 0, state.doc.w - w), y: clamp(c.y - h / 2, 0, state.doc.h - h), w, h };
+  }
+  return kitPicture(String(svg || ""), size.name || "Drawing", pt, { aspect: sw > 0 && sh > 0 ? sw / sh : svgAspect(svg) || 1, def: 0.6, box });
+}
+/** Uploads and photos: a new picture layer (whole picture, at most the canvas size, or rel of it from the kit). */
+async function insertPicture(src, name, pt) {
+  if (typeof src !== "string") { const blob = src; const f = typeof File === "function" ? new File([blob], name || "Picture", { type: blob.type || "image/png" }) : Object.assign(blob, { name: name || "Picture" }); await importImage(f); return true; }
+  const svg = /^data:image\/svg/i.test(src) ? svgMarkupOf(src) : "";
+  return kitPicture(src, String(name || "Picture").replace(/\.[a-z0-9]+$/i, ""), pt, { aspect: svg ? svgAspect(svg) : 0, def: 0.6 });
+}
+// The kit's Draw tools (Pen, Marker, Glow pen, Highlighter, Eraser) use Draw's own brushes on the selected layer.
+const KIT_BRUSH = { pen: "pen", marker: "marker", glow: "glow", highlighter: "highlighter", eraser: "eraser", pencil: "pencil" };
+let kitDrawing0 = null; // { mark: undo steps when the kit's Draw started, tool before it }
+const kitDraw = {
+  start({ tool = "pen", color, size, alpha } = {}) {
+    const t = KIT_BRUSH[tool] || "pen";
+    if (!kitDrawing0) kitDrawing0 = { mark: history.past.length, was: state.tool };
+    setTool(t);
+    if (color && t !== "eraser") { setColor(color); addRecent(state.color); }
+    // the kit's weight is in screen px: the same thickness on screen at this zoom
+    if (size > 0) setSize(Math.max(1, Math.round(size / (state.cam.zoom || 1))));
+    // the kit's transparency on top of the brush's own see-through look (a highlighter stays a highlighter)
+    if (alpha > 0 && alpha <= 1) { state.settings[t].opacity = Math.round(clamp((BRUSHES[t]?.opacity ?? 1) * alpha, 0.02, 1) * 100) / 100; syncOptions(); saveSettings(); }
+    return true;
+  },
+  stop(keep = true) {
+    if (!kitDrawing0) return false;
+    if (!keep) while (history.past.length > kitDrawing0.mark && history.canUndo) undo();
+    kitDrawing0 = null;
+    return true;
+  },
+  undo: () => undo(),
+  active: () => !!kitDrawing0,
+};
+/* Design panel → Styles: paper colours for the drawing (the background under every layer). One undo step each. */
+const PAPERS = [["White", "#ffffff"], ["Cream", "#fdf6e3"], ["Kraft", "#e8d5b5"], ["Mist", "#eef2f7"], ["Sky", "#e0f2fe"], ["Mint", "#e7f8ef"], ["Blush", "#fde8ec"], ["Lemon", "#fff7cc"], ["Lilac", "#ede9fe"], ["Slate", "#334155"], ["Chalkboard", "#1f3a2e"], ["Night", "#0f172a"]];
+function setPaper(hex) {
+  const h = normHex(hex), d = state.doc;
+  if (!h || !d) return false;
+  const was = d._savedBg ?? d.background ?? "#ffffff";
+  if (was === h) return false;
+  d.background = d._savedBg = h; $("#bgColor").value = h;
+  pushHistory({ kind: "bg", before: was, after: h });
+  scheduleSave(); requestRender();
+  return true;
+}
+function renderDesignStyles(box) {
+  box.append(el("p", { class: "muted small", text: "Paper colours for your drawing: the colour under every layer. Undo takes it back." }),
+    el("div", { class: "paper-grid" }, PAPERS.map(([name, hex]) => el("button", { type: "button", class: "paper", "data-paper": hex, title: name, "aria-label": `Paper colour ${name}`, onclick: () => { if (setPaper(hex)) toast(`${name} paper`); } },
+      el("span", { class: "paper-sw", style: `background:${hex}` }), el("span", { text: name })))));
+}
+function buildInsert() {
+  return {
+    image: (src, name, pt) => insertPicture(src, name, pt),
+    shape: (spec, pt) => kitShape(spec || {}, pt),
+    svg: (markup, meta, pt) => kitSvg(markup, meta || {}, pt),
+    text: (spec, pt) => kitText([typeof spec === "string" ? { content: spec, role: /^(h1|heading|title)$/.test(pt || "") ? "heading" : /^(h2|subheading)$/.test(pt || "") ? "subheading" : "body" } : spec || {}], typeof pt === "string" ? undefined : pt),
+    textGroup: (specs, pt) => kitText(Array.isArray(specs) && specs.length ? specs : [{}], pt),
+    drawing: (svg, size, pt) => kitDrawing(svg, size || {}, pt),
+    color: (hex) => { setColor(hex); addRecent(state.color); },
+    font: (key) => { if (FONT_FAMILIES[key]) { state.settings.text.font = key; fontSel.value = key; saveSettings(); toast(`Text font: ${FONT_FAMILIES[key].label}. Pick Text and tap the canvas.`); } },
+  };
+}
+const kitInsert = buildInsert();
 
 async function mountFrame() {
   let mod = null;
@@ -1492,19 +1713,19 @@ async function mountFrame() {
       ],
       share: { download: [{ label: "PNG", act: () => doExport("png") }, { label: "PNG (transparent)", act: () => doExport("png-clear") }, { label: "JPG", act: () => doExport("jpg") }, { label: "Drawing file", act: () => doExport("json") }], link: () => location.origin + "/tools/draw" },
       templates: { gallery: { TEMPLATES: GALLERY, thumb: templateThumb }, tool: "draw", apply: (id) => applyTemplate(id), placeholder: "Search Draw templates" },
+      // Elements, Text and Tools are the shared kit's Canva panels (shared/panels/). Draw's brushes are its main tool, so
+      // they come first in Tools (primary); its Text part is the Text tool (type on the canvas) and its font.
+      // No label / icon on these: the rail keeps the kit's names.
       panels: {
-        tools: { label: "Brushes", icon: "tools", render: (b) => renderBrushesPanel(b) },
-        elements: (b) => renderElementsPanel(b),
-        text: (b) => renderTextPanel(b),
+        tools: { title: "Brushes", primary: true, render: (b) => renderBrushesPanel(b) },
+        text: { title: "Type on the canvas", render: (b) => renderTextPanel(b) },
         layers: { label: "Layers", icon: "pages", render: (b) => renderLayersPanel(b) },
       },
-      rail: ["templates", "tools", "elements", "text", "layers", "brand", "uploads", "projects", "apps"],
-      insert: {
-        image: (src, name) => insertPicture(src, name),
-        text: (str, style) => insertText(str, style === "heading" || style === "h1" ? { size: 120, bold: true } : style === "subheading" || style === "h2" ? { size: 72, bold: true } : { size: 44 }),
-        color: (hex) => { setColor(hex); addRecent(state.color); },
-        font: (key) => { if (FONT_FAMILIES[key]) { state.settings.text.font = key; fontSel.value = key; saveSettings(); toast(`Text font: ${FONT_FAMILIES[key].label}. Pick Text and tap the canvas.`); } },
-      },
+      rail: ["templates", "elements", "text", "brand", "uploads", "tools", "layers", "projects", "apps"],
+      insert: kitInsert,
+      draw: kitDraw,
+      // Design panel's Styles tab: paper colours
+      design: { styles: (box) => renderDesignStyles(box) },
       projects: {
         save: async () => { await saveNow(); return { name: state.doc.name, data: await drawingJson(), thumb: thumbDataUrl() }; },
         open: async (rec) => { const p = rec?.data ? rec : await getProject(rec?.id); if (state.saveStatus !== "saved") await saveNow(); await loadDrawing(p.data, { id: p.id }); },
@@ -1584,6 +1805,10 @@ window.adApp = {
   docColors: () => { refreshDocColors(true); return [...document.querySelectorAll("#docColors .swatch")].map((b) => b.dataset.color); },
   setSize,
   get shell() { return shell; },
+  /** the left-rail kit's insert adapter (shared/panels/index.js) and Draw's brushes for the kit's Draw tools */
+  insert: kitInsert, draw: kitDraw,
+  /** Design panel → Styles (paper colours) */
+  designStyles: (box) => renderDesignStyles(box), setPaper,
 };
 
 async function start() {

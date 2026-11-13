@@ -6,6 +6,8 @@ import { parseCSV, detectDelimiter, toCSV } from "./csv.js";
 import { saveProject, listProjects, getProject, uid } from "../shared/store.js";
 import { aiReady } from "../shared/config.js";
 import { onlineAi, comingSoon } from "../shared/ai.js";
+import { FONT_FAMILIES, ensureFont, loadBrand } from "../shared/brand.js";
+import { makeSheetsInsert } from "./insert.js";
 
 const $ = (id) => document.getElementById(id);
 const KM = 16384, key = (r, c) => r * KM + c, unkey = (k) => [Math.floor(k / KM), k % KM];
@@ -14,6 +16,8 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const plain = (v) => (v instanceof FormulaError ? v.code : v);
+/** Focus of a cover picture from its cell style pos ("48% 30%", like CSS object-position) → [0.48, 0.3], or null. */
+const focusOf = (pos) => { const m = /^(\d{1,3}(?:\.\d+)?)% (\d{1,3}(?:\.\d+)?)%$/.exec(String(pos || "").trim()); return m ? [Math.min(100, +m[1]) / 100, Math.min(100, +m[2]) / 100] : null; };
 const els = {};
 /** Runs an async action from a click; any failure becomes a friendly message instead of an uncaught error. */
 const safe = (fn) => (...a) => Promise.resolve().then(() => fn(...a)).catch((e) => { console.error(e); toast("Sorry, something went wrong: " + (e?.message || e)); });
@@ -210,7 +214,7 @@ function cellHtml(r, c, top, w, h, extra = "") {
     if (opt && text) inner = `<span class="pill" style="background:${esc(opt.color)}">${esc(text)}</span>`;
   }
   const img = m.images.get(key(r, c));
-  if (img) { cls += " ci" + (stl?.fit === "cover" ? " cover" : ""); inner = `<img class="cimg" alt="" src="${esc(img)}">` + (text ? `<span>${esc(text)}</span>` : ""); }
+  if (img) { const fp = stl?.fit === "cover" ? focusOf(stl.pos) : null; cls += " ci" + (stl?.fit === "cover" ? " cover" : ""); inner = `<img class="cimg" alt="" src="${esc(img)}"${fp ? ` style="object-position:${Math.round(fp[0] * 100)}% ${Math.round(fp[1] * 100)}%"` : ""}>` + (text ? `<span>${esc(text)}</span>` : ""); }
   return `<div class="${cls}" data-ref="${colName(c)}${r + 1}"${title} style="left:${left}px;top:${top}px;width:${w}px;height:${h}px;${css}">${inner ?? `<span>${esc(text)}</span>`}</div>`;
 }
 function render() {
@@ -852,6 +856,7 @@ function autoScroll(e) {
   if (e.clientX > b.right - 16) scroller.scrollLeft += 20; else if (e.clientX < b.left + 16) scroller.scrollLeft -= 20;
 }
 spacer.addEventListener("mousedown", (e) => { if (!e.target.closest(".chart, .cell-input:not(.idle), .dd-btn, .link-chip, .date-pick, .err-chip")) e.preventDefault(); });
+spacer.addEventListener("pointerdown", (e) => { if (!e.target.closest?.(".chart")) S.lastFloat = null; }, true);
 spacer.addEventListener("pointerdown", (e) => {
   if (e.target.closest(".chart, .fill-handle, .fn-hint, .dd-btn, .link-chip, .date-pick, .err-chip") || (S.edit && e.target === cellInput)) return;
   closeMenus();
@@ -1861,6 +1866,72 @@ function pickChartKind(d) {
   return d.series.length > 2 ? "stacked" : "bar";
 }
 function renderCharts() { return drawCharts().catch((e) => console.error(e)); }
+
+/* ---------------- floating text boxes (Text panel: Add a text box, styles, font combinations) ----------------
+   { kind: "text", text, st: { family, size, color, bold, italic, align, ls (em), upper, lh, bg }, x, y, w, h } in the
+   floating layer with the charts and pictures: type in it, drag its bar to move, the corner to change its width. */
+const TEXT_BOX_HTML = `<div class="chart-bar tbox-bar" title="Drag to move"><span class="tbox-grip" aria-hidden="true">Text box</span><button type="button" data-cact="del" aria-label="Delete text box" title="Delete text box">✕</button></div><div class="chart-body tbox-body" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="Text box text"></div><div class="chart-resize" title="Drag to change the width"></div>`;
+// innerText keeps the line breaks typed in the box (Enter makes new lines); textContent where there is no innerText.
+const boxText = (b) => ("innerText" in b ? b.innerText : b.textContent);
+const setBoxText = (b, t) => { if ("innerText" in b) b.innerText = t; else b.textContent = t; };
+function textBoxCss(ch) {
+  const st = ch.st || {};
+  return { fontFamily: (FONT_FAMILIES[st.family] || FONT_FAMILIES.sans).css, fontSize: (st.size || 16) + "px", color: st.color || "#1b2133", fontWeight: st.bold ? "700" : "400", fontStyle: st.italic ? "italic" : "normal", textAlign: st.align || "left", letterSpacing: st.ls ? st.ls + "em" : "", textTransform: st.upper ? "uppercase" : "", lineHeight: String(st.lh || 1.25), background: st.bg || "", borderRadius: st.bg ? "8px" : "" };
+}
+function paintTextBox(el, ch) {
+  const body = el.querySelector(".tbox-body");
+  if (!body) return;
+  Object.assign(body.style, textBoxCss(ch));
+  if (document.activeElement !== body && boxText(body) !== (ch.text || "")) setBoxText(body, ch.text || "");
+  const h = el.offsetHeight;
+  if (h > 0) ch.h = h;
+}
+function wireTextBox(el, id) {
+  const body = el.querySelector(".tbox-body");
+  let snapped = false;
+  const find = () => meta().charts.find((c) => c.id === id);
+  body.addEventListener("focus", () => { snapped = false; S.lastFloat = id; });
+  body.addEventListener("input", () => {
+    const c = find(); if (!c) return;
+    if (S.mode !== "edit") { setBoxText(body, c.text || ""); return; }
+    if (!snapped) { snapshot(); snapped = true; }
+    c.text = boxText(body).replace(/\n$/, "");
+    if (el.offsetHeight > 0) c.h = el.offsetHeight;
+    scheduleSave();
+  });
+  // Typing here is not typing in the grid.
+  for (const t of ["keydown", "keyup", "keypress", "copy", "cut", "beforeinput", "pointerdown", "mousedown"]) body.addEventListener(t, (e) => e.stopPropagation());
+  body.addEventListener("keydown", (e) => { if (e.key === "Escape") { body.blur(); focusGrid(); } });
+  body.addEventListener("paste", (e) => { e.stopPropagation(); e.preventDefault(); const t = e.clipboardData?.getData("text/plain") || ""; if (!document.execCommand?.("insertText", false, t)) { setBoxText(body, boxText(body) + t); body.dispatchEvent(new Event("input")); } });
+}
+/** Puts the caret in a floating text box with all its text selected (typing replaces it). */
+function focusFloating(id) {
+  const body = els.chartLayer.querySelector(`[data-id="${id}"] .tbox-body`);
+  if (!body) return;
+  body.focus({ preventScroll: true });
+  try { const r = document.createRange(); r.selectNodeContents(body); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } catch {}
+}
+/** A picture's new source (photo frames): redraw its element. */
+function refreshFloating(id) {
+  const ch = meta().charts.find((c) => c.id === id), img = els.chartLayer.querySelector(`[data-id="${id}"] .chart-body img`);
+  if (ch && img) img.src = ch.src;
+  else renderCharts();
+}
+/** PDF: a text box as text on the page (wrapped like on screen). */
+function drawTextBox(g, ch) {
+  const st = ch.st || {}, size = st.size || 16, lh = size * (st.lh || 1.25), pad = 6;
+  g.save();
+  g.font = `${st.italic ? "italic " : ""}${st.bold ? 700 : 400} ${size}px ${(FONT_FAMILIES[st.family] || FONT_FAMILIES.sans).css}`;
+  if ("letterSpacing" in g) g.letterSpacing = st.ls ? `${st.ls * size}px` : "0px";
+  const text = st.upper ? String(ch.text || "").toUpperCase() : String(ch.text || ""), maxW = Math.max(10, ch.w - pad * 2), lines = [];
+  for (const para of text.split("\n")) { let cur = ""; for (const w of para.split(/(\s+)/)) { const t = cur + w; if (cur.trim() && g.measureText(t.trimEnd()).width > maxW) { lines.push(cur.trimEnd()); cur = w.trimStart(); } else cur = t; } lines.push(cur); }
+  if (st.bg) { g.fillStyle = st.bg; g.fillRect(ch.x, ch.y, ch.w, lines.length * lh + pad * 2); }
+  g.fillStyle = st.color || "#1b2133"; g.textBaseline = "middle";
+  g.textAlign = st.align === "center" ? "center" : st.align === "right" ? "right" : "left";
+  const x = st.align === "center" ? ch.x + ch.w / 2 : st.align === "right" ? ch.x + ch.w - pad : ch.x + pad;
+  lines.forEach((l, i) => g.fillText(l, x, ch.y + pad + i * lh + lh / 2));
+  g.restore();
+}
 async function drawCharts() {
   const s = sheet(), m = meta(s);
   const want = new Set(m.charts.map((c) => c.id));
@@ -1869,7 +1940,7 @@ async function drawCharts() {
   await refreshLiveCharts(s, m);
   let lib;
   try { lib = await loadCharts(); } catch {
-    for (const ch of m.charts) { const el = chartEl(ch); el.querySelector(".chart-body").innerHTML = '<div class="msg">The chart drawing tools could not load. Check your internet connection and try again.</div>'; }
+    for (const ch of m.charts) { const el = chartEl(ch); if (ch.kind === "image") { const body = el.querySelector(".chart-body"); if (!body.querySelector("img")) body.innerHTML = `<img alt="${esc(ch.title || "Picture")}" src="${esc(ch.src || "")}">`; } else if (ch.kind === "text") paintTextBox(el, ch); else el.querySelector(".chart-body").innerHTML = '<div class="msg">The chart drawing tools could not load. Check your internet connection and try again.</div>'; }
     return;
   }
   if (sheet() !== s) return;
@@ -1879,6 +1950,7 @@ async function drawCharts() {
       ch.x = Math.round(G.colX[clamp(p.col, 0, G.cols)] / Z); ch.y = Math.round(G.rowY[clamp(p.row, 0, G.rows)] / Z);
     }
     const el = chartEl(ch);
+    if (ch.kind === "text") { Object.assign(el.style, { left: ch.x + "px", top: ch.y + "px", width: ch.w + "px", height: "" }); paintTextBox(el, ch); continue; }
     Object.assign(el.style, { left: ch.x + "px", top: ch.y + "px", width: ch.w + "px", height: ch.h + "px" });
     el.setAttribute("aria-label", `${ch.kind} chart: ${ch.title || "untitled"}`);
     const title = el.querySelector(".chart-title");
@@ -1898,20 +1970,23 @@ function chartEl(ch) {
   el.dataset.id = ch.id;
   el.setAttribute("role", "figure");
   el.tabIndex = 0;
-  el.innerHTML = ch.kind === "image"
+  if (ch.kind === "text") { el.classList.add("tbox"); el.setAttribute("role", "group"); el.setAttribute("aria-label", "Text box"); }
+  el.innerHTML = ch.kind === "text" ? TEXT_BOX_HTML : ch.kind === "image"
     ? `<div class="chart-bar" title="Drag to move"><input class="chart-title" type="text" aria-label="Picture name" placeholder="Picture"><select class="chart-kind" hidden aria-hidden="true"><option value="image">Picture</option></select><button type="button" data-cact="del" aria-label="Delete picture" title="Delete picture">✕</button></div><div class="chart-body pic"></div><div class="chart-resize" title="Drag to resize"></div>`
     : `<div class="chart-bar" title="Drag to move"><input class="chart-title" type="text" aria-label="Chart title" placeholder="Chart title"><select class="chart-kind" aria-label="Chart type"><option value="bar">Columns</option><option value="hbar">Horizontal bar</option><option value="stacked">Stacked columns</option><option value="line">Line</option><option value="area">Area</option><option value="pie">Pie</option><option value="donut">Donut</option><option value="scatter">Scatter</option></select><button type="button" data-cact="opts" title="Chart options: legend, values, colours" aria-label="Chart options">⋯</button><button type="button" data-cact="svg" title="Download as SVG">SVG</button><button type="button" data-cact="png" title="Download as PNG picture">PNG</button><button type="button" data-cact="del" aria-label="Delete chart" title="Delete chart">✕</button></div><div class="chart-body"></div><div class="chart-resize" title="Drag to resize"></div>`;
   els.chartLayer.appendChild(el);
+  if (ch.kind === "text") wireTextBox(el, ch.id);
+  el.addEventListener("pointerdown", () => { S.lastFloat = ch.id; });
   const find = () => meta().charts.find((c) => c.id === ch.id);
-  el.querySelector(".chart-kind").addEventListener("change", (e) => { const c = find(); if (!c) return; snapshot(); c.kind = e.target.value; renderCharts(); scheduleSave(); });
-  el.querySelector(".chart-title").addEventListener("change", (e) => { const c = find(); if (!c) return; snapshot(); c.title = e.target.value; scheduleSave(); });
-  el.querySelector(".chart-title").addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.blur(); e.stopPropagation(); });
+  el.querySelector(".chart-kind")?.addEventListener("change", (e) => { const c = find(); if (!c) return; snapshot(); c.kind = e.target.value; renderCharts(); scheduleSave(); });
+  el.querySelector(".chart-title")?.addEventListener("change", (e) => { const c = find(); if (!c) return; snapshot(); c.title = e.target.value; scheduleSave(); });
+  el.querySelector(".chart-title")?.addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.blur(); e.stopPropagation(); });
   el.addEventListener("click", (e) => {
     const b = e.target.closest("[data-cact]");
     if (!b) return;
     const c = find();
     if (!c) return;
-    if (b.dataset.cact === "del") { snapshot(); meta().charts = meta().charts.filter((x) => x.id !== c.id); renderCharts(); scheduleSave(); toast("Chart deleted."); }
+    if (b.dataset.cact === "del") { snapshot(); meta().charts = meta().charts.filter((x) => x.id !== c.id); renderCharts(); scheduleSave(); toast(c.kind === "text" ? "Text box deleted." : c.kind === "image" ? "Picture deleted." : "Chart deleted."); }
     else if (b.dataset.cact === "opts") chartOptions(c, b);
     else safe(downloadChart)(c, b.dataset.cact);
   });
@@ -1931,6 +2006,7 @@ function chartEl(ch) {
       if (!moved && Math.hypot(dx, dy) < 3) return;
       if (!moved) { snapshot(); moved = true; }
       if (mode === "move") { c.x = Math.max(0, Math.round(p0.cx + dx)); c.y = Math.max(0, Math.round(p0.cy + dy)); el.style.left = c.x + "px"; el.style.top = c.y + "px"; }
+      else if (c.kind === "text") { c.w = Math.max(40, Math.round(p0.w + dx)); el.style.width = c.w + "px"; }
       else { c.w = Math.max(220, Math.round(p0.w + dx)); c.h = Math.max(170, Math.round(p0.h + dy)); el.style.width = c.w + "px"; el.style.height = c.h + "px"; }
     };
     const up = () => { target.removeEventListener("pointermove", mv); target.removeEventListener("pointerup", up); target.removeEventListener("pointercancel", up); if (moved) { if (mode === "size") renderCharts(); scheduleSave(); } };
@@ -2383,16 +2459,6 @@ function putText(str, style) {
   autoHeights(sheet(), new Set([ar]));
   afterChange();
 }
-function insertPicture(src, name) {
-  commitEdit();
-  if (!src) return;
-  snapshot();
-  const ch = { id: uid(), kind: "image", src, title: name || "Picture", w: 240, h: 200, x: Math.round(G.colX[Math.min(G.cols, S.sel.c2 + 1)] / Z) + 16, y: Math.round(G.rowY[S.sel.r1] / Z) };
-  meta().charts.push(ch);
-  renderCharts();
-  afterChange();
-  toast("Picture added. Drag its top bar to move it and the corner to resize.");
-}
 /** Adds the sheets of a built workbook (templates) to this workbook. */
 function addSheetFrom(src) {
   const s = S.wb.addSheet(S.wb.uniqueName(src.name || "Sheet"), { rows: src.rows || 1000, cols: src.cols || 26 });
@@ -2407,6 +2473,70 @@ function addSheetFrom(src) {
   extraMetaFrom(m, src);
   m.freeze = src.freeze || 0;
   return s;
+}
+/* Design panel template detail: one sheet of a template ("page"), and the template's style on this sheet. */
+async function applyTemplatePage(id, i = 0) {
+  commitEdit();
+  const T = await import("./templates.js");
+  const st = T.buildTemplate(id), src = st.sheets[Math.max(0, Math.min(st.sheets.length - 1, +i || 0))];
+  const empty = S.wb.sheets.every((s) => !s.cells.size && !meta(s).charts.length);
+  snapshot();
+  if (empty) { const keep = S.id; load({ ...st, name: st.name, sheets: [src] }); S.id = keep; }
+  else { const first = S.wb.sheets.length; addSheetFrom(src); renderTabs(); switchSheet(first); afterChange(); }
+  scheduleSave();
+  toast(empty ? `“${src.name}” of ${st.name} is ready.` : `“${src.name}” of ${st.name} was added as a new sheet tab.`);
+  return true;
+}
+/** A template's style: its header row look, title look and cell font (first sheet). */
+function templateLook(st) {
+  const src = st.sheets[0] || {}, rows = new Map();
+  for (const [ref, s] of Object.entries(src.styles || {})) { const p = parseCellName(ref); if (!p || !s) continue; if (!rows.has(p.row)) rows.set(p.row, []); rows.get(p.row).push(s); }
+  let head = null, title = null;
+  for (const r of [...rows.keys()].sort((a, b) => a - b)) {
+    const list = rows.get(r);
+    if (!title && list.some((s) => +s.size >= 17)) { const s = list.find((x) => +x.size >= 17); title = { size: s.size, color: s.color, b: s.b, fill: s.fill, font: s.font }; continue; }
+    if (!head && list.filter((s) => s.fill && s.b).length >= 2) { const s = list.find((x) => x.fill && x.b); head = { fill: s.fill, color: s.color, b: true, font: s.font }; }
+  }
+  const fills = new Map();
+  for (const s of Object.values(src.styles || {})) if (/^#[0-9a-f]{6}$/i.test(s?.fill || "") && !/^#f[0-9a-f]f[0-9a-f]f[0-9a-f]$/i.test(s.fill)) fills.set(s.fill.toLowerCase(), (fills.get(s.fill.toLowerCase()) || 0) + 1);
+  const font = head?.font || title?.font || null;
+  return { name: st.name, head, title, font, colors: [...fills.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]).slice(0, 5) };
+}
+function templateStyleOf(id) {
+  try { const st = TPL?.buildTemplate(id); if (!st) return null; const k = templateLook(st); return { name: k.name, colors: k.colors.length ? k.colors : [k.head?.fill, k.title?.color].filter(Boolean), fonts: [k.font || "Default font", k.head ? "Header row colours" : "Cell styles"] }; } catch { return null; }
+}
+let TPL = null;
+/** Applies a template's look to this sheet: its header row style on your header row (the first row with several
+ *  filled cells), its title style on a single title cell above it, its font on the used cells. */
+async function applyTemplateStyle(id) {
+  commitEdit();
+  const T = TPL || (TPL = await import("./templates.js"));
+  return applyLook(templateLook(T.buildTemplate(id)), "template style");
+}
+/** Brand panel › Apply brand to the whole design: the brand's main colour on the header row, its fonts on the title and cells. */
+function applyBrandKit(kit) {
+  commitEdit();
+  const k = kit || {}, cols = (k.colors || []).filter((c) => /^#[0-9a-f]{6}$/i.test(c) && !/^#(?:f{6}|0{6})$/i.test(c));
+  const n = cols[0] ? parseInt(cols[0].slice(1), 16) : 0, lum = ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000;
+  const fam = (f) => (f && FONT_FAMILIES[f] ? FONT_FAMILIES[f].css : null);
+  return applyLook({ name: k.name || "Brand", head: cols[0] ? { fill: cols[0], color: lum > 150 ? "#1b2133" : "#ffffff" } : null, title: cols[1] || cols[0] ? { size: 20, color: cols[1] || cols[0], b: true } : null, font: fam(k.fonts?.body), titleFont: fam(k.fonts?.heading) }, "brand");
+}
+/** Puts a look (header row, title cell, font) on the active sheet's data. */
+function applyLook(look, what) {
+  const s = sheet(), m = meta(s), used = S.wb.usedRange(s);
+  if (!used.rows) { toast(`Add some cells first: the ${what} goes on your header row and title.`); return false; }
+  const filled = (r) => { let n = 0; for (let c = 0; c < used.cols; c++) if (S.wb.getInput(s, r, c) !== "") n++; return n; };
+  let hr = -1;
+  for (let r = 0; r < Math.min(used.rows, 30); r++) if (filled(r) >= 2) { hr = r; break; }
+  snapshot();
+  const set = (r, c, patch) => { const k = key(r, c), cur = { ...(m.styles.get(k) || {}) }; for (const [p, v] of Object.entries(patch)) if (v == null || v === "") delete cur[p]; else cur[p] = v; if (Object.keys(cur).length) m.styles.set(k, cur); else m.styles.delete(k); };
+  if (look.head && hr >= 0) for (let c = 0; c < used.cols; c++) if (S.wb.getInput(s, hr, c) !== "") set(hr, c, { fill: look.head.fill, color: look.head.color, b: true });
+  if (look.font) for (let r = 0; r < used.rows; r++) for (let c = 0; c < used.cols; c++) if (S.wb.getInput(s, r, c) !== "") set(r, c, { font: look.font });
+  if (look.title) for (let r = 0; r < (hr >= 0 ? hr : 1); r++) if (filled(r) === 1) { for (let c = 0; c < used.cols; c++) if (S.wb.getInput(s, r, c) !== "") set(r, c, { size: look.title.size, color: look.title.color, b: look.title.b, fill: look.title.fill, ...(look.titleFont ? { font: look.titleFont } : {}) }); }
+  autoHeights(s, new Set(Array.from({ length: Math.min(used.rows, 5000) }, (_, i) => i)));
+  afterChange();
+  toast(`${look.name} ${what === "brand" ? "brand" : "style"} applied: header row${look.title ? ", title" : ""}${look.font ? " and font" : ""}.`);
+  return true;
 }
 /** Templates panel: an empty workbook becomes the template; otherwise the template comes in as new sheet tabs. */
 async function applyTemplate(id) {
@@ -2451,10 +2581,10 @@ function stickerInto(text) {
 }
 function elementsPanel(el) {
   el.innerHTML = `<div class="sp">
-    <h3 class="sp-h">Charts</h3>
+    <h3 class="sp-h">${shell ? "Charts from your data" : "Charts"}</h3>
     <button type="button" class="sp-wide" data-magicchart="1">✦ <b>Magic Charts</b>: the best chart for the selected data</button>
-    <div class="sp-grid">${Object.keys(CHART_ICON).map((k) => `<button type="button" class="sp-tile" data-chart="${k}">${CHART_ICON[k]}<span>${CHART_NAMES[k]}</span></button>`).join("")}</div>
-    <p class="sp-note">Select your labels and numbers first, then pick a chart. It updates when the numbers change.</p>
+    ${shell ? "" : `<div class="sp-grid">${Object.keys(CHART_ICON).map((k) => `<button type="button" class="sp-tile" data-chart="${k}">${CHART_ICON[k]}<span>${CHART_NAMES[k]}</span></button>`).join("")}</div>`}
+    <p class="sp-note">${shell ? "Select your labels and numbers, then pick Magic Charts, or any chart in Browse categories › Charts: the chart is made from the selected cells and updates when the numbers change." : "Select your labels and numbers first, then pick a chart. It updates when the numbers change."}</p>
     <h3 class="sp-h">In a cell</h3>
     <div class="sp-grid"><button type="button" class="sp-tile" data-cellpic="1"><svg viewBox="0 0 40 30"><rect x="6" y="5" width="28" height="20" rx="3" fill="#ede9fe" stroke="#8b5cf6"/><circle cx="14" cy="12" r="3" fill="#8b5cf6" stroke="none"/><path d="M8 23l8-7 6 5 4-3 6 5" stroke="#5b4cf0" fill="none"/></svg><span>Picture in a cell</span></button><button type="button" class="sp-tile" data-celldd="1"><svg viewBox="0 0 40 30"><rect x="5" y="9" width="30" height="12" rx="6" fill="#dcfce7" stroke="#16a34a"/><path d="m27 13 3 3 3-3" stroke="#16a34a" fill="none"/></svg><span>Dropdown pills</span></button></div>
     <h3 class="sp-h">Stickers</h3>
@@ -2484,9 +2614,9 @@ function elementsPanel(el) {
   });
 }
 const TEXT_STYLES = [
-  { id: "heading", label: "Add a heading", text: "Heading", st: { b: true, size: 24, i: false } },
-  { id: "subheading", label: "Add a subheading", text: "Subheading", st: { b: true, size: 17, i: false } },
-  { id: "body", label: "Add a little bit of body text", text: "Body text", st: { b: false, size: undefined, i: false } },
+  { id: "heading", label: "Add a heading", cell: "Heading cells", text: "Heading", st: { b: true, size: 24, i: false } },
+  { id: "subheading", label: "Add a subheading", cell: "Subheading cells", text: "Subheading", st: { b: true, size: 17, i: false } },
+  { id: "body", label: "Add a little bit of body text", cell: "Body text cells", text: "Body text", st: { b: false, size: undefined, i: false } },
   { id: "band", label: "Title band", text: "Title", st: { b: true, size: 18, fill: "#5b4cf0", color: "#ffffff", valign: "middle" } },
   { id: "header", label: "Table header", text: "Column", st: { b: true, fill: "#ece9ff", color: "#2a2373", bd: "b", bc: "#5b4cf0" } },
   { id: "note", label: "Small note", text: "Note", st: { i: true, size: 11, color: "#64748b" } },
@@ -2494,8 +2624,8 @@ const TEXT_STYLES = [
 ];
 function textPanel(el) {
   el.innerHTML = `<div class="sp">
-    <p class="sp-note">Click a style to use it on the selected cells.</p>
-    <div class="sp-text">${TEXT_STYLES.map((t) => `<button type="button" class="ts-${t.id}" data-tstyle="${t.id}">${esc(t.label)}</button>`).join("")}</div>
+    ${shell ? '<h3 class="sp-h">Cell styles</h3>' : ""}<p class="sp-note">Click a style to use it on the selected cells.</p>
+    <div class="sp-text">${TEXT_STYLES.map((t) => `<button type="button" class="ts-${t.id}" data-tstyle="${t.id}">${esc(shell ? t.cell || t.label : t.label)}</button>`).join("")}</div>
     <h3 class="sp-h">Fonts</h3>
     <div class="sp-fonts">${Object.keys(FONTS).map((f) => `<button type="button" data-font="${esc(f)}" style="font-family:${esc(FONTS[f])}">${f || "Default"}</button>`).join("")}</div>
   </div>`;
@@ -2802,6 +2932,9 @@ async function putCellImage(src) {
   const { ar, ac } = S.sel, m = meta();
   snapshot();
   m.images.set(key(ar, ac), src);
+  // a new picture is centred: the face focus (pos) belonged to the template's photo
+  const st0 = m.styles.get(key(ar, ac));
+  if (st0?.pos) { const { pos, ...rest } = st0; if (Object.keys(rest).length) m.styles.set(key(ar, ac), rest); else m.styles.delete(key(ar, ac)); }
   if ((m.rowH.get(ar) ?? DEF_H) < 60) { m.rowH.set(ar, 60); m.autoH.delete(ar); layout(); }
   afterChange();
   toast(`Picture added to ${cellName(ar, ac)}. Delete or Backspace removes it.`);
@@ -2893,10 +3026,11 @@ async function exportPdfBytes() {
     for (let c = 0; c < cols; c++) X.push(X[c] + (m.colW.get(c) ?? DEF_W));
     for (let r = 0; r < rows; r++) Y.push(Y[r] + (m.hidden.has(r) ? 0 : m.rowH.get(r) ?? DEF_H));
     let W = X[cols], H = Y[rows];
-    const charts = [];
+    const charts = [], texts = [];
     for (const ch of m.charts) {
       if (ch.x === undefined) { const p = parseCellName(ch.at || "") || { row: 0, col: Math.min(cols, 6) }; ch.x = X[Math.min(p.col, cols)] ?? W; ch.y = Y[Math.min(p.row, rows)] ?? H; }
       let svg = null;
+      if (ch.kind === "text") { texts.push(ch); W = Math.max(W, ch.x + ch.w); H = Math.max(H, ch.y + ch.h); continue; }
       if (ch.kind === "image") svg = ch.src;
       else if (lib) { try { const raw = chartSvg(lib, ch, s, Math.max(60, ch.w - 2), Math.max(60, ch.h - BAR_H - 2), true); if (raw) svg = URL.createObjectURL(new Blob([raw.replace(/^<svg([^>]*)>/, `<svg$1><rect width="100%" height="100%" fill="#fff"/>`)], { type: "image/svg+xml" })); } catch {} }
       const img = svg ? await loadImg(svg) : null;
@@ -2926,7 +3060,7 @@ async function exportPdfBytes() {
           if (!m.noGrid) { g.strokeStyle = "#e5e7eb"; g.lineWidth = 0.5; g.strokeRect(x, y, w, h); }
           if (st.bd) { g.strokeStyle = st.bc || "#334155"; g.lineWidth = st.bs === "thick" ? 2 : 1; g.setLineDash(st.bs === "dashed" ? [5, 3] : st.bs === "dotted" ? [1.5, 2.5] : []); g.beginPath(); if (st.bd.includes("t")) { g.moveTo(x, y); g.lineTo(x + w, y); } if (st.bd.includes("b")) { g.moveTo(x, y + h); g.lineTo(x + w, y + h); } if (st.bd.includes("l")) { g.moveTo(x, y); g.lineTo(x, y + h); } if (st.bd.includes("r")) { g.moveTo(x + w, y); g.lineTo(x + w, y + h); } g.stroke(); g.setLineDash([]); }
           const pic = pics.get(key(r, c));
-          if (pic && st.fit === "cover") { const k2 = Math.max(w / pic.width, h / pic.height), sw = w / k2, sh = h / k2; g.drawImage(pic, (pic.width - sw) / 2, (pic.height - sh) / 2, sw, sh, x, y, w, h); }
+          if (pic && st.fit === "cover") { const k2 = Math.max(w / pic.width, h / pic.height), sw = w / k2, sh = h / k2, fp = focusOf(st.pos) || [0.5, 0.5]; g.drawImage(pic, (pic.width - sw) * fp[0], (pic.height - sh) * fp[1], sw, sh, x, y, w, h); }
           else if (pic) { const k2 = Math.min((w - 4) / pic.width, (h - 4) / pic.height); g.drawImage(pic, x + (w - pic.width * k2) / 2, y + (h - pic.height * k2) / 2, pic.width * k2, pic.height * k2); }
           if (v === null || v === undefined) continue;
           let text = displayText(v, st);
@@ -2946,6 +3080,7 @@ async function exportPdfBytes() {
         }
       }
       for (const { ch, img } of charts) if (ch.x < x1 && ch.x + ch.w > x0 && ch.y < y1 && ch.y + ch.h > y0) g.drawImage(img, ch.x, ch.y, ch.w, ch.h - (ch.kind === "image" ? 0 : BAR_H));
+      for (const t of texts) if (t.x < x1 && t.x + t.w > x0 && t.y < y1 && t.y + t.h > y0) drawTextBox(g, t);
       const png = await new Promise((res) => cv.toBlob(res, "image/png"));
       const image = await pdf.embedPng(new Uint8Array(await png.arrayBuffer()));
       // CSS pixels → points (×0.75), shrunk to fit inside the page margins, kept in proportion.
@@ -3125,11 +3260,23 @@ els.toolbar.addEventListener("click", (e) => {
 
 /* ---------------- the editor frame ---------------- */
 
+// Insert adapter for the shared left-rail panels (Elements, Text, Tools), like Canva Sheets: charts and tables go into
+// the sheet's cells, pictures / graphics / frames float, text comes in as text boxes (insert.js).
+const kitInsert = makeSheetsInsert({
+  S, meta, sheet, key, cellAt, cellName, rangeName, parseCellName, shiftFormula, setInputs, snapshot, afterChange, renderCharts, insertChart, commitEdit, toast, uid, layout, autoHeights,
+  scroller, spacer, stage: () => els.stage, zoom: () => Z, BAR_H,
+  select: (r1, c1, r2, c2) => { setSel(r1, c1, r2, c2); ensureVisible(r1, c1); render(); },
+  hasNumbers: ({ r1, c1, r2, c2 }) => { const s = sheet(); for (let r = r1; r <= Math.min(r2, r1 + 2000); r++) for (let c = c1; c <= Math.min(c2, c1 + 60); c++) if (typeof S.wb.getValue(s, r, c) === "number") return true; return false; },
+  focusFloating, refreshFloating,
+  lastFloating: () => (S.lastFloat && els.chartLayer.querySelector(`[data-id="${S.lastFloat}"]`) ? S.lastFloat : null),
+  fontReady: (family, bold, italic) => ensureFont(family, bold, italic).catch(() => {}),
+});
 async function mountFrame() {
   let mod = null;
   try { mod = await import("../shared/editor-shell.js"); } catch { return false; }
   if (!mod?.mountShell) return false;
   const gallery = await import("./gallery.js");
+  TPL ||= await import("./templates.js"); // already loaded by the gallery: page counts and template styles for the Design panel
   const dl = (act) => () => fileAction(act);
   shell = mod.mountShell({
     app: "sheets", kind: "Sheet", title: S.name || "Untitled sheet", home: "/tools/sheets",
@@ -3149,15 +3296,24 @@ async function mountFrame() {
       { label: "Download AsaanDesk sheet file (.json)", group: "Download", act: dl("exportJson") },
     ],
     share: { download: [{ label: "Excel (.xlsx)", act: dl("exportXlsx") }, { label: "PDF", act: dl("exportPdf") }, { label: "CSV (this sheet)", act: dl("exportCsv") }, { label: "AsaanDesk sheet file (.json)", act: dl("exportJson") }] },
-    templates: { gallery, tool: MODE === "insights" ? "magic-insights" : MODE === "formulas" ? "magic-formulas" : "sheets", apply: (id) => safe(applyTemplate)(id), placeholder: MODE === "insights" ? "Search data sets" : MODE === "formulas" ? "Search formula practice sheets" : "Search Sheet templates" },
-    panels: { elements: (el) => elementsPanel(el), text: (el) => textPanel(el), tools: (el) => toolsPanel(el) },
+    templates: {
+      gallery: { ...gallery, styleOf: (id) => templateStyleOf(id) },
+      // Design panel detail: a template's sheets one by one (new tabs) and its style on this sheet.
+      applyPage: (id, i) => applyTemplatePage(id, i), applyStyle: (id) => applyTemplateStyle(id),
+      pageCount: (id) => { try { return TPL?.buildTemplate(id)?.sheets.length || gallery.templateMeta(id)?.pages || 1; } catch { return 1; } },
+      pageThumb: (id, i) => gallery.thumbPage(id, i),
+      tool: MODE === "insights" ? "magic-insights" : MODE === "formulas" ? "magic-formulas" : "sheets", apply: (id) => safe(applyTemplate)(id), placeholder: MODE === "insights" ? "Search data sets" : MODE === "formulas" ? "Search formula practice sheets" : "Search Sheet templates" },
+    panels: { elements: { render: (el) => elementsPanel(el), kitLabel: "Sheet items" }, text: (el) => textPanel(el), tools: (el) => toolsPanel(el) },
     rail: ["templates", "elements", "text", "brand", "uploads", "tools", "projects", "apps", "translate"],
     insert: {
-      image: (src, name) => insertPicture(src, name),
-      text: (str, style) => putText(str, style === "heading" || style?.heading ? { b: true, size: 22 } : style === "subheading" ? { b: true, size: 16 } : null),
+      ...kitInsert,
+      // Kit text specs make text boxes; plain strings (older callers) still go into the active cell.
+      text: (spec, pt) => (typeof spec === "string" ? putText(spec, pt === "heading" ? { b: true, size: 22 } : pt === "subheading" ? { b: true, size: 16 } : null) : kitInsert.text(spec, pt)),
       color: (hex) => applyStyle({ fill: hex }),
       font: (family, css) => applyStyle({ font: css || family }),
     },
+    magicWrite: () => showWrite(),
+    applyBrand: (kit) => applyBrandKit(kit || loadBrand()),
     getText: () => selectionText(),
     setText: (str) => putText(str),
     versions: {
@@ -3240,6 +3396,12 @@ window.adApp = {
     return { x: b.left + q.x + q.w / 2, y: b.top + q.y + q.h / 2, w: q.w, h: q.h };
   },
   charts: () => meta().charts.map((c) => ({ ...c })),
+  /** The shared panels' insert adapter (insert.js). */
+  insert: kitInsert,
+  applyTemplatePage: (id, i) => applyTemplatePage(id, i),
+  applyTemplateStyle: (id) => applyTemplateStyle(id),
+  applyBrand: (kit) => applyBrandKit(kit || loadBrand()),
+  templateStyleOf: (id) => templateStyleOf(id),
   exportXlsx: () => exportXlsxBytes(),
   exportCsv: () => sheetCsv(),
   flushSave: () => saveNow(),

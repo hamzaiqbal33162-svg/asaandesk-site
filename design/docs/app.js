@@ -1436,11 +1436,15 @@ const ui = initUi({
   editor, viewer, paper, state, CMDS, change, exec, toast, placeCaret, rememberSelection, restoreSelection, selectedBlocks, syncModel, markDirty,
   savedRange: () => savedRange, openPanel, closePanel, doExport, downloadPdfOf, newDocument, openTemplate, flushSave, setDoc, setZoom, pickZoom, setTitle, setDocFont,
   onSave: (f) => hooks.save.push(f), onRender: (f) => hooks.render.push(f), onPanel: (name, f) => { hooks.panel[name] = f; },
+  // Text panel › Page numbers: the page footer numbers (also in print, PDF and Word).
+  setPageNumbers: (on) => { state.doc.page.pageNumbers = !!on; $("#pageNumbers").checked = !!on; applyPage(); markDirty(); },
 });
 
 // Test hooks for automated checks.
 window.adApp = {
   ui,
+  /** The shared panels' insert adapter (insert.js). */
+  insert: ui.insert,
   app: "docs",
   version: "1.0.0",
   ready,

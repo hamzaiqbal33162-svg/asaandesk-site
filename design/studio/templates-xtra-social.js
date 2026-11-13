@@ -40,6 +40,8 @@ export default function add(k) {
   tpl("carousel-cover-ig-x3", "Carousel cover post", P, "carousel cover swipe guide series instagram", () => [page("#ecfdf5", [
     R(0, 0, 360, 1080, TEA, { name: "Side band" }),
     T("01", 60, 80, 260, { size: 160, bold: true, color: WHITE, lh: 1, name: "Number" }),
+    // The guide's author in the side band (Canva's carousel covers show the creator).
+    F(40, 300, 280, 720, { shape: "rounded", radius: 140, name: "Creator photo", border: { color: WHITE, width: 8 } }),
     T("5 easy ways to save money every month", 420, 220, 600, { size: 76, bold: true, color: "#064e3b", lh: 1.12, name: "Title" }),
     T("A short guide in five slides", 420, 680, 600, { size: 36, color: "#047857", name: "Subtitle" }),
     R(420, 860, 330, 96, "#064e3b", { radius: 48, name: "Swipe pill" }),
@@ -119,8 +121,11 @@ export default function add(k) {
     T("We're", 80, 80, 920, { size: 110, family: "serif", italic: true, color: INK, lh: 1, name: "We're" }),
     T("HIRING", 80, 190, 920, { size: 190, bold: true, color: INK, lh: 1, name: "Hiring" }),
     ...["Designer", "Sales lead", "Driver"].flatMap((t, i) => [R(80, 470 + i * 140, 520, 110, INK, { radius: 55, name: "Role pill" }), T(t, 80, 498 + i * 140, 520, { size: 48, bold: true, color: GOLD, align: "center", name: "Role" })]),
-    C(680, 560, 320, 320, WHITE, { name: "Apply circle" }),
-    T("Apply\nby DM", 680, 640, 320, { size: 64, bold: true, color: INK, align: "center", lh: 1.05, name: "Apply" }),
+    // A smiling team member in a ringed circle (Canva's hiring posts show a person), the apply badge under it.
+    C(650, 420, 380, 380, WHITE, { name: "Photo ring" }),
+    F(665, 435, 350, 350, { shape: "circle", name: "Team member photo" }),
+    C(820, 800, 210, 210, INK, { name: "Apply circle" }),
+    T("Apply\nby DM", 820, 863, 210, { size: 40, bold: true, color: GOLD, align: "center", lh: 1.05, name: "Apply" }),
   ])]);
 
   // 12. New menu item: plate circle and price ribbon.

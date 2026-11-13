@@ -5,6 +5,7 @@ import { pickType, WEBM_VIDEO_TYPES, WEBM_AUDIO_TYPES, bitrateFor, once, probeVi
 import { fixWebmDuration, webmEnd } from "../video/webm.js";
 import * as L from "./rec-logic.js";
 import { createPrompter, renderPrompterPanel } from "./prompter.js";
+import { kitWords } from "../voice/voice-text.js";
 
 const md = navigator.mediaDevices;
 const caps = {
@@ -831,7 +832,7 @@ function init() {
 }
 
 /* ---------------- Editor frame (shared full-screen shell) ---------------- */
-let shell = null, gallery = null, pill = null, toolsEl = null, uploadsEl = null, prompter = null;
+let shell = null, gallery = null, pill = null, toolsEl = null, prompter = null;
 const PI = {
   screen: '<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/>',
   camera: '<rect x="3" y="6.5" width="12.5" height="11" rx="2.2"/><path d="m15.5 11 5.5-3v8l-5.5-3"/>',
@@ -988,6 +989,38 @@ function drawTools(el) {
   test.addEventListener("click", () => { testDevices(); if (matchMedia("(max-width: 759.98px)").matches) shell?.closePanel(); }); el.append(test);
   el.append(h("p", "rec-tmuted", "This asks for permission once, so the lists above show the names of your devices. Nothing is recorded."));
 }
+// ---------- Design panel: Layouts (what is recorded and where the camera bubble sits) and Styles (bubble shape, ring) ----------
+const REC_LAYOUTS = [
+  { label: "Screen + camera, bottom left", mode: "both", pos: "bl", size: "M" }, { label: "Screen + camera, bottom right", mode: "both", pos: "br", size: "M" },
+  { label: "Screen + small camera, top right", mode: "both", pos: "tr", size: "S" }, { label: "Screen + big camera, top left", mode: "both", pos: "tl", size: "L" },
+  { label: "Camera only", mode: "camera" }, { label: "Screen only", mode: "screen" }, { label: "Sound only", mode: "audio" },
+];
+const RINGS = [["", "White"], ["#5b4cf0", "Violet"], ["#ff3b3b", "Red"], ["#ff7a59", "Coral"], ["#ffd166", "Yellow"], ["#14b8a6", "Teal"], ["#2f80ff", "Blue"], ["#1b2133", "Ink"]];
+function designButton(label, on, act, extra = "") {
+  const b = document.createElement("button"); b.type = "button"; b.className = "btn block rec-tfind"; b.textContent = label; b.setAttribute("aria-pressed", String(!!on));
+  if (extra) b.dataset.design = extra;
+  b.addEventListener("click", () => { if (isLive()) { toast("Stop the recording first, then change the layout."); return; } act(); });
+  return b;
+}
+function renderRecLayouts(el) {
+  el.replaceChildren();
+  const h = document.createElement("h3"); h.className = "rec-th"; h.textContent = "Recording layouts"; el.append(h);
+  for (const l of REC_LAYOUTS) {
+    if (L.MODES[l.mode]?.display && sup.screen && l.mode !== "camera") continue; // this device can't share its screen
+    const on = state.mode === l.mode && (!l.pos || (state.bubblePos === l.pos && state.bubbleSize === l.size));
+    el.append(designButton(l.label, on, () => { selectMode(l.mode); if (l.pos) { state.bubblePos = l.pos; state.bubbleSize = l.size; if (state.bubble) state.bubble = cornerBubble(state.W, state.H, l.size, l.pos); } render(); renderRecLayouts(el); toast(l.label); }, "layout-" + l.mode + (l.pos || "")));
+  }
+}
+function renderRecStyles(el) {
+  el.replaceChildren();
+  const h = document.createElement("h3"); h.className = "rec-th"; h.textContent = "Camera bubble shape"; el.append(h);
+  for (const [v, t] of [["circle", "Circle"], ["rounded", "Rounded"], ["square", "Square"]]) el.append(designButton(t, state.bubbleShape === v, () => { state.bubbleShape = v; render(); renderRecStyles(el); }, "shape-" + v));
+  const h2 = document.createElement("h3"); h2.className = "rec-th"; h2.textContent = "Bubble ring colour"; el.append(h2);
+  for (const [c, t] of RINGS) {
+    const b = designButton(t, (state.ring || "") === c, () => { state.ring = c; render(); renderRecStyles(el); }, "ring-" + (c || "white"));
+    b.style.borderLeft = `14px solid ${c || "#ffffff"}`; el.append(b);
+  }
+}
 async function findDevices() {
   try {
     const st = await md.getUserMedia({ audio: true, video: true }).catch(() => md.getUserMedia({ audio: true }));
@@ -1010,32 +1043,13 @@ async function openFile(file) {
   shell?.setProjectId?.(null);
   await showResult({ blob: file, type, isAudio, ms: 0, mode: isAudio ? "audio" : "camera" });
   state.result.name = file.name;
-  uploads.unshift({ name: file.name, blob: file, type, isAudio }); uploads.splice(6);
-  if (uploadsEl) drawUploads(uploadsEl);
   render();
   toast(`Opened ${file.name}`);
+  if (matchMedia("(max-width: 759.98px)").matches) shell?.closePanel();
   return true;
 }
-const uploads = [];
-function drawUploads(el) {
-  el.replaceChildren();
-  const lab = document.createElement("label"); lab.className = "rec-drop";
-  lab.innerHTML = `<input type="file" id="recUpload" accept="video/*,audio/*,.webm,.mp4,.mov,.mkv,.mp3,.wav,.m4a,.ogg" hidden><b>Upload a video or sound</b><small>Trim it, save it as WebM, MP4 or WAV, or send it to the video editor. It stays on this device.</small>`;
-  const inp = lab.querySelector("input");
-  inp.addEventListener("change", async () => { const f = inp.files[0]; inp.value = ""; if (await openFile(f) && matchMedia("(max-width: 759.98px)").matches) shell?.closePanel(); });
-  lab.addEventListener("dragover", (e) => { e.preventDefault(); lab.classList.add("on"); });
-  lab.addEventListener("dragleave", () => lab.classList.remove("on"));
-  lab.addEventListener("drop", (e) => { e.preventDefault(); lab.classList.remove("on"); openFile(e.dataTransfer?.files?.[0]); });
-  el.append(lab);
-  const hd = document.createElement("h3"); hd.className = "rec-th"; hd.textContent = "Opened in this session"; el.append(hd);
-  if (!uploads.length) { const p = document.createElement("p"); p.className = "rec-tmuted"; p.textContent = "Nothing opened yet. Your recordings can be kept under Projects."; el.append(p); }
-  for (const u of uploads) {
-    const b = document.createElement("button"); b.type = "button"; b.className = "btn block rec-uprow";
-    b.textContent = `${u.isAudio ? "Sound" : "Video"}: ${u.name}`;
-    b.addEventListener("click", () => openFile(new File([u.blob], u.name, { type: u.type })));
-    el.append(b);
-  }
-}
+// Uploads is the editor frame's Canva-style panel (Upload files, Images / Videos / Audio, folders, record yourself):
+// a video or sound you click there opens here through the insert adapter (kitInsert: video / audio -> openFile).
 
 function frameThumb() {
   const v = $("#out"), r = state.result;
@@ -1043,6 +1057,59 @@ function frameThumb() {
   try { const c = document.createElement("canvas"); c.width = 240; c.height = Math.round(240 * v.videoHeight / v.videoWidth); c.getContext("2d").drawImage(v, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.7); } catch { return ""; }
 }
 const needResult = () => { if (!state.result) { toast("Record something first (or upload a file)."); return false; } return true; };
+
+// ---------- left-rail kit inserts (shared/panels/index.js) ----------
+// A recording is your screen, camera and voice, so the kit's items go where the recorder can use them: text goes into
+// the teleprompter script (on your screen only, never in the video), videos and sounds open like an upload (trim, save,
+// send to the editor), a colour becomes the camera bubble's ring. Pictures and graphics can't be part of a screen or
+// camera recording: they say where to add them (the video editor) instead of pretending.
+async function kitBlob(src) {
+  let t = src;
+  if (typeof t === "function") t = await t();
+  if (t && typeof t.render === "function") t = await t.render();
+  if (t instanceof Blob) return t;
+  if (t && typeof t.getChannelData === "function") { const { audioBufferToWav } = await import("../video/wav.js"); return new Blob([audioBufferToWav(t)], { type: "audio/wav" }); }
+  if (typeof t === "string" && t) { const r = await fetch(t); if (!r.ok) throw new Error("That file could not be loaded."); return r.blob(); }
+  return null;
+}
+const kitName = (n, b, fallback) => {
+  const base = String(n || fallback).replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || fallback;
+  return /\.[a-z0-9]{2,4}$/i.test(base) ? base : `${base}.${(b.type.split("/")[1] || "webm").replace("mpeg", "mp3").replace("x-wav", "wav").replace("quicktime", "mov")}`;
+};
+const isAv = (b) => /^(video|audio)\//.test(b?.type || "");
+function kitInsert() {
+  const toEditor = "Pictures and graphics can't be part of a screen or camera recording. Record first, then use File > Open in video editor to add them.";
+  const script = (specs) => {
+    if (!prompter) throw new Error("The teleprompter is not ready yet. Try again in a moment.");
+    const text = L.appendScript(prompter.state.text, specs.map(kitWords));
+    if (text === null) return false;
+    prompter.set({ text, on: true });
+    toast("Added to your teleprompter script (Teleprompter panel). Only you see it while you record.", 3600);
+    return true;
+  };
+  const open = async (src, name, fallback) => {
+    if (isLive()) throw new Error("Stop the recording first.");
+    const b = await kitBlob(src);
+    if (!b || !isAv(b)) return false;
+    return openFile(new File([b], kitName(name, b, fallback), { type: b.type }));
+  };
+  return {
+    text: (spec) => script([spec]),
+    textGroup: (specs) => script(specs || []),
+    video: async (spec = {}) => open(spec.src || spec.url || spec.blob, spec.name, "Video"),
+    audio: async (spec = {}) => (await open(spec.track ?? spec.src ?? spec.url ?? spec.blob, spec.name, "Sound")) || Promise.reject(new Error("That sound could not be opened here.")),
+    // Uploads: a video or sound opens like an upload; pictures can't be recorded
+    // refused at once for a plain picture (no unhandled promise for callers that don't await)
+    image: (src, name) => {
+      const type = src instanceof Blob ? src.type : /^data:([^;,]+)/i.exec(String(src || ""))?.[1] || "";
+      if (!src || (type && !/^(video|audio)\//.test(type))) throw new Error(toEditor);
+      return (async () => { const b = await kitBlob(src).catch(() => null); if (b && isAv(b)) return open(b, name, "Video"); throw new Error(toEditor); })();
+    },
+    color: (hex) => { state.ring = hex; render(); toast("Camera bubble ring colour set: it shows in screen and camera recordings."); },
+  };
+}
+const kitIns = kitInsert();
+kitIns.video.files = true; // the kit records its animated loops into real WebM files (they open like an upload)
 
 async function mountFrame() {
   let mod;
@@ -1077,12 +1144,14 @@ async function mountFrame() {
         link: () => location.origin + location.pathname,
       },
       templates: { gallery, tool: "online-video-recorder", apply: async (id) => { applyTemplate(id); if (matchMedia("(max-width: 759.98px)").matches) shell?.closePanel(); }, placeholder: "Search recording layouts" },
+      // Elements, Text and Tools are the shared kit's (Canva's structure); the recording settings lead Tools (primary).
       panels: {
-        tools: { label: "Tools", icon: "tools", render: (el) => { toolsEl = el; drawTools(el); }, refresh: true },
-        uploads: { label: "Uploads", icon: "uploads", render: (el) => { uploadsEl = el; drawUploads(el); }, refresh: true },
-        prompter: { label: "Teleprompter", icon: "notes", render: (el) => renderPrompterPanel(el, prompter) },
+        tools: { title: "Recording", primary: true, render: (el) => { toolsEl = el; drawTools(el); }, refresh: true },
+        prompter: { label: "Teleprompter", icon: "notes", render: (el) => renderPrompterPanel(el, prompter), refresh: true },
       },
-      rail: ["templates", "tools", "prompter", "uploads", "projects", "apps"],
+      rail: ["templates", "elements", "text", "brand", "uploads", "tools", "prompter", "projects", "apps"],
+      insert: kitIns,
+      design: { layouts: (el) => renderRecLayouts(el), styles: (el) => renderRecStyles(el) }, // Design › Layouts (what is recorded, bubble corner) and Styles (bubble shape, ring)
       projects: {
         save: async () => {
           const r = state.result;
@@ -1112,7 +1181,7 @@ async function mountFrame() {
 }
 
 window.adApp = {
-  state, sup, caps, start, stop, pause, resume, exportWebM, exportMp4, exportWav, openInEditor, reset,
+  state, sup, caps, start, stop, pause, resume, exportWebM, exportMp4, exportWav, openInEditor, reset, insert: kitIns,
   applyTemplate, openFile, get shell() { return shell; }, get prompter() { return prompter; }, retake, deleteRecording, discard, testDevices,
   get lastRecording() { return state.result?.blob || null; },
   get lastExport() { return state.lastExport; },

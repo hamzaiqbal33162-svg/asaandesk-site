@@ -2,7 +2,8 @@
 // title, kicker and accent bar; KPI cards, styled tables with a coloured header row and zebra rows, charts, checklists,
 // two-column sections, letters, résumés) drawn as one self-contained 320 × 200 SVG string. Pure (no DOM), own artwork.
 // spec = { P: palette {dark, light, mid, cream, ink, font?}, T: content theme, style, body, title, sub, kicker, photo
-//          (thumb URL or ""), serif, barText, layout, table: "money" | "schedule" | "metrics" | "people" }
+//          (thumb URL or ""), serif, barText, layout, table: "money" | "schedule" | "metrics" | "people",
+//          photoBox / portraitBox (people photos: crop around the face), portrait (round résumé photo, thumb URL) }
 const W = 320;
 // Bottom limit of the body being drawn (200 on a landscape card; each stacked section sets its own on a portrait page).
 let BOT = 196;
@@ -62,17 +63,32 @@ function stack(sp, x, maxW, H, o = {}) {
 }
 const heading = (x, y, s, P, o = {}) => `<rect x="${x}" y="${y - 8.5}" width="${Math.round(String(s).length * (o.size || 8) * 0.6 + 16)}" height="12" rx="6" fill="${P.light}"/><circle cx="${x + 6}" cy="${y - 2.5}" r="2" fill="${P.mid}"/>` + txt(x + 11, y, s, { size: o.size || 7.6, bold: true, fill: P.dark, serif: o.serif });
 const tick = (x, y, c) => `<path d="M${x + 1.6} ${y + 3.8} l1.7 1.8 l3.2 -3.6" fill="none" stroke="${c}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>`;
-const photoImg = (u, href, x, y, w, h, rx = 0) => !href ? "" : (rx ? `<clipPath id="${u}c${x}${y}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}"/></clipPath><image href="${esc(href)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${u}c${x}${y})"/>` : `<image href="${esc(href)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/>`);
+const n1 = (v) => Math.round(v * 10) / 10;
+/** A photo filling a w × h box. box(w, h) → [x, y, w, h, photo w, photo h] (gallery.js faceBox) crops a people photo
+ *  around the face (a nested SVG viewport shows only that part); other photos are centre-cropped. rx = round corners. */
+const photoImg = (u, href, x, y, w, h, rx = 0, box = null) => {
+  if (!href || !box) return photoImgC(u, href, x, y, w, h, rx);
+  const [vx, vy, vw, vh, pw, ph] = box(w, h);
+  const img = `<svg x="${x}" y="${y}" width="${w}" height="${h}" viewBox="${n1(vx)} ${n1(vy)} ${n1(vw)} ${n1(vh)}" preserveAspectRatio="xMidYMid slice"><image href="${esc(href)}" width="${pw}" height="${ph}"/></svg>`;
+  return rx ? `<clipPath id="${u}c${x}${y}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}"/></clipPath><g clip-path="url(#${u}c${x}${y})">${img}</g>` : img;
+};
+const photoImgC = (u, href, x, y, w, h, rx = 0) => !href ? "" : (rx ?`<clipPath id="${u}c${x}${y}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}"/></clipPath><image href="${esc(href)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${u}c${x}${y})"/>` : `<image href="${esc(href)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/>`);
 const lg = (id, stops, x2 = 1, y2 = 0) => `<linearGradient id="${id}" x1="0" y1="0" x2="${x2}" y2="${y2}">${stops.map(([o, c, a]) => `<stop offset="${o}" stop-color="${c}" stop-opacity="${a}"/>`).join("")}</linearGradient>`;
 
 /* ---------------- headers ---------------- */
 // Each returns [svg, bodyTop]. All text sits on solid colour or a strong overlay so it stays readable.
 function headerPhoto(sp, u, mode) {
-  const { P } = sp, H = 116;
+  const { P } = sp, H = 116, person = !!(sp.photo && sp.photoBox);
   let s = "";
-  if (sp.photo) s += photoImg(u, sp.photo, 0, 0, W, H); else s += `<rect width="${W}" height="${H}" fill="${P.mid}"/>`;
+  if (person && mode !== "tint") {
+    // a person beside the title: the photo docked on the right (face in view), the band colour fading in from the left
+    s += `<rect width="${W}" height="${H}" fill="${P.dark}"/>` + photoImg(u, sp.photo, 150, 0, 170, H, 0, sp.photoBox);
+    s += `<defs>${lg(u + "dk", [[0, P.dark, 1], [1, P.dark, 0]])}</defs><rect x="149" width="52" height="${H}" fill="url(#${u}dk)"/>`;
+    return [s + stack(sp, 18, 128, H, { max: 26, fill: "#ffffff", kickFill: P.light, subOp: 0.9, barFill: P.light, subMax: 28 }), H];
+  }
+  if (sp.photo) s += photoImg(u, sp.photo, 0, 0, W, H, 0, sp.photoBox); else s += `<rect width="${W}" height="${H}" fill="${P.mid}"/>`;
   if (mode === "tint") {
-    s += `<rect width="${W}" height="${H}" fill="${P.dark}" opacity=".66"/>`;
+    s += `<rect width="${W}" height="${H}" fill="${P.dark}" opacity="${person ? ".5" : ".66"}"/>`;
     return [s + stack(sp, 160, 250, H, { anchor: "middle", center: true, max: 25, fill: "#ffffff", kickFill: P.light, subOp: 0.9, barFill: P.light, kickMax: 40, subMax: 52 }), H];
   }
   if (mode === "split") s += `<defs>${lg(u + "sp", [[0, P.dark, 1], [1, P.dark, 0]])}</defs><rect width="168" height="${H}" fill="${P.dark}"/><rect x="167" width="70" height="${H}" fill="url(#${u}sp)"/>`;
@@ -83,7 +99,7 @@ function headerPhoto(sp, u, mode) {
 function headerSoft(sp, u) {
   const { P } = sp, H = 112;
   let s = `<rect width="${W}" height="${H}" fill="${P.light}" opacity=".55"/>`;
-  if (sp.photo) s += photoImg(u, sp.photo, 150, 0, 170, H);
+  if (sp.photo) s += photoImg(u, sp.photo, 150, 0, 170, H, 0, sp.photoBox);
   s += `<defs>${lg(u + "sf", [[0, "#ffffff", 1], [1, "#ffffff", 0]])}</defs><rect x="150" width="60" height="${H}" fill="url(#${u}sf)"/><rect width="152" height="${H}" fill="#ffffff"/>`;
   s += `<rect width="${W}" height="4" fill="${P.mid}"/>`;
   return [s + stack(sp, 18, 138, H, { top: 16, max: 24, fill: P.ink, kickFill: P.mid, subFill: "#475569", barFill: P.mid, kickMax: 28, subMax: 30 }), H];
@@ -100,8 +116,10 @@ function headerAvatar(sp, u, decoSvg) {
   const { P } = sp, H = 88;
   let s = `<defs>${lg(u + "av", [[0, P.dark, 1], [1, P.mid, 1]], 1, 0)}</defs><rect width="${W}" height="${H}" fill="url(#${u}av)"/><circle cx="300" cy="16" r="40" fill="#ffffff" opacity=".07"/>`;
   s += `<circle cx="52" cy="44" r="31" fill="${P.light}"/><circle cx="52" cy="44" r="27" fill="${P.cream}"/>`;
-  const d = decoSvg ? decoSvg("avatar", P.mid, P.light) : "";
-  if (d) s += `<clipPath id="${u}ac"><circle cx="52" cy="44" r="27"/></clipPath><svg x="25" y="17" width="54" height="54" viewBox="${(d.match(/viewBox="([^"]+)"/) || [])[1] || "0 0 100 100"}" clip-path="url(#${u}ac)">${d.replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "")}</svg>`;
+  // a round profile photo (people library, cropped around the face); the illustrated avatar only when there is none
+  const d = sp.portrait || !decoSvg ? "" : decoSvg("avatar", P.mid, P.light);
+  if (sp.portrait) s += `<clipPath id="${u}ac"><circle cx="52" cy="44" r="27"/></clipPath><g clip-path="url(#${u}ac)">${photoImg(u, sp.portrait, 25, 17, 54, 54, 0, sp.portraitBox)}</g>`;
+  else if (d) s +=`<clipPath id="${u}ac"><circle cx="52" cy="44" r="27"/></clipPath><svg x="25" y="17" width="54" height="54" viewBox="${(d.match(/viewBox="([^"]+)"/) || [])[1] || "0 0 100 100"}" clip-path="url(#${u}ac)">${d.replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "")}</svg>`;
   const f = fit(sp.title, 200, 22, 13, 1, true, !!sp.serif);
   s += title(98, 42, f, { fill: "#ffffff", serif: !!sp.serif });
   if (sp.sub) s += txt(98, 56, clip(sp.sub.toUpperCase(), 36), { size: 6.8, bold: true, fill: P.light, ls: 1.2 });
@@ -120,7 +138,7 @@ function headerBar(sp, u) {
   y += (f.lines.length - 1) * f.size * 1.08;
   if (sp.sub) s += txt(18, y + 13, clip(sp.sub, hasPhoto ? 34 : 60), { size: 7.2, fill: "#64748b" });
   s += `<rect x="18" y="${y + 20}" width="${hasPhoto ? 168 : 284}" height="1.4" fill="${P.mid}"/>`;
-  if (hasPhoto) s += `<rect x="196" y="24" width="108" height="76" rx="8" fill="${P.light}"/>` + photoImg(u, sp.photo, 196, 24, 108, 76, 8);
+  if (hasPhoto) s += `<rect x="196" y="24" width="108" height="76" rx="8" fill="${P.light}"/>` + photoImg(u, sp.photo, 196, 24, 108, 76, 8, sp.photoBox);
   return [s, Math.max(hasPhoto ? 104 : 72, y + 28)];
 }
 function headerPlain(sp, u) {

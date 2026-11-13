@@ -6,9 +6,11 @@
 // the card looks like the homepage that opens. Names are made up; emails use example.com and phone numbers are
 // placeholders. TOTAL matches the number of website templates Canva lists.
 import { newBlock, normalizeSite, DEFAULT_THEME, BLOCK_TYPES, addPage, switchPage, themeVars } from "./blocks.js";
-import { art, photoPicker, thumbOf, isLibraryPhoto, ICONS as WICONS } from "./art.js";
+import { art, photoPicker, thumbOf, isLibraryPhoto, libraryPhotoOf, ICONS as WICONS } from "./art.js";
+import { isPerson, coverBox } from "../shared/photo-library.js";
 import { makeTemplate } from "./templates.js";
 import { kit, text, fit, textW, rect, circle, line, mix, isDark, hash } from "../shared/tpl-kit.js";
+import { FONT_FAMILIES } from "../shared/brand.js";
 
 const L = (label, href) => ({ label, href });
 const W = "923000000000";
@@ -49,9 +51,9 @@ const EXTRA = {
           { name: "Free", price: "Rs 0", period: "/ month", text: "For one shop.", features: ["Sales and credit", "One phone"], button: L("Start free", "#contact"), featured: false },
           { name: "Pro", price: "Rs 900", period: "/ month", text: "For busy shops.", features: ["Stock tracking", "Three phones", "Reports"], button: L("Go Pro", "#contact"), featured: true }] }, A("pop", { bg: "tint" })),
         newBlock("testimonials", { title: "Shopkeepers love Tally", items: [
-          { quote: "I close the shop ten minutes earlier because the totals are ready.", name: "Rashid A.", role: "General store, Multan", photo: ph("workspace coworking office", "q0") },
-          { quote: "Credit reminders brought back money I had forgotten about.", name: "Sobia K.", role: "Pharmacy, Lahore", photo: ph("workspace coworking office", "q1") },
-          { quote: "My son set it up in five minutes.", name: "Ghulam R.", role: "Hardware shop, Sialkot", photo: ph("workspace coworking office", "q2") }] }, A("rise")),
+          { quote: "I close the shop ten minutes earlier because the totals are ready.", name: "Rashid A.", role: "General store, Multan", photo: ph.person("testimonial customer smiling portrait", "q0", { sex: "m" }) },
+          { quote: "Credit reminders brought back money I had forgotten about.", name: "Sobia K.", role: "Pharmacy, Lahore", photo: ph.person("testimonial customer smiling portrait", "q1", { sex: "f" }) },
+          { quote: "My son set it up in five minutes.", name: "Ghulam R.", role: "Hardware shop, Sialkot", photo: ph.person("senior elderly portrait", "q2", { sex: "m" }) }] }, A("rise")),
         newBlock("faq", { title: "Questions", items: [{ q: "Does it work offline?", a: "Yes. It saves on the phone and syncs later." }, { q: "Can I cancel any time?", a: "Yes, with one tap in the settings." }] }, A("rise", { bg: "alt" })),
         newBlock("contact", { title: "Get the app", text: "Leave your number and we will send the download link.", email: "hello@example.com", phone: "+92 300 0000000", whatsapp: "", waText: "", waLabel: "", address: "", formTitle: "Send me the link", send: "Send" }, A("rise")),
         newBlock("footer", { text: "Tally · simple shop records", links: [L("Features", "#features"), L("FAQ", "#faq")], copy: "© 2026 Tally" }),
@@ -62,8 +64,8 @@ const EXTRA = {
     return site("Sana and Omar", "Join us to celebrate the wedding of Sana and Omar in Islamabad.",
       { primary: "#9d174d", accent: "#d4a017", headingFont: "serif", bodyFont: "serif", corners: "round" }, [
         newBlock("header", { brand: "Sana & Omar", links: [L("Our story", "#about"), L("Events", "#timeline"), L("Venue", "#location"), L("RSVP", "#contact")], cta: L("RSVP", "#contact") }),
-        newBlock("hero", { eyebrow: "Saturday 20 February 2027 · Islamabad", title: "Sana and Omar are getting married", text: "We would love you to be with us for the mehndi, the nikah and the walima.", primary: L("RSVP now", "#contact"), secondary: L("See the events", "#timeline"), image: ph("wedding rings flowers marriage engagement", "hero"), layout: "card" }, { anim: "fade" }),
-        newBlock("about", { title: "Our story", text: "We met at university in 2019 over a broken library printer.\nSix years later, we are starting our life together.", image: ph("flowers garden wedding", "about"), button: L("", ""), side: "right" }, A("pan", { bg: "tint" })),
+        newBlock("hero", { eyebrow: "Saturday 20 February 2027 · Islamabad", title: "Sana and Omar are getting married", text: "We would love you to be with us for the mehndi, the nikah and the walima.", primary: L("RSVP now", "#contact"), secondary: L("See the events", "#timeline"), image: ph.person("wedding couple bride groom south asian #wedding", "hero"), layout: "card" }, { anim: "fade" }),
+        newBlock("about", { title: "Our story", text: "We met at university in 2019 over a broken library printer.\nSix years later, we are starting our life together.", image: ph.person("couple love engagement #couple", "about"), button: L("", ""), side: "right" }, A("pan", { bg: "tint" })),
         newBlock("timeline", { title: "Wedding events", items: [
           { when: "Thursday 7pm", title: "Mehndi", text: "Music, dancing and dinner at the family home." },
           { when: "Saturday 4pm", title: "Nikah", text: "On the mosque lawn, followed by tea." },
@@ -79,7 +81,7 @@ const EXTRA = {
     return site("Peak Fitness Studio", "Small group training, yoga and personal coaching in Karachi.",
       { primary: "#ea580c", accent: "#0ea5e9", headingFont: "sans", bodyFont: "sans", corners: "sharp", mode: "dark", bg: "#0f1222", text: "#e9ebf5" }, [
         newBlock("header", { brand: "Peak Fitness", links: [L("Classes", "#timeline"), L("Plans", "#pricing"), L("Coaches", "#team")], cta: L("Free trial", "#contact") }, { bg: "dark" }),
-        newBlock("hero", { eyebrow: "Clifton, Karachi", title: "Get stronger in 12 weeks", text: "Small groups, real coaches and a plan made for you.", primary: L("Book a free class", "#contact"), secondary: L("See plans", "#pricing"), image: "", layout: "minimal" }, { bgImage: ph("fitness gym weights workout", "hero"), anim: "zoom" }),
+        newBlock("hero", { eyebrow: "Clifton, Karachi", title: "Get stronger in 12 weeks", text: "Small groups, real coaches and a plan made for you.", primary: L("Book a free class", "#contact"), secondary: L("See plans", "#pricing"), image: "", layout: "minimal" }, { bgImage: ph.person("fitness trainer gym workout #fitness", "hero", { landscape: true }), anim: "zoom" }),
         newBlock("features", { title: "Results you can count", intro: "", items: [
           { icon: "users", title: "1,200+", text: "Members trained since 2019" },
           { icon: "award", title: "12 weeks", text: "From first class to real strength" },
@@ -88,7 +90,7 @@ const EXTRA = {
         newBlock("pricing", { title: "Plans", intro: "", plans: [
           { name: "Monthly", price: "Rs 8,000", period: "/ month", text: "", features: ["All classes"], button: L("Join", "#contact"), featured: false },
           { name: "Quarterly", price: "Rs 21,000", period: "/ 3 months", text: "Best value.", features: ["All classes", "Diet plan"], button: L("Join", "#contact"), featured: true }] }, A("pop", { bg: "alt" })),
-        newBlock("team", { title: "Coaches", intro: "", members: ph.many("fitness sport gym", 3, "t").map((photo, i) => ({ photo, name: ["Coach Faraz", "Coach Mehwish", "Coach Danish"][i], role: ["Strength", "Yoga", "Bootcamp"][i] })) }, A("rise")),
+        newBlock("team", { title: "Coaches", intro: "", members: ph.cast("fitness trainer coach member #fitness", "mfm", "t").map((photo, i) => ({ photo, name: ["Coach Faraz", "Coach Mehwish", "Coach Danish"][i], role: ["Strength", "Yoga", "Bootcamp"][i] })) }, A("rise")),
         newBlock("contact", { title: "Book a free class", text: "Your first class is on us.", email: "hello@example.com", phone: "+92 300 0000000", whatsapp: "923000000000", waText: "Hi! I want a free class.", waLabel: "Book on WhatsApp", address: "Clifton Block 5, Karachi", formTitle: "Book a trial", send: "Book" }, A("rise", { bg: "alt" })),
         newBlock("footer", { text: "Peak Fitness Studio", links: [L("Plans", "#pricing")], copy: "© 2026 Peak Fitness" }),
       ], "fitness");
@@ -100,8 +102,8 @@ const EXTRA = {
         newBlock("header", { brand: "Clean Water Circle", links: [L("Our work", "#features"), L("Stories", "#reviews"), L("Help", "#contact")], cta: L("Donate", "#contact") }),
         newBlock("hero", { eyebrow: "Since 2020 · 64 schools", title: "Clean water for every school child", text: "One filter gives 300 children safe drinking water for five years.", primary: L("Give a filter", "#contact"), secondary: L("See our work", "#features"), image: ph("nature valley water lake", "hero"), layout: "split" }, { anim: "fade" }),
         newBlock("features", { title: "What your gift does", intro: "", items: [{ icon: "heart", title: "Rs 5,000", text: "Repairs one school tap." }, { icon: "shield", title: "Rs 25,000", text: "Buys one water filter." }, { icon: "star", title: "Rs 60,000", text: "Filter plus five years of care." }] }, A("pop", { bg: "dark" })),
-        newBlock("about", { title: "Why we started", text: "In 2020 we met a head teacher whose pupils missed school every week because of dirty water.\nToday 64 schools have clean water, and parents help us look after every filter.", image: ph("education school books classroom", "about"), button: L("Volunteer with us", "#contact"), side: "left" }, A("pan")),
-        newBlock("testimonials", { title: "Stories", items: [{ quote: "Fewer children miss school because of stomach illness now.", name: "Head teacher", role: "Village school", photo: ph("education school classroom", "av0") }, { quote: "Our pupils drink from the filter every break. Thank you!", name: "Science teacher", role: "Girls school", photo: ph("education school classroom", "av1") }] }, A("rise", { bg: "alt" })),
+        newBlock("about", { title: "Why we started", text: "In 2020 we met a head teacher whose pupils missed school every week because of dirty water.\nToday 64 schools have clean water, and parents help us look after every filter.", image: ph.person("teacher class kids classroom #teacher", "about"), button: L("Volunteer with us", "#contact"), side: "left" }, A("pan")),
+        newBlock("testimonials", { title: "Stories", items: [{ quote: "Fewer children miss school because of stomach illness now.", name: "Head teacher", role: "Village school", photo: ph.person("teacher portrait professional", "av0", { sex: "m" }) }, { quote: "Our pupils drink from the filter every break. Thank you!", name: "Science teacher", role: "Girls school", photo: ph.person("teacher portrait professional", "av1", { sex: "f" }) }] }, A("rise", { bg: "alt" })),
         newBlock("contact", { title: "Help us", text: "Volunteer or donate. Every rupee goes to filters.", email: "give@example.com", phone: "", whatsapp: "923000000000", waText: "I want to help.", waLabel: "Talk to us", address: "", formTitle: "Send a message", send: "Send" }, A("rise", { bg: "tint" })),
         newBlock("footer", { text: "Clean Water Circle · a volunteer group", links: [], copy: "© 2026 Clean Water Circle" }),
       ], "charity");
@@ -450,6 +452,39 @@ const THEMES = [
     s: [["7am", "Morning flow", "Wake up gently."], ["6pm", "Evening stretch", "Let the day go."], ["Sunday", "Meditation", "Quiet and still."]], t: [["Maham", "Founder"], ["Raza", "Teacher"], ["Anum", "Meditation"]], g: ["Studio", "Morning class", "Retreat", "Tea corner", "Garden", "Meditation"],
     ct: ["Try a class", "Your first class is half price. Pick a time and we save you a mat."], T: { s: "Class times", p: "Prices", t: "Teachers", f: "Why students love it" }, ph: ["yoga wellness calm nature", "yoga studio wellness calm", "yoga wellness nature calm flowers", "yoga wellness calm nature flowers", "wellness calm nature flowers"] },
 ];
+// People in each theme, like Canva's website templates: team members and review avatars are always real people (their
+// sex follows the names: f woman, m man, c couple, g family, o / O older woman / man); the hero and about photos show a
+// person where the business is about people (portfolio, coach, doctor, salon, speakers, wedding…), places/food/rooms
+// stay where the business is about those. hero / about = a pickPerson kind or absent; team / q = one kind for all
+// members (with ts / qs codes) or one kind per member.
+const PPL = {
+  repairs: { about: "team colleagues staff smiling #team", team: "team member man portrait smiling casual", ts: "mmf", qs: "fmf" },
+  restaurant: { about: "chef cooking kitchen #chef", team: ["chef portrait #chef", "barista woman smiling portrait #barista", "man smiling portrait member"], qs: "cfm" },
+  cafe: { about: "barista woman smiling cafe #barista", team: ["woman smiling portrait member", "barista man coffee #barista", "woman smiling portrait young member"], qs: "fmf" },
+  clinic: { hero: "doctor woman stethoscope clinic #doctor", team: "doctor medical portrait #medical", ts: "fmf", qs: "fmf" },
+  academy: { hero: "students study class university #students", about: "teacher helping student tutor #teacher", team: "teacher member portrait professional", ts: "mfm", qs: "fmm" },
+  boutique: { hero: "fashion model woman style #fashion", team: "member portrait smiling professional", ts: "ffm", qs: "fff" },
+  designer: { hero: "business woman portrait creative professional", team: "member portrait young creative", ts: "ffm", q: "testimonial client business portrait", qs: "mfm" },
+  photographer: { about: "photographer camera creator #photographer #camera", team: "member portrait young creative", ts: "mfm", qs: "cmf" },
+  conference: { hero: "speaker conference stage presenter #speaker", about: "conference audience seminar #audience", team: "speaker member portrait professional", ts: "fmf", qs: "mfm" },
+  realestate: { about: "realtor showing home agent clients #realtor", team: "realtor agent member portrait professional", ts: "mfm", qs: "gmf" },
+  travel: { about: "travel traveler adventure trip #travel", team: "member portrait smiling", ts: "mfm", qs: "cmf" },
+  startup: { about: "team startup colleagues casual laptop #team", team: "founder member portrait young professional", ts: "mfm", q: "testimonial client business portrait", qs: "mfm" },
+  salon: { hero: "beauty skincare woman spa #beauty", about: "salon stylist hair beauty #salon", team: "beauty member woman portrait smiling", ts: "fff", qs: "fff" },
+  consultant: { hero: "business man executive portrait suit #business", about: "team meeting business office #team", team: "business headshot member professional", ts: "mfm", q: "testimonial client business portrait", qs: "fmm" },
+  musician: { hero: "musician guitar singer #musician", about: "concert crowd music festival #concert", team: "musician member portrait #musician #guitar", ts: "mfm", qs: "fmm" },
+  gym: { hero: "fitness trainer gym workout #fitness", about: "fitness gym workout man #fitness", team: "fitness trainer coach member #fitness", ts: "mfm", qs: "mfm" },
+  wedding: { hero: "wedding couple bride groom #wedding", about: "couple love engagement #couple", team: ["woman festive south asian portrait member", "man kurta south asian portrait member", "senior couple grandparents #grandparents"], qs: "ofg" },
+  charity: { hero: "child girl smiling school kids #child", about: "teacher class kids classroom #teacher", team: "member portrait professional", ts: "fmf", qs: "fmf" },
+  agency: { about: "team meeting colleagues office #team", team: "member portrait creative professional", ts: "fmf", q: "testimonial client business portrait", qs: "mfm" },
+  school: { hero: "teacher class kids classroom school #class", about: "teacher smiling school #teacher", team: "teacher member portrait professional", ts: "fmf", qs: "fmf" },
+  homeshop: { team: "member portrait smiling", ts: "fmf", qs: "ffm" },
+  events: { about: "team colleagues staff smiling #team", team: "member portrait smiling professional", ts: "fmf", qs: "cmo" },
+  hotel: { about: "family parents kids #family", team: ["senior man portrait #senior", "woman smiling professional portrait member", "chef portrait #chef"], qs: "com" },
+  interior: { about: "team meeting office planning #team", team: "member portrait professional", ts: "fmf", qs: "cmm" },
+  law: { about: "senior businessman suit executive #business", team: ["senior businessman suit portrait #business", "business woman headshot", "business man headshot suit"], q: "testimonial client business portrait", qs: "mfm" },
+  yoga: { hero: "yoga woman stretch wellness #yoga", team: "yoga fitness member portrait #fitness", ts: "fmf", qs: "fmf" },
+};
 const BY = (list) => Object.fromEntries(list.map((x) => [x[0], x]));
 const PAL = BY(PALETTES), LAY = BY(LAYOUTS), THM = Object.fromEntries(THEMES.map((t) => [t.id, t]));
 const MORE = { features: "What we offer", about: "Our story", gallery: "See the gallery", pricing: "See prices", products: "Shop now", testimonials: "Read reviews", faq: "Questions", team: "Meet the team", timeline: "How it works", map: "Find us" };
@@ -477,9 +512,14 @@ function buildGenerated(lid, pid, tid, upTo = Infinity) {
   const T = t.T || {};
   // Photos: picked once per site in a fixed order, so the thumbnail and the opened site always show the same ones.
   const ph = photoPicker(id);
-  const [tH, tA, tG, tT, tP] = t.ph;
-  const heroImg = ph(tH, "hero");
-  const picOf = { about: () => ph(tA, "about"), gallery: () => ph.many(tG, 6, "g"), products: () => ph.many(tP, t.pr.length, "p"), team: () => ph.many(tT, t.t.length, "t"), avatars: () => ph.many(tT, t.q.length, "q") };
+  const [tH, tA, tG, tP] = [t.ph[0], t.ph[1], t.ph[2], t.ph[4]];
+  // People (PPL): a person-led hero picks a wide photo for full-width / background heroes.
+  const pp = PPL[tid] || {};
+  const wideHero = ["cover", "banner", "card"].includes(hero) || hbg === "photo";
+  const heroImg = pp.hero ? ph.person(pp.hero, "hero", wideHero ? { landscape: true } : {}) : ph(tH, "hero");
+  const cast = (kind, codes, n, slot) => (Array.isArray(kind) ? kind.slice(0, n).map((kd, k) => ph.person(kd, `${slot}${k}`)) : ph.cast(kind, String(codes || "").padEnd(n, "x").slice(0, n), slot));
+  const picOf = { about: () => (pp.about ? ph.person(pp.about, "about") : ph(tA, "about")), gallery: () => ph.many(tG, 6, "g"), products: () => ph.many(tP, t.pr.length, "p"),
+    team: () => cast(pp.team || "team member portrait", pp.ts, t.t.length, "t"), avatars: () => cast(pp.q || "testimonial customer smiling portrait", pp.qs, t.q.length, "q") };
   const cache = {}; const pics = (k) => (cache[k] ||= picOf[k]());
   const make = (spec, i) => {
     const { type, variant, bg, stats } = specOf(spec);
@@ -603,6 +643,9 @@ function pic(ctx, url, x, y, w, h, { rx = 0, round = false, ex = "" } = {}) {
   const k = ctx.k, u = isLibraryPhoto(url) ? thumbOf(url) : "";
   const cp = round ? k.clip(circle(x + w / 2, y + h / 2, w / 2, "#000")) : rx ? k.clipRect(x, y, w, h, rx) : "";
   const base = rect(x, y, w, h, u ? "#c9ced8" : k.lin([ctx.V["--pt"], ctx.V["--a"]], 45));
+  // people photos: cropped around the face (like the site's object-position), the rest centred like object-fit: cover
+  const lp = u ? libraryPhotoOf(url) : null;
+  if (lp && isPerson(lp)) { const b = coverBox(lp, w, h); return `<g${cp}${ex}>${base}<svg x="${n1(x)}" y="${n1(y)}" width="${n1(w)}" height="${n1(h)}" overflow="hidden"><image href="${u}" x="${n1(b.x)}" y="${n1(b.y)}" width="${n1(b.w)}" height="${n1(b.h)}" preserveAspectRatio="none"/></svg></g>`; }
   return `<g${cp}${ex}>${base}${u ? `<image href="${u}" x="${n1(x)}" y="${n1(y)}" width="${n1(w)}" height="${n1(h)}" preserveAspectRatio="xMidYMid slice"/>` : ""}</g>`;
 }
 const n1 = (v) => String(Math.round(v * 10) / 10);
@@ -876,6 +919,21 @@ export function thumbSite(s, { pages = 0, salt = "" } = {}) {
   const n = pages || s.pages?.length || 1;
   if (n > 1) { const lab = `${n} pages`, w = bw(lab, 5); body += rect(TW - MX - w, TH - 16, w, 11, "#141826", 5.5, ' fill-opacity=".86"') + text(TW - MX - w / 2, TH - 8.6, lab, { size: 5, weight: 700, fill: "#ffffff", anchor: "middle" }); }
   return k.svg(TW, TH, body, { bg: ctx.V["--bg"] });
+}
+/** A template's style for the editor's "Apply this template style" card: its colours and heading / body fonts. */
+export function styleOf(id) {
+  if (!hasTemplate(id)) return null;
+  const t = { ...DEFAULT_THEME, ...(makeSite(id).theme || {}) };
+  const name = (k) => (FONT_FAMILIES[k]?.label || k || "Sans").replace(/ \(.*\)$/, "");
+  return { name: "Template style", colors: [...new Set([t.primary, t.accent, t.bg, t.text].filter(Boolean))], fonts: [name(t.headingFont), name(t.bodyFont)], heading: t.headingFont, body: t.bodyFont };
+}
+/** Page i of a template (multi-page sites), drawn like the homepage thumbnail (the editor's template detail view). */
+export function thumbPage(id, i = 0) {
+  const s = makeSite(hasTemplate(id) ? id : HAND[0][0]);
+  const pages = s.pages?.length ? s.pages : null;
+  if (!pages || !i) return pages ? thumbSite({ ...s, pages: null, blocks: pages[0].blocks }) : thumbSite(s);
+  const pg = pages[Math.max(0, Math.min(pages.length - 1, i | 0))];
+  return thumbSite({ ...s, pages: null, blocks: pg.blocks }, { salt: pg.name || String(i) });
 }
 /** Our own drawn thumbnail: the homepage the template opens, with its real photos (small files). */
 export function thumb(id) {

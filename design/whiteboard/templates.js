@@ -6,7 +6,7 @@ import { byIdOf, pasteObjects, normalizeObject } from "./model.js";
 import { objectPrims, boardBounds, primsToSvg, noteLayout, shapeLayout } from "./render.js";
 import { parseTemplateId, paletteById, themeById, recolor, PALETTES, THEMES } from "./variants.js";
 import { setBuild, resetPhotos } from "./templates-kit.js";
-import { PHOTOS, photoUrl } from "../shared/photo-library.js";
+import { ALL_PHOTOS, photoUrl } from "../shared/photo-library.js";
 import { BUILDERS_A } from "./templates-a.js";
 import { BUILDERS_B } from "./templates-b.js";
 import { BUILDERS_C } from "./templates-c.js";
@@ -166,7 +166,7 @@ export function applyTemplate(board, id, cx, cy) {
 /** Size of a template's content (for placing it). */
 export function templateBounds(id) { const objects = templateById(id).build(); return boardBounds(objects, byIdOf({ objects })); }
 
-const THUMB_OF = new Map(PHOTOS.map((p) => [photoUrl(p, "full"), photoUrl(p, "thumb")]));
+const THUMB_OF = new Map(ALL_PHOTOS.map((p) => [photoUrl(p, "full"), photoUrl(p, "thumb")]));
 /** Small SVG preview of a template (for the template picker). */
 export function templatePreviewSvg(id, w = 180, h = 112) {
   const objects = templateById(id).build();

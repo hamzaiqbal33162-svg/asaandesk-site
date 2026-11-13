@@ -5,7 +5,7 @@
 // Own names, colours, text and artwork only.
 import { decoSvg } from "./decos.js";
 import { drawThumb, PAGE_W, PAGE_H } from "./thumbs.js";
-import { pickPhoto, photoUrl } from "../shared/photo-library.js";
+import { pickPhoto, pickPerson, photoUrl, isPerson, focusCrop } from "../shared/photo-library.js";
 
 export const CANVA_COUNT = 3240; // Canva Docs templates (canva.com/docs/templates, 11 Nov 2026)
 const LONG = "Long docs", MORE = "More templates for you";
@@ -333,6 +333,42 @@ const ORIG_SPEC = {
 // Kicker line (small caps above the title) for personal documents, where the organisation name would read oddly.
 const KICKER = { "wedding-program": "Together with their families", "short-story": "A short story", speech: "Remarks", "thank-you-letter": "With gratitude", recipe: "From our kitchen", menu: "Seasonal menu", journal: "Daily journal", "award-letter": "Certificate of appreciation", "habit-tracker": "Personal", "meal-planner": "Meal plan", "shopping-list": "This week", "about-me": "About me", "book-report": "Book report", "daily-planner": "Plan your day", "weekly-planner": "Plan your week", "personal-budget": "Personal finance", "trip-budget": "Trip planner", "city-guide": "City guide", "travel-itinerary": "Travel itinerary" };
 const photoTopic = (T, L) => `${THEME_PHOTO[T.key] || T.label} ${L ? L[1] : ""}`.trim();
+
+/* ---------------- people photos: where Canva's Docs show a person, ours show one too (shared people library) ---------------- */
+// Each content theme's main person (TH: Ayesha, Hamid, Bilal…): woman or man, and what kind of person the theme shows.
+const PERSON = { school: ["f", "teacher"], clinic: ["m", "doctor"], restaurant: ["m", "chef"], shop: ["f", "shop owner"], tech: ["m", "business"], ngo: ["f", "business"], travel: ["m", "business"], fitness: ["f", "fitness trainer"], realestate: ["m", "realtor"], agency: ["f", "business"], bakery: ["f", "barista shop owner"], construction: ["m", "business"] };
+// People at work in each content theme (team / scene photos for newsletters, impact reports…).
+const CREW = { school: "teacher students class", clinic: "doctor nurse medical", restaurant: "chef cooking kitchen", shop: "barista shop owner staff", tech: "team meeting startup office colleagues", ngo: "team hands together community volunteers", travel: "travel traveler trip", fitness: "fitness gym workout", realestate: "realtor showing home clients", agency: "team whiteboard presentation workshop colleagues", bakery: "barista cafe coffee staff", construction: "team meeting business office colleagues" };
+const who = (T) => PERSON[T.key] || ["f", "business"];
+const sexWord = (s) => (s === "f" ? "woman" : "man");
+// Layouts whose header photo shows people (Canva: newsletters and brochures with staff and customers, impact reports,
+// a customer on case studies, team and welcome docs, a speaker, a traveller on travel guides…). Planner-type docs
+// (itineraries, agendas, programmes) keep places and things, as Canva's planners do.
+const PEOPLE_HEAD = {
+  newsletter: (T) => CREW[T.key], "two-column-newsletter": (T) => CREW[T.key], brochure: (T) => CREW[T.key], "impact-report": (T) => CREW[T.key],
+  "press-release": (T) => `${sexWord(who(T)[0])} ${who(T)[1]} portrait`, "magazine-article": (T) => `${sexWord(who(T)[0])} business founder portrait`,
+  "case-study": () => "smiling customer testimonial", "onboarding-guide": () => "team welcome handshake hiring colleagues",
+  "employee-handbook": () => "team colleagues staff office", "team-directory": () => "team standing smiling staff colleagues",
+  "volunteer-handbook": () => "team hands together community volunteers", "workshop-handout": () => "presenter workshop training",
+  speech: (T) => `${sexWord(who(T)[0])} speaker microphone`, "city-guide": () => "traveler woman travel trip",
+};
+// Layouts whose second (story) photo inside the opened document shows people as well.
+const PEOPLE_STORY = new Set(["newsletter", "two-column-newsletter", "brochure", "impact-report", "onboarding-guide", "employee-handbook", "volunteer-handbook", "about-me"]);
+// Résumé-like layouts: the illustrated avatar is now a round profile photo of the right person (Canva résumé docs).
+const PORTRAIT = new Set(["resume", "resume-sidebar", "about-me"]);
+const ORIG_SEX = { resume: "f", cv: "f" }; // Sana Malik, Ayesha Khan
+const portraitOf = (sex, role, seed) => pickPerson(`${sexWord(sex)} ${role} professional headshot portrait`, seed, { sex });
+// Magic Write starters about people.
+const MW_PEOPLE = { "mw-short-bio": (T) => `${sexWord(who(T)[0])} business portrait`, "mw-speech": (T) => `${sexWord(who(T)[0])} speaker microphone`, "mw-job-post": () => "team welcome handshake hiring colleagues", "mw-meeting-summary": () => "team meeting office colleagues", "mw-review-reply": () => "smiling customer testimonial" };
+/** Header photo of a layout: a people photo where the layout shows people, else a place / thing photo. */
+function headPhoto(layout, T, L, seed) {
+  const kind = PEOPLE_HEAD[layout]?.(T);
+  return kind ? pickPerson(kind, seed, { landscape: true }) : pickPhoto(photoTopic(T, L), seed);
+}
+/** Kind of people for the story photo of an opened document (null: a place / thing photo). */
+const storyPeople = (layout, T) => (PEOPLE_STORY.has(layout) ? (PEOPLE_HEAD[layout]?.(T) || CREW[T.key] || "team colleagues") : null);
+/** People layouts per tool (the counts and tests read these). */
+export const PEOPLE_LAYOUTS = { head: Object.keys(PEOPLE_HEAD), portrait: [...PORTRAIT], story: [...PEOPLE_STORY], magicWrite: Object.keys(MW_PEOPLE) };
 /** The look of any template id: { P, T, style, body, label, table, title, sub, kicker, serif, deco, barText, photo (record) }.
  *  templates.js uses the same look for the opened document, so the card and the document match. */
 export function docLook(id) {
@@ -342,22 +378,29 @@ export function docLook(id) {
     const P = PMAP[pid], T = TMAP[tk], l = ORIG_LAYOUT[id] || id, L = LMAP[l];
     let body = BODY[l] || "sections";
     if (body === "kpi") body = "chart";
-    const photo = ["band", "avatar", "plain"].includes(style) ? null : pickPhoto(photoTopic(T, L), id);
-    return { P, T, style, body, label: LABEL[l] || DEF_LABEL[body] || "Overview", table: TABLE_KIND[l] || "metrics", title: o.title, sub: o.sub, kicker: "", serif: !!o.serif, deco: o.deco || "diamonds", photo, layout: l, original: true, topic: photoTopic(T, L), id };
+    const photo = ["band", "avatar", "plain"].includes(style) ? null : headPhoto(l, T, L, id);
+    const portrait = style === "avatar" ? portraitOf(ORIG_SEX[id] || who(T)[0], "business", id) : null;
+    return { P, T, style, body, label: LABEL[l] || DEF_LABEL[body] || "Overview", table: TABLE_KIND[l] || "metrics", title: o.title, sub: o.sub, kicker: "", serif: !!o.serif, deco: o.deco || "diamonds", photo, portrait, people: storyPeople(l, T), layout: l, original: true, topic: photoTopic(T, L), id };
   }
   const mi = MAGIC_WRITE.findIndex((t) => t.id === id);
   if (mi >= 0) {
     const mw = MAGIC_WRITE[mi], P = PMAP[mw.palette], T = THEMES[mi % THEMES.length], style = ["tint", "soft", "split"][mi % 3];
-    return { P, T, style, body: mi % 2 ? "sections" : "letter", label: "Draft", table: "metrics", title: mw.name, sub: "AI writing starter", kicker: "Magic Write", serif: false, deco: "confetti", photo: pickPhoto(`${mw.name} ${THEME_PHOTO[T.key]}`, id), layout: mw.id, topic: `${mw.name} ${THEME_PHOTO[T.key]}`, id };
+    const kind = MW_PEOPLE[mw.id]?.(T);
+    const photo = kind ? pickPerson(kind, id, { landscape: true }) : pickPhoto(`${mw.name} ${THEME_PHOTO[T.key]}`, id);
+    return { P, T, style, body: mi % 2 ? "sections" : "letter", label: "Draft", table: "metrics", title: mw.name, sub: "AI writing starter", kicker: "Magic Write", serif: false, deco: "confetti", photo, portrait: null, people: null, layout: mw.id, topic: `${mw.name} ${THEME_PHOTO[T.key]}`, id };
   }
   const g = parseId(id);
   if (!g) return null;
   const { L, P, T, layout } = g, opt = L[8] || {}, style = styleOf(layout), body = BODY[layout] || "sections";
   const title = L[6](T), sub = L[7](T);
   const kicker = style === "avatar" ? "" : KICKER[layout] || (sub === T.org || String(title).includes(T.short) ? `${T.label} · ${T.city}` : T.org);
-  const photo = style === "band" || style === "avatar" || style === "plain" || (style === "bar" && !BAR_PHOTO.has(layout)) ? null : pickPhoto(photoTopic(T, L), id);
-  return { P, T, style, body, label: LABEL[layout] || DEF_LABEL[body] || "Overview", table: TABLE_KIND[layout] || "metrics", title, sub, kicker, serif: !!(opt.serif || P.font === "serif"), deco: L[5] || "diamonds", barText: opt.barText, photo, layout, topic: photoTopic(T, L), id };
+  const photo = style === "band" || style === "avatar" || style === "plain" || (style === "bar" && !BAR_PHOTO.has(layout)) ? null : headPhoto(layout, T, L, id);
+  const portrait = style === "avatar" && PORTRAIT.has(layout) ? portraitOf(who(T)[0], who(T)[1], id) : null;
+  return { P, T, style, body, label: LABEL[layout] || DEF_LABEL[body] || "Overview", table: TABLE_KIND[layout] || "metrics", title, sub, kicker, serif: !!(opt.serif || P.font === "serif"), deco: L[5] || "diamonds", barText: opt.barText, photo, portrait, people: storyPeople(layout, T), layout, topic: photoTopic(T, L), id };
 }
+/** Pixel viewBox [x, y, w, h, photo w, photo h] of a people photo cropped around the face for a w × h box (null for
+ *  other photos: those are centre-cropped). */
+const faceBox = (p) => (p && isPerson(p) ? (w, h) => { const c = focusCrop(p, w, h); return [c.x * p.w, c.y * p.h, c.w * p.w, c.h * p.h, p.w, p.h]; } : null);
 const cache = new Map();
 /** Aspect ratio of thumb(id): a portrait A4 page (Canva shows Docs templates as whole first pages). Template panels and
  *  intro cards size their picture box with it (CSS aspect-ratio value). */
@@ -368,7 +411,7 @@ export function thumb(id) {
   const k = docLook(id);
   let svg;
   if (!k) svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PAGE_W} ${PAGE_H}"><rect width="${PAGE_W}" height="${PAGE_H}" fill="#ffffff"/></svg>`;
-  else svg = drawThumb({ ...k, photo: k.photo ? photoUrl(k.photo, "thumb") : "" }, id, decoSvg);
+  else svg = drawThumb({ ...k, photo: k.photo ? photoUrl(k.photo, "thumb") : "", photoBox: faceBox(k.photo), portrait: k.portrait ? photoUrl(k.portrait, "thumb") : "", portraitBox: faceBox(k.portrait) }, id, decoSvg);
   cache.set(id, svg);
   if (cache.size > 600) cache.delete(cache.keys().next().value);
   return svg;

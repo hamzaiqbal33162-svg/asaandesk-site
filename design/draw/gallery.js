@@ -7,7 +7,7 @@
 // shadows and heavy type); real photos come from the shared library (CC0 / public domain): thumbnails use its small files,
 // the opened artwork the full ones. parts(id) splits the artwork into layers (frame or background, photos, lines or guides,
 // title) so the editor opens each template as separate, editable layers.
-import { kit, headline, text as ktext, fit, icon as kicon, pickPhoto, mix, isDark, hash } from "../shared/tpl-kit.js";
+import { kit, headline, text as ktext, fit, icon as kicon, pickPhoto, pickPerson, mix, isDark, hash } from "../shared/tpl-kit.js";
 import { PHOTOS } from "../shared/photo-library.js";
 
 const LW = { k: 1, thumb: false }; // outline width factor: colouring art is drawn smaller inside its frame, so its lines get thicker
@@ -398,13 +398,35 @@ const rot = (deg, cx, cy, body) => (deg ? `<g transform="rotate(${deg} ${r1(cx)}
 const tint = (c, t = 0.85) => mix(c, "#ffffff", t);
 const hline = (x1, x2, y, col, sw = 3, ex = "") => `<path d="M${r1(x1)} ${r1(y)}H${r1(x2)}" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" fill="none"${ex}/>`;
 
+// People (shared people library) in the photo templates of the themes about people: their reference photos, journal and
+// mood-board prints and photo stickers show people the way Canva's do (the character sheet always starts from a person).
+// Faces are cropped automatically (k.photo crops people photos around the face).
+const PEOPLE_TOPIC = { // [first people photo, the next one]
+  school: ["students class school", "teacher smiling school"], sports: ["fitness sport workout gym", "fitness trainer coach"], birthday: ["child girl smiling kids", "friends young happy group"],
+  holidays: ["family parents mother father", "friends young happy group"], city: ["fashion street style young", "fashion street style young"],
+};
+const PEOPLE_AT = { // layout -> which of its photos show people (for the themes in PEOPLE_TOPIC)
+  storyboard: [0], "sketch-frames": [0, 2], "journal-page": [0], "dot-journal": [0], "handwriting-lines": [0], "sticker-sheet": [1], "mood-board": [1, 3],
+};
+function personAt(layout, theme, n) {
+  if (layout === "character-turnaround") return n === 0 ? { kind: "fashion model outfit style", shot: "full", alt: true } : null;
+  const kinds = PEOPLE_TOPIC[theme], at = PEOPLE_AT[layout] || [];
+  if (!kinds || !at.includes(n)) return null;
+  if (theme === "city" && (layout !== "mood-board" || n !== 1)) return null; // the city keeps its buildings, the mood board one street portrait
+  return { kind: kinds[Math.min(1, at.indexOf(n))] };
+}
 function ctxOf(t, size, salt) {
   const L = LBY.get(t.layout), pal = PBY.get(t.palette), th = TBY.get(t.theme), K = kit(t.id, salt);
   const topic = PHOTO_TOPIC[th.id] || "nature";
+  const person = (n, exclude = []) => { const s = personAt(L.id, th.id, n); return s ? pickPerson(s.kind, `${t.id}:p${n}`, { exclude, shot: s.shot || null, sex: s.alt ? ((+String(t.palette).slice(1) || 0) % 2 ? "f" : "m") : null }) : null; };
   return {
     K, L, pal, th, w: L.w, h: L.h, size, id: t.id, p: `${salt}-${safe(t.id)}-`, topic,
-    pic: (n = 0, tp = topic) => { const r = onTopic(tp, t.id); return r.length ? r[n % r.length] : pickPhoto(tp, `${t.id}:${n}`); },
-    pics: (n, tp = topic) => { const r = onTopic(tp, t.id); return r.length >= n ? r.slice(0, n) : [...r, ...Array.from({ length: n - r.length }, (_, i) => pickPhoto(tp, `${t.id}:x${i}`))]; },
+    pic: (n = 0, tp = topic) => { const pp = tp === topic && person(n); if (pp) return pp; const r = onTopic(tp, t.id); return r.length ? r[n % r.length] : pickPhoto(tp, `${t.id}:${n}`); },
+    pics: (n, tp = topic) => {
+      const r = onTopic(tp, t.id), out = r.length >= n ? r.slice(0, n) : [...r, ...Array.from({ length: n - r.length }, (_, i) => pickPhoto(tp, `${t.id}:x${i}`))];
+      if (tp === topic) for (let i = 0; i < n; i++) { const pp = person(i, out.map((p) => p?.id)); if (pp) out[i] = pp; }
+      return out;
+    },
     photo: (ph, x, y, w, h, o = {}) => K.photo(ph, x, y, w, h, { size, fallback: tint(pal.acc[0], 0.6), ...o }),
   };
 }

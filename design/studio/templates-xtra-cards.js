@@ -1,7 +1,12 @@
 // AsaanDesk Studio: 25 more own business card layouts (front + back), each a different composition.
 // Pure module. templates.js calls the default export with its helpers. Own text, colours and shapes only.
+import { castFor, face, KIND } from "./templates-faces.js";
+
 export default function addCardTemplates(k) {
-  const { tpl, T, R, C, S, E, F, page } = k;
+  const { T, R, C, S, E, F, page } = k;
+  // Person spots show people photos of their kind (templates-faces.js): one person picker per template build.
+  let CAST = null;
+  const tpl = (id, title, preset, tags, build) => k.tpl(id, title, preset, tags, (W, H) => { CAST = castFor(id); return build(W, H); });
   const { INK, MUTED, WHITE } = k.K;
   const tags = (extra) => "business card visiting card contact " + extra;
   // Contact rows with small icons.
@@ -70,7 +75,7 @@ export default function addCardTemplates(k) {
   tpl("photo-circle-card-x3", "Photo circle business card", "business-card-us", tags("photo portrait circle personal"), (W, H) => [
     page("#ffffff", [
       C(18, 40, 112, 112, "#e0f2fe", { name: "Photo ring" }),
-      F(26, 48, 96, 96, { shape: "circle", name: "Portrait photo" }),
+      face(CAST, F(26, 48, 96, 96, { shape: "circle", name: "Portrait photo" }), KIND.fitness, { sex: "m" }),
       T("Noah Patel", 148, 46, 170, { size: 19, bold: true, color: "#0c4a6e" }),
       T("Fitness Coach", 148, 72, 170, { size: 10.5, color: "#0284c7" }),
       ...rows(STD("+1 555 0122 818", "noah@fitwithnoah.com", "Denver, Colorado"), 148, 100, 20, 8.5, "#0284c7", INK, 160),

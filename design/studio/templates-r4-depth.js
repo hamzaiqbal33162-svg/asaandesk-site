@@ -1,6 +1,9 @@
 // ROUND 4 layout batch: own "3D-style" designs (layered soft shadows, glossy gradient shapes, extruded headlines,
-// isometric blocks, tilted photo / device stacks) for Instagram posts and presentations. Pure module, no imports.
+// isometric blocks, tilted photo / device stacks) for Instagram posts and presentations. Pure module; the award
+// winners show people photos of their kind (templates-faces.js).
 // 7 Instagram posts (1080 × 1080) + 5 presentations (1920 × 1080, title / content / closing slides with notes).
+import { castFor, member } from "./templates-faces.js";
+
 export default function add(k) {
   const { tpl, T, S, R, C, E, F, page } = k;
   const { WHITE } = k.K;
@@ -245,10 +248,11 @@ export default function add(k) {
 
   /* P4. Team awards on isometric podiums */
   tpl("podium-awards-3d-deck", "Podium team awards presentation", PR, "presentation awards team recognition winners celebration office 3d podium", (W, H) => {
+    const cast = castFor("podium-awards-3d-deck");
     // A podium block: the place number sits on the front, below the light top face.
     const block = (x, base, w, h, n, stops) => { const t = w * 0.57735; return [...bar(x, base, w, h, stops[0], stops[1], stops[2]), mid(n, x, r1(base - h + t / 2), w, Math.min(h - t / 2, 150), { size: 80, bold: true, color: WHITE, name: "Place" })]; };
     // A winner: round photo standing on the podium's top face, name and role under the podium.
-    const winner = (x, base, h, n, name, role, stops) => [...block(x, base, 360, h, n, stops), ...shadow("ellipse", x + 80, base - h - 175, 200, 200, { s: 7 }), F(x + 80, base - h - 175, 200, 200, { shape: "circle", name: "Winner photo" }), T(name, x - 20, base + 112, 400, { size: 38, bold: true, color: "#1e1b4b", align: "center", name: "Name" }), T(role, x - 20, base + 162, 400, { size: 30, color: "#4c1d95", align: "center", name: "Role" })];
+    const winner = (x, base, h, n, name, role, stops) => [...block(x, base, 360, h, n, stops), ...shadow("ellipse", x + 80, base - h - 175, 200, 200, { s: 7 }), member(cast, F(x + 80, base - h - 175, 200, 200, { shape: "circle", name: "Winner photo" }), name, role), T(name, x - 20, base + 112, 400, { size: 38, bold: true, color: "#1e1b4b", align: "center", name: "Name" }), T(role, x - 20, base + 162, 400, { size: 30, color: "#4c1d95", align: "center", name: "Role" })];
     return [
       slide(["#faf5ff", "#ede9fe", 180], [
         E("deco-confetti", 1580, 90, 220, { c1: "#f59e0b", c2: "#8b5cf6" }),

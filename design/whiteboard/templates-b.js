@@ -1,6 +1,6 @@
 // Whiteboard templates, part B: strategy canvases, planners, retros and team boards (own layouts and wording).
 import { W, H, M, TOP, BOT, A, TI, N, NOTES, INK, GREY, SOFT, LINE, WHITE, th, tv, who, cap, low, nameOf, roleOf,
-  txt, shape, note, pill, tag, link, line, pen, icon, badge, avatar, photo, board, panel, notesIn, columns, table, bar, fitSize } from "./templates-kit.js";
+  txt, shape, note, pill, tag, link, line, pen, icon, badge, avatar, photo, board, panel, notesIn, columns, table, bar, fitSize, themed, sexOf } from "./templates-kit.js";
 import { makeFrame } from "./model.js";
 
 /** Columns of sections, each a card with a coloured header pill and sticky notes. cols: [name, accent, note colour, icon, notes, prompt]. */
@@ -178,7 +178,7 @@ export const BUILDERS_B = {
       const y = TOP + 62 + r * 75;
       out.push(shape(M, y, tw + cw * 7 + 110, 75, { kind: "rect", fill: r % 2 ? WHITE : "#f6f7fb", stroke: LINE, sw: 1 }), txt(M + 16, y + 26, tw - 20, j, 19, { bold: true }));
       days.forEach((_, d) => { if ((r * 3 + d) % 4 !== 3) out.push(icon("star", M + tw + d * cw + 40, y + 18, 38, (r + d) % 3 ? A[3] : "#d5d9e6", 2.5)); });
-      out.push(avatar(M + tw + cw * 7 + 30, y + 12, 50, kids[r % 4], A[(r + 1) % 6], { sw: 2 }));
+      out.push(avatar(M + tw + cw * 7 + 30, y + 12, 50, kids[r % 4], A[(r + 1) % 6], { sw: 2, kind: themed() ? undefined : `child kids ${sexOf(kids[r % 4]) === "f" ? "girl" : "boy"}` }));
     });
     return out;
   },
