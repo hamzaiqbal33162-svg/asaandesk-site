@@ -1,0 +1,408 @@
+<!doctype html>
+<!-- Chill and Craft · Fill Submit · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fill Submit · send button with progress</title>
+<script>
+  // Theme: ?theme=light|dark overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colours and motion curves ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #fff7ed;
+    --bg2: #fde4cc;
+    --card: #ffffff;
+    --text: #2d1a0e;
+    --muted: #8a6a55;
+    --line: #ead9ca;
+    --field: #fffdfb;
+    --orange: #f97316;
+    --orange-dark: #ea580c;
+    --peach: #ffedd5;
+    --on-fill: #431407;
+    --ok: #15803d;
+    --error: #c81e1e;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg1: #1f150e;
+      --bg2: #0c0806;
+      --card: #1c1612;
+      --text: #fbeee2;
+      --muted: #b89c88;
+      --line: #3d2f25;
+      --field: #241c16;
+      --orange: #f97316;
+      --orange-dark: #ea580c;
+      --peach: #3a2618;
+      --on-fill: #fff7ed;
+      --ok: #16a34a;
+      --error: #f87171;
+      --focus: #93c5fd;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #1f150e;
+    --bg2: #0c0806;
+    --card: #1c1612;
+    --text: #fbeee2;
+    --muted: #b89c88;
+    --line: #3d2f25;
+    --field: #241c16;
+    --orange: #f97316;
+    --orange-dark: #ea580c;
+    --peach: #3a2618;
+    --on-fill: #fff7ed;
+    --ok: #16a34a;
+    --error: #f87171;
+    --focus: #93c5fd;
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(160deg, var(--bg1), var(--bg2));
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overflow-x: hidden;
+  }
+  .stage { width: 100%; padding: 24px 16px; display: grid; place-items: center; }
+
+  /* ---------- Form card ---------- */
+  .card {
+    width: 380px;
+    max-width: 100%;
+    padding: 24px 22px 20px;
+    border-radius: 22px;
+    background: var(--card);
+    box-shadow: 0 24px 50px -32px rgba(120, 50, 10, .6);
+  }
+  h1 { margin: 0 0 4px; font-size: 21px; letter-spacing: -.01em; }
+  .lead { margin: 0 0 18px; font-size: 14px; color: var(--muted); }
+
+  .field { display: block; margin-bottom: 14px; }
+  .field > span { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13.5px; font-weight: 600; }
+  .field small { font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+  input, textarea {
+    width: 100%;
+    padding: 11px 13px;
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    background: var(--field);
+    color: var(--text);
+    font: inherit;
+    font-size: 15px;
+    transition: border-color .2s, box-shadow .25s, transform .3s var(--spring);
+  }
+  textarea { resize: vertical; min-height: 84px; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: .75; }
+  input:focus, textarea:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 4px rgba(249, 115, 22, .22); transform: translateY(-1px); }
+  [aria-invalid="true"] { border-color: var(--error); }
+  .err { display: block; margin-top: 5px; font-size: 12.5px; font-style: normal; color: var(--error); animation: errIn .35s var(--spring); }
+  .err:empty { display: none; }
+
+  /* ---------- Submit button with its own progress ---------- */
+  .send-wrap { position: relative; margin-top: 6px; }
+  .send {
+    --p: 0; /* progress 0..1 */
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    height: 54px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--orange);
+    color: #fff;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 650;
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 12px 24px -14px rgba(234, 88, 12, .9);
+    transition: background-color .3s, transform .4s var(--spring), color .3s, box-shadow .3s;
+  }
+  .send:hover { background: var(--orange-dark); transform: translateY(-2px); box-shadow: 0 16px 28px -14px rgba(234, 88, 12, 1); }
+  .send:active { transform: scale(.97); transition-duration: .1s; }
+  .send:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .send > :not(.fill) { position: relative; }
+  .send .icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; overflow: visible; transition: transform .4s var(--spring), opacity .2s; }
+  .send:hover .icon { transform: translate(3px, -3px) rotate(-8deg); }
+  .send .tick { stroke-dasharray: 20; stroke-dashoffset: 20; transition: stroke-dashoffset .4s .2s ease-out; }
+  .send .plane { transition: opacity .2s; }
+  .label { display: inline-block; font-variant-numeric: tabular-nums; }
+
+  /* The fill grows from the left with moving stripes */
+  .fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: calc(var(--p) * 100%);
+    background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, .2) 0 10px, transparent 10px 20px) var(--orange);
+    background-size: 28.28px 28.28px;
+    transition: width .45s var(--spring);
+  }
+  /* A paper plane rides the front edge of the fill */
+  .rider { position: absolute; top: 50%; left: calc(var(--p) * 100%); width: 22px; height: 22px; margin: -11px 0 0 -16px; opacity: 0; transition: left .45s var(--spring), opacity .2s; }
+  .rider svg { width: 100%; height: 100%; fill: #fff; stroke: var(--on-fill); stroke-width: 1.4; stroke-linejoin: round; }
+
+  .fx { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+  .particle { position: absolute; width: 7px; height: 10px; border-radius: 2px; pointer-events: none; }
+
+  .send[data-state="sending"] { background: var(--peach); color: var(--on-fill); cursor: progress; transform: none; box-shadow: none; }
+  .send[data-state="sending"] .fill { animation: stripes .6s linear infinite; }
+  .send[data-state="sending"] .icon { opacity: 0; transform: translateX(-12px); }
+  .send[data-state="sending"] .rider { opacity: 1; }
+  .send[data-state="sending"] .rider svg { animation: glide .5s ease-in-out infinite alternate; }
+  .send[data-state="sent"] { background: var(--ok); color: #fff; animation: pop .6s var(--spring); }
+  .send[data-state="sent"] .fill { opacity: 0; transition: opacity .3s; }
+  .send[data-state="sent"] .plane { opacity: 0; }
+  .send[data-state="sent"] .tick { stroke-dashoffset: 0; }
+  .send[data-state="sent"] .icon { transform: scale(1.2); }
+
+  .status { min-height: 1.4em; margin: 12px 0 0; font-size: 13.5px; text-align: center; color: var(--muted); }
+  .status.good { color: var(--ok); font-weight: 600; animation: errIn .5s var(--spring); }
+
+  @keyframes stripes { from { background-position: 0 0; } to { background-position: 28.28px 0; } }
+  @keyframes glide { from { transform: translateY(-2px) rotate(-6deg); } to { transform: translateY(2px) rotate(4deg); } }
+  @keyframes pop { 0% { transform: scale(1); } 30% { transform: scale(.94, 1.06); } 100% { transform: scale(1); } }
+  @keyframes errIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  /* Calm mode: same steps, no big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+    .fx { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <form class="card" novalidate>
+    <h1>Get in touch</h1>
+    <p class="lead">Tell us what you need. We reply within one working day.</p>
+
+    <label class="field">
+      <span>Your name</span>
+      <input name="name" autocomplete="name" placeholder="e.g. Bilal Ahmed" aria-describedby="err-name">
+      <em class="err" id="err-name"></em>
+    </label>
+
+    <label class="field">
+      <span>Email</span>
+      <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" aria-describedby="err-email">
+      <em class="err" id="err-email"></em>
+    </label>
+
+    <label class="field">
+      <span>Message <small id="count">0 / 500</small></span>
+      <textarea name="message" rows="3" maxlength="500" placeholder="How can we help?" aria-describedby="err-message count"></textarea>
+      <em class="err" id="err-message"></em>
+    </label>
+
+    <div class="send-wrap">
+      <button class="send" type="submit" data-state="idle">
+        <span class="fill" aria-hidden="true"></span>
+        <span class="rider" aria-hidden="true">
+          <svg viewBox="0 0 22 22"><path d="M20 2L2 9.5l6.5 3L20 2l-8.5 12.5V20l-3-7.5" /></svg>
+        </span>
+        <svg class="icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path class="plane" d="M17.5 2.5L8.6 11.4M17.5 2.5l-5.6 15-3.3-6.1-6.1-3.3z" />
+          <path class="tick" d="M4 10.5l4 4 8-9" />
+        </svg>
+        <span class="label">Send message</span>
+      </button>
+      <span class="fx" aria-hidden="true"></span>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </form>
+</main>
+
+<script>
+  // ---------- Fill Submit: a form whose button shows its own progress ----------
+  const form = document.querySelector(".card");
+  const send = form.querySelector(".send");
+  const rider = send.querySelector(".rider");
+  const label = send.querySelector(".label");
+  const fx = form.querySelector(".fx");
+  const status = document.getElementById("status");
+  const count = document.getElementById("count");
+  const fields = {
+    name: form.elements.name,
+    email: form.elements.email,
+    message: form.elements.message
+  };
+
+  const SPRING = "cubic-bezier(.34, 1.56, .64, 1)";
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduceMotion.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 600) : ms));
+  let busy = false;
+  let tried = false; // show errors live only after the first try
+
+  function play(el, frames, options) {
+    if (calm() || !el.animate) return Promise.resolve();
+    return el.animate(frames, options).finished.catch(() => {});
+  }
+
+  const shake = (el) => play(el, [{ transform: "translateX(0)" }, { transform: "translateX(-7px)" }, { transform: "translateX(6px)" }, { transform: "translateX(-3px)" }, { transform: "translateX(0)" }], { duration: 420, easing: "ease-in-out" });
+
+  async function swapLabel(text) {
+    await play(label, [{ transform: "translateY(0)", opacity: 1 }, { transform: "translateY(-10px)", opacity: 0 }], { duration: 130, easing: "ease-in" });
+    label.textContent = text;
+    play(label, [{ transform: "translateY(10px)", opacity: 0 }, { transform: "translateY(0)", opacity: 1 }], { duration: 420, easing: SPRING });
+  }
+
+  // Confetti thrown up from the button, falling with gravity
+  function confetti(count) {
+    if (calm()) return;
+    const colors = ["#f97316", "#facc15", "#22c55e", "#fb7185", "#38bdf8"];
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement("i");
+      p.className = "particle";
+      p.style.background = colors[i % colors.length];
+      fx.appendChild(p);
+      const dx = (Math.random() - .5) * 300;
+      const up = -60 - Math.random() * 80;
+      const spin = Math.round(Math.random() * 900 - 450);
+      p.animate([
+        { transform: "translate(-50%, -50%) rotate(0) scale(.4)", opacity: 1 },
+        { transform: "translate(calc(-50% + " + (dx * .55).toFixed(1) + "px), " + up.toFixed(1) + "px) rotate(" + spin / 2 + "deg) scale(1)", opacity: 1, offset: .35, easing: "cubic-bezier(.3, .6, .6, 1)" },
+        { transform: "translate(calc(-50% + " + dx.toFixed(1) + "px), 90px) rotate(" + spin + "deg) scale(.8)", opacity: 0 }
+      ], { duration: 1300 + Math.random() * 600, easing: "cubic-bezier(.5, 0, .8, .6)" }).onfinish = () => p.remove();
+    }
+  }
+
+  // Rules for each field: return an error message, or "" when fine
+  const rules = {
+    name: (v) => (v.trim().length < 2 ? "Please enter your name." : ""),
+    email: (v) => (!v.trim() ? "Please enter your email." : /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim()) ? "" : "That email does not look right."),
+    message: (v) => (v.trim().length < 10 ? "Please write at least 10 characters." : "")
+  };
+
+  function check(name) {
+    const input = fields[name];
+    const msg = rules[name](input.value);
+    document.getElementById("err-" + name).textContent = msg;
+    input.setAttribute("aria-invalid", msg ? "true" : "false");
+    return !msg;
+  }
+
+  // Live feedback
+  Object.keys(fields).forEach((name) => {
+    fields[name].addEventListener("input", () => {
+      if (tried) check(name);
+    });
+  });
+  fields.message.addEventListener("input", () => {
+    count.textContent = fields.message.value.length + " / 500";
+  });
+
+  // Fake sending with uneven chunks
+  function simulateSend(onTick) {
+    return new Promise((resolve) => {
+      let p = 0;
+      (function step() {
+        p = Math.min(100, p + 3 + Math.random() * 9);
+        onTick(p);
+        if (p >= 100) resolve();
+        else setTimeout(step, 140 + Math.random() * 140);
+      })();
+    });
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    tried = true;
+
+    // 1. Validate: shake the button and the bad fields, focus the first one
+    const names = Object.keys(fields);
+    const ok = names.map(check);
+    const bad = names.filter((n, i) => !ok[i]);
+    if (bad.length) {
+      shake(send);
+      bad.forEach((n) => shake(fields[n]));
+      fields[bad[0]].focus();
+      status.className = "status";
+      status.textContent = "Please fix the highlighted field" + (bad.length > 1 ? "s." : ".");
+      return;
+    }
+
+    busy = true;
+    Object.values(fields).forEach((f) => (f.readOnly = true));
+    send.setAttribute("aria-disabled", "true");
+
+    // 2. Anticipation: the button squashes, the plane pulls back
+    await Promise.all([
+      play(send, [{ transform: "scale(1)" }, { transform: "scale(1.02, .88)" }, { transform: "scale(1)" }], { duration: 320, easing: "ease-out" }),
+      play(send.querySelector(".icon"), [{ transform: "translate(0, 0)" }, { transform: "translate(-5px, 4px) rotate(10deg)" }], { duration: 300, easing: "ease-out" })
+    ]);
+
+    // 3. Send: the button fills from the left, a plane rides the edge
+    send.dataset.state = "sending";
+    status.className = "status";
+    status.textContent = "Sending your message…";
+    label.textContent = "Sending… 0%";
+    await simulateSend((p) => {
+      send.style.setProperty("--p", (p / 100).toFixed(3));
+      label.textContent = "Sending… " + Math.round(p) + "%";
+    });
+    await wait(250);
+
+    // 4. Finish: the plane takes off, the button pops green, confetti flies
+    await play(rider, [
+      { transform: "translate(0, 0) rotate(0)", opacity: 1 },
+      { transform: "translate(40px, -40px) rotate(-20deg) scale(1.3)", opacity: 0 }
+    ], { duration: 420, easing: "cubic-bezier(.5, 0, .9, .5)", fill: "forwards" });
+    send.dataset.state = "sent";
+    confetti(28);
+    swapLabel("Message sent");
+    const first = fields.name.value.trim().split(/\s+/)[0];
+    status.className = "status good";
+    status.textContent = "Thanks, " + first + "! We will reply to " + fields.email.value.trim() + " soon.";
+    await wait(3400);
+
+    // 5. Reset the form for the next message
+    form.reset();
+    count.textContent = "0 / 500";
+    Object.values(fields).forEach((f) => {
+      f.readOnly = false;
+      f.removeAttribute("aria-invalid");
+    });
+    tried = false;
+    send.dataset.state = "idle";
+    send.style.setProperty("--p", 0);
+    if (rider.getAnimations) rider.getAnimations().forEach((a) => a.cancel());
+    send.removeAttribute("aria-disabled");
+    swapLabel("Send message");
+    status.className = "status";
+    status.textContent = "";
+    busy = false;
+  });
+</script>
+</body>
+</html>

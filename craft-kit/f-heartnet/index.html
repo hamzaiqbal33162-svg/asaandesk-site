@@ -1,0 +1,460 @@
+<!doctype html>
+<!-- Chill and Craft · Heartnet · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heartnet · a beating heart of glowing dots</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens (--mode tells the canvas which palette to use) ---------- */
+  :root {
+    --mode: light;
+    --bg1: #fff5f7;
+    --bg2: #fbdfe7;
+    --ink: #4a1d2c;
+    --muted: #8a5a69;
+    --panel: rgba(255, 255, 255, 0.72);
+    --line: rgba(74, 29, 44, 0.16);
+    --field: #ffffff;
+    --btn: #d6245a;
+    --btn-ink: #ffffff;
+    --focus: #6a1fd1;
+    --msg: #8c1238;
+    --msg-glow: rgba(255, 255, 255, 0.9);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --mode: dark;
+      --bg1: #2a0b1e; --bg2: #07030b; --ink: #ffe9f0; --muted: #c49aac;
+      --panel: rgba(30, 10, 24, 0.66); --line: rgba(255, 233, 240, 0.16); --field: #1c0a17;
+      --btn: #ff4d82; --btn-ink: #22040f; --focus: #ffd166;
+      --msg: #fff3f7; --msg-glow: rgba(255, 70, 130, 0.75);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --mode: dark;
+    --bg1: #2a0b1e; --bg2: #07030b; --ink: #ffe9f0; --muted: #c49aac;
+    --panel: rgba(30, 10, 24, 0.66); --line: rgba(255, 233, 240, 0.16); --field: #1c0a17;
+    --btn: #ff4d82; --btn-ink: #22040f; --focus: #ffd166;
+    --msg: #fff3f7; --msg-glow: rgba(255, 70, 130, 0.75);
+    color-scheme: dark;
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    overflow: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background: radial-gradient(80% 70% at 50% 40%, var(--bg1), var(--bg2));
+  }
+  .stage { position: relative; width: 100%; height: 100vh; min-height: 400px; overflow: hidden; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* message written in the middle of the heart */
+  .msg {
+    position: absolute;
+    left: 50%;
+    top: 40%;
+    margin: 0;
+    transform: translate(-50%, -50%);
+    max-width: 60%;
+    text-align: center;
+    pointer-events: none;
+    color: var(--msg);
+    font-family: Georgia, "Times New Roman", serif;
+    font-style: italic;
+    font-weight: 700;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+    text-shadow: 0 0 18px var(--msg-glow), 0 0 4px var(--msg-glow);
+  }
+
+  /* ---------- Control panel ---------- */
+  .panel {
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    width: min(720px, calc(100% - 24px));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 10px 14px;
+    padding: 12px 14px;
+    border-radius: 18px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .fld { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .fld.grow { flex: 1 1 160px; }
+  .fld input[type="text"] {
+    font: inherit; font-size: 15px; font-weight: 500; color: var(--ink);
+    background: var(--field); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0;
+  }
+  .fld input[type="range"] { width: 130px; accent-color: var(--btn); }
+  fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; }
+  legend { padding: 0; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+  .swatches { display: flex; gap: 8px; }
+  .swatch { position: relative; }
+  .swatch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .swatch span { display: block; width: 28px; height: 28px; border-radius: 50%; border: 3px solid transparent; box-shadow: 0 0 0 1px var(--line); }
+  .swatch input:checked + span { border-color: var(--ink); }
+  .swatch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .btn {
+    font: 700 14px system-ui, sans-serif; border: 0; border-radius: 999px; padding: 10px 18px;
+    background: var(--btn); color: var(--btn-ink); cursor: pointer; margin-left: auto;
+  }
+  input:focus-visible, .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    canvas { cursor: default; }
+  }
+</style>
+</head>
+<body>
+<main class="stage" id="stage">
+  <h1 class="sr">Heartnet: a heart made of glowing dots joined by threads of light</h1>
+  <canvas id="c" aria-hidden="true"></canvas>
+  <p class="msg" id="msg">Ali &amp; Zara</p>
+
+  <form class="panel" id="panel" autocomplete="off">
+    <label class="fld grow">Message
+      <input id="text" type="text" maxlength="28" value="Ali & Zara">
+    </label>
+    <div class="fld">
+      <label for="bpm">Beat: <span id="bpmOut">72</span> bpm</label>
+      <input id="bpm" type="range" min="40" max="140" value="72">
+    </div>
+    <fieldset>
+      <legend>Colour</legend>
+      <div class="swatches">
+        <label class="swatch"><input type="radio" name="hue" value="rose" checked aria-label="Rose"><span style="background:#ff4d7d"></span></label>
+        <label class="swatch"><input type="radio" name="hue" value="violet" aria-label="Violet"><span style="background:#a66bff"></span></label>
+        <label class="swatch"><input type="radio" name="hue" value="gold" aria-label="Gold"><span style="background:#ffb938"></span></label>
+      </div>
+    </fieldset>
+    <button class="btn" id="pulse" type="button">Send a pulse</button>
+  </form>
+  <p class="sr" id="live" aria-live="polite"></p>
+</main>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    var $ = function (id) { return document.getElementById(id); };
+    var stage = $("stage"), canvas = $("c"), ctx = canvas.getContext("2d");
+    var panel = $("panel"), msg = $("msg"), live = $("live");
+
+    /* Colours for each swatch: bright on dark, deeper on light */
+    var HUES = {
+      rose:   { dark: "#ff4d7d", light: "#d61f57" },
+      violet: { dark: "#b27bff", light: "#7a32e0" },
+      gold:   { dark: "#ffbf47", light: "#c27400" }
+    };
+    var hue = "rose", mode = "light", rgb = [214, 31, 87], sprite = null;
+
+    function hexToRgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+    function refreshColours() {
+      mode = getComputedStyle(document.documentElement).getPropertyValue("--mode").trim() || "light";
+      rgb = hexToRgb(HUES[hue][mode === "dark" ? "dark" : "light"]);
+      // a soft glow dot, drawn once and stamped for every point
+      sprite = document.createElement("canvas");
+      sprite.width = sprite.height = 32;
+      var s = sprite.getContext("2d"), g = s.createRadialGradient(16, 16, 0, 16, 16, 16);
+      g.addColorStop(0, "rgba(255,255,255,1)");
+      g.addColorStop(0.25, "rgba(" + rgb.join(",") + ",0.9)");
+      g.addColorStop(1, "rgba(" + rgb.join(",") + ",0)");
+      s.fillStyle = g;
+      s.fillRect(0, 0, 32, 32);
+    }
+
+    /* ---------- 1. Points on and inside a heart ---------- */
+    var seed = 11;
+    function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+    // classic heart curve, scaled to roughly -1..1
+    function heartXY(t) {
+      var s = Math.sin(t);
+      var x = 16 * s * s * s;
+      var y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      return [x / 17, -(y + 2.5) / 17];
+    }
+    var outline = [];
+    for (var k = 0; k < 200; k++) outline.push(heartXY((k / 200) * Math.PI * 2));
+    function inside(px, py) {
+      var c = false;
+      for (var i = 0, j = outline.length - 1; i < outline.length; j = i++) {
+        var xi = outline[i][0], yi = outline[i][1], xj = outline[j][0], yj = outline[j][1];
+        if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) c = !c;
+      }
+      return c;
+    }
+    var pts = [];
+    function mk(hx, hy, edge) {
+      return { hx: hx, hy: hy, x: 0, y: 0, vx: 0, vy: 0, ph: rnd() * 6.283, r: edge ? 1.7 + rnd() * 1.2 : 1.1 + rnd() * 1.4 };
+    }
+    for (var e = 0; e < 150; e++) {
+      var p = heartXY(((e + rnd() * 0.5) / 150) * Math.PI * 2), f = 0.97 + rnd() * 0.05;
+      pts.push(mk(p[0] * f, p[1] * f, true));
+    }
+    var inner = 0;
+    while (inner < 170) {
+      var x = rnd() * 2 - 1, y = rnd() * 2 - 1;
+      if (inside(x / 0.94, y / 0.94)) { pts.push(mk(x, y, false)); inner++; }
+    }
+
+    /* ---------- 2. Layout ---------- */
+    var W = 0, H = 0, cx = 0, cy = 0, S = 100, placed = false;
+    function layout() {
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      W = stage.clientWidth; H = stage.clientHeight;
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      var room = H - panel.offsetHeight - 28;
+      cx = W / 2;
+      cy = Math.max(90, room / 2 + 6);
+      S = Math.max(70, Math.min(W * 0.4, room * 0.5));
+      msg.style.left = cx + "px";
+      msg.style.top = cy + "px";
+      msg.style.fontSize = Math.max(16, S * 0.17).toFixed(0) + "px";
+      msg.style.maxWidth = (S * 1.1).toFixed(0) + "px";
+      if (!placed) {
+        placed = true;
+        pts.forEach(function (pt) {
+          // fly in from scattered spots, unless motion is reduced
+          if (reduce.matches) { pt.x = cx + pt.hx * S; pt.y = cy + pt.hy * S; }
+          else { pt.x = Math.random() * W; pt.y = Math.random() * H; }
+        });
+      }
+      if (reduce.matches) drawFrame(performance.now(), 0);
+    }
+    new ResizeObserver(layout).observe(stage);
+
+    /* ---------- 2b. Extra layers: rising hearts far behind, sparks, beat shockwaves ---------- */
+    var floaters = [], sparks = [], rings = [];
+    for (var fl = 0; fl < 28; fl++) floaters.push({ x: Math.random(), y: Math.random(), z: 0.25 + Math.random() * 0.75, ph: Math.random() * 6.28 });
+    function smallHeart(x, y, s) {
+      ctx.moveTo(x, y + s);
+      ctx.bezierCurveTo(x - 1.4 * s, y + 0.1 * s, x - 0.9 * s, y - 1.1 * s, x, y - 0.45 * s);
+      ctx.bezierCurveTo(x + 0.9 * s, y - 1.1 * s, x + 1.4 * s, y + 0.1 * s, x, y + s);
+    }
+    function addSparks(x, y, n, power) {
+      if (reduce.matches) return;
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * Math.PI * 2, v = power * (0.3 + Math.random());
+        sparks.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5 + Math.random() * 0.7, max: 1.2, r: 1 + Math.random() * 2 });
+      }
+      if (sparks.length > 400) sparks.splice(0, sparks.length - 400);
+    }
+
+    /* ---------- 3. Input: pointer, pulse, controls ---------- */
+    var pointer = { x: 0, y: 0, on: false }, flash = 0, lastTrail = 0;
+    canvas.addEventListener("pointermove", function (e) {
+      pointer.x = e.offsetX; pointer.y = e.offsetY; pointer.on = true;
+      var now = performance.now();
+      if (now - lastTrail > 30) { lastTrail = now; addSparks(e.offsetX, e.offsetY, 2, 40); } // a short glitter trail
+    });
+    canvas.addEventListener("pointerleave", function () { pointer.on = false; });
+    canvas.addEventListener("pointerdown", function (e) { burst(e.offsetX, e.offsetY); });
+    $("pulse").addEventListener("click", function () { burst(cx, cy); });
+
+    function burst(bx, by) {
+      flash = 1;
+      live.textContent = "Pulse sent. The heart scatters and comes back together.";
+      if (reduce.matches) { drawFrame(performance.now(), 0); return; }
+      addSparks(bx, by, 60, 420);
+      rings.push({ age: 0, big: true });
+      pts.forEach(function (pt) {
+        var dx = pt.x - bx, dy = pt.y - by, d = Math.sqrt(dx * dx + dy * dy) || 1;
+        var push = 260 + Math.random() * 520;
+        pt.vx += (dx / d) * push;
+        pt.vy += (dy / d) * push;
+      });
+    }
+
+    var bpm = 72;
+    $("bpm").addEventListener("input", function (e) { bpm = +e.target.value; $("bpmOut").textContent = bpm; });
+    $("text").addEventListener("input", function (e) { msg.textContent = e.target.value; });
+    panel.addEventListener("submit", function (e) { e.preventDefault(); });
+    panel.addEventListener("change", function (e) {
+      if (e.target.name === "hue") { hue = e.target.value; refreshColours(); if (reduce.matches) drawFrame(performance.now(), 0); }
+    });
+    darkQuery.addEventListener("change", function () {
+      refreshColours();
+      if (reduce.matches) drawFrame(performance.now(), 0);
+    });
+
+    /* ---------- 4. Heartbeat: a "lub" and a softer "dub" ---------- */
+    function beatAt(t) {
+      var period = 60 / bpm, ph = (t % period) / period;
+      var d1 = Math.min(ph, 1 - ph), d2 = ph - 0.2;
+      return Math.exp(-(d1 * d1) / 0.004) + 0.6 * Math.exp(-(d2 * d2) / 0.004);
+    }
+
+    /* ---------- 5. Draw ---------- */
+    var buckets = [[], [], [], []];
+    var BUCKET_ALPHA = [0.08, 0.18, 0.32, 0.5];
+    var lastBeat = -1, par = { x: 0, y: 0 };
+    function drawFrame(now, dt) {
+      var t = now / 1000, calm = reduce.matches;
+      var beat = calm ? 0 : beatAt(t);
+      var scale = 1 + 0.07 * beat;
+      flash = Math.max(0, flash - dt * 1.5);
+      // every "lub" sends a heart-shaped shockwave outward
+      var beatIndex = Math.floor(t / (60 / bpm));
+      if (!calm && beatIndex !== lastBeat) { lastBeat = beatIndex; rings.push({ age: 0, big: false }); }
+
+      // move every point toward its home with a springy pull
+      for (var i = 0; i < pts.length; i++) {
+        var pt = pts[i];
+        var tx = cx + pt.hx * S * scale, ty = cy + pt.hy * S * scale;
+        if (calm) { pt.x = tx; pt.y = ty; continue; }
+        tx += Math.sin(t * 1.3 + pt.ph) * 2;
+        ty += Math.cos(t * 1.1 + pt.ph) * 2;
+        pt.vx += (tx - pt.x) * 60 * dt;
+        pt.vy += (ty - pt.y) * 60 * dt;
+        if (pointer.on) {
+          var dx = pt.x - pointer.x, dy = pt.y - pointer.y, d2 = dx * dx + dy * dy, R = S * 0.45;
+          if (d2 < R * R) {
+            var d = Math.sqrt(d2) || 1, push = (1 - d / R) * 1600 * dt;
+            pt.vx += (dx / d) * push;
+            pt.vy += (dy / d) * push;
+          }
+        }
+        var drag = Math.max(0, 1 - 4.2 * dt);
+        pt.vx *= drag; pt.vy *= drag;
+        pt.x += pt.vx * dt; pt.y += pt.vy * dt;
+      }
+
+      ctx.clearRect(0, 0, W, H);
+      var col = rgb.join(",");
+
+      // far layer: small hearts drifting upward, nearer ones bigger, brighter and with more parallax
+      var px = pointer.on && !calm ? (pointer.x - cx) / W : 0, py = pointer.on && !calm ? (pointer.y - cy) / H : 0;
+      par.x += (px - par.x) * Math.min(1, dt * 3);
+      par.y += (py - par.y) * Math.min(1, dt * 3);
+      for (var f = 0; f < floaters.length; f++) {
+        var F = floaters[f];
+        if (!calm) { F.y -= (0.012 + F.z * 0.03) * dt; if (F.y < -0.05) { F.y = 1.05; F.x = Math.random(); } }
+        var fx = F.x * W + Math.sin(t * 0.6 + F.ph) * 14 * F.z - par.x * 60 * F.z;
+        var fy = F.y * H - par.y * 40 * F.z;
+        ctx.fillStyle = "rgba(" + col + "," + (0.05 + F.z * 0.16).toFixed(3) + ")";
+        ctx.beginPath();
+        smallHeart(fx, fy, 3 + F.z * 9);
+        ctx.fill();
+      }
+
+      // shockwave rings shaped like the heart
+      for (var r = rings.length - 1; r >= 0; r--) {
+        var ring = rings[r];
+        ring.age += dt / (ring.big ? 1.1 : 1.6);
+        if (ring.age >= 1) { rings.splice(r, 1); continue; }
+        var rs = S * (1 + ring.age * (ring.big ? 0.9 : 0.45));
+        ctx.strokeStyle = "rgba(" + col + "," + ((1 - ring.age) * (ring.big ? 0.6 : 0.3)).toFixed(3) + ")";
+        ctx.lineWidth = ring.big ? 3 : 1.5;
+        ctx.beginPath();
+        for (var o = 0; o < outline.length; o += 4) {
+          var ox = cx + outline[o][0] * rs, oy = cy + outline[o][1] * rs;
+          if (o === 0) ctx.moveTo(ox, oy); else ctx.lineTo(ox, oy);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      // threads between close neighbours, grouped by strength for speed
+      var D = S * 0.24, D2 = D * D;
+      for (var b = 0; b < 4; b++) buckets[b].length = 0;
+      for (var a = 0; a < pts.length; a++) {
+        var A = pts[a];
+        for (var c = a + 1; c < pts.length; c++) {
+          var B = pts[c], ex = A.x - B.x, ey = A.y - B.y, q = ex * ex + ey * ey;
+          if (q < D2) {
+            var s = 1 - Math.sqrt(q) / D;
+            buckets[Math.min(3, (s * 4) | 0)].push(a, c);
+          }
+        }
+      }
+      var glow = 0.75 + 0.25 * beat + 0.5 * flash;
+      if (calm) glow = 0.85 + 0.4 * flash;
+      ctx.lineWidth = 1;
+      for (b = 0; b < 4; b++) {
+        var list = buckets[b];
+        if (!list.length) continue;
+        ctx.strokeStyle = "rgba(" + rgb.join(",") + "," + Math.min(1, BUCKET_ALPHA[b] * glow).toFixed(3) + ")";
+        ctx.beginPath();
+        for (var n = 0; n < list.length; n += 2) {
+          ctx.moveTo(pts[list[n]].x, pts[list[n]].y);
+          ctx.lineTo(pts[list[n + 1]].x, pts[list[n + 1]].y);
+        }
+        ctx.stroke();
+      }
+
+      // the dots: glowing stamps on dark, solid dots on light
+      if (mode === "dark") {
+        ctx.globalCompositeOperation = "lighter";
+        for (i = 0; i < pts.length; i++) {
+          var sz = pts[i].r * (6 + 2 * beat);
+          ctx.drawImage(sprite, pts[i].x - sz / 2, pts[i].y - sz / 2, sz, sz);
+        }
+        ctx.globalCompositeOperation = "source-over";
+      } else {
+        ctx.fillStyle = "rgb(" + rgb.join(",") + ")";
+        ctx.beginPath();
+        for (i = 0; i < pts.length; i++) {
+          var rr = pts[i].r * (1 + 0.3 * beat);
+          ctx.moveTo(pts[i].x + rr, pts[i].y);
+          ctx.arc(pts[i].x, pts[i].y, rr, 0, Math.PI * 2);
+        }
+        ctx.fill();
+      }
+
+      // sparks from the pointer trail and from pulses
+      for (var sp = sparks.length - 1; sp >= 0; sp--) {
+        var P = sparks[sp];
+        P.life -= dt;
+        if (P.life <= 0) { sparks.splice(sp, 1); continue; }
+        P.vx *= 1 - 2.5 * dt; P.vy = P.vy * (1 - 2.5 * dt) + 40 * dt;
+        P.x += P.vx * dt; P.y += P.vy * dt;
+        var k = P.life / P.max;
+        if (mode === "dark") {
+          ctx.globalCompositeOperation = "lighter";
+          var z = P.r * 7 * k + 2;
+          ctx.drawImage(sprite, P.x - z / 2, P.y - z / 2, z, z);
+          ctx.globalCompositeOperation = "source-over";
+        } else {
+          ctx.fillStyle = "rgba(" + col + "," + k.toFixed(2) + ")";
+          ctx.beginPath(); ctx.arc(P.x, P.y, P.r * k + 0.4, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+
+    var prev = performance.now();
+    function loop(now) {
+      var dt = Math.min(0.033, (now - prev) / 1000);
+      prev = now;
+      if (!reduce.matches || flash > 0) drawFrame(now, dt);
+      requestAnimationFrame(loop);
+    }
+    refreshColours();
+    layout();
+    requestAnimationFrame(loop);
+  })();
+</script>
+</body>
+</html>

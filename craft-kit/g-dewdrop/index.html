@@ -1,0 +1,819 @@
+<!doctype html>
+<!-- Chill and Craft · Dewdrop · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dewdrop · a round glass sign-in form</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    --bg: #fff3e8;
+    --b1: #ff8a5b; --b2: #ffc93c; --b3: #b26bff; --b4: #23cbbf;
+    --glass: rgba(255, 255, 255, 0.26);
+    --edge: rgba(255, 255, 255, 0.8);
+    --ink: #2a1c3a; --muted: #5d4c70;
+    --field: rgba(255, 255, 255, 0.58); --field-line: rgba(42, 28, 58, 0.14);
+    --accent: #6a3bf0; --accent2: #e3489b; --accent-ink: #ffffff;
+    --ok: #0f9e70; --err: #d2364a;
+    --focus: #1a5ff0; --focus-soft: rgba(26, 95, 240, 0.25);
+    --shadow: rgba(80, 30, 90, 0.28);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #110c22;
+      --b1: #ff4f7b; --b2: #ff9a3d; --b3: #7a5cff; --b4: #00b8ae;
+      --glass: rgba(255, 255, 255, 0.07); --edge: rgba(255, 255, 255, 0.3);
+      --ink: #f5f0ff; --muted: #bdb1d6;
+      --field: rgba(12, 7, 28, 0.42); --field-line: rgba(255, 255, 255, 0.16);
+      --accent: #a98bff; --accent2: #ff7ab8; --accent-ink: #170d33;
+      --ok: #35d39c; --err: #ff6b7c;
+      --focus: #ffd35a; --focus-soft: rgba(255, 211, 90, 0.3);
+      --shadow: rgba(0, 0, 0, 0.55);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #110c22;
+    --b1: #ff4f7b; --b2: #ff9a3d; --b3: #7a5cff; --b4: #00b8ae;
+    --glass: rgba(255, 255, 255, 0.07); --edge: rgba(255, 255, 255, 0.3);
+    --ink: #f5f0ff; --muted: #bdb1d6;
+    --field: rgba(12, 7, 28, 0.42); --field-line: rgba(255, 255, 255, 0.16);
+    --accent: #a98bff; --accent2: #ff7ab8; --accent-ink: #170d33;
+    --ok: #35d39c; --err: #ff6b7c;
+    --focus: #ffd35a; --focus-soft: rgba(255, 211, 90, 0.3);
+    --shadow: rgba(0, 0, 0, 0.55);
+    color-scheme: dark;
+  }
+
+  /* ---------- Stage and drifting colour blobs ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    overflow-x: hidden;
+  }
+  .stage {
+    position: relative;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 14px;
+    padding: 16px 12px;
+    overflow: hidden;
+  }
+  .blobs {
+    position: absolute; inset: -12%;
+    pointer-events: none;
+    transform: translate(calc(var(--rx, 0) * -22px), calc(var(--ry, 0) * -18px));
+  }
+  .blob {
+    position: absolute;
+    width: 62vmax; height: 62vmax;
+    border-radius: 50%;
+    animation: drift 24s ease-in-out infinite alternate;
+  }
+  .b1 { left: -14%; top: -20%; background: radial-gradient(circle, var(--b1) 0, transparent 64%); }
+  .b2 { right: -18%; top: -10%; background: radial-gradient(circle, var(--b2) 0, transparent 62%); animation-duration: 29s; animation-direction: alternate-reverse; }
+  .b3 { left: 4%; bottom: -30%; background: radial-gradient(circle, var(--b3) 0, transparent 62%); animation-duration: 21s; }
+  .b4 { right: -8%; bottom: -26%; background: radial-gradient(circle, var(--b4) 0, transparent 60%); animation-duration: 33s; animation-direction: alternate-reverse; }
+  @keyframes drift {
+    0% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(6vmax, 4vmax) scale(1.08); }
+    100% { transform: translate(-4vmax, 7vmax) scale(0.94); }
+  }
+
+  /* ---------- The glass drop (tilts toward the pointer) ---------- */
+  .tilt {
+    position: relative;
+    transform: perspective(1100px) rotateX(calc(var(--ry, 0) * -7deg)) rotateY(calc(var(--rx, 0) * 9deg));
+  }
+  .drop {
+    --w: min(460px, calc(100vw - 24px), max(400px, calc(100vh - 90px)));
+    position: relative;
+    width: var(--w);
+    height: max(var(--w), min(490px, calc(100vh - 90px)));
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background:
+      radial-gradient(120% 90% at 50% 110%, rgba(255, 255, 255, 0.18), transparent 60%),
+      var(--glass);
+    border: 1px solid var(--edge);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    backdrop-filter: blur(20px) saturate(170%);
+    box-shadow:
+      inset 0 2px 1px rgba(255, 255, 255, 0.55),
+      inset 0 -18px 40px rgba(255, 255, 255, 0.08),
+      inset 0 0 0 6px rgba(255, 255, 255, 0.05),
+      0 30px 60px -20px var(--shadow);
+  }
+  /* specular highlight that slides with the tilt */
+  .shine {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    background:
+      radial-gradient(38% 22% at calc(32% + var(--rx, 0) * 14%) calc(16% + var(--ry, 0) * 10%), rgba(255, 255, 255, 0.6), transparent 70%),
+      radial-gradient(20% 10% at 70% 88%, rgba(255, 255, 255, 0.25), transparent 70%);
+    mix-blend-mode: soft-light;
+  }
+  /* progress ring around the edge while signing in */
+  .rim {
+    --p: 0;
+    position: absolute; inset: -7px;
+    border-radius: 50%;
+    pointer-events: none;
+    background: conic-gradient(var(--rim, var(--accent)) calc(var(--p) * 360deg), transparent 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+    filter: drop-shadow(0 0 6px var(--rim, var(--accent)));
+    transition: opacity 0.4s;
+  }
+  .drop.ok { --rim: var(--ok); }
+  .drop.fail { --rim: var(--err); }
+  .drop.wobble { animation: wobble 0.75s cubic-bezier(0.3, 0.7, 0.4, 1); }
+  .drop.shake { animation: shake 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+  .drop.pop { animation: pop 0.8s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  @keyframes wobble {
+    0% { transform: scale(1, 1); }
+    25% { transform: scale(0.94, 1.05); }
+    50% { transform: scale(1.04, 0.97); }
+    72% { transform: scale(0.985, 1.015); }
+    100% { transform: scale(1, 1); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    15% { transform: translateX(-14px) rotate(-1.5deg); }
+    32% { transform: translateX(11px) rotate(1deg); }
+    50% { transform: translateX(-7px); }
+    68% { transform: translateX(4px); }
+    84% { transform: translateX(-2px); }
+  }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    30% { transform: scale(0.95); }
+    65% { transform: scale(1.04); }
+    100% { transform: scale(1); }
+  }
+  /* a ripple ring that leaves the drop on success */
+  .ripple {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    border: 2px solid var(--ok);
+    pointer-events: none;
+    animation: ripple 1.1s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+  }
+  @keyframes ripple { from { transform: scale(1); opacity: 0.9; } to { transform: scale(1.35); opacity: 0; } }
+
+  /* ---------- Views inside the drop ---------- */
+  .view {
+    grid-area: 1 / 1;
+    width: min(320px, 76%);
+    display: flex; flex-direction: column; align-items: stretch;
+    text-align: center;
+    position: relative;
+    transition: opacity 0.45s, transform 0.6s cubic-bezier(0.34, 1.4, 0.64, 1), filter 0.45s;
+  }
+  .view.away { opacity: 0; transform: scale(0.9) translateY(10px); filter: blur(6px); pointer-events: none; }
+  .title {
+    margin: 0 0 12px;
+    font-size: clamp(22px, 5.6vw, 28px);
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+  .title.swap { animation: titleIn 0.6s cubic-bezier(0.34, 1.5, 0.64, 1); }
+  @keyframes titleIn { from { opacity: 0; transform: translateY(12px) scale(0.92); filter: blur(4px); } }
+
+  /* segmented switch with a stretchy pill */
+  .seg {
+    position: relative;
+    display: grid; grid-template-columns: 1fr 1fr;
+    margin: 0 auto 14px;
+    width: min(240px, 100%);
+    padding: 4px;
+    border-radius: 999px;
+    background: var(--field);
+    border: 1px solid var(--field-line);
+  }
+  .seg-pill {
+    position: absolute; top: 4px; bottom: 4px;
+    left: 4px; right: 50%;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    box-shadow: 0 6px 16px -6px var(--accent);
+    transition: left 0.5s cubic-bezier(0.5, 1.5, 0.45, 1) 0s, right 0.5s cubic-bezier(0.5, 1.5, 0.45, 1) 0.09s;
+  }
+  .drop[data-mode="up"] .seg-pill {
+    left: 50%; right: 4px;
+    transition: right 0.5s cubic-bezier(0.5, 1.5, 0.45, 1) 0s, left 0.5s cubic-bezier(0.5, 1.5, 0.45, 1) 0.09s;
+  }
+  .seg button {
+    position: relative;
+    border: 0; background: none;
+    font: inherit; font-size: 14px; font-weight: 650;
+    color: var(--muted);
+    padding: 8px 0;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color 0.3s, transform 0.2s;
+  }
+  .seg button[aria-selected="true"] { color: var(--accent-ink); }
+  .seg button:active { transform: scale(0.94); }
+
+  /* fields with floating labels */
+  .form { display: flex; flex-direction: column; }
+  .form.swap .field, .form.swap .extras, .form.swap .go { animation: rise 0.55s cubic-bezier(0.34, 1.5, 0.64, 1) backwards; }
+  .form.swap #fEmail { animation-delay: 0.07s; }
+  .form.swap #fPass { animation-delay: 0.11s; }
+  .form.swap .extras { animation-delay: 0.15s; }
+  .form.swap .go { animation-delay: 0.19s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
+
+  .grow { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.5s cubic-bezier(0.34, 1.3, 0.64, 1), opacity 0.35s; opacity: 0; }
+  .grow > div { min-height: 0; overflow: hidden; padding: 0 3px; margin: 0 -3px; }
+  .drop[data-mode="up"] .grow { grid-template-rows: 1fr; opacity: 1; }
+
+  .field { position: relative; margin-bottom: 10px; }
+  .field input {
+    width: 100%; height: 46px;
+    border-radius: 999px;
+    border: 1px solid var(--field-line);
+    background: var(--field);
+    padding: 17px 18px 4px;
+    font: inherit; font-size: 15px;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.25s, box-shadow 0.25s, background 0.25s;
+  }
+  .field.has-btn input { padding-right: 48px; }
+  .field input:focus-visible { border-color: var(--focus); box-shadow: 0 0 0 3px var(--focus-soft); }
+  .field label {
+    position: absolute; left: 19px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 15px;
+    color: var(--muted);
+    pointer-events: none;
+    white-space: nowrap;
+    max-width: calc(100% - 60px);
+    overflow: hidden; text-overflow: ellipsis;
+    transition: top 0.3s cubic-bezier(0.34, 1.5, 0.64, 1), font-size 0.25s, color 0.25s;
+  }
+  .field input:focus + label,
+  .field input:not(:placeholder-shown) + label { top: 13px; font-size: 11px; }
+  .lbl-err { font-weight: 600; }
+  .field.bad input { border-color: var(--err); box-shadow: 0 0 0 3px color-mix(in srgb, var(--err) 22%, transparent); animation: nudge 0.4s; }
+  .field.bad label { color: var(--err); }
+  .field.good input { border-color: color-mix(in srgb, var(--ok) 60%, var(--field-line)); }
+  @keyframes nudge { 30% { transform: translateX(-5px); } 60% { transform: translateX(4px); } }
+
+  .peek {
+    position: absolute; right: 6px; top: 50%;
+    width: 36px; height: 36px; margin-top: -18px;
+    border: 0; border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    display: grid; place-items: center;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, transform 0.2s;
+  }
+  .peek:hover { background: var(--field-line); color: var(--ink); }
+  .peek:active { transform: scale(0.88); }
+  .peek svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .peek .slash { stroke-dasharray: 24; stroke-dashoffset: 0; transition: stroke-dashoffset 0.35s cubic-bezier(0.6, 0, 0.4, 1); }
+  .peek[aria-pressed="true"] .slash { stroke-dashoffset: 24; }
+  .peek .pupil { transform-origin: 12px 12px; transition: transform 0.35s cubic-bezier(0.34, 1.6, 0.64, 1); }
+  .peek[aria-pressed="false"] .pupil { transform: scale(0.6); }
+
+  /* remember me / strength row (both share one grid cell) */
+  .extras { display: grid; margin: 2px 4px 12px; min-height: 22px; font-size: 13px; }
+  .extras > div { grid-area: 1 / 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; transition: opacity 0.35s, transform 0.45s cubic-bezier(0.34, 1.5, 0.64, 1); }
+  .drop[data-mode="in"] .row-up, .drop[data-mode="up"] .row-in { opacity: 0; transform: translateY(6px); visibility: hidden; }
+  .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); position: relative; }
+  .check input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .check .box {
+    width: 30px; height: 18px; border-radius: 999px;
+    background: var(--field); border: 1px solid var(--field-line);
+    position: relative; transition: background 0.3s;
+  }
+  .check .box::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--muted);
+    transition: transform 0.4s cubic-bezier(0.34, 1.7, 0.64, 1), background 0.3s, width 0.2s;
+  }
+  .check input:checked + .box { background: var(--accent); border-color: transparent; }
+  .check input:checked + .box::after { transform: translateX(12px); background: var(--accent-ink); }
+  .check input:active + .box::after { width: 16px; }
+  .check input:focus-visible + .box { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .link { border: 0; background: none; font: inherit; color: var(--accent); font-weight: 650; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+  .link:hover { text-decoration: underline; }
+  .meter { flex: 1; height: 6px; border-radius: 999px; background: var(--field-line); overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--err); transition: width 0.5s cubic-bezier(0.34, 1.5, 0.64, 1), background 0.3s; }
+  .meter-text { color: var(--muted); min-width: 60px; text-align: right; }
+
+  /* the main button: idle, working, done */
+  .go {
+    position: relative;
+    display: block;
+    width: 100%; height: 48px;
+    margin: 0 auto;
+    border: 0; border-radius: 999px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: var(--accent-ink);
+    font: inherit; font-size: 15px; font-weight: 700;
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 12px 24px -12px var(--accent);
+    transition: width 0.55s cubic-bezier(0.34, 1.45, 0.64, 1), transform 0.15s, background 0.4s, box-shadow 0.3s;
+  }
+  .go:hover { box-shadow: 0 16px 30px -12px var(--accent); }
+  .go:active { transform: scale(0.96); }
+  .go.working, .go.done { width: 48px; }
+  .go.done { background: var(--ok); }
+  .go-label { display: inline-block; transition: opacity 0.2s, transform 0.35s; }
+  .go.working .go-label, .go.done .go-label { opacity: 0; transform: translateY(-10px); }
+  .spinner {
+    position: absolute; inset: 0; margin: auto;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 3px solid currentColor; border-right-color: transparent;
+    opacity: 0;
+    animation: spin 0.75s linear infinite;
+    transition: opacity 0.2s;
+  }
+  .go.working .spinner { opacity: 1; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .tick { position: absolute; inset: 0; margin: auto; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .tick path { stroke-dasharray: 24; stroke-dashoffset: 24; transition: stroke-dashoffset 0.45s 0.15s cubic-bezier(0.6, 0, 0.3, 1); }
+  .go.done .tick path { stroke-dashoffset: 0; }
+
+  /* success view */
+  .view-done { align-items: center; gap: 10px; }
+  .view-done[hidden] { display: none; }
+  .badge { width: 84px; height: 84px; }
+  .badge circle { fill: color-mix(in srgb, var(--ok) 18%, transparent); stroke: var(--ok); stroke-width: 3; stroke-dasharray: 252; stroke-dashoffset: 252; }
+  .badge path { fill: none; stroke: var(--ok); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 60; stroke-dashoffset: 60; }
+  .view-done.show .badge circle { animation: draw 0.7s cubic-bezier(0.6, 0, 0.3, 1) forwards; }
+  .view-done.show .badge path { animation: draw 0.45s 0.55s cubic-bezier(0.6, 0, 0.3, 1) forwards; }
+  .view-done.show .badge { animation: popIn 0.8s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @keyframes popIn { from { transform: scale(0.4) rotate(-20deg); opacity: 0; } }
+  .view-done h2 { margin: 0; font-size: clamp(20px, 5vw, 25px); letter-spacing: -0.01em; }
+  .view-done p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+  .view-done.show > :not(.badge) { animation: rise 0.6s cubic-bezier(0.34, 1.5, 0.64, 1) backwards; }
+  .view-done.show > :nth-child(2) { animation-delay: 0.35s; }
+  .view-done.show > :nth-child(3) { animation-delay: 0.45s; }
+  .view-done.show > :nth-child(4) { animation-delay: 0.55s; }
+  .ghost {
+    margin-top: 6px;
+    border: 1px solid var(--field-line); background: var(--field);
+    color: var(--ink);
+    font: inherit; font-weight: 650; font-size: 14px;
+    padding: 10px 22px; border-radius: 999px;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.34, 1.6, 0.64, 1), background 0.2s;
+  }
+  .ghost:hover { transform: translateY(-2px); }
+  .ghost:active { transform: scale(0.95); }
+
+  /* droplets that fly off the rim */
+  .splash { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+  .splash i {
+    position: absolute; left: -5px; top: -5px;
+    width: 10px; height: 10px;
+    border-radius: 50% 50% 50% 0;
+    background: radial-gradient(circle at 35% 35%, #fff, var(--c, var(--ok)) 60%);
+    opacity: 0.95;
+  }
+
+  .note {
+    position: relative;
+    margin: 0;
+    max-width: 440px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--ink);
+    opacity: 0.82;
+    padding: 0 8px;
+  }
+  .note.flash { animation: titleIn 0.55s cubic-bezier(0.34, 1.5, 0.64, 1); }
+  .note b { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-weight: 600; }
+
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Reduced motion: same states, no big movement ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    .blob { animation: none; }
+    .tilt, .blobs { transform: none !important; }
+    .drop.wobble, .drop.shake, .drop.pop, .title.swap, .badge,
+    .form.swap .field, .form.swap .extras, .form.swap .go,
+    .view-done.show > :not(.badge), .field.bad input, .note.flash { animation: none !important; }
+    .view-done.show .badge circle, .view-done.show .badge path { animation-duration: 0.01s !important; animation-delay: 0s !important; }
+    .seg-pill, .view, .go, .grow, .extras > div { transition-duration: 0.01s !important; transition-delay: 0s !important; }
+    .spinner { animation-duration: 2s; }
+    .ripple { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage" id="stage">
+  <div class="blobs" aria-hidden="true">
+    <i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i><i class="blob b4"></i>
+  </div>
+
+  <div class="tilt" id="tilt">
+    <section class="drop" id="drop" data-mode="in" aria-labelledby="title">
+      <div class="rim" id="rim" aria-hidden="true"></div>
+      <div class="shine" aria-hidden="true"></div>
+
+      <!-- Form view -->
+      <div class="view view-form" id="viewForm">
+        <h1 class="title" id="title">Welcome back</h1>
+
+        <div class="seg" role="tablist" aria-label="Sign in or sign up">
+          <span class="seg-pill" aria-hidden="true"></span>
+          <button type="button" role="tab" id="tabIn" aria-selected="true" aria-controls="form">Sign in</button>
+          <button type="button" role="tab" id="tabUp" aria-selected="false" aria-controls="form" tabindex="-1">Sign up</button>
+        </div>
+
+        <form class="form" id="form" role="tabpanel" aria-labelledby="tabIn" novalidate>
+          <div class="grow" id="nameGrow" inert>
+            <div>
+              <div class="field" id="fName">
+                <input id="name" name="name" type="text" autocomplete="name" placeholder=" " aria-invalid="false">
+                <label for="name"><span>Your name</span><span class="lbl-err"></span></label>
+              </div>
+            </div>
+          </div>
+
+          <div class="field" id="fEmail">
+            <input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder=" " aria-invalid="false">
+            <label for="email"><span>Email</span><span class="lbl-err"></span></label>
+          </div>
+
+          <div class="field has-btn" id="fPass">
+            <input id="pass" name="password" type="password" autocomplete="current-password" placeholder=" " aria-invalid="false">
+            <label for="pass"><span>Password</span><span class="lbl-err"></span></label>
+            <button type="button" class="peek" id="peek" aria-label="Show password" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/>
+                <circle class="pupil" cx="12" cy="12" r="3"/>
+                <path class="slash" d="M4 4l16 16"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="extras">
+            <div class="row-in" id="rowIn">
+              <label class="check"><input type="checkbox" id="remember"><span class="box" aria-hidden="true"></span>Remember me</label>
+              <button type="button" class="link" id="forgot">Forgot password?</button>
+            </div>
+            <div class="row-up" id="rowUp" aria-hidden="true">
+              <div class="meter" aria-hidden="true"><i id="meterBar"></i></div>
+              <span class="meter-text" id="meterText">Strength</span>
+            </div>
+          </div>
+
+          <button class="go" id="go" type="submit">
+            <span class="go-label" id="goLabel">Sign in</span>
+            <span class="spinner" aria-hidden="true"></span>
+            <svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+          </button>
+        </form>
+      </div>
+
+      <!-- Success view -->
+      <div class="view view-done away" id="viewDone" hidden>
+        <svg class="badge" viewBox="0 0 90 90" aria-hidden="true"><circle cx="45" cy="45" r="40"/><path d="M27 46l12 12 25-26"/></svg>
+        <h2 id="doneTitle" tabindex="-1">Welcome back</h2>
+        <p id="doneText">You are signed in. This is a demo, so nothing was sent anywhere.</p>
+        <button type="button" class="ghost" id="signOut">Sign out</button>
+      </div>
+    </section>
+    <div class="splash" id="splash" aria-hidden="true"></div>
+  </div>
+
+  <p class="note" id="note">Demo: any email and a password of 6+ characters. Type <b>wrongpass</b> to see the error state.</p>
+  <p class="sr-only" id="status" aria-live="polite"></p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s) { return document.querySelector(s); };
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  var stage = $("#stage"), tilt = $("#tilt"), drop = $("#drop"), rim = $("#rim");
+  var form = $("#form"), title = $("#title"), go = $("#go"), goLabel = $("#goLabel");
+  var tabIn = $("#tabIn"), tabUp = $("#tabUp"), nameGrow = $("#nameGrow");
+  var viewForm = $("#viewForm"), viewDone = $("#viewDone"), splash = $("#splash");
+  var statusEl = $("#status"), note = $("#note");
+  var peek = $("#peek"), forgot = $("#forgot"), signOut = $("#signOut");
+  var meterBar = $("#meterBar"), meterText = $("#meterText");
+
+  var mode = "in";      // "in" = sign in, "up" = sign up
+  var busy = false;     // true while the fake request runs
+  var tried = false;    // after the first submit, fields re-check as you type
+  var noteText = note.innerHTML;
+
+  function say(text) { statusEl.textContent = ""; setTimeout(function () { statusEl.textContent = text; }, 30); }
+  function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+
+  /* ---------- Fields and their checks ---------- */
+  var EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  var fields = {
+    name: { input: $("#name"), box: $("#fName"), check: function (v) { v = v.trim(); return !v ? "required" : v.length < 2 ? "too short" : ""; } },
+    email: { input: $("#email"), box: $("#fEmail"), check: function (v) { v = v.trim(); return !v ? "required" : EMAIL.test(v) ? "" : "check the format"; } },
+    pass: { input: $("#pass"), box: $("#fPass"), check: function (v) { return !v ? "required" : v.length < 6 ? "6+ characters" : ""; } }
+  };
+  function activeKeys() { return mode === "up" ? ["name", "email", "pass"] : ["email", "pass"]; }
+
+  function showError(key, msg) {
+    var f = fields[key];
+    f.box.classList.toggle("bad", !!msg);
+    f.box.classList.toggle("good", !msg && !!f.input.value.trim());
+    f.input.setAttribute("aria-invalid", msg ? "true" : "false");
+    f.box.querySelector(".lbl-err").textContent = msg ? " · " + msg : "";
+  }
+  function clearErrors() {
+    Object.keys(fields).forEach(function (k) {
+      fields[k].box.classList.remove("bad", "good");
+      fields[k].input.setAttribute("aria-invalid", "false");
+      fields[k].box.querySelector(".lbl-err").textContent = "";
+    });
+  }
+  function validate() {
+    var first = null;
+    activeKeys().forEach(function (k) {
+      var msg = fields[k].check(fields[k].input.value);
+      showError(k, msg);
+      if (msg && !first) first = k;
+    });
+    return first;
+  }
+  Object.keys(fields).forEach(function (k) {
+    fields[k].input.addEventListener("input", function () {
+      if (tried) showError(k, fields[k].check(fields[k].input.value));
+      if (k === "pass") updateMeter();
+    });
+  });
+
+  /* ---------- Strength bar (sign up only) ---------- */
+  function updateMeter() {
+    var v = fields.pass.input.value, s = 0;
+    if (v.length >= 6) s++;
+    if (v.length >= 10) s++;
+    if (/[A-Z]/.test(v) && /[a-z]/.test(v)) s++;
+    if (/\d/.test(v) && /[^A-Za-z0-9]/.test(v)) s++;
+    if (!v) s = 0;
+    var words = ["Strength", "Weak", "Okay", "Good", "Strong"];
+    var colours = ["var(--err)", "var(--err)", "#f0a020", "#3aa0f0", "var(--ok)"];
+    meterBar.style.width = (v ? Math.max(12, s * 25) : 0) + "%";
+    meterBar.style.background = colours[s];
+    meterText.textContent = words[s];
+  }
+
+  /* ---------- Sign in / sign up switch ---------- */
+  function setMode(m, focusTab) {
+    if (m === mode || busy) return;
+    mode = m;
+    drop.dataset.mode = m;
+    var up = m === "up";
+    tabIn.setAttribute("aria-selected", String(!up));
+    tabUp.setAttribute("aria-selected", String(up));
+    tabIn.tabIndex = up ? -1 : 0;
+    tabUp.tabIndex = up ? 0 : -1;
+    form.setAttribute("aria-labelledby", up ? "tabUp" : "tabIn");
+    nameGrow.inert = !up;
+    $("#rowIn").setAttribute("aria-hidden", String(up));
+    $("#rowUp").setAttribute("aria-hidden", String(!up));
+    title.textContent = up ? "Make an account" : "Welcome back";
+    goLabel.textContent = up ? "Create account" : "Sign in";
+    fields.pass.input.setAttribute("autocomplete", up ? "new-password" : "current-password");
+    tried = false;
+    clearErrors();
+    updateMeter();
+    note.innerHTML = noteText;
+    if (!reduce.matches) { restart(title, "swap"); restart(form, "swap"); restart(drop, "wobble"); }
+    if (focusTab) (up ? tabUp : tabIn).focus();
+    say(up ? "Sign up form. Enter your name, email and a password." : "Sign in form.");
+  }
+  tabIn.addEventListener("click", function () { setMode("in"); });
+  tabUp.addEventListener("click", function () { setMode("up"); });
+  [tabIn, tabUp].forEach(function (t) {
+    t.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        var next = e.key === "Home" ? "in" : e.key === "End" ? "up" : (mode === "in" ? "up" : "in");
+        setMode(next, true);
+      }
+    });
+  });
+  form.addEventListener("animationend", function (e) { if (e.target.classList.contains("go")) form.classList.remove("swap"); });
+  drop.addEventListener("animationend", function (e) { if (e.target === drop) drop.classList.remove("wobble", "shake", "pop"); });
+
+  /* ---------- Show / hide password ---------- */
+  peek.addEventListener("click", function () {
+    var show = peek.getAttribute("aria-pressed") !== "true";
+    peek.setAttribute("aria-pressed", String(show));
+    peek.setAttribute("aria-label", show ? "Hide password" : "Show password");
+    var input = fields.pass.input, pos = input.selectionStart;
+    input.type = show ? "text" : "password";
+    if (document.activeElement === input && pos != null) input.setSelectionRange(pos, pos);
+  });
+
+  /* ---------- Forgot password ---------- */
+  forgot.addEventListener("click", function () {
+    var msg = fields.email.check(fields.email.input.value);
+    if (msg) {
+      showError("email", "type it first");
+      fields.email.input.focus();
+      say("Type your email first, then press Forgot password.");
+      return;
+    }
+    showError("email", "");
+    note.textContent = "Reset link sent to " + fields.email.input.value.trim() + " (demo, nothing was sent).";
+    if (!reduce.matches) restart(note, "flash");
+    say(note.textContent);
+  });
+
+  /* ---------- Rim progress ---------- */
+  function animateRim(from, to, ms, done) {
+    var start = performance.now();
+    function step(now) {
+      var t = Math.min(1, (now - start) / ms);
+      var e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; // ease in-out
+      rim.style.setProperty("--p", (from + (to - from) * e).toFixed(4));
+      if (t < 1) requestAnimationFrame(step); else if (done) done();
+    }
+    requestAnimationFrame(step);
+  }
+
+  /* ---------- Submit: idle → working → done (or error) ---------- */
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (busy) return;
+    tried = true;
+    var bad = validate();
+    if (bad) {
+      if (!reduce.matches) restart(drop, "shake");
+      fields[bad].input.focus();
+      var n = activeKeys().filter(function (k) { return fields[k].input.getAttribute("aria-invalid") === "true"; }).length;
+      say(n === 1 ? "One field needs a fix." : n + " fields need a fix.");
+      return;
+    }
+    run();
+  });
+
+  function lockInputs(on) {
+    Object.keys(fields).forEach(function (k) { fields[k].input.readOnly = on; });
+    tabIn.disabled = on; tabUp.disabled = on; peek.disabled = on; forgot.disabled = on;
+  }
+
+  function run() {
+    busy = true;
+    lockInputs(true);
+    drop.classList.remove("ok", "fail");
+    go.classList.add("working");
+    go.setAttribute("aria-busy", "true");
+    say(mode === "up" ? "Creating your account…" : "Signing in…");
+    animateRim(0, 1, reduce.matches ? 400 : 1700, function () {
+      var fail = mode === "in" && fields.pass.input.value === "wrongpass";
+      if (fail) failed(); else succeeded();
+    });
+  }
+
+  function failed() {
+    drop.classList.add("fail");
+    go.classList.remove("working");
+    go.removeAttribute("aria-busy");
+    if (!reduce.matches) restart(drop, "shake");
+    showError("pass", "does not match");
+    say("That password does not match. Try again.");
+    animateRim(1, 0, 600, function () {
+      drop.classList.remove("fail");
+      busy = false;
+      lockInputs(false);
+      fields.pass.input.focus();
+      fields.pass.input.select();
+    });
+  }
+
+  function who() {
+    var n = fields.name.input.value.trim();
+    if (mode === "up" && n) return n.split(/\s+/)[0];
+    var local = fields.email.input.value.trim().split("@")[0].replace(/[._\-+\d]+/g, " ").trim().split(" ")[0] || "friend";
+    return local.charAt(0).toUpperCase() + local.slice(1);
+  }
+
+  function succeeded() {
+    drop.classList.add("ok");
+    go.classList.remove("working");
+    go.classList.add("done");
+    go.removeAttribute("aria-busy");
+    if (!reduce.matches) {
+      restart(drop, "pop");
+      var ring = document.createElement("span");
+      ring.className = "ripple";
+      drop.appendChild(ring);
+      ring.addEventListener("animationend", function () { ring.remove(); });
+      burst();
+    }
+    var name = who();
+    $("#doneTitle").textContent = (mode === "up" ? "Welcome aboard, " : "Welcome back, ") + name;
+    $("#doneText").textContent = mode === "up"
+      ? "Your account is ready. This is a demo, so nothing was sent anywhere."
+      : "You are signed in. This is a demo, so nothing was sent anywhere.";
+    say(mode === "up" ? "Account created. Welcome aboard, " + name + "." : "Signed in. Welcome back, " + name + ".");
+    setTimeout(function () {
+      viewForm.classList.add("away");
+      viewForm.inert = true;
+      viewDone.hidden = false;
+      void viewDone.offsetWidth;
+      viewDone.classList.remove("away");
+      viewDone.classList.add("show");
+      $("#doneTitle").focus({ preventScroll: true });
+    }, reduce.matches ? 200 : 850);
+  }
+
+  /* droplets fly off the edge, fall a little and fade */
+  function burst() {
+    var w = drop.offsetWidth / 2, h = drop.offsetHeight / 2;
+    var colours = ["var(--ok)", "var(--b4)", "var(--accent)", "var(--b2)", "var(--accent2)"];
+    for (var i = 0; i < 26; i++) {
+      var a = (i / 26) * Math.PI * 2 + Math.random() * 0.2;
+      var x0 = Math.cos(a) * w, y0 = Math.sin(a) * h;
+      var dist = 40 + Math.random() * 70;
+      var x1 = x0 + Math.cos(a) * dist, y1 = y0 + Math.sin(a) * dist;
+      var d = document.createElement("i");
+      d.style.setProperty("--c", colours[i % colours.length]);
+      var rot = (a * 180) / Math.PI + 45;
+      splash.appendChild(d);
+      var anim = d.animate([
+        { transform: "translate(" + x0 + "px," + y0 + "px) rotate(" + rot + "deg) scale(0.2)", opacity: 0 },
+        { transform: "translate(" + (x0 + (x1 - x0) * 0.6) + "px," + (y0 + (y1 - y0) * 0.6) + "px) rotate(" + rot + "deg) scale(1.1)", opacity: 1, offset: 0.35 },
+        { transform: "translate(" + x1 + "px," + (y1 + 40) + "px) rotate(" + (rot + 90) + "deg) scale(0)", opacity: 0 }
+      ], { duration: 900 + Math.random() * 500, easing: "cubic-bezier(.2,.7,.3,1)", delay: Math.random() * 120 });
+      anim.onfinish = (function (el) { return function () { el.remove(); }; })(d);
+    }
+  }
+
+  /* ---------- Sign out: smooth reset to the form ---------- */
+  signOut.addEventListener("click", function () {
+    viewDone.classList.add("away");
+    viewDone.classList.remove("show");
+    viewForm.inert = false;
+    viewForm.classList.remove("away");
+    go.classList.remove("done");
+    drop.classList.remove("ok");
+    animateRim(1, 0, reduce.matches ? 200 : 700);
+    fields.pass.input.value = "";
+    fields.pass.input.type = "password";
+    peek.setAttribute("aria-pressed", "false");
+    peek.setAttribute("aria-label", "Show password");
+    if (mode === "up") fields.name.input.value = "";
+    tried = false;
+    clearErrors();
+    updateMeter();
+    note.innerHTML = noteText;
+    busy = false;
+    lockInputs(false);
+    setTimeout(function () { viewDone.hidden = true; }, 500);
+    if (!reduce.matches) { restart(drop, "wobble"); restart(form, "swap"); }
+    (fields.email.input.value ? fields.pass.input : fields.email.input).focus();
+    say("Signed out. The form is ready again.");
+  });
+
+  /* ---------- Tilt toward the pointer (eased) ---------- */
+  var tx = 0, ty = 0, cx = 0, cy = 0, raf = 0;
+  function tick() {
+    cx += (tx - cx) * 0.08;
+    cy += (ty - cy) * 0.08;
+    stage.style.setProperty("--rx", cx.toFixed(4));
+    stage.style.setProperty("--ry", cy.toFixed(4));
+    if (Math.abs(tx - cx) > 0.001 || Math.abs(ty - cy) > 0.001) raf = requestAnimationFrame(tick); else raf = 0;
+  }
+  function aim(x, y) { if (reduce.matches) return; tx = x; ty = y; if (!raf) raf = requestAnimationFrame(tick); }
+  stage.addEventListener("pointermove", function (e) {
+    if (e.pointerType === "touch") return;
+    var r = stage.getBoundingClientRect();
+    aim(((e.clientX - r.left) / r.width) * 2 - 1, ((e.clientY - r.top) / r.height) * 2 - 1);
+  });
+  stage.addEventListener("pointerleave", function () { aim(0, 0); });
+})();
+</script>
+</body>
+</html>

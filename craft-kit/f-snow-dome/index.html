@@ -1,0 +1,566 @@
+<!doctype html>
+<!-- Chill and Craft · Snow Dome · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snow Dome · shake the globe to make it snow</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: light is a winter afternoon, dark is a winter night ---------- */
+  :root {
+    --page1: #f1f4f9;
+    --page2: #d6dde8;
+    --ink: #1f2a3a;
+    --muted: #5b6678;
+    --sky1: #4f78b8;
+    --sky2: #a8c4e6;
+    --far: #7d93bb;
+    --near: #61779f;
+    --cap: #f4f8ff;
+    --ground: #eef3fb;
+    --pine: #2f5d55;
+    --pine2: #3d7466;
+    --house1: #b5653e;
+    --house2: #d39a4a;
+    --house3: #8a4e6b;
+    --roof: #4a3242;
+    --window: #ffd56b;
+    --flake: #ffffff;
+    --pile: rgba(255, 255, 255, 0.9);
+    --btn: #b3202c;
+    --btn-ink: #fff7ec;
+    --focus: #1d5fd1;
+    --shadow: rgba(20, 30, 50, 0.35);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page1: #18203a; --page2: #070a14; --ink: #eef2fb; --muted: #a2adc4;
+      --sky1: #0c1733; --sky2: #2a4677; --far: #33466e; --near: #263657;
+      --cap: #dfe8f7; --ground: #d6e1f2; --pine: #1d3d3a; --pine2: #285148;
+      --house1: #8f4a2c; --house2: #a8743a; --house3: #6b3a55; --roof: #2c1f2b;
+      --window: #ffc85a; --flake: #f6f9ff; --pile: rgba(232, 240, 252, 0.92);
+      --btn: #e2434f; --btn-ink: #1a0508; --focus: #8fd0ff; --shadow: rgba(0, 0, 0, 0.6);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page1: #18203a; --page2: #070a14; --ink: #eef2fb; --muted: #a2adc4;
+    --sky1: #0c1733; --sky2: #2a4677; --far: #33466e; --near: #263657;
+    --cap: #dfe8f7; --ground: #d6e1f2; --pine: #1d3d3a; --pine2: #285148;
+    --house1: #8f4a2c; --house2: #a8743a; --house3: #6b3a55; --roof: #2c1f2b;
+    --window: #ffc85a; --flake: #f6f9ff; --pile: rgba(232, 240, 252, 0.92);
+    --btn: #e2434f; --btn-ink: #1a0508; --focus: #8fd0ff; --shadow: rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+
+  /* ---------- Page ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(100% 80% at 50% 30%, var(--page1), var(--page2));
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- The globe ---------- */
+  .wrap {
+    position: relative;
+    width: min(360px, 86vw, calc((100vh - 170px) * 0.8333));
+    min-width: 230px;
+    aspect-ratio: 400 / 480;
+  }
+  .shadow {
+    position: absolute;
+    left: 16%;
+    right: 16%;
+    bottom: -1%;
+    height: 7%;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, var(--shadow), transparent);
+    transform-origin: 50% 50%;
+  }
+  .mover { position: absolute; inset: 0; transform-origin: 50% 88%; will-change: transform; }
+  .mover svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .mover canvas {
+    position: absolute;
+    left: 10%;
+    top: 8.3333%;
+    width: 80%;
+    height: 66.6667%;
+    clip-path: circle(49.4% at 50% 50%);
+  }
+  .sky1 { stop-color: var(--sky1); }
+  .sky2 { stop-color: var(--sky2); }
+  .far { fill: var(--far); }
+  .near { fill: var(--near); }
+  .cap { fill: var(--cap); }
+  .ground { fill: var(--ground); }
+  .pine { fill: var(--pine); }
+  .pine2 { fill: var(--pine2); }
+  .trunk { fill: #5a3a28; }
+  .house1 { fill: var(--house1); }
+  .house2 { fill: var(--house2); }
+  .house3 { fill: var(--house3); }
+  .roof { fill: var(--roof); }
+  .snowcap { fill: var(--cap); }
+  .door { fill: #3a2418; }
+  .win { fill: var(--window); animation: flicker 3.4s steps(1) infinite; }
+  .halo { fill: url(#halo); animation: flicker 3.4s steps(1) infinite; }
+  @keyframes flicker { 0% { opacity: 1; } 37% { opacity: 0.78; } 41% { opacity: 1; } 70% { opacity: 0.88; } 73% { opacity: 1; } }
+  .hl1 { stop-color: var(--window); stop-opacity: 0.55; }
+  .hl2 { stop-color: var(--window); stop-opacity: 0; }
+  .smoke { fill: #dfe4ee; opacity: 0; transform-box: fill-box; transform-origin: center; animation: smoke 3.6s ease-out infinite; }
+  @keyframes smoke { 0% { opacity: 0.55; transform: translate(0, 0) scale(0.5); } 100% { opacity: 0; transform: translate(8px, -26px) scale(1.7); } }
+  .star { fill: #fff; opacity: 0.7; }
+  .moon { fill: #fff6d8; }
+  .rim { fill: none; stroke: rgba(255, 255, 255, 0.45); stroke-width: 2.5; }
+  .rim-in { fill: none; stroke: rgba(10, 20, 40, 0.18); stroke-width: 6; }
+  .gloss { fill: none; stroke: #fff; stroke-linecap: round; }
+  .spark { fill: #fff; transform-box: fill-box; transform-origin: center; animation: spark 5.5s ease-in-out infinite; opacity: 0; }
+  @keyframes spark { 0%, 78% { opacity: 0; transform: scale(0.3) rotate(0deg); } 88% { opacity: 1; transform: scale(1) rotate(45deg); } 100% { opacity: 0; transform: scale(0.3) rotate(90deg); } }
+  .lac-a { stop-color: #d8343c; }
+  .lac-b { stop-color: #8c1420; }
+  .gold-a { stop-color: #ffe39a; }
+  .gold-b { stop-color: #c08a2c; }
+  .trim { fill: none; stroke: url(#gold); stroke-width: 3; }
+  .plaque-text { fill: #4a2a10; font: 700 13px system-ui, sans-serif; letter-spacing: 0.08em; text-anchor: middle; dominant-baseline: central; }
+
+  /* invisible handle over the glass: drag it, or focus and press Enter/arrows */
+  .grab {
+    position: absolute;
+    left: 10%;
+    top: 8.3333%;
+    width: 80%;
+    height: 66.6667%;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    cursor: grab;
+    touch-action: none;
+  }
+  .grab:active { cursor: grabbing; }
+  .grab:focus-visible { outline: 3px dashed var(--focus); outline-offset: 6px; }
+
+  /* ---------- Text and button ---------- */
+  .status { margin: 4px 0 0; min-height: 1.5em; font-size: 15px; font-weight: 600; text-align: center; }
+  .btn {
+    font: 700 15px system-ui, sans-serif;
+    border: 0;
+    border-radius: 999px;
+    padding: 11px 22px;
+    background: var(--btn);
+    color: var(--btn-ink);
+    cursor: pointer;
+    box-shadow: 0 6px 16px rgba(140, 20, 32, 0.3);
+  }
+  .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .btn:active { transform: translateY(1px); }
+  .hint { margin: 0; font-size: 13px; color: var(--muted); text-align: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .win, .halo, .spark { animation: none; }
+    .smoke { animation: none; opacity: 0.35; }
+    .spark { opacity: 0; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Snow Dome: a snow globe with a tiny hill village you can shake</h1>
+
+  <div class="wrap" id="wrap">
+    <div class="shadow" id="shadow"></div>
+    <div class="mover" id="mover">
+      <!-- Back: the village inside the glass -->
+      <svg viewBox="0 0 400 480" aria-hidden="true">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="sky1"/><stop offset="1" class="sky2"/></linearGradient>
+          <radialGradient id="halo"><stop offset="0" class="hl1"/><stop offset="1" class="hl2"/></radialGradient>
+          <clipPath id="inside"><circle cx="200" cy="200" r="158"/></clipPath>
+        </defs>
+        <g clip-path="url(#inside)">
+          <rect x="40" y="40" width="320" height="320" fill="url(#sky)"/>
+          <g id="stars"></g>
+          <path class="moon" d="M282 92 a20 20 0 1 0 14 34 a16 16 0 1 1 -14 -34z"/>
+          <path class="far" d="M40 268 L92 168 L124 210 L170 132 L222 218 L262 170 L300 226 L330 186 L362 252 L362 360 L40 360Z"/>
+          <path class="cap" d="M92 168 L80 191 L90 186 L96 194 L104 184 L108 192Z"/>
+          <path class="cap" d="M170 132 L154 162 L166 154 L172 164 L182 152 L190 162Z"/>
+          <path class="cap" d="M262 170 L250 192 L259 188 L265 195 L272 186 L277 192Z"/>
+          <path class="near" d="M40 300 Q110 236 180 268 Q240 296 290 252 Q330 222 362 262 L362 360 L40 360Z"/>
+          <g id="village"></g>
+        </g>
+      </svg>
+
+      <!-- Snow (canvas, clipped to the glass) -->
+      <canvas id="snow" aria-hidden="true"></canvas>
+
+      <!-- Front: glass shine and the lacquered base -->
+      <svg viewBox="0 0 400 480" aria-hidden="true">
+        <defs>
+          <linearGradient id="lacquer" x1="0" y1="0" x2="1" y2="0"><stop offset="0" class="lac-b"/><stop offset="0.35" class="lac-a"/><stop offset="1" class="lac-b"/></linearGradient>
+          <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" class="gold-a"/><stop offset="1" class="gold-b"/></linearGradient>
+          <radialGradient id="sheen" cx="30%" cy="25%" r="60%"><stop offset="0" stop-color="#fff" stop-opacity="0.28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+        </defs>
+        <circle cx="200" cy="200" r="158" fill="url(#sheen)"/>
+        <circle class="rim-in" cx="200" cy="200" r="156"/>
+        <circle class="rim" cx="200" cy="200" r="159"/>
+        <path class="gloss" d="M84 150 A124 124 0 0 1 158 70" stroke-width="10" opacity="0.4"/>
+        <path class="gloss" d="M98 186 A110 110 0 0 1 104 166" stroke-width="6" opacity="0.35"/>
+        <path class="gloss" d="M300 290 A120 120 0 0 1 270 318" stroke-width="5" opacity="0.18"/>
+        <path class="spark" d="M126 96 l3 9 l9 3 l-9 3 l-3 9 l-3 -9 l-9 -3 l9 -3z"/>
+
+        <!-- base -->
+        <path fill="#6d0f19" d="M92 436 Q200 462 308 436 L314 452 Q200 478 86 452Z"/>
+        <path fill="url(#lacquer)" d="M80 346 Q200 326 320 346 L300 440 Q200 462 100 440Z"/>
+        <path fill="#fff" opacity="0.18" d="M112 350 Q130 346 138 345 L128 440 Q118 438 112 436Z"/>
+        <path fill="url(#lacquer)" d="M70 334 Q200 306 330 334 L322 352 Q200 326 78 352Z"/>
+        <path class="trim" d="M78 351 Q200 326 322 351"/>
+        <path class="trim" d="M98 436 Q200 458 302 436"/>
+        <rect x="146" y="382" width="108" height="30" rx="7" fill="url(#gold)"/>
+        <rect x="150" y="386" width="100" height="22" rx="5" fill="none" stroke="#8a5a1a" stroke-opacity="0.45"/>
+        <text class="plaque-text" x="200" y="397">Hill Station</text>
+      </svg>
+    </div>
+    <button class="grab" id="grab" type="button" aria-label="Snow globe. Drag it, or press Enter or the arrow keys, to shake it"></button>
+  </div>
+
+  <p class="status" id="status" role="status" aria-live="polite">Drag the globe to shake it.</p>
+  <button class="btn" id="shake" type="button">Shake it</button>
+  <p class="hint">Fling it hard for a blizzard, then watch the snow settle.</p>
+</main>
+
+<script>
+  (function () {
+    "use strict";
+    var NS = "http://www.w3.org/2000/svg";
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (id) { return document.getElementById(id); };
+    var wrap = $("wrap"), mover = $("mover"), shadow = $("shadow"), canvas = $("snow");
+    var ctx = canvas.getContext("2d"), grab = $("grab"), status = $("status");
+
+    function el(tag, attrs, parent) {
+      var n = document.createElementNS(NS, tag);
+      for (var k in attrs) n.setAttribute(k, attrs[k]);
+      if (parent) parent.appendChild(n);
+      return n;
+    }
+
+    /* ---------- Globe geometry (local units: centre 0,0, radius 160) ---------- */
+    var R = 160;
+    function groundY(x) { return 88 + 0.0012 * x * x; } // top of the snowy ground
+    var BINS = 64, pile = new Float32Array(BINS);         // extra height of settled snow
+    function bin(x) { return Math.max(0, Math.min(BINS - 1, Math.floor(((x + R) / (2 * R)) * BINS))); }
+    function restY(x) { return groundY(x) - pile[bin(x)]; }
+
+    /* ---------- 1. Build the village ---------- */
+    var village = $("village"), stars = $("stars");
+    for (var s = 0; s < 18; s++) {
+      el("circle", { cx: (70 + Math.random() * 260).toFixed(1), cy: (60 + Math.random() * 110).toFixed(1), r: (0.6 + Math.random() * 0.9).toFixed(1), "class": "star" }, stars);
+    }
+    var gd = "M40 380";
+    for (var gx = -170; gx <= 170; gx += 10) gd += " L" + (200 + gx) + " " + (200 + groundY(gx)).toFixed(1);
+    gd += " L370 380Z";
+
+    function pine(x, h) {
+      var bx = 200 + x, by = 200 + groundY(x) + 2;
+      el("rect", { x: bx - 2, y: by - 7, width: 4, height: 8, "class": "trunk" }, village);
+      for (var i = 0; i < 3; i++) {
+        var w = h * (0.5 - i * 0.12), top = by - 6 - h * (0.42 + i * 0.27), base = by - 5 - h * i * 0.27;
+        el("path", { d: "M" + (bx - w) + " " + base + " L" + bx + " " + top + " L" + (bx + w) + " " + base + "Z", "class": i % 2 ? "pine2" : "pine" }, village);
+        el("path", { d: "M" + (bx - w * 0.45) + " " + (top + h * 0.14) + " L" + bx + " " + top + " L" + (bx + w * 0.45) + " " + (top + h * 0.14) + "Z", "class": "cap" }, village);
+      }
+    }
+    function house(x, w, h, fillVar, delay, door) {
+      var bx = 200 + x, by = 200 + groundY(x) + 3, rh = w * 0.55, top = by - h;
+      // chimney and its smoke sit behind the roof
+      el("rect", { x: bx + w / 4, y: top - rh * 0.75, width: 5, height: rh * 0.75 + 2, "class": "roof" }, village);
+      for (var p = 0; p < 3; p++) {
+        var puff = el("circle", { cx: bx + w / 4 + 2.5, cy: top - rh * 0.75 - 3, r: 3.2, "class": "smoke" }, village);
+        puff.style.animationDelay = (-p * 1.2 - delay).toFixed(2) + "s";
+      }
+      el("rect", { x: bx - w / 2, y: top, width: w, height: h, "class": fillVar }, village);
+      el("path", { d: "M" + (bx - w / 2 - 5) + " " + top + " L" + bx + " " + (top - rh) + " L" + (bx + w / 2 + 5) + " " + top + "Z", "class": "roof" }, village);
+      el("path", {
+        d: "M" + (bx - w / 2 - 7) + " " + (top + 1) + " L" + bx + " " + (top - rh - 3) + " L" + (bx + w / 2 + 7) + " " + (top + 1) +
+          " Q" + bx + " " + (top - rh + 9) + " " + (bx - w / 2 - 7) + " " + (top + 1) + "Z", "class": "snowcap"
+      }, village);
+      var halo = el("circle", { cx: bx - (door ? 7 : 0), cy: top + 10, r: 14, "class": "halo" }, village);
+      var win = el("rect", { x: bx - (door ? 12 : 5), y: top + 6, width: 10, height: 9, rx: 1.5, "class": "win" }, village);
+      halo.style.animationDelay = win.style.animationDelay = (-delay).toFixed(2) + "s";
+      if (door) el("rect", { x: bx + 4, y: by - 13, width: 8, height: 13, rx: 2, "class": "door" }, village);
+    }
+    [[-128, 30], [-104, 44], [-80, 28], [84, 38], [106, 50], [130, 30]].forEach(function (p) { pine(p[0], p[1]); });
+    el("path", { d: gd, "class": "ground" }, village);
+    house(-52, 30, 22, "house1", 0.4, false);
+    house(52, 30, 22, "house3", 2.1, false);
+    house(0, 40, 26, "house2", 1.2, true);
+
+    /* ---------- 2. Snowflakes: far layer (small) and near layer (big, soft) ---------- */
+    var flakes = [];
+    function addFlake(layer) {
+      var a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * (R - 16);
+      var x = Math.cos(a) * d, y = Math.min(groundY(x) - 6, Math.sin(a) * d * 0.85 - 20);
+      flakes.push({
+        x: x, y: y, vx: 0, vy: 0, layer: layer, rest: false, ph: Math.random() * 6.283,
+        r: layer ? 2.1 + Math.random() * 1.8 : 0.8 + Math.random() * 0.9
+      });
+    }
+    for (var f = 0; f < 230; f++) addFlake(f < 165 ? 0 : 1);
+
+    var flakeColour = "#fff", pileColour = "rgba(255,255,255,0.9)", sprite = null;
+    function readColours() {
+      var cs = getComputedStyle(document.documentElement);
+      flakeColour = cs.getPropertyValue("--flake").trim() || "#fff";
+      pileColour = cs.getPropertyValue("--pile").trim() || "rgba(255,255,255,0.9)";
+      sprite = document.createElement("canvas");
+      sprite.width = sprite.height = 32;
+      var c = sprite.getContext("2d"), g = c.createRadialGradient(16, 16, 0, 16, 16, 16);
+      g.addColorStop(0, flakeColour);
+      g.addColorStop(0.45, flakeColour);
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = g;
+      c.fillRect(0, 0, 32, 32);
+    }
+
+    /* ---------- 3. Sizes ---------- */
+    var ww = 360, cw = 0, ch = 0, dpr = 1, sc = 1;
+    function resize() {
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      ww = wrap.clientWidth;
+      cw = canvas.clientWidth; ch = canvas.clientHeight;
+      canvas.width = Math.max(1, Math.round(cw * dpr));
+      canvas.height = Math.max(1, Math.round(ch * dpr));
+      sc = cw / 320;
+    }
+    new ResizeObserver(resize).observe(wrap);
+
+    /* ---------- 4. Shaking: drag, fling, keys, button ---------- */
+    var ox = 0, oy = 0, gvx = 0, gvy = 0, pvx = 0, pvy = 0, tx = 0, ty = 0;
+    var dragging = false, start = null, auto = null, energy = 0, wake = 0, phase = "falling";
+
+    function say(text) { if (status.textContent !== text) status.textContent = text; }
+
+    // calm mode: the globe stays put, the snow just lifts and drifts down
+    function gentleLift(power) {
+      flakes.forEach(function (fl) {
+        if (fl.rest && Math.random() < 0.85) {
+          fl.rest = false;
+          pile[bin(fl.x)] = Math.max(0, pile[bin(fl.x)] - fl.r * 0.35);
+        }
+        fl.vy -= (30 + Math.random() * 50) * power;
+        fl.vx += (Math.random() - 0.5) * 40 * power;
+      });
+      energy = Math.max(energy, 0.3);
+      phase = "swirl";
+      say("Snow is swirling…");
+    }
+
+    grab.addEventListener("pointerdown", function (e) {
+      grab.setPointerCapture(e.pointerId);
+      dragging = true;
+      auto = null;
+      start = { x: e.clientX, y: e.clientY, ox: tx, oy: ty, moved: 0, lastLift: 0 };
+    });
+    grab.addEventListener("pointermove", function (e) {
+      if (!dragging || !start) return;
+      var dx = e.clientX - start.x, dy = e.clientY - start.y, lim = ww * 0.2;
+      start.moved = Math.max(start.moved, Math.abs(dx) + Math.abs(dy));
+      var len = Math.hypot(dx, dy);
+      if (len > lim) { dx *= lim / len; dy *= lim / len; }
+      tx = start.ox + dx;
+      ty = start.oy + dy;
+      if (reduce.matches && start.moved > 20 && performance.now() - start.lastLift > 350) {
+        start.lastLift = performance.now();
+        gentleLift(0.6);
+      }
+    });
+    function endDrag() {
+      if (!dragging) return;
+      dragging = false;
+      tx = 0; ty = 0; // let go: it springs back and wobbles
+      if (start && start.moved < 6) shake(); // a simple tap shakes it for you
+      start = null;
+    }
+    grab.addEventListener("pointerup", endDrag);
+    grab.addEventListener("pointercancel", endDrag);
+    grab.addEventListener("click", function (e) { if (e.detail === 0) shake(); });
+    grab.addEventListener("keydown", function (e) {
+      var k = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      if (!k) return;
+      e.preventDefault();
+      if (reduce.matches) { gentleLift(0.5); return; }
+      gvx += k[0] * ww * 2.4;
+      gvy += k[1] * ww * 1.6;
+    });
+    $("shake").addEventListener("click", shake);
+
+    function shake() {
+      if (reduce.matches) { gentleLift(1); return; }
+      auto = { t: 0 };
+    }
+
+    /* ---------- 5. Physics ---------- */
+    function stepGlobe(dt) {
+      if (reduce.matches) { ox = oy = gvx = gvy = 0; return { ax: 0, ay: 0 }; }
+      if (auto) {
+        auto.t += dt;
+        var fade = Math.max(0, 1 - auto.t / 1.4);
+        tx = Math.sin(auto.t * Math.PI * 2 * 3.2) * ww * 0.12 * fade;
+        ty = -Math.abs(Math.sin(auto.t * Math.PI * 2 * 1.6)) * ww * 0.06 * fade;
+        if (auto.t > 1.4) { auto = null; tx = ty = 0; }
+      }
+      var held = dragging || auto;
+      var k = held ? 170 : 110, c = held ? 15 : 6.5;
+      gvx += ((tx - ox) * k - gvx * c) * dt;
+      gvy += ((ty - oy) * k - gvy * c) * dt;
+      ox += gvx * dt;
+      oy += gvy * dt;
+      var ax = (gvx - pvx) / dt, ay = (gvy - pvy) / dt;
+      pvx = gvx; pvy = gvy;
+      var cap = 40000;
+      return { ax: Math.max(-cap, Math.min(cap, ax)), ay: Math.max(-cap, Math.min(cap, ay)) };
+    }
+
+    function stepSnow(dt, t, acc) {
+      var calm = reduce.matches;
+      var units = 400 / ww;                    // px -> globe units
+      var ax = acc.ax * units, ay = acc.ay * units;
+      var mag = Math.hypot(ax, ay);
+      energy = Math.min(1, energy + Math.min(mag, 25000) * dt * 0.00011);
+      energy *= Math.exp(-0.75 * dt);
+      wake = Math.min(1.5, mag / 2600);
+      var grav = calm ? 18 : 40, decay = Math.exp(-(calm ? 2.8 : 2) * dt);
+      var resting = 0;
+
+      for (var i = 0; i < flakes.length; i++) {
+        var fl = flakes[i], k = fl.layer ? 0.085 : 0.062;
+        if (fl.rest) {
+          // a strong jolt knocks settled snow loose
+          if (wake > 0.3 && Math.random() < wake * dt * (fl.layer ? 9 : 7)) {
+            fl.rest = false;
+            pile[bin(fl.x)] = Math.max(0, pile[bin(fl.x)] - fl.r * 0.35);
+            fl.vy = -50 - Math.random() * 110;
+            fl.vx = (Math.random() - 0.5) * 90 - ax * k * 0.03;
+          } else { resting++; continue; }
+        }
+        // inertia: the water lags behind the glass
+        fl.vx += -ax * k * dt;
+        fl.vy += -ay * k * dt + grav * dt;
+        // swirling turbulence while the globe has energy
+        if (energy > 0.01) {
+          fl.vx += Math.sin(fl.y * 0.035 + t * 1.7 + fl.ph) * energy * 170 * dt;
+          fl.vy += Math.cos(fl.x * 0.035 - t * 1.3 + fl.ph) * energy * 170 * dt;
+        }
+        fl.vx *= decay;
+        fl.vy *= decay;
+        fl.x += (fl.vx + Math.sin(t * 1.4 + fl.ph) * 5) * dt;
+        fl.y += fl.vy * dt;
+        // the glass wall
+        var lim = R - 4 - fl.r, d2 = fl.x * fl.x + fl.y * fl.y;
+        if (d2 > lim * lim) {
+          var d = Math.sqrt(d2), nx = fl.x / d, ny = fl.y / d;
+          fl.x = nx * lim; fl.y = ny * lim;
+          var vn = fl.vx * nx + fl.vy * ny;
+          if (vn > 0) { fl.vx -= 1.4 * vn * nx; fl.vy -= 1.4 * vn * ny; }
+        }
+        // landing on the snow pile
+        var gy = restY(fl.x);
+        if (fl.y >= gy) {
+          fl.y = gy;
+          if (fl.vy >= 0 && Math.abs(fl.vx) + fl.vy < 60 && energy < 0.35) {
+            fl.rest = true;
+            fl.vx = fl.vy = 0;
+            var b = bin(fl.x);
+            pile[b] = Math.min(16, pile[b] + fl.r * 0.35);
+            resting++;
+          } else if (fl.vy > 0) fl.vy *= -0.3;
+        }
+      }
+
+      if (energy > 0.25 && phase !== "swirl") { phase = "swirl"; say("Snow is swirling…"); }
+      if (phase === "swirl" && energy < 0.05 && resting / flakes.length > 0.92) {
+        phase = "settled";
+        say("The snow has settled.");
+      }
+    }
+
+    /* ---------- 6. Draw ---------- */
+    function draw() {
+      ctx.setTransform(dpr * sc, 0, 0, dpr * sc, (dpr * cw) / 2, (dpr * ch) / 2);
+      ctx.clearRect(-R - 2, -R - 2, 2 * R + 4, 2 * R + 4);
+      // the soft heap of settled snow
+      ctx.fillStyle = pileColour;
+      ctx.beginPath();
+      ctx.moveTo(-R, groundY(-R) + 2);
+      for (var b = 0; b < BINS; b++) {
+        var x = -R + ((b + 0.5) / BINS) * 2 * R;
+        ctx.lineTo(x, restY(x) + 1.5);
+      }
+      ctx.lineTo(R, groundY(R) + 2);
+      ctx.lineTo(R, R);
+      ctx.lineTo(-R, R);
+      ctx.closePath();
+      ctx.fill();
+      // far flakes: small sharp dots
+      ctx.fillStyle = flakeColour;
+      ctx.globalAlpha = 0.8;
+      ctx.beginPath();
+      for (var i = 0; i < flakes.length; i++) {
+        var fl = flakes[i];
+        if (fl.layer) continue;
+        ctx.moveTo(fl.x + fl.r, fl.y);
+        ctx.arc(fl.x, fl.y, fl.r, 0, Math.PI * 2);
+      }
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // near flakes: bigger and soft, as if closer to the glass
+      for (i = 0; i < flakes.length; i++) {
+        fl = flakes[i];
+        if (!fl.layer) continue;
+        var size = fl.r * 4;
+        ctx.drawImage(sprite, fl.x - size / 2, fl.y - size / 2, size, size);
+      }
+    }
+
+    function place() {
+      var rot = Math.max(-14, Math.min(14, ox * 0.11 + gvx * 0.004));
+      mover.style.transform = "translate(" + ox.toFixed(2) + "px," + oy.toFixed(2) + "px) rotate(" + rot.toFixed(2) + "deg)";
+      var lift = Math.max(0, -oy);
+      shadow.style.transform = "translateX(" + (ox * 0.6).toFixed(1) + "px) scale(" + (1 + Math.abs(ox) / 260 + lift / 300).toFixed(3) + "," + (1 - lift / 400).toFixed(3) + ")";
+      shadow.style.opacity = Math.max(0.35, 1 - lift / 160).toFixed(2);
+    }
+
+    /* ---------- 7. Loop ---------- */
+    var prev = performance.now();
+    function loop(now) {
+      var dt = Math.min(0.033, Math.max(0.001, (now - prev) / 1000));
+      prev = now;
+      var acc = stepGlobe(dt);
+      stepSnow(dt, now / 1000, acc);
+      place();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    readColours();
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColours);
+    resize();
+    requestAnimationFrame(loop);
+  })();
+</script>
+</body>
+</html>

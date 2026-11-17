@@ -1,0 +1,377 @@
+<!doctype html>
+<!-- Chill and Craft · Cumulus · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cumulus · Publish button with rolling clouds</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg: #eaf3fb;
+    --card: #ffffff;
+    --line: #dde7f1;
+    --ink: #17283c;
+    --muted: #6a7b8e;
+    --bar: #e6eef6;
+    --btn-a: #1f5fe0;
+    --btn-b: #3d8bff;
+    --sky-a: #8fd3ff;
+    --sky-b: #d8f1ff;
+    --cloud: #ffffff;
+    --sky-ink: #0b3a7a;
+    --sun: #ffcf3f;
+    --live: #14a36b;
+    --error: #d93b3b;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1420;
+    --card: #171e2d;
+    --line: #273248;
+    --ink: #e8eef8;
+    --muted: #93a0b5;
+    --bar: #232d40;
+    --btn-a: #5b4bd6;
+    --btn-b: #7d6cf0;
+    --sky-a: #3a2f7d;
+    --sky-b: #7666cf;
+    --cloud: #d9d2ff;
+    --sky-ink: #ffffff;
+    --sun: #ffb86b;
+    --live: #3fd69a;
+    --error: #ff7676;
+    color-scheme: dark;
+  }
+  *,
+  *::before,
+  *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  .stage { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; overflow: hidden; }
+
+  /* ---------- Editor card ---------- */
+  .editor { position: relative; width: min(460px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 18px 20px 20px; box-shadow: 0 30px 60px -36px rgba(20, 50, 90, 0.5); }
+  .top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 0.8rem; color: var(--muted); }
+  .chip { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; background: var(--bar); color: var(--muted); }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; position: relative; }
+  .chip.live { background: color-mix(in srgb, var(--live) 18%, transparent); color: var(--live); }
+  .chip.live .dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: currentColor; animation: ping 1.4s ease-out infinite; }
+  @keyframes ping { to { transform: scale(3); opacity: 0; } }
+  label.small { display: block; font-size: 0.76rem; color: var(--muted); margin-bottom: 4px; }
+  .title { width: 100%; border: 0; border-bottom: 2px solid var(--line); padding: 4px 0 8px; font: inherit; font-size: clamp(1.1rem, 4.5vw, 1.35rem); font-weight: 750; color: var(--ink); background: transparent; }
+  .title:focus-visible { outline: none; border-color: var(--btn-b); }
+  .title[aria-invalid="true"] { border-color: var(--error); }
+  .error { margin: 6px 0 0; min-height: 1.2em; font-size: 0.8rem; color: var(--error); }
+  .lines { margin: 8px 0 18px; display: grid; gap: 8px; }
+  .lines i { display: block; height: 9px; border-radius: 5px; background: var(--bar); }
+  .lines i:nth-child(2) { width: 92%; }
+  .lines i:nth-child(3) { width: 64%; }
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .words { font-size: 0.82rem; color: var(--muted); }
+  .status { margin: 12px 0 0; min-height: 1.2em; font-size: 0.82rem; color: var(--muted); }
+
+  /* Flying page and confetti */
+  .page { position: absolute; left: 0; top: 0; width: 22px; height: 28px; border-radius: 3px; background: #fff; box-shadow: 0 4px 10px rgba(20, 50, 90, 0.25); pointer-events: none; z-index: 6; }
+  .page::before { content: ""; position: absolute; left: 4px; right: 4px; top: 6px; height: 12px; background: repeating-linear-gradient(#b8c6d8 0 2px, transparent 2px 5px); }
+  .bit { position: absolute; left: 0; top: 0; width: 7px; height: 9px; border-radius: 2px; pointer-events: none; z-index: 7; }
+
+  /* ---------- The Publish button ---------- */
+  .publish {
+    position: relative;
+    width: 196px;
+    height: 52px;
+    padding: 0;
+    border: 0;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--btn-a), var(--btn-b));
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    overflow: hidden;
+    isolation: isolate;
+    box-shadow: 0 12px 24px -12px var(--btn-a);
+    transition: transform 0.5s cubic-bezier(0.3, 1.7, 0.5, 1), box-shadow 0.3s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .publish:hover { transform: translateY(-3px); box-shadow: 0 18px 28px -14px var(--btn-a); }
+  .publish:active { transform: scale(0.95); transition-duration: 0.1s; }
+  .publish:focus-visible { outline: 3px solid var(--btn-b); outline-offset: 4px; }
+  .publish[aria-busy="true"] { cursor: progress; }
+  .publish[data-state="working"] { animation: float 1.6s ease-in-out infinite; }
+  @keyframes float { 50% { transform: translateY(-3px); } }
+  .publish.wiggle { animation: wiggle 0.45s ease; }
+  @keyframes wiggle { 20% { transform: rotate(-4deg); } 45% { transform: rotate(3deg); } 70% { transform: rotate(-2deg); } }
+
+  /* Sky layer: blooms open from the icon while working */
+  .sky { position: absolute; inset: 0; background: linear-gradient(180deg, var(--sky-a), var(--sky-b)); clip-path: circle(0px at 34px 50%); z-index: -1; }
+  .cl { position: absolute; left: 0; fill: var(--cloud); opacity: 0; }
+  .cl.a { top: 6px; width: 46px; }
+  .cl.b { top: 24px; width: 64px; }
+  .cl.c { top: 2px; width: 30px; }
+  .publish[data-state="working"] .cl { opacity: 0.95; animation: roll 2.4s linear infinite; }
+  .publish[data-state="working"] .cl.b { opacity: 0.75; animation-duration: 3.4s; animation-delay: -1.4s; }
+  .publish[data-state="working"] .cl.c { opacity: 0.85; animation-duration: 1.7s; animation-delay: -0.9s; }
+  @keyframes roll { from { transform: translateX(210px) translateY(0); } 50% { transform: translateX(70px) translateY(2px); } to { transform: translateX(-80px) translateY(0); } }
+  .sun { position: absolute; left: 50%; top: 100%; width: 70px; height: 70px; margin-left: -35px; }
+  .sun circle { fill: var(--sun); }
+  .sun .sunrays { stroke: var(--sun); stroke-width: 3; stroke-linecap: round; transform-origin: 35px 35px; animation: spin 6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .bar { position: absolute; left: 12px; right: 12px; bottom: 6px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.4); opacity: 0; transition: opacity 0.2s; }
+  .bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--sky-ink); transition: width 0.18s linear; }
+  .publish[data-state="working"] .bar { opacity: 1; }
+
+  .content { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 100%; transition: color 0.3s; }
+  .publish[data-state="working"] .content, .publish[data-state="done"] .content { color: var(--sky-ink); }
+  .icon { position: relative; width: 20px; height: 20px; flex: none; }
+  .icon svg { position: absolute; inset: 0; width: 20px; height: 20px; }
+  .publish:hover .i-cloud { animation: bob 1.3s ease-in-out infinite; }
+  .publish:hover .up { animation: lift 1.3s ease-in-out infinite; }
+  .publish:active .up { transform: translateY(2px); animation: none; }
+  @keyframes bob { 50% { transform: translateY(-2px); } }
+  @keyframes lift { 50% { transform: translateY(-2px); } }
+  .i-done { opacity: 0; transform: scale(0); }
+  .i-done path { stroke-dasharray: 20; stroke-dashoffset: 20; }
+  .publish[data-state="done"] .i-cloud { opacity: 0; }
+  .roller { position: relative; display: inline-block; height: 1.25em; overflow: hidden; min-width: 7.6em; text-align: left; }
+  .roller span { display: block; line-height: 1.25em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .publish, .bar i { transition: none; }
+    .publish[data-state="working"], .publish[data-state="working"] .cl, .publish.wiggle,
+    .publish:hover .i-cloud, .publish:hover .up, .sun .sunrays, .chip.live .dot::after { animation: none; }
+    .publish[data-state="working"] .sky, .publish[data-state="done"] .sky { clip-path: none; }
+    .publish[data-state="working"] .cl.a { transform: translateX(30px); }
+    .publish[data-state="working"] .cl.b { transform: translateX(110px); }
+    .publish[data-state="working"] .cl.c { transform: translateX(150px); }
+    .publish[data-state="done"] .i-done { opacity: 1; transform: none; }
+    .publish[data-state="done"] .i-done path { stroke-dashoffset: 0; }
+    .page, .bit { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <article class="editor" id="editor" aria-labelledby="post-label">
+      <div class="top">
+        <span class="chip" id="chip"><i class="dot" aria-hidden="true"></i><span id="chip-text">Draft</span></span>
+        <span id="saved">Edited 2 min ago</span>
+      </div>
+      <label class="small" id="post-label" for="title">Post title</label>
+      <input class="title" id="title" type="text" value="Ten street foods to try in Lahore" aria-describedby="title-error" />
+      <p class="error" id="title-error"></p>
+      <div class="lines" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="foot">
+        <span class="words">842 words · 4 photos</span>
+        <button class="publish" id="publish" type="button" data-state="idle">
+          <span class="sky" id="sky" aria-hidden="true">
+            <svg class="cl a" viewBox="0 0 44 24"><path d="M10 22h24a7 7 0 0 0 .6-14A10 10 0 0 0 15.4 7 7.5 7.5 0 0 0 10 22Z" /></svg>
+            <svg class="cl b" viewBox="0 0 44 24"><path d="M10 22h24a7 7 0 0 0 .6-14A10 10 0 0 0 15.4 7 7.5 7.5 0 0 0 10 22Z" /></svg>
+            <svg class="cl c" viewBox="0 0 44 24"><path d="M10 22h24a7 7 0 0 0 .6-14A10 10 0 0 0 15.4 7 7.5 7.5 0 0 0 10 22Z" /></svg>
+            <svg class="sun" id="sun" viewBox="0 0 70 70"><g class="sunrays"><path d="M35 4v8M35 58v8M4 35h8M58 35h8M13 13l6 6M51 51l6 6M13 57l6-6M51 19l6-6" /></g><circle cx="35" cy="35" r="15" /></svg>
+          </span>
+          <span class="bar" aria-hidden="true"><i id="fill"></i></span>
+          <span class="content">
+            <span class="icon" aria-hidden="true">
+              <svg class="i-cloud" viewBox="0 0 24 24"><path d="M7 18h10.5a4 4 0 0 0 .3-8A6 6 0 0 0 6.4 9.3 4.4 4.4 0 0 0 7 18Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" /><path class="up" d="M12 15v-5m-2.3 2.2L12 10l2.3 2.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              <svg class="i-done" id="i-done" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.15" /><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            </span>
+            <span class="roller" id="label"><span>Publish</span></span>
+          </span>
+        </button>
+      </div>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </article>
+  </main>
+
+<script>
+  // Cumulus: squash → the sky blooms open → a page floats up → clouds roll while it saves
+  // → clouds part, the sun rises, confetti → the sky folds back into the button.
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var editor = $("editor"), btn = $("publish"), label = $("label"), fill = $("fill"), sky = $("sky"), sun = $("sun"), iDone = $("i-done");
+    var chip = $("chip"), chipText = $("chip-text"), saved = $("saved"), title = $("title"), error = $("title-error"), status = $("status");
+    var calm = matchMedia("(prefers-reduced-motion: reduce)");
+    var isLive = false;
+    var busy = false;
+
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    // Spring helper: samples a damped spring from 0 to 1 (overshoots, then settles)
+    function springCurve(stiffness, damping) {
+      var x = 0, v = 0, out = [0], dt = 1 / 60;
+      for (var i = 0; i < 240; i++) {
+        v += (-stiffness * (x - 1) - damping * v) * dt;
+        x += v * dt;
+        out.push(x);
+        if (Math.abs(v) < 0.01 && Math.abs(x - 1) < 0.002) break;
+      }
+      out[out.length - 1] = 1;
+      return out;
+    }
+    function springTo(el, frame, stiffness, damping) {
+      var c = springCurve(stiffness || 260, damping || 14);
+      return el.animate(c.map(frame), { duration: (c.length * 1000) / 60, easing: "linear" });
+    }
+
+    // Paper confetti that falls with a flutter
+    function confetti(x, y, n) {
+      var colors = ["#3d8bff", "#ffcf3f", "#14a36b", "#ff6b8b", "#8fd3ff"];
+      for (var i = 0; i < n; i++) {
+        var p = document.createElement("i");
+        p.className = "bit";
+        p.style.background = colors[i % colors.length];
+        editor.appendChild(p);
+        var a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.2;
+        var s = 90 + Math.random() * 70, vx = Math.cos(a) * s, vy = Math.sin(a) * s, spin = (Math.random() - 0.5) * 900, frames = [];
+        for (var k = 0; k <= 12; k++) {
+          var t = k / 12, e = 1 - Math.pow(1 - t, 2.2);
+          frames.push({ transform: "translate(" + (x + vx * e + Math.sin(t * 10 + i) * 8).toFixed(1) + "px," + (y + vy * e + 130 * t * t).toFixed(1) + "px) rotate(" + (spin * t).toFixed(0) + "deg) rotateY(" + (t * 900).toFixed(0) + "deg)", opacity: t > 0.75 ? (1 - t) * 4 : 1 });
+        }
+        p.animate(frames, { duration: 1000 + Math.random() * 500, easing: "linear", fill: "forwards" }).onfinish = (function (el) { return function () { el.remove(); }; })(p);
+      }
+    }
+
+    // Rolls the label: the old text slides up, the new one springs in
+    function roll(text) {
+      while (label.children.length > 1) label.removeChild(label.firstElementChild);
+      var old = label.firstElementChild;
+      if (calm.matches) { old.textContent = text; return; }
+      var next = document.createElement("span");
+      next.textContent = text;
+      next.style.position = "absolute";
+      next.style.top = "0";
+      label.appendChild(next);
+      old.animate([{ transform: "translateY(0)", opacity: 1 }, { transform: "translateY(-100%)", opacity: 0 }], { duration: 200, easing: "ease-in", fill: "forwards" }).onfinish = function () { old.remove(); next.style.position = ""; };
+      springTo(next, function (p) { return { transform: "translateY(" + ((1 - p) * 100).toFixed(1) + "%)" }; }, 320, 17);
+    }
+
+    function setLabel(text) { label.lastElementChild.textContent = text; }
+    function within(el) { var e = editor.getBoundingClientRect(), r = el.getBoundingClientRect(); return { x: r.left - e.left + r.width / 2, y: r.top - e.top + r.height / 2 }; }
+
+    async function publish() {
+      busy = true;
+      var verb = isLive ? "Updating" : "Publishing";
+      btn.setAttribute("aria-busy", "true");
+      status.textContent = verb + " your post…";
+      saved.textContent = "Saving to the cloud…";
+
+      if (!calm.matches) {
+        // 1. Anticipation: squash, the arrow dips
+        await btn.animate([{ transform: "scale(1)" }, { transform: "scale(1.04, 0.88)" }], { duration: 150, easing: "ease-in" }).finished;
+        springTo(btn, function (p) { return { transform: "scale(" + (1.04 - 0.04 * p).toFixed(3) + "," + (0.88 + 0.12 * p).toFixed(3) + ")" }; }, 320, 10);
+        // 2. The sky blooms out of the icon and a page floats up into it
+        sky.getAnimations().forEach(function (a) { a.cancel(); });
+        sky.animate([{ clipPath: "circle(0px at 34px 50%)" }, { clipPath: "circle(240px at 34px 50%)" }], { duration: 650, easing: "cubic-bezier(0.3, 0.8, 0.3, 1)", fill: "forwards" });
+        var from = within(btn);
+        var page = document.createElement("i");
+        page.className = "page";
+        editor.appendChild(page);
+        page.animate([
+          { transform: "translate(" + (from.x - 75) + "px," + (from.y - 14) + "px) scale(0.4)", opacity: 0 },
+          { transform: "translate(" + (from.x - 70) + "px," + (from.y - 50) + "px) rotate(-8deg) scale(1)", opacity: 1, offset: 0.35 },
+          { transform: "translate(" + (from.x - 40) + "px," + (from.y - 120) + "px) rotate(10deg) scale(0.7)", opacity: 0 }
+        ], { duration: 1100, easing: "cubic-bezier(0.3, 0.6, 0.4, 1)" }).onfinish = function () { page.remove(); };
+      }
+      btn.dataset.state = "working";
+      roll(verb + " 0%");
+
+      // 3. Progress: clouds roll while a simulated upload counts to 100
+      var progress = 0;
+      while (progress < 100) {
+        await wait(90);
+        progress = Math.min(100, progress + 2 + Math.random() * (calm.matches ? 8 : 5));
+        fill.style.width = progress + "%";
+        setLabel(verb + " " + Math.round(progress) + "%");
+      }
+      await wait(200);
+
+      // 4. Finish: clouds part, the sun rises, a tick pops, confetti, the badge goes live
+      var clouds = Array.prototype.slice.call(btn.querySelectorAll(".cl"));
+      var held = clouds.map(function (c) { return getComputedStyle(c).transform; });
+      isLive = true;
+      btn.dataset.state = "done";
+      roll(isLive && verb === "Updating" ? "Updated" : "Published");
+      btn.removeAttribute("aria-busy");
+      chipText.textContent = "Live";
+      chip.classList.add("live");
+      saved.textContent = "Published just now";
+      status.textContent = "Your post is live.";
+      if (!calm.matches) {
+        clouds.forEach(function (c, i) {
+          var away = i === 1 ? "translateX(240px) translateY(10px)" : "translateX(-90px) translateY(-6px)";
+          c.animate([{ transform: held[i] === "none" ? "translateX(70px)" : held[i], opacity: 0.9 }, { transform: away, opacity: 0 }], { duration: 600, easing: "cubic-bezier(0.5, 0, 0.3, 1)" });
+        });
+        springTo(sun, function (p) { return { transform: "translateY(" + (-48 * p).toFixed(1) + "px)" }; }, 160, 11).onfinish = function () { sun.style.transform = "translateY(-48px)"; };
+        springTo(iDone, function (p) { return { transform: "scale(" + p.toFixed(3) + ")", opacity: Math.min(1, p * 2) }; }, 300, 11).onfinish = function () { iDone.style.transform = "none"; iDone.style.opacity = "1"; };
+        iDone.lastElementChild.animate([{ strokeDashoffset: 20 }, { strokeDashoffset: 0 }], { duration: 350, delay: 100, easing: "ease-out", fill: "forwards" });
+        springTo(chip, function (p) { return { transform: "scale(" + (1 + Math.sin(p * Math.PI) * 0.25).toFixed(3) + ")" }; }, 220, 10);
+        var c = within(btn);
+        confetti(c.x, c.y - 10, 26);
+      } else {
+        sun.style.transform = "translateY(-48px)";
+      }
+
+      // 5. Reset: the sky folds back into the icon and the button offers Update
+      await wait(2300);
+      if (!calm.matches) {
+        await Promise.all([
+          sky.animate([{ clipPath: "circle(240px at 34px 50%)" }, { clipPath: "circle(0px at 34px 50%)" }], { duration: 520, easing: "cubic-bezier(0.6, 0, 0.4, 1)", fill: "forwards" }).finished,
+          iDone.animate([{ transform: "none", opacity: 1 }, { transform: "scale(0) rotate(-40deg)", opacity: 0 }], { duration: 260, easing: "ease-in", fill: "forwards" }).finished
+        ]);
+      }
+      iDone.getAnimations().forEach(function (a) { a.cancel(); });
+      iDone.lastElementChild.getAnimations().forEach(function (a) { a.cancel(); });
+      iDone.style.transform = "";
+      iDone.style.opacity = "";
+      sun.style.transform = "";
+      fill.style.width = "0%";
+      btn.dataset.state = "idle";
+      roll("Update");
+      if (!calm.matches) springTo(btn, function (p) { return { transform: "scale(" + (0.94 + 0.06 * p).toFixed(3) + ")" }; }, 260, 10);
+      busy = false;
+    }
+
+    btn.addEventListener("click", function () {
+      if (busy) return;
+      if (!title.value.trim()) {
+        title.setAttribute("aria-invalid", "true");
+        error.textContent = "Add a title before you publish.";
+        btn.classList.remove("wiggle");
+        void btn.offsetWidth;
+        btn.classList.add("wiggle");
+        title.focus();
+        return;
+      }
+      publish();
+    });
+
+    title.addEventListener("input", function () {
+      if (title.value.trim()) {
+        title.removeAttribute("aria-invalid");
+        error.textContent = "";
+      }
+    });
+  })();
+</script>
+</body>
+</html>

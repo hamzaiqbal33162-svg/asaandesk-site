@@ -1,0 +1,384 @@
+<!doctype html>
+<!-- Chill and Craft · Level Up · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Level Up · upload button</title>
+<script>
+  // Theme: ?theme=light|dark overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colours and motion curves ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #eef6ff;
+    --bg2: #d2e5fa;
+    --btn1: #0b63ce;
+    --btn2: #0846a0;
+    --water: #67e8f9;
+    --water-done: #6ee7b7;
+    --error: #c2410c;
+    --hint: #3b5878;
+    --link: #0b63ce;
+    --focus: #f59e0b;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg1: #0d1a2c;
+      --bg2: #050a12;
+      --btn1: #1462c4;
+      --btn2: #0b3a7a;
+      --hint: #8fb0d3;
+      --link: #7cc4ff;
+      --focus: #fbbf24;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #0d1a2c;
+    --bg2: #050a12;
+    --btn1: #1462c4;
+    --btn2: #0b3a7a;
+    --hint: #8fb0d3;
+    --link: #7cc4ff;
+    --focus: #fbbf24;
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  body { overflow-x: hidden; } /* particles may fly past the edges */
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at 50% 30%, var(--bg1), var(--bg2) 80%);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 40px 16px 24px; width: 100%; }
+
+  /* ---------- Button ---------- */
+  .btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 310px;
+    max-width: 100%;
+    padding: 10px 20px 10px 10px;
+    border: 0;
+    border-radius: 20px;
+    background: linear-gradient(135deg, var(--btn1), var(--btn2));
+    color: #fff;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 18px 34px -20px rgba(8, 70, 160, .9);
+    transition: transform .4s var(--spring), box-shadow .25s;
+  }
+  .btn:hover { transform: translateY(-3px); box-shadow: 0 24px 38px -20px rgba(8, 70, 160, 1); }
+  .btn:active { transform: scale(.97); transition-duration: .1s; }
+  .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .btn[aria-disabled="true"] { cursor: progress; transform: none; }
+  .btn::after { /* dashed ring shown while a file is dragged over */
+    content: "";
+    position: absolute;
+    inset: -7px;
+    border: 2px dashed var(--link);
+    border-radius: 26px;
+    opacity: 0;
+    transition: opacity .2s;
+    pointer-events: none;
+  }
+  .btn[data-drag="on"]::after { opacity: 1; }
+  .btn[data-drag="on"] { transform: scale(1.03); }
+
+  .gauge { position: relative; flex: none; display: grid; place-items: center; width: 54px; height: 66px; border-radius: 15px; background: rgba(255, 255, 255, .14); transition: background-color .3s, box-shadow .3s; }
+  .btn:hover .gauge { background: rgba(255, 255, 255, .2); box-shadow: 0 0 0 4px rgba(103, 232, 249, .18); }
+  .gauge svg { width: 44px; height: 56px; overflow: visible; }
+  .stroke { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+  .arrow { transform-box: fill-box; transform-origin: 50% 100%; transition: transform .6s var(--spring), opacity .3s; }
+  .btn:hover .arrow { animation: lift .8s ease-in-out infinite; }
+  .tubeset { transform-box: fill-box; transform-origin: 50% 100%; transform: scale(.6, .3); opacity: 0; transition: transform .7s var(--spring), opacity .25s; }
+  .tube { fill: rgba(255, 255, 255, .1); stroke-dasharray: 100; stroke-dashoffset: 100; transition: stroke-dashoffset .5s ease-out; }
+  .ticks path { fill: none; stroke: rgba(255, 255, 255, .45); stroke-width: 1.6; stroke-linecap: round; opacity: 0; transform: translateX(5px); transition: opacity .3s, transform .45s var(--spring), stroke .3s; }
+  .ticks path.lit { stroke: var(--water); }
+  .water { transition: transform .3s ease-out; }
+  .water path { fill: var(--water); transition: fill .3s; animation: ripple 1.4s linear infinite; }
+  .bubble { fill: none; stroke: rgba(255, 255, 255, .85); stroke-width: .9; opacity: 0; }
+  .check { stroke-width: 3; stroke-dasharray: 30; stroke-dashoffset: 30; transform-box: fill-box; transform-origin: 50% 50%; transition: stroke-dashoffset .4s ease-out; }
+
+  .fx { position: absolute; left: 50%; top: 8px; width: 0; height: 0; pointer-events: none; }
+  .particle { position: absolute; width: 5px; height: 7px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; pointer-events: none; }
+
+  .text { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+  .title { display: block; font-size: 16.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta { display: block; font-size: 12.5px; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+
+  .hint { margin: 0; font-size: 13.5px; color: var(--hint); text-align: center; line-height: 1.5; }
+  .demo { padding: 0; border: 0; background: none; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .demo:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+  /* ---------- States ---------- */
+  /* working: the arrow has launched; a tube springs up with scale marks */
+  .btn:is([data-state="working"], [data-state="done"]) .arrow { transform: translateY(-16px) scale(.4, 1.2); opacity: 0; animation: none; transition: transform .3s cubic-bezier(.5, 0, .9, .4), opacity .25s .05s; }
+  .btn[data-state="working"] .tubeset { transform: none; opacity: 1; transition-delay: .2s; }
+  .btn[data-state="working"] .tube { stroke-dashoffset: 0; transition-delay: .25s; }
+  .btn[data-state="done"] .tube { stroke-dashoffset: 0; }
+  .btn[data-state="working"] .ticks path { opacity: 1; transform: none; }
+  .btn[data-state="working"] .ticks path:nth-child(1) { transition-delay: .55s; }
+  .btn[data-state="working"] .ticks path:nth-child(2) { transition-delay: .5s; }
+  .btn[data-state="working"] .ticks path:nth-child(3) { transition-delay: .45s; }
+  .btn[data-state="working"] .ticks path:nth-child(4) { transition-delay: .4s; }
+  .btn[data-state="working"] .ticks path:nth-child(5) { transition-delay: .35s; }
+  .btn[data-state="working"] .bubble { animation: fizz 1.6s ease-in infinite; }
+  .btn[data-state="working"] .bubble + .bubble { animation-delay: .7s; }
+
+  /* done: the full gauge turns mint, sloshes, and becomes a springy tick */
+  .btn[data-state="done"] .water path { fill: var(--water-done); }
+  .btn[data-state="done"] .tubeset { transform: scale(.7, .4); opacity: 0; transition: transform .45s ease-in .45s, opacity .3s .5s; }
+  .btn[data-state="done"] .check { stroke-dashoffset: 0; transition-delay: .7s; animation: boing .7s .7s var(--spring) backwards; }
+  .btn[data-state="done"] .gauge { animation: boing .7s var(--spring); }
+  .btn[data-state="error"] { background: var(--error); animation: shake .45s ease-in-out; }
+
+  @keyframes lift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+  @keyframes ripple { from { transform: translateX(0); } to { transform: translateX(-16px); } }
+  @keyframes fizz { 0% { opacity: 0; transform: translateY(0); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px); } }
+  @keyframes boing { 0% { transform: scale(.4); } 100% { transform: scale(1); } }
+  @keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 45% { transform: translateX(6px); } 70% { transform: translateX(-3px); } }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  /* Calm mode: same steps, no big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; animation-delay: 0s !important; }
+    .fx { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <button class="btn" type="button" data-state="idle" aria-describedby="hint">
+    <span class="gauge" aria-hidden="true">
+      <svg viewBox="0 0 44 56">
+        <defs>
+          <clipPath id="tubeInside"><rect x="18.6" y="8.6" width="10.8" height="38.8" rx="5.4" /></clipPath>
+        </defs>
+        <g class="tubeset">
+          <!-- Scale marks beside the gauge (top to bottom) -->
+          <g class="ticks">
+            <path d="M9 14h4" data-level="83" />
+            <path d="M10.5 21h2.5" data-level="67" />
+            <path d="M8 28h5" data-level="50" />
+            <path d="M10.5 35h2.5" data-level="33" />
+            <path d="M9 42h4" data-level="17" />
+          </g>
+          <!-- Water: a wavy block that rises inside the tube -->
+          <g clip-path="url(#tubeInside)">
+            <g class="water" style="transform: translateY(40px)">
+              <path d="M0 9q4-2 8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0V60H0z" />
+              <circle class="bubble" cx="22" cy="44" r="1.3" />
+              <circle class="bubble" cx="26" cy="47" r="1" />
+            </g>
+          </g>
+          <rect class="stroke tube" pathLength="100" x="17" y="7" width="14" height="42" rx="7" />
+        </g>
+        <!-- Upload arrow (idle) -->
+        <path class="stroke arrow" d="M22 42V14M13.5 22.5L22 14l8.5 8.5" />
+        <!-- Tick (done) -->
+        <path class="stroke check" d="M12 29l6.5 6.5L32 21.5" />
+      </svg>
+      <span class="fx"></span>
+    </span>
+    <span class="text">
+      <span class="title">Upload file</span>
+      <span class="meta">PDF, images or docs · up to 25 MB</span>
+    </span>
+  </button>
+  <input type="file" id="picker" hidden>
+  <p class="hint" id="hint">Drop a file on the button, or <button class="demo" type="button">try a sample file</button></p>
+  <p class="sr-only" id="status" aria-live="polite"></p>
+</main>
+
+<script>
+  // ---------- Level Up upload button ----------
+  const btn = document.querySelector(".btn");
+  const gauge = btn.querySelector(".gauge");
+  const arrow = btn.querySelector(".arrow");
+  const water = btn.querySelector(".water");
+  const ticks = [...btn.querySelectorAll(".ticks path")];
+  const fx = btn.querySelector(".fx");
+  const picker = document.getElementById("picker");
+  const demo = document.querySelector(".demo");
+  const title = btn.querySelector(".title");
+  const meta = btn.querySelector(".meta");
+  const status = document.getElementById("status");
+
+  const MB = 1024 * 1024;
+  const MAX_SIZE = 25 * MB;
+  const IDLE_TITLE = "Upload file";
+  const IDLE_META = "PDF, images or docs · up to 25 MB";
+  const SPRING = "cubic-bezier(.34, 1.56, .64, 1)";
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduceMotion.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 400) : ms));
+  let busy = false;
+
+  function play(el, frames, options) {
+    if (calm() || !el.animate) return Promise.resolve();
+    return el.animate(frames, options).finished.catch(() => {});
+  }
+
+  // Water droplets splashing out of the top of the gauge
+  function splash(count) {
+    if (calm()) return;
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement("i");
+      p.className = "particle";
+      p.style.background = i % 2 ? "#6ee7b7" : "#a5f3fc";
+      fx.appendChild(p);
+      const dx = (i / (count - 1) - .5) * 70 + (Math.random() - .5) * 10;
+      const up = -26 - Math.random() * 22;
+      p.animate([
+        { transform: "translate(-50%, 0) scale(.6)", opacity: 1 },
+        { transform: "translate(calc(-50% + " + (dx * .6).toFixed(1) + "px), " + up.toFixed(1) + "px) scale(1)", opacity: 1, offset: .45, easing: "cubic-bezier(.3, .6, .6, 1)" },
+        { transform: "translate(calc(-50% + " + dx.toFixed(1) + "px), 30px) scale(.6)", opacity: 0 }
+      ], { duration: 800 + Math.random() * 250, easing: "cubic-bezier(.5, 0, .9, .6)" }).onfinish = () => p.remove();
+    }
+  }
+
+  async function swap(el, text) {
+    await play(el, [{ transform: "translateY(0)", opacity: 1 }, { transform: "translateY(-8px)", opacity: 0 }], { duration: 120, easing: "ease-in" });
+    el.textContent = text;
+    play(el, [{ transform: "translateY(8px)", opacity: 0 }, { transform: "translateY(0)", opacity: 1 }], { duration: 420, easing: SPRING });
+  }
+
+  // 1.2 MB, 640 KB, 900 B
+  function formatSize(bytes) {
+    if (bytes >= MB) return (bytes / MB).toFixed(1) + " MB";
+    if (bytes >= 1024) return Math.round(bytes / 1024) + " KB";
+    return bytes + " B";
+  }
+
+  // 0% = water below the tube, 100% = tube full; marks light up as it passes
+  function setLevel(p) {
+    water.style.transform = "translateY(" + ((1 - p / 100) * 40).toFixed(2) + "px)";
+    ticks.forEach((t) => t.classList.toggle("lit", p >= Number(t.dataset.level)));
+  }
+
+  // Fake upload: about `ms` long, with uneven steps
+  function simulateUpload(ms, onTick) {
+    return new Promise((resolve) => {
+      let p = 0;
+      const tick = 100;
+      (function step() {
+        p = Math.min(100, p + (100 * tick / ms) * (.5 + Math.random()));
+        onTick(p);
+        if (p >= 100) resolve();
+        else setTimeout(step, tick);
+      })();
+    });
+  }
+
+  async function upload(file) {
+    if (busy) return;
+    busy = true;
+    btn.setAttribute("aria-disabled", "true");
+    btn.title = file.name;
+
+    // Too big? Shake, say so, then reset
+    if (file.size > MAX_SIZE) {
+      btn.dataset.state = "error";
+      swap(title, "That file is too big");
+      meta.textContent = formatSize(file.size) + " · the limit is 25 MB";
+      status.textContent = "Upload refused. " + file.name + " is larger than 25 megabytes.";
+      await wait(3000);
+      return reset();
+    }
+
+    // 1. Anticipation: the gauge squashes and the arrow crouches
+    await Promise.all([
+      play(gauge, [{ transform: "scale(1)" }, { transform: "scale(1.1, .86)" }, { transform: "scale(1)" }], { duration: 300, easing: "ease-out" }),
+      play(arrow, [{ transform: "scaleY(1)" }, { transform: "scaleY(.7)" }], { duration: 220, easing: "ease-out" })
+    ]);
+
+    // 2. The arrow launches up; a tube with scale marks springs into its place
+    btn.dataset.state = "working";
+    setLevel(0);
+    swap(title, file.name);
+    status.textContent = "Uploading " + file.name + ".";
+    await wait(450);
+
+    // 3. Water rises with the progress
+    const ms = Math.min(5200, Math.max(1800, (file.size / (1.6 * MB)) * 1000));
+    let spoken = 0;
+    await simulateUpload(ms, (p) => {
+      setLevel(p);
+      meta.textContent = "Uploading · " + formatSize(file.size * p / 100) + " of " + formatSize(file.size) + " · " + Math.round(p) + "%";
+      if (p - spoken >= 25 && p < 100) {
+        spoken = Math.floor(p / 25) * 25;
+        status.textContent = "Uploaded " + spoken + " percent.";
+      }
+    });
+
+    // 4. Finish: slosh, splash, mint, springy tick
+    btn.dataset.state = "done";
+    play(water, [{ transform: "translateY(0)" }, { transform: "translateY(-3px)" }, { transform: "translateY(1px)" }, { transform: "translateY(0)" }], { duration: 500, easing: "ease-out" });
+    splash(8);
+    swap(title, "Uploaded");
+    meta.textContent = file.name + " · " + formatSize(file.size);
+    status.textContent = "Upload complete. " + file.name + " is uploaded.";
+    await wait(3000);
+    reset();
+  }
+
+  function reset() {
+    btn.dataset.state = "idle";
+    setLevel(0);
+    swap(title, IDLE_TITLE);
+    meta.textContent = IDLE_META;
+    btn.removeAttribute("title");
+    btn.removeAttribute("aria-disabled");
+    picker.value = "";
+    busy = false;
+  }
+
+  // Click opens the file picker
+  btn.addEventListener("click", () => {
+    if (!busy) picker.click();
+  });
+  picker.addEventListener("change", () => {
+    if (picker.files && picker.files[0]) upload(picker.files[0]);
+  });
+
+  // A pretend file for quick testing
+  demo.addEventListener("click", () => upload({ name: "Shop-Catalogue-2026.pdf", size: Math.round(3.4 * MB) }));
+
+  // Drag and drop onto the button
+  btn.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    if (!busy) btn.dataset.drag = "on";
+  });
+  btn.addEventListener("dragleave", () => btn.removeAttribute("data-drag"));
+  btn.addEventListener("drop", (e) => {
+    e.preventDefault();
+    btn.removeAttribute("data-drag");
+    const file = e.dataTransfer && e.dataTransfer.files[0];
+    if (file) upload(file);
+  });
+  // Stop the browser from opening files dropped next to the button
+  ["dragover", "drop"].forEach((type) => document.addEventListener(type, (e) => e.preventDefault()));
+</script>
+</body>
+</html>

@@ -1,0 +1,621 @@
+<!doctype html>
+<!-- Chill and Craft · Earshot · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earshot · loudness volume slider</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    color-scheme: light;
+    --stage: #fdf0e8;
+    --card: #ffffff;
+    --ink: #2a171c;
+    --muted: #7c6168;
+    --line: #f1dfd9;
+    --track: #f4e6e1;
+    --hot-1: #ff8a3d;
+    --hot-2: #ff2e63;
+    --z1: #22b07d;
+    --z2: #e6b422;
+    --z3: #f07b23;
+    --z4: #e2334f;
+    --ring: #ff2e63;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --stage: #120b0e;
+    --card: #1e1418;
+    --ink: #fbeaee;
+    --muted: #b99aa2;
+    --line: #34252b;
+    --track: #2e2126;
+    --z1: #34d399;
+    --z2: #facc15;
+    --z3: #fb923c;
+    --z4: #fb5370;
+    --ring: #ff7a9b;
+  }
+
+  /* ---------- Page ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 22px 16px;
+    color: var(--ink);
+    background: var(--stage);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .player {
+    --zone: var(--z1);
+    width: min(100%, 390px);
+    padding: 18px;
+    border-radius: 26px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 28px 50px -30px rgba(120, 30, 50, .45);
+  }
+
+  /* ---------- Now playing ---------- */
+  .now { display: flex; gap: 14px; align-items: center; }
+  .art {
+    --amp: .5;
+    position: relative;
+    flex: none;
+    width: 96px;
+    height: 96px;
+    border-radius: 18px;
+    overflow: hidden;
+    background: linear-gradient(180deg, var(--a1, #ffb36b), var(--a2, #ff4f7b) 60%, var(--a3, #6b2fbf));
+  }
+  .art::before {                 /* sun */
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 26px;
+    width: 40px;
+    height: 40px;
+    margin-left: -20px;
+    border-radius: 50%;
+    background: #fff3c4;
+    opacity: .9;
+  }
+  .art::after {                  /* sea stripes */
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 40%;
+    background: repeating-linear-gradient(180deg, rgba(40, 10, 60, .55) 0 4px, rgba(40, 10, 60, .25) 4px 8px);
+  }
+  .eq { position: absolute; left: 10px; right: 10px; bottom: 8px; z-index: 1; display: flex; gap: 4px; align-items: flex-end; height: 34px; }
+  .eq span { flex: 1; height: 100%; border-radius: 3px 3px 0 0; background: rgba(255, 255, 255, .85); transform-origin: bottom; transform: scaleY(.12); }
+  .player.playing .eq span { animation: eq var(--d) ease-in-out infinite alternate; }
+  @keyframes eq { from { transform: scaleY(.12); } to { transform: scaleY(var(--amp)); } }
+  /* The cover breathes with the bass beat while a song plays */
+  .player.playing .art { animation: beat 1s cubic-bezier(.2, .8, .3, 1) infinite; }
+  @keyframes beat { 0% { transform: scale(1.045); } 35% { transform: scale(1); } }
+  .player.playing .art::before { animation: sun 1s ease-out infinite; }
+  @keyframes sun { 0% { box-shadow: 0 0 0 0 rgba(255, 243, 196, .8); } 60% { box-shadow: 0 0 0 14px rgba(255, 243, 196, 0); } }
+
+  .info { min-width: 0; }
+  .label { margin: 0; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .song { margin: 4px 0 2px; font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .artist { margin: 0; font-size: 14px; color: var(--muted); }
+
+  /* ---------- Sliders ---------- */
+  input[type="range"] {
+    --fill: 50%;
+    width: 100%;
+    height: 22px;
+    margin: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--hot-1), var(--hot-2)) 0 0 / var(--fill) 100% no-repeat, var(--track);
+  }
+  input[type="range"]::-moz-range-track { height: 6px; border-radius: 6px; background: var(--track); }
+  input[type="range"]::-moz-range-progress { height: 6px; border-radius: 6px; background: linear-gradient(90deg, var(--hot-1), var(--hot-2)); }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    margin-top: -6px;
+    border-radius: 50%;
+    background: #fff;
+    border: 3px solid var(--hot-2);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+  }
+  input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid var(--hot-2); transition: transform .3s cubic-bezier(.34, 1.56, .64, 1); }
+  input[type="range"]::-webkit-slider-thumb { transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), box-shadow .2s; }
+  input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.18); }
+  input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.35); box-shadow: 0 0 0 8px rgba(255, 46, 99, .18); }
+  input[type="range"]:hover::-moz-range-thumb { transform: scale(1.18); }
+  input[type="range"]:active::-moz-range-thumb { transform: scale(1.35); }
+  input[type="range"]:focus { outline: none; }
+  input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(255, 46, 99, .3); }
+  input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px rgba(255, 46, 99, .3); }
+  input[type="range"]:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: 6px; }
+
+  .seek { margin: 16px 0 2px; }
+  .times { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---------- Transport buttons ---------- */
+  .transport { display: flex; justify-content: center; align-items: center; gap: 18px; margin: 6px 0 14px; }
+  .icon-btn {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .icon-btn svg { width: 22px; height: 22px; }
+  .play { width: 58px; height: 58px; color: #fff; background: linear-gradient(135deg, var(--hot-1), var(--hot-2)); box-shadow: 0 10px 20px -10px var(--hot-2); }
+  .play svg { width: 26px; height: 26px; }
+  .play .pause, .player.playing .play .start { display: none; }
+  .player.playing .play .pause { display: block; }
+  /* Icons spring in when play and pause swap */
+  .player.playing .play .pause, .player:not(.playing) .play .start { animation: iconIn .4s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes iconIn { from { transform: scale(.3) rotate(-90deg); opacity: 0; } }
+  button:focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+
+  /* Press and hover micro-interactions */
+  .icon-btn { transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), background .2s, box-shadow .2s; }
+  .icon-btn:hover { background: var(--track); }
+  .play:hover { background: linear-gradient(135deg, var(--hot-1), var(--hot-2)); transform: scale(1.06); box-shadow: 0 14px 26px -10px var(--hot-2); }
+  #prev:hover { transform: translateX(-3px); }
+  #next:hover { transform: translateX(3px); }
+  .icon-btn:active { transform: scale(.86); transition-duration: .08s; }
+
+  /* ---------- Volume row ---------- */
+  .vol { display: flex; align-items: center; gap: 10px; margin-top: 26px; }
+  .vol .icon-btn { position: relative; width: 38px; height: 38px; flex: none; }
+  .wave { transition: opacity .2s; }
+  .vol-pct { width: 42px; flex: none; text-align: right; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  /* Sound rings pulse out of the speaker: faster and wider when louder */
+  #mute::before, #mute::after {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border-radius: 50%;
+    border: 2px solid var(--zone);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .player.playing:not(.muted) #mute::before { animation: rings var(--pulse, 1.2s) ease-out infinite; }
+  .player.playing:not(.muted) #mute::after { animation: rings var(--pulse, 1.2s) ease-out infinite; animation-delay: calc(var(--pulse, 1.2s) / -2); }
+  @keyframes rings { from { opacity: .75; transform: scale(.9); } to { opacity: 0; transform: scale(var(--ring-size, 1.8)); } }
+
+  /* Value bubble hangs above the thumb and swings on a spring */
+  .vol-wrap { position: relative; flex: 1; min-width: 0; }
+  .bubble {
+    position: absolute;
+    left: 0;
+    bottom: 27px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    background: var(--zone);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    transform-origin: 50% 100%;
+    scale: 1;
+    transition: scale .3s cubic-bezier(.34, 1.56, .64, 1), background .3s;
+    pointer-events: none;
+  }
+  .bubble::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -4px;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
+    background: inherit;
+    transform: rotate(45deg);
+  }
+  .vol-wrap:hover .bubble, .vol-wrap:focus-within .bubble { scale: 1.15; }
+
+  /* ---------- Loudness panel ---------- */
+  .loud {
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--zone) 10%, var(--card));
+    border: 1px solid color-mix(in srgb, var(--zone) 35%, var(--line));
+    transition: background .3s, border-color .3s;
+  }
+  .loud-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .db { margin: 0; font-size: 34px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--zone); transition: color .3s; }
+  .db small { font-size: 15px; font-weight: 700; margin-left: 3px; }
+  .like { margin: 0; text-align: right; font-size: 14px; font-weight: 600; }
+  .meter { display: grid; grid-template-columns: repeat(15, 1fr); gap: 3px; margin: 12px 0 10px; }
+  .meter i { height: 12px; border-radius: 3px; background: var(--track); transform: scaleY(.55); transition: background .15s, transform .45s cubic-bezier(.34, 1.8, .64, 1); }
+  .meter i.on { background: var(--seg); transform: scaleY(1); transition-delay: calc(var(--j) * 12ms); }
+  /* While playing, the lit segments dance like a level meter */
+  .player.playing:not(.muted) .meter i.on { animation: jitter .32s ease-in-out infinite alternate; animation-delay: calc(var(--j) * -47ms); }
+  @keyframes jitter { from { transform: scaleY(.75); } to { transform: scaleY(1.18); } }
+  .loud.danger .db { animation: tremble .12s linear infinite; }
+  @keyframes tremble { 25% { transform: translate(1px, -1px); } 75% { transform: translate(-1px, 1px); } }
+  .warn.flash { animation: flash .6s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes flash { from { opacity: 0; transform: translateX(-10px) scale(.95); } }
+  .safe { margin: 0; font-size: 13px; color: var(--muted); }
+  .safe b { color: var(--ink); }
+  .warn { margin: 6px 0 0; min-height: 18px; font-size: 13px; font-weight: 700; color: var(--zone); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+    .player.playing .eq span { animation: none !important; transform: scaleY(var(--amp)); }
+  }
+</style>
+</head>
+<body>
+  <main class="player" id="player">
+    <div class="now">
+      <div class="art" id="art" aria-hidden="true">
+        <div class="eq"><span style="--d:.42s"></span><span style="--d:.31s"></span><span style="--d:.5s"></span><span style="--d:.36s"></span><span style="--d:.46s"></span></div>
+      </div>
+      <div class="info">
+        <p class="label">Now playing</p>
+        <h1 class="song" id="song">Monsoon Drive</h1>
+        <p class="artist" id="artist">The Clifton Tapes</p>
+      </div>
+    </div>
+
+    <!-- Seek bar -->
+    <div class="seek">
+      <input type="range" id="seek" min="0" max="204" step="1" value="0" aria-label="Song position">
+      <div class="times"><span id="cur">0:00</span><span id="dur">3:24</span></div>
+    </div>
+
+    <!-- Transport -->
+    <div class="transport">
+      <button type="button" class="icon-btn" id="prev" aria-label="Previous song">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h2v14H7zM19 5.5v13L10 12z"/></svg>
+      </button>
+      <button type="button" class="icon-btn play" id="play" aria-label="Play">
+        <svg class="start" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>
+        <svg class="pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="next" aria-label="Next song">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15 5h2v14h-2zM5 5.5v13L14 12z"/></svg>
+      </button>
+    </div>
+
+    <!-- Volume -->
+    <div class="vol">
+      <button type="button" class="icon-btn" id="mute" aria-label="Mute" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke-linejoin="round"/>
+          <path class="wave" id="w1" d="M15 9.5a3.5 3.5 0 0 1 0 5"/>
+          <path class="wave" id="w2" d="M17.5 7.5a6.5 6.5 0 0 1 0 9"/>
+          <path class="wave" id="w3" d="M20 5.5a9.5 9.5 0 0 1 0 13"/>
+          <path id="cross" d="M16 9.5l5 5M21 9.5l-5 5" opacity="0"/>
+        </svg>
+      </button>
+      <div class="vol-wrap" id="volWrap">
+        <span class="bubble" id="bubble" aria-hidden="true">64 dB</span>
+        <input type="range" id="vol" min="0" max="100" step="1" value="45" aria-label="Volume">
+      </div>
+      <span class="vol-pct" id="pct" aria-hidden="true">45%</span>
+    </div>
+
+    <!-- How loud is it really? -->
+    <section class="loud" id="loud" aria-label="Loudness at this volume">
+      <div class="loud-top">
+        <p class="db"><span id="db">64</span><small>dB</small></p>
+        <p class="like" id="like">like a normal conversation</p>
+      </div>
+      <div class="meter" id="meter" aria-hidden="true"></div>
+      <p class="safe">Safe listening time: <b id="safe">no limit</b></p>
+      <p class="warn" id="warn"></p>
+    </section>
+    <p class="sr" id="announce" role="status" aria-live="polite"></p>
+  </main>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const player = $("player");
+  const vol = $("vol");
+  const seek = $("seek");
+
+  // ---- Songs (made-up artists; melodies are generated live) ----
+  const TRACKS = [
+    { song: "Monsoon Drive", artist: "The Clifton Tapes", len: 204, root: 57, colors: ["#ffb36b", "#ff4f7b", "#6b2fbf"], pattern: [0, 2, 4, -1, 3, 4, 2, -1, 0, 2, 4, 5, 4, 2, 1, -1] },
+    { song: "Margalla Morning", artist: "Saffron Static", len: 187, root: 60, colors: ["#9be7ff", "#4f9dff", "#2a3f9f"], pattern: [4, -1, 2, 4, 5, -1, 4, 2, 0, -1, 1, 2, 4, -1, 2, -1] },
+    { song: "Night Bus Home", artist: "Low Tide Club", len: 221, root: 55, colors: ["#c3a6ff", "#7b5cff", "#1f1650"], pattern: [0, -1, 0, 2, -1, 4, 3, -1, 2, -1, 0, 1, -1, 2, 0, -1] }
+  ];
+  let track = 0;
+  let elapsed = 0;
+  let playing = false;
+  let muted = false;
+  let lastZone = "";
+
+  // ---- Loudness: volume % to an estimated sound level ----
+  // Assumes typical headphones reach about 105 dB at full volume.
+  const LEVELS = [
+    [40, "like a quiet library"],
+    [50, "like light rain on a window"],
+    [60, "like a quiet office"],
+    [70, "like a normal conversation"],
+    [80, "like a busy cafe"],
+    [85, "like city traffic"],
+    [90, "like a motorbike going past"],
+    [95, "like a food blender up close"],
+    [100, "like a train going past"],
+    [999, "like a rock concert"]
+  ];
+  function toDb(v) { return v <= 0 ? 0 : Math.round(30 + v * 0.75); }
+  function zoneColor(db) {
+    if (db < 70) return "var(--z1)";
+    if (db < 85) return "var(--z2)";
+    if (db < 95) return "var(--z3)";
+    return "var(--z4)";
+  }
+  function safeTime(db) {
+    // Common workplace rule: 8 hours at 85 dB, half as long for every 3 dB more
+    if (db < 85) return "no limit";
+    const hours = 8 / Math.pow(2, (db - 85) / 3);
+    if (hours >= 1) return "about " + Math.round(hours) + (Math.round(hours) === 1 ? " hour" : " hours") + " a day";
+    return "about " + Math.max(1, Math.round(hours * 60)) + " minutes a day";
+  }
+
+  // Build the 15 meter segments
+  const meter = $("meter");
+  const segs = [];
+  for (let i = 0; i < 15; i++) {
+    const seg = document.createElement("i");
+    const segDb = 30 + ((i + 1) / 15) * 75;
+    seg.style.setProperty("--seg", zoneColor(segDb));
+    seg.style.setProperty("--j", i);
+    meter.append(seg);
+    segs.push(seg);
+  }
+
+  function renderVolume() {
+    const v = Number(vol.value);
+    const on = muted ? 0 : v;
+    const db = toDb(on);
+    vol.style.setProperty("--fill", v + "%");
+    $("pct").textContent = v + "%";
+    $("art").style.setProperty("--amp", (0.2 + (on / 100) * 0.8).toFixed(2));
+
+    // Speaker waves light up with the level
+    $("w1").style.opacity = on > 0 ? 1 : 0.15;
+    $("w2").style.opacity = on > 33 ? 1 : 0.15;
+    $("w3").style.opacity = on > 66 ? 1 : 0.15;
+    $("cross").style.opacity = on === 0 ? 1 : 0;
+
+    const loud = $("loud");
+    let like = "silent";
+    if (db) like = LEVELS.find((l) => db < l[0])[1];
+    player.style.setProperty("--zone", db ? zoneColor(db) : "var(--muted)");
+    player.style.setProperty("--pulse", (1.6 - on * 0.01).toFixed(2) + "s");     // louder = faster rings
+    player.style.setProperty("--ring-size", (1.3 + on / 100).toFixed(2));        // and wider rings
+    player.classList.toggle("muted", muted || v === 0);
+    loud.classList.toggle("danger", db >= 95);
+    $("like").textContent = muted ? "muted" : like;
+    $("safe").textContent = db ? safeTime(db) : "no limit";
+    segs.forEach((s, i) => s.classList.toggle("on", on > 0 && i < Math.ceil((on / 100) * 15)));
+
+    let warn = "";
+    if (db >= 95) warn = "Very loud: this can damage hearing quickly.";
+    else if (db >= 85) warn = "Loud: take regular breaks.";
+    const warnEl = $("warn");
+    if (warn !== warnEl.textContent) {
+      warnEl.textContent = warn;
+      warnEl.classList.remove("flash");
+      void warnEl.offsetWidth;
+      if (warn) warnEl.classList.add("flash");
+    }
+    kick();                                   // move the bubble and count the dB on a spring
+
+    vol.setAttribute("aria-valuetext", v + "%, about " + db + " decibels, " + (muted ? "muted" : like));
+
+    // Tell screen readers only when the loudness zone changes
+    const zone = muted ? "muted" : like;
+    if (zone !== lastZone) {
+      lastZone = zone;
+      clearTimeout(renderVolume.t);
+      renderVolume.t = setTimeout(() => {
+        $("announce").textContent = muted ? "Muted" : "About " + db + " decibels, " + like + (warn ? ". " + warn : "");
+      }, 500);
+    }
+    applyGain();
+  }
+
+  // ---- Spring physics: the bubble chases the thumb and the dB number counts ----
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const bubble = $("bubble");
+  let bx = null;        // bubble position (px)
+  let bv = 0;           // bubble speed
+  let shownDb = 0;      // number currently on screen
+  let raf = 0;
+  function thumbX() {
+    const thumb = 18;
+    return (Number(vol.value) / 100) * (vol.offsetWidth - thumb) + thumb / 2;
+  }
+  function springStep() {
+    const target = thumbX();
+    const goal = toDb(muted ? 0 : Number(vol.value));
+    if (bx === null || reduce) { bx = target; bv = 0; shownDb = goal; }
+    bv = (bv + (target - bx) * 0.14) * 0.76;          // stiffness, then damping
+    bx += bv;
+    shownDb += (goal - shownDb) * 0.2;
+    const tilt = Math.max(-28, Math.min(28, -bv * 1.8)); // lags behind like it hangs on a spring
+    const settled = Math.abs(target - bx) < 0.3 && Math.abs(bv) < 0.3 && Math.abs(goal - shownDb) < 0.4;
+    if (settled) { bx = target; shownDb = goal; }
+    const n = Math.round(shownDb);
+    bubble.style.transform = "translateX(" + bx.toFixed(1) + "px) translateX(-50%) rotate(" + (settled ? 0 : tilt.toFixed(1)) + "deg)";
+    bubble.textContent = n ? n + " dB" : "Muted";
+    $("db").textContent = n;
+    raf = settled ? 0 : requestAnimationFrame(springStep);
+  }
+  function kick() {
+    if (!raf) raf = requestAnimationFrame(springStep);
+  }
+  window.addEventListener("resize", () => { bx = null; kick(); });
+
+  // ---- Song position ----
+  const fmt = (s) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+  function renderSeek() {
+    const t = TRACKS[track];
+    seek.max = t.len;
+    seek.value = Math.floor(elapsed);
+    seek.style.setProperty("--fill", (elapsed / t.len) * 100 + "%");
+    seek.setAttribute("aria-valuetext", fmt(elapsed) + " of " + fmt(t.len));
+    $("cur").textContent = fmt(elapsed);
+    $("dur").textContent = fmt(t.len);
+  }
+  function loadTrack(i) {
+    track = (i + TRACKS.length) % TRACKS.length;
+    const t = TRACKS[track];
+    elapsed = 0;
+    step = 0;
+    $("song").textContent = t.song;
+    $("artist").textContent = t.artist;
+    const art = $("art");
+    art.style.setProperty("--a1", t.colors[0]);
+    art.style.setProperty("--a2", t.colors[1]);
+    art.style.setProperty("--a3", t.colors[2]);
+    renderSeek();
+  }
+
+  // ---- A tiny live synth so the slider changes real sound ----
+  let ctx = null;
+  let master = null;
+  let synthTimer = null;
+  let clockTimer = null;
+  let nextTime = 0;
+  let step = 0;
+  const SCALE = [0, 2, 4, 7, 9, 12, 14, 16];
+  const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+
+  function applyGain() {
+    if (!master) return;
+    const v = muted ? 0 : Math.pow(Number(vol.value) / 100, 2) * 0.22;
+    master.gain.setTargetAtTime(playing ? v : 0, ctx.currentTime, 0.05);
+  }
+  function note(freq, t, dur, type, peak) {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g);
+    g.connect(master);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+  function schedule() {
+    const t = TRACKS[track];
+    while (nextTime < ctx.currentTime + 0.15) {
+      const idx = t.pattern[step % t.pattern.length];
+      if (idx >= 0) note(mtof(t.root + 12 + SCALE[idx]), nextTime, 0.35, "triangle", 0.5);
+      if (step % 4 === 0) note(mtof(t.root - 12 + (step % 16 === 8 ? 5 : 0)), nextTime, 0.9, "sine", 0.6);
+      step++;
+      nextTime += 0.25;
+    }
+  }
+  function startSound() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;                       // no audio support: the player still works silently
+    if (!ctx) {
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = 0;
+      master.connect(ctx.destination);
+    }
+    ctx.resume();
+    nextTime = ctx.currentTime + 0.05;
+    clearInterval(synthTimer);
+    synthTimer = setInterval(schedule, 50);
+    applyGain();
+  }
+  function stopSound() {
+    clearInterval(synthTimer);
+    synthTimer = null;
+    applyGain();
+  }
+
+  // ---- Play / pause ----
+  function setPlaying(on) {
+    playing = on;
+    player.classList.toggle("playing", on);
+    $("play").setAttribute("aria-label", on ? "Pause" : "Play");
+    clearInterval(clockTimer);
+    if (on) {
+      startSound();
+      clockTimer = setInterval(() => {
+        elapsed += 0.25;
+        if (elapsed >= TRACKS[track].len) loadTrack(track + 1);
+        renderSeek();
+      }, 250);
+    } else {
+      stopSound();
+    }
+  }
+
+  $("play").addEventListener("click", () => setPlaying(!playing));
+  $("prev").addEventListener("click", () => loadTrack(elapsed > 3 ? track : track - 1));
+  $("next").addEventListener("click", () => loadTrack(track + 1));
+  seek.addEventListener("input", () => {
+    elapsed = Number(seek.value);
+    renderSeek();
+  });
+  vol.addEventListener("input", () => {
+    if (muted && Number(vol.value) > 0) setMuted(false);
+    renderVolume();
+  });
+
+  function setMuted(on) {
+    muted = on;
+    $("mute").setAttribute("aria-pressed", String(on));
+    $("mute").setAttribute("aria-label", on ? "Unmute" : "Mute");
+  }
+  $("mute").addEventListener("click", () => {
+    setMuted(!muted);
+    renderVolume();
+  });
+
+  loadTrack(0);
+  renderVolume();
+})();
+</script>
+</body>
+</html>

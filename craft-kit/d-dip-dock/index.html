@@ -1,0 +1,467 @@
+<!doctype html>
+<!-- Chill and Craft · Dip Dock · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dip Dock · liquid bottom tab bar</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours (light first, dark below) ---------- */
+  :root {
+    --bg: #e9e2fb;
+    --bg-2: #fbe3f1;
+    --phone: #fdfbff;
+    --phone-edge: #dcd2f5;
+    --screen: #f3effd;
+    --ink: #24183f;
+    --muted: #7a6d98;
+    --card: #ffffff;
+    --dock: #ffffff;
+    --tab: #9c90bb;
+    --blob-a: #8a5cff;
+    --blob-b: #ff5fa8;
+    --focus: #8a5cff;
+    --shadow: rgba(60, 20, 120, 0.18);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d0918;
+    --bg-2: #1d0d22;
+    --phone: #140f24;
+    --phone-edge: #2a2044;
+    --screen: #120d20;
+    --ink: #f1ebff;
+    --muted: #9d90bf;
+    --card: #1d1632;
+    --dock: #211938;
+    --tab: #7f739e;
+    --focus: #ff8cc4;
+    --shadow: rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(150deg, var(--bg), var(--bg-2));
+  }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+
+  /* ---------- Stage + phone ---------- */
+  .stage { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+  .phone {
+    width: min(340px, 100%);
+    height: min(580px, calc(100vh - 32px));
+    min-height: 460px;
+    padding: 10px;
+    border-radius: 40px;
+    background: var(--phone);
+    border: 1px solid var(--phone-edge);
+    box-shadow: 0 34px 60px -34px var(--shadow);
+    display: flex;
+  }
+  .screen {
+    flex: 1;
+    min-width: 0;
+    border-radius: 31px;
+    background: var(--screen);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---------- Screen content ---------- */
+  .content { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 18px 8px; }
+  .content small { color: var(--muted); font-size: 12px; }
+  .content h1 { margin: 2px 0 14px; font-size: 24px; letter-spacing: -0.02em; }
+  .view.enter { animation: drift 0.45s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  @keyframes drift { from { opacity: 0; transform: translateX(14px); } }
+  .feature {
+    height: 120px; border-radius: 22px; padding: 14px; color: #fff;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    background: radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.35), transparent 40%), linear-gradient(135deg, var(--blob-a), var(--blob-b));
+  }
+  .feature b { font-size: 17px; }
+  .feature span { font-size: 12px; opacity: 0.9; }
+  .list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
+  .list li { display: flex; gap: 12px; align-items: center; background: var(--card); border-radius: 16px; padding: 8px; font-size: 13px; }
+  .list i { width: 40px; height: 40px; border-radius: 12px; flex: none; }
+  .list small { display: block; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips span { background: var(--card); border-radius: 999px; padding: 8px 12px; font-size: 13px; }
+  .search { display: block; background: var(--card); border-radius: 16px; padding: 12px 14px; color: var(--muted); font-size: 14px; margin-bottom: 12px; }
+
+  /* ---------- The liquid dock ---------- */
+  .dock {
+    position: relative;
+    flex: none;
+    height: 70px;
+    margin-top: 30px; /* room for the bubble above the bar */
+  }
+  .shape {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    filter: drop-shadow(0 -6px 14px var(--shadow));
+  }
+  .shape path { fill: var(--dock); }
+  .tabs { position: absolute; inset: 0; display: flex; padding: 0 14px; }
+  .tab {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--tab);
+    cursor: pointer;
+    border-radius: 16px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab:focus-visible { outline-offset: -4px; }
+  .ico {
+    position: absolute;
+    top: 22px;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    margin-left: -12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: opacity 0.25s, transform 0.4s cubic-bezier(0.3, 1.4, 0.5, 1);
+  }
+  .lbl {
+    position: absolute;
+    left: -6px;
+    right: -6px;
+    bottom: 9px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink);
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.3s, transform 0.3s;
+  }
+  /* resting icons duck as the bubble rolls over them (JS sets --push) */
+  .tab:not([aria-current="page"]) .ico { transform: translateY(calc(var(--push, 0) * 10px)) scale(calc(1 - var(--push, 0) * 0.3)); }
+  .tab .ico { transition: opacity 0.25s, transform 0.4s cubic-bezier(0.3, 1.4, 0.5, 1), scale 0.12s; }
+  .tab:hover .ico { translate: 0 -2px; }
+  .tab:active .ico { scale: 0.8; }
+  .tab[aria-current="page"] .ico { opacity: 0; transform: translateY(-16px) scale(0.6); }
+  .tab[aria-current="page"] .lbl { opacity: 1; transform: none; transition-delay: 0.15s; }
+
+  /* The bubble that rides in the dip. JS sets its position and squash. */
+  .bubble {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 54px;
+    height: 54px;
+    margin: -27px 0 0 -27px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.55), transparent 32%), linear-gradient(140deg, var(--blob-a), var(--blob-b));
+    box-shadow: 0 10px 20px -8px var(--blob-b);
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    will-change: transform;
+  }
+  .bubble svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: opacity 0.12s; }
+  .bubble.swap svg { opacity: 0; }
+  .bubble.land svg { animation: land 0.55s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  @keyframes land { from { transform: scale(0.5) rotate(-25deg); } }
+  /* droplets shed by the bubble while it moves fast */
+  .drip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 7px;
+    height: 7px;
+    margin: -3.5px 0 0 -3.5px;
+    border-radius: 50%;
+    background: linear-gradient(140deg, var(--blob-a), var(--blob-b));
+    pointer-events: none;
+  }
+  /* staggered entrance for the screen content */
+  .in { animation: pop-in 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards; }
+  @keyframes pop-in { from { opacity: 0; transform: translateY(16px) scale(0.94); } }
+  .list li, .chips span, .feature { transition: transform 0.25s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  .list li:hover, .chips span:hover, .feature:hover { transform: translateY(-2px) scale(1.01); }
+  /* ripple when the bubble lands */
+  .ripple {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 54px;
+    height: 54px;
+    margin: -27px 0 0 -27px;
+    border-radius: 50%;
+    border: 2px solid var(--blob-b);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .ripple.go { animation: ripple 0.6s ease-out; }
+  @keyframes ripple { from { opacity: 0.6; transform: scale(1); } to { opacity: 0; transform: scale(1.6); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      transition-delay: 0s !important;
+    }
+  }
+</style>
+</head>
+<body>
+<!-- Icon set (each tab and the bubble reuse these) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20h-5v-5.5H9V20H4z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></symbol>
+  <symbol id="i-library" viewBox="0 0 24 24"><path d="M5 4v16M9.5 4v16M14 5l4.5 14.5"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c1.2-3.6 3.8-5.4 7-5.4s5.8 1.8 7 5.4"/></symbol>
+</svg>
+
+<main class="stage">
+  <div class="phone">
+    <div class="screen">
+      <section class="content" aria-labelledby="title">
+        <div class="view" id="view">
+          <small id="eyebrow"></small>
+          <h1 id="title"></h1>
+          <div id="body"></div>
+        </div>
+      </section>
+
+      <nav class="dock" id="dock" aria-label="Main">
+        <svg class="shape" aria-hidden="true"><path id="shape" d="" /></svg>
+        <div class="tabs">
+          <button class="tab" type="button" data-icon="i-home" aria-current="page"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg><span class="lbl">Home</span></button>
+          <button class="tab" type="button" data-icon="i-search"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><span class="lbl">Search</span></button>
+          <button class="tab" type="button" data-icon="i-plus"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg><span class="lbl">Create</span></button>
+          <button class="tab" type="button" data-icon="i-library"><svg class="ico" aria-hidden="true"><use href="#i-library"/></svg><span class="lbl">Library</span></button>
+          <button class="tab" type="button" data-icon="i-user"><svg class="ico" aria-hidden="true"><use href="#i-user"/></svg><span class="lbl">You</span></button>
+        </div>
+        <span class="ripple" id="ripple" aria-hidden="true"></span>
+        <span class="bubble" id="bubble" aria-hidden="true"><svg><use id="bubble-icon" href="#i-home"/></svg></span>
+      </nav>
+    </div>
+  </div>
+  <p class="sr-only" id="status" aria-live="polite"></p>
+</main>
+
+<script>
+  (function () {
+    var dock = document.getElementById("dock");
+    var shape = document.getElementById("shape");
+    var bubble = document.getElementById("bubble");
+    var bubbleIcon = document.getElementById("bubble-icon");
+    var ripple = document.getElementById("ripple");
+    var tabs = Array.prototype.slice.call(dock.querySelectorAll(".tab"));
+    var view = document.getElementById("view");
+    var eyebrow = document.getElementById("eyebrow");
+    var title = document.getElementById("title");
+    var body = document.getElementById("body");
+    var status = document.getElementById("status");
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+
+    var DEPTH = 32;  // how deep the dip is
+    var SPREAD = 46; // half the width of the dip
+    var current = 0;
+    var x = 0, v = 0, target = 0, startX = 0; // spring state
+    var pendingIcon = null, raf = 0, last = 0;
+
+    // ---------- Demo screens ----------
+    function item(a, b, name, sub) {
+      return '<li><i style="background:linear-gradient(135deg,' + a + "," + b + ')"></i><span>' + name + "<small>" + sub + "</small></span></li>";
+    }
+    var screens = [
+      { eyebrow: "Tonight's mix", title: "Listen", html: '<div class="feature"><b>Monsoon Evenings</b><span>Slow songs for rainy windows</span></div><ul class="list">' +
+        item("#ffb86b", "#ff5fa8", "Tea Break Lo-fi", "48 min · 22 tracks") + item("#5ad1c7", "#8a5cff", "Highway North", "Road trip · 1 h 10 min") + "</ul>" },
+      { eyebrow: "Find anything", title: "Search", html: '<span class="search">Songs, artists, podcasts</span><div class="chips">' +
+        "<span>Classical nights</span><span>Focus</span><span>Wedding songs</span><span>Cricket podcasts</span><span>Indie rock</span><span>Morning run</span></div>" },
+      { eyebrow: "Make something new", title: "Create", html: '<ul class="list">' + item("#8a5cff", "#5ad1c7", "New playlist", "Start from a mood") +
+        item("#ff5fa8", "#ffb86b", "Record a voice note", "Up to 5 minutes") + item("#5ad1c7", "#9be15d", "Share a mix", "Send to friends") + "</ul>" },
+      { eyebrow: "Saved for later", title: "Library", html: '<ul class="list">' + item("#ff5fa8", "#8a5cff", "Liked songs", "312 songs") +
+        item("#ffb86b", "#ff6b6b", "Studio Karachi Sessions", "Podcast · 14 episodes") + item("#9be15d", "#5ad1c7", "Downloads", "2.1 GB") + "</ul>" },
+      { eyebrow: "Signed in", title: "Hi, Rameez", html: '<ul class="list">' + item("#8a5cff", "#ff5fa8", "Listening time", "18 h this month") +
+        item("#5ad1c7", "#8a5cff", "Audio quality", "High at home") + "</ul>" }
+    ];
+    function render(i) {
+      var s = screens[i];
+      eyebrow.textContent = s.eyebrow;
+      title.textContent = s.title;
+      body.innerHTML = s.html;
+      view.classList.remove("enter");
+      void view.offsetWidth;
+      view.classList.add("enter");
+      Array.prototype.forEach.call(body.querySelectorAll(".feature, .list li, .chips span, .search"), function (el, k) {
+        el.style.animationDelay = 70 + k * 55 + "ms";
+        el.classList.add("in");
+      });
+    }
+
+    // ---------- Drawing ----------
+    function centerOf(i) {
+      var d = dock.getBoundingClientRect();
+      var b = tabs[i].getBoundingClientRect();
+      return b.left - d.left + b.width / 2;
+    }
+    // The bar outline with a smooth dip under the bubble.
+    function pathFor(cx, depth) {
+      var W = dock.clientWidth, H = dock.clientHeight;
+      var left = cx - SPREAD, right = cx + SPREAD;
+      var start = Math.min(0, left), end = Math.max(W, right);
+      return "M" + start + " 0H" + left +
+        "C" + (left + 22) + " 0 " + (cx - 30) + " " + depth + " " + cx + " " + depth +
+        "C" + (cx + 30) + " " + depth + " " + (right - 22) + " 0 " + right + " 0" +
+        "H" + end + "V" + H + "H" + start + "Z";
+    }
+    var centers = [];
+    var lastDrip = 0;
+    function draw() {
+      var speed = Math.abs(v);
+      // Fast moves flatten the dip, sink the bubble and stretch it like a drop.
+      var sink = Math.min(14, speed / 90);
+      var stretch = Math.min(0.32, speed / 2600);
+      shape.setAttribute("d", pathFor(x, DEPTH - sink * 0.9));
+      bubble.style.transform = "translate(" + x + "px," + sink + "px) scale(" + (1 + stretch) + "," + (1 - stretch * 0.55) + ")";
+      ripple.style.left = x + "px";
+      // icons under the passing bubble duck out of its way
+      tabs.forEach(function (t, k) {
+        if (k === current || !centers.length) return;
+        var p = Math.max(0, 1 - Math.abs(centers[k] - x) / 46) * Math.min(1, speed / 500);
+        t.style.setProperty("--push", p.toFixed(3));
+      });
+      // shed a droplet now and then while moving fast
+      var now = performance.now();
+      if (speed > 380 && now - lastDrip > 45) {
+        lastDrip = now;
+        drip(x + (Math.random() - 0.5) * 14, sink + 18, v);
+      }
+    }
+    function drip(px, py, vel) {
+      var d = document.createElement("span");
+      d.className = "drip";
+      d.setAttribute("aria-hidden", "true");
+      dock.insertBefore(d, ripple);
+      var dx = -vel * 0.02 + (Math.random() - 0.5) * 8;
+      var anim = d.animate([
+        { transform: "translate(" + px + "px," + py + "px) scale(1)", opacity: 0.95 },
+        { transform: "translate(" + (px + dx) + "px," + (py + 22 + Math.random() * 10) + "px) scale(0.3)", opacity: 0 }
+      ], { duration: 520, easing: "cubic-bezier(.4,0,.8,.6)" });
+      anim.onfinish = function () { d.remove(); };
+    }
+
+    // ---------- Spring animation ----------
+    function tick(now) {
+      var dt = Math.min(0.032, Math.max(0.001, (now - last) / 1000));
+      last = now;
+      var a = 190 * (target - x) - 21 * v; // stiffness and damping
+      v += a * dt;
+      x += v * dt;
+      // swap the bubble icon halfway through the trip
+      if (pendingIcon && Math.abs(target - x) <= Math.abs(target - startX) / 2) {
+        bubbleIcon.setAttribute("href", "#" + pendingIcon);
+        bubble.classList.remove("swap");
+        pendingIcon = null;
+      }
+      if (Math.abs(target - x) < 0.3 && Math.abs(v) < 6) {
+        x = target;
+        v = 0;
+        draw();
+        raf = 0;
+        ripple.classList.remove("go");
+        bubble.classList.remove("land");
+        void ripple.offsetWidth;
+        ripple.classList.add("go");
+        bubble.classList.add("land");
+        tabs.forEach(function (t) { t.style.setProperty("--push", "0"); });
+        return;
+      }
+      draw();
+      raf = requestAnimationFrame(tick);
+    }
+
+    function moveTo(i, instant) {
+      centers = tabs.map(function (t, k) { return centerOf(k); });
+      target = centers[i];
+      var icon = tabs[i].dataset.icon;
+      if (instant || reduce.matches) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+        x = target;
+        v = 0;
+        bubbleIcon.setAttribute("href", "#" + icon);
+        bubble.classList.remove("swap");
+        pendingIcon = null;
+        draw();
+        return;
+      }
+      startX = x;
+      pendingIcon = icon;
+      bubble.classList.add("swap");
+      if (!raf) {
+        last = performance.now();
+        raf = requestAnimationFrame(tick);
+      }
+    }
+
+    function select(i) {
+      if (i === current) return;
+      tabs[current].removeAttribute("aria-current");
+      tabs[i].setAttribute("aria-current", "page");
+      current = i;
+      moveTo(i);
+      render(i);
+      status.textContent = tabs[i].textContent.trim() + " tab selected";
+    }
+
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener("click", function () { select(i); });
+      tab.addEventListener("keydown", function (e) {
+        var next = null;
+        if (e.key === "ArrowRight") next = (i + 1) % tabs.length;
+        else if (e.key === "ArrowLeft") next = (i - 1 + tabs.length) % tabs.length;
+        else if (e.key === "Home") next = 0;
+        else if (e.key === "End") next = tabs.length - 1;
+        if (next === null) return;
+        e.preventDefault();
+        tabs[next].focus();
+        select(next);
+      });
+    });
+
+    window.addEventListener("resize", function () { moveTo(current, true); });
+    render(0);
+    requestAnimationFrame(function () { moveTo(0, true); });
+  })();
+</script>
+</body>
+</html>

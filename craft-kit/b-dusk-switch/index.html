@@ -1,0 +1,367 @@
+<!doctype html>
+<!-- Chill and Craft · Dusk Switch · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dusk Switch · Theme toggle with circle reveal</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  // Once the visitor flips the switch (data-manual), their choice wins.
+  (function () {
+    var root = document.documentElement;
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      if (root.dataset.manual) return;
+      root.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --page: #fbf3e8;
+    --glow: #ffe2bd;
+    --card: #ffffff;
+    --ink: #1f2440;
+    --muted: #6e6a7c;
+    --line: #efe4d4;
+    --accent: #e8672e;
+    --track: #8fd0ff;
+    --track-edge: #6cb8ee;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --page: #10122b;
+    --glow: #2a2465;
+    --card: #191c3c;
+    --ink: #f1ecff;
+    --muted: #a7a3c4;
+    --line: #2a2e57;
+    --accent: #ffb86b;
+    --track: #1b1f4a;
+    --track-edge: #3a3f86;
+    color-scheme: dark;
+  }
+  *,
+  *::before,
+  *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: radial-gradient(70% 60% at 85% 0%, var(--glow), transparent 70%), var(--page);
+  }
+
+  /* The circle reveal: turn off the default cross-fade, the script grows a circle instead */
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+  /* Fallback for browsers without view transitions: a growing circle of the new page colour */
+  .wipe { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+
+  .stage { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; overflow: hidden; }
+
+  /* ---------- Mini blog to show the theme ---------- */
+  .site { width: min(520px, 100%); }
+  .bar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .logo { display: flex; align-items: center; gap: 8px; font-weight: 800; letter-spacing: -0.01em; }
+  .logo svg { width: 26px; height: 26px; transition: transform 0.9s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  :root[data-theme="dark"] .logo svg { transform: rotate(180deg); }
+  .nav { margin-left: auto; display: flex; gap: 14px; font-size: 0.88rem; color: var(--muted); }
+  @media (max-width: 420px) { .nav { display: none; } .switch { margin-left: auto; } }
+
+  .post { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 22px; box-shadow: 0 24px 50px -32px rgba(20, 20, 60, 0.45); }
+  .tag { margin: 0 0 8px; color: var(--accent); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .post h1 { margin: 0 0 10px; font-size: clamp(1.25rem, 4.6vw, 1.6rem); line-height: 1.2; }
+  .post p.lede { margin: 0 0 18px; color: var(--muted); line-height: 1.55; font-size: 0.95rem; }
+  .author { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
+  .author .badge { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--card); font-weight: 800; font-size: 0.75rem; }
+  .author small { display: block; color: var(--muted); }
+  .status { margin: 14px 2px 0; font-size: 0.85rem; color: var(--muted); min-height: 1.3em; }
+
+  /* ---------- The switch ---------- */
+  .switch {
+    position: relative;
+    flex: none;
+    width: 76px;
+    height: 38px;
+    padding: 0;
+    border-radius: 999px;
+    border: 2px solid var(--track-edge);
+    background: var(--track);
+    cursor: pointer;
+    overflow: hidden;
+    transition: background 0.5s ease, border-color 0.5s ease, transform 0.4s cubic-bezier(0.3, 1.7, 0.5, 1);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .switch:hover { transform: scale(1.05); }
+  .switch:active { transform: scale(0.95); transition-duration: 0.1s; }
+  .switch:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .switch .decor { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* Clouds sink at different speeds; stars pop in one by one */
+  .cloud { fill: #fff; transition: transform 0.5s ease, opacity 0.4s; }
+  .cloud.two { opacity: 0.75; transition-duration: 0.8s; }
+  .switch:hover .cloud { transform: translateX(-3px); }
+  .switch[aria-checked="true"] .cloud { transform: translateY(16px); opacity: 0; }
+  .twinkle { fill: #fff; opacity: 0; transform: scale(0); transform-box: fill-box; transform-origin: center; transition: transform 0.5s cubic-bezier(0.3, 1.8, 0.5, 1), opacity 0.3s; }
+  .switch[aria-checked="true"] .twinkle { opacity: 1; transform: scale(1); }
+  .switch[aria-checked="true"] .twinkle:nth-of-type(2) { transition-delay: 0.12s; }
+  .switch[aria-checked="true"] .twinkle:nth-of-type(3) { transition-delay: 0.22s; }
+  .switch[aria-checked="true"] .twinkle:nth-of-type(4) { transition-delay: 0.3s; }
+  .switch[aria-checked="true"]:hover .twinkle { animation: blink 0.9s ease-in-out infinite alternate; }
+  @keyframes blink { to { opacity: 0.3; } }
+
+  /* Knob: the wrapper travels on a spring, the icon inside squashes */
+  .knob-wrap {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 28px;
+    height: 28px;
+    transition: transform 0.85s cubic-bezier(0.3, 1.5, 0.4, 1);
+    transition-timing-function: linear(0, 0.099, 0.295, 0.531, 0.76, 0.952, 1.092, 1.175, 1.207, 1.2, 1.166, 1.12, 1.07, 1.026, 0.992, 0.97, 0.959, 0.958, 0.964, 0.974, 0.984, 0.994, 1.001, 1.006, 1.008, 1.006, 1.002, 1);
+  }
+  .switch:hover .knob-wrap { transform: translateX(4px); }
+  .switch[aria-checked="true"] .knob-wrap { transform: translateX(38px); }
+  .switch[aria-checked="true"]:hover .knob-wrap { transform: translateX(34px); }
+  .knob { width: 28px; height: 28px; display: block; overflow: visible; transition: transform 0.6s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .switch[aria-checked="true"] .knob { transform: rotate(-30deg); }
+  .switch:active .knob { transform: scale(1.2, 0.85); }
+
+  .ray { stroke: #ffc53a; stroke-width: 2; stroke-linecap: round; transform-origin: 14px 14px; transition: transform 0.35s cubic-bezier(0.5, 0, 0.7, 0.4) calc(var(--i) * 30ms), opacity 0.3s calc(var(--i) * 30ms); }
+  .rays { transform-origin: 14px 14px; }
+  .switch:hover .rays { animation: spin 4s linear infinite; }
+  .switch[aria-checked="true"] .ray { transform: scale(0.2); opacity: 0; }
+  .switch[aria-checked="false"] .ray { transition: transform 0.45s cubic-bezier(0.3, 1.8, 0.5, 1) calc(0.2s + var(--i) * 40ms), opacity 0.2s calc(0.2s + var(--i) * 40ms); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .orb { transition: fill 0.5s ease; fill: #ffc53a; }
+  .switch[aria-checked="true"] .orb { fill: #f3efff; }
+  .bite { transform: translate(16px, -12px); transition: transform 0.6s cubic-bezier(0.3, 1.4, 0.5, 1) 0.1s; }
+  .switch[aria-checked="true"] .bite { transform: translate(5px, -3px); }
+  .crater { fill: #cfc8ef; opacity: 0; transition: opacity 0.3s 0.3s; }
+  .switch[aria-checked="true"] .crater { opacity: 1; }
+
+  /* Finishing touches: a shooting star (dark) or a sun flare (light) */
+  .meteor { position: fixed; left: 0; top: 0; width: 120px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, #fff); pointer-events: none; z-index: 40; opacity: 0; }
+  .meteor::after { content: ""; position: absolute; right: -2px; top: -2px; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 10px #fff; }
+  .flare { position: fixed; width: 20px; height: 20px; margin: -10px; border-radius: 50%; border: 2px solid #ffc53a; pointer-events: none; z-index: 40; }
+  .beam { position: fixed; width: 2px; height: 14px; margin: -7px -1px; border-radius: 2px; background: #ffc53a; pointer-events: none; z-index: 40; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .switch, .knob-wrap, .knob, .ray, .orb, .bite, .crater, .cloud, .twinkle, .logo svg { transition: none; }
+    .switch:hover .rays, .switch[aria-checked="true"]:hover .twinkle { animation: none; }
+    .meteor, .flare, .beam { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <div class="site">
+      <header class="bar">
+        <span class="logo">
+          <svg viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="11" style="fill: var(--accent)" /><path d="M13 2 A11 11 0 0 1 13 24 Z" style="fill: var(--ink)" opacity="0.85" /></svg>
+          Chai &amp; Pages
+        </span>
+        <span class="nav" aria-hidden="true"><span>Stories</span><span>Travel</span><span>About</span></span>
+        <button class="switch" id="switch" type="button" role="switch" aria-checked="false" aria-label="Dark mode">
+          <svg class="decor" viewBox="0 0 76 38" aria-hidden="true">
+            <g class="cloud"><circle cx="50" cy="24" r="6" /><circle cx="57" cy="21" r="7" /><circle cx="64" cy="25" r="5" /><rect x="48" y="24" width="18" height="6" rx="3" /></g>
+            <g class="cloud two"><circle cx="40" cy="12" r="3.5" /><circle cx="45" cy="10" r="4.5" /><rect x="38" y="11" width="11" height="4" rx="2" /></g>
+            <circle class="twinkle" cx="14" cy="11" r="1.6" />
+            <circle class="twinkle" cx="24" cy="24" r="1.1" />
+            <circle class="twinkle" cx="9" cy="27" r="1.3" />
+            <circle class="twinkle" cx="30" cy="9" r="0.9" />
+          </svg>
+          <span class="knob-wrap" id="knob-wrap" aria-hidden="true">
+            <svg class="knob" id="knob" viewBox="0 0 28 28">
+              <defs>
+                <mask id="moon-mask">
+                  <rect width="28" height="28" fill="#fff" />
+                  <circle class="bite" cx="14" cy="14" r="9" fill="#000" />
+                </mask>
+              </defs>
+              <g class="rays">
+                <path class="ray" style="--i:0" d="M14 1.5v3" /><path class="ray" style="--i:1" d="M20.7 7.3l2.1-2.1" />
+                <path class="ray" style="--i:2" d="M23.5 14h3" /><path class="ray" style="--i:3" d="M20.7 20.7l2.1 2.1" />
+                <path class="ray" style="--i:4" d="M14 23.5v3" /><path class="ray" style="--i:5" d="M5.2 22.8l2.1-2.1" />
+                <path class="ray" style="--i:6" d="M1.5 14h3" /><path class="ray" style="--i:7" d="M5.2 5.2l2.1 2.1" />
+              </g>
+              <g mask="url(#moon-mask)">
+                <circle class="orb" cx="14" cy="14" r="8.5" />
+                <circle class="crater" cx="10.5" cy="16" r="1.6" />
+                <circle class="crater" cx="13.5" cy="19.5" r="1" />
+              </g>
+            </svg>
+          </span>
+        </button>
+      </header>
+
+      <article class="post" id="post">
+        <p class="tag">Travel · 6 min read</p>
+        <h1>Night trains and the long road north</h1>
+        <p class="lede">Packed parathas, a window seat and fourteen hours of tea stops. Notes from a slow journey to the mountains, written mostly after dark.</p>
+        <div class="author">
+          <span class="badge" aria-hidden="true">SK</span>
+          <span>Sana Khan<small>12 November</small></span>
+        </div>
+      </article>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </div>
+  </main>
+
+<script>
+  // Dusk Switch: stretch → spring across → sun/moon morph → circle reveal → page settles → sky finish.
+  (function () {
+    var root = document.documentElement;
+    var sw = document.getElementById("switch");
+    var knob = document.getElementById("knob");
+    var post = document.getElementById("post");
+    var status = document.getElementById("status");
+    var calm = matchMedia("(prefers-reduced-motion: reduce)");
+    var busy = false;
+
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    // Spring helper: samples a damped spring from 0 to 1 (overshoots, then settles)
+    function springCurve(stiffness, damping) {
+      var x = 0, v = 0, out = [0], dt = 1 / 60;
+      for (var i = 0; i < 240; i++) {
+        v += (-stiffness * (x - 1) - damping * v) * dt;
+        x += v * dt;
+        out.push(x);
+        if (Math.abs(v) < 0.01 && Math.abs(x - 1) < 0.002) break;
+      }
+      out[out.length - 1] = 1;
+      return out;
+    }
+    function springTo(el, frame, stiffness, damping, delay) {
+      var c = springCurve(stiffness || 260, damping || 14);
+      return el.animate(c.map(frame), { duration: (c.length * 1000) / 60, easing: "linear", delay: delay || 0, fill: "backwards" });
+    }
+
+    // Keep the switch in step with the theme (system changes included)
+    function sync() { sw.setAttribute("aria-checked", String(root.dataset.theme === "dark")); }
+    sync();
+    new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+
+    function reach(x, y) { return Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)); }
+
+    function apply(next) {
+      root.dataset.manual = "1";
+      root.dataset.theme = next;
+      sync();
+      status.textContent = next === "dark" ? "Dark theme on. Easy on the eyes." : "Light theme on.";
+    }
+
+    // Fallback reveal: paint a circle in the new page colour, then swap the theme under it
+    function wipe(next, x, y, r) {
+      return new Promise(function (resolve) {
+        var probe = document.createElement("div");
+        document.body.appendChild(probe);
+        var old = root.dataset.theme;
+        root.dataset.theme = next;
+        var colour = getComputedStyle(probe).getPropertyValue("--page").trim() || (next === "dark" ? "#10122b" : "#fbf3e8");
+        root.dataset.theme = old;
+        probe.remove();
+        var layer = document.createElement("div");
+        layer.className = "wipe";
+        layer.style.background = colour;
+        document.body.appendChild(layer);
+        layer.animate({ clipPath: ["circle(0px at " + x + "px " + y + "px)", "circle(" + r + "px at " + x + "px " + y + "px)"] }, { duration: 650, easing: "cubic-bezier(0.6, 0.05, 0.3, 1)", fill: "forwards" }).onfinish = function () {
+          apply(next);
+          layer.animate({ opacity: [1, 0] }, { duration: 260, fill: "forwards" }).onfinish = function () { layer.remove(); };
+          resolve();
+        };
+      });
+    }
+
+    function reveal(next, x, y) {
+      var r = reach(x, y);
+      if (!document.startViewTransition) return wipe(next, x, y, r);
+      var vt = document.startViewTransition(function () { apply(next); });
+      vt.ready.then(function () {
+        root.animate({ clipPath: ["circle(0px at " + x + "px " + y + "px)", "circle(" + r + "px at " + x + "px " + y + "px)"] }, { duration: 750, easing: "cubic-bezier(0.6, 0.05, 0.3, 1)", pseudoElement: "::view-transition-new(root)" });
+      }).catch(function () {});
+      return vt.finished.catch(function () {});
+    }
+
+    // Dark finish: a shooting star crosses the top of the page
+    function shootingStar() {
+      var m = document.createElement("span");
+      m.className = "meteor";
+      document.body.appendChild(m);
+      var w = innerWidth;
+      m.animate([
+        { transform: "translate(" + w * 0.15 + "px, 40px) rotate(18deg) scaleX(0.2)", opacity: 0 },
+        { opacity: 1, offset: 0.2 },
+        { transform: "translate(" + w * 0.75 + "px, " + (40 + w * 0.2) + "px) rotate(18deg) scaleX(1)", opacity: 0 }
+      ], { duration: 900, easing: "cubic-bezier(0.3, 0, 0.6, 1)" }).onfinish = function () { m.remove(); };
+    }
+
+    // Light finish: rings and short beams flare out of the switch
+    function sunFlare(x, y) {
+      for (var j = 0; j < 2; j++) {
+        var f = document.createElement("span");
+        f.className = "flare";
+        f.style.left = x + "px";
+        f.style.top = y + "px";
+        document.body.appendChild(f);
+        f.animate([{ transform: "scale(1)", opacity: 0.9 }, { transform: "scale(" + (5 + j * 3) + ")", opacity: 0 }], { duration: 700 + j * 200, delay: j * 120, easing: "cubic-bezier(0.2, 0.7, 0.3, 1)", fill: "both" }).onfinish = (function (el) { return function () { el.remove(); }; })(f);
+      }
+      for (var i = 0; i < 10; i++) {
+        var b = document.createElement("span");
+        b.className = "beam";
+        b.style.left = x + "px";
+        b.style.top = y + "px";
+        document.body.appendChild(b);
+        var a = (i / 10) * 360;
+        b.animate([
+          { transform: "rotate(" + a + "deg) translateY(-20px) scaleY(0.3)", opacity: 1 },
+          { transform: "rotate(" + a + "deg) translateY(-54px) scaleY(1)", opacity: 1, offset: 0.5 },
+          { transform: "rotate(" + a + "deg) translateY(-70px) scaleY(0.2)", opacity: 0 }
+        ], { duration: 650, easing: "ease-out" }).onfinish = (function (el) { return function () { el.remove(); }; })(b);
+      }
+    }
+
+    sw.addEventListener("click", async function (e) {
+      if (busy) return;
+      var next = root.dataset.theme === "dark" ? "light" : "dark";
+      var box = sw.getBoundingClientRect();
+      var keyboard = e.detail === 0 || (!e.clientX && !e.clientY);
+      var x = keyboard ? box.left + box.width / 2 : e.clientX;
+      var y = keyboard ? box.top + box.height / 2 : e.clientY;
+
+      if (calm.matches) { apply(next); return; }
+      busy = true;
+
+      // 1. Anticipation: the knob stretches the way it is about to travel
+      var dir = next === "dark" ? 1 : -1;
+      await knob.animate([{ transform: "none" }, { transform: "translateX(" + -3 * dir + "px) scale(1.3, 0.8)" }], { duration: 120, easing: "ease-in", fill: "forwards" }).finished;
+      knob.getAnimations().forEach(function (a) { a.cancel(); });
+
+      // 2 + 3. Main: the theme flips (knob springs across in CSS) and the reveal grows from the click
+      var revealed = reveal(next, x, y);
+      springTo(knob, function (p) { return { transform: "scale(" + (1.3 - 0.3 * p).toFixed(3) + "," + (0.8 + 0.2 * p).toFixed(3) + ")" }; }, 300, 9);
+
+      // The page settles in a stagger as the new theme arrives
+      Array.prototype.forEach.call(post.children, function (el, i) {
+        springTo(el, function (p) { return { transform: "translateY(" + ((1 - p) * 10).toFixed(2) + "px)", opacity: Math.min(1, 0.3 + p) }; }, 220, 15, 120 + i * 70);
+      });
+      springTo(post, function (p) { return { transform: "translateY(" + ((1 - p) * 8).toFixed(2) + "px) scale(" + (0.98 + 0.02 * p).toFixed(4) + ")" }; }, 200, 14, 80);
+
+      // 4. Finish: shooting star at night, sun flare by day
+      await wait(450);
+      var b = sw.getBoundingClientRect();
+      if (next === "dark") shootingStar();
+      else sunFlare(b.left + b.width / 2, b.top + b.height / 2);
+      await revealed;
+      busy = false;
+    });
+  })();
+</script>
+</body>
+</html>

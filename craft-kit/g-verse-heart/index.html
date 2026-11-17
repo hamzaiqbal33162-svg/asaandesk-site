@@ -1,0 +1,640 @@
+<!doctype html>
+<!-- Chill and Craft · Verse Heart · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verse Heart · a 3D heart made of words</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens (--mode tells the canvas which palette to use) ---------- */
+  :root {
+    --mode: light;
+    --bg: #fff6f3; --bg2: #ffe1e8;
+    --ink: #3a0d1c; --muted: #7d4c5c;
+    --glass: rgba(255, 255, 255, 0.7); --line: rgba(58, 13, 28, 0.14);
+    --card: #ffffff;
+    --accent: #c8102e; --accent-ink: #ffffff;
+    --focus: #5b2ee0;
+    --shadow: rgba(120, 20, 50, 0.2);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --mode: dark;
+      --bg: #170510; --bg2: #040103;
+      --ink: #ffe9ef; --muted: #c7a0ad;
+      --glass: rgba(30, 8, 18, 0.62); --line: rgba(255, 233, 239, 0.14);
+      --card: #1e0a14;
+      --accent: #ff3b64; --accent-ink: #26030d;
+      --focus: #ffd35a;
+      --shadow: rgba(0, 0, 0, 0.6);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --mode: dark;
+    --bg: #170510; --bg2: #040103;
+    --ink: #ffe9ef; --muted: #c7a0ad;
+    --glass: rgba(30, 8, 18, 0.62); --line: rgba(255, 233, 239, 0.14);
+    --card: #1e0a14;
+    --accent: #ff3b64; --accent-ink: #26030d;
+    --focus: #ffd35a;
+    --shadow: rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+
+  /* ---------- Page ---------- */
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  html, body { margin: 0; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); overflow-x: hidden; line-height: 1.5; }
+  button, input, select { font: inherit; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+
+  /* ---------- Hero with the canvas ---------- */
+  .hero { position: relative; height: 100vh; min-height: 580px; overflow: hidden; }
+  #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; cursor: grab; transform: scale(calc(1 - var(--sc, 0) * 0.12)); opacity: calc(1 - var(--sc, 0) * 0.6); }
+  #cv.drag { cursor: grabbing; }
+  .head { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 16px 18px; z-index: 2; transition: opacity 0.5s, transform 0.6s cubic-bezier(0.3, 1.4, 0.5, 1); animation: down 1s cubic-bezier(0.3, 1.4, 0.5, 1) 0.3s both; }
+  @keyframes down { from { opacity: 0; transform: translateY(-20px); } }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; letter-spacing: -0.01em; }
+  .brand svg { width: 26px; height: 26px; fill: var(--accent); animation: thump 1.2s ease-in-out infinite; }
+  @keyframes thump { 0%, 100% { transform: scale(1); } 12% { transform: scale(1.18); } 26% { transform: scale(0.98); } 40% { transform: scale(1.1); } 60% { transform: scale(1); } }
+  .pill { border: 1px solid var(--line); background: var(--glass); color: var(--ink); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-radius: 999px; padding: 8px 14px; font-weight: 700; font-size: 13px; cursor: pointer; transition: transform 0.25s cubic-bezier(0.3, 1.8, 0.5, 1), background 0.2s; }
+  .pill:hover { transform: translateY(-2px); }
+  .pill:active { transform: scale(0.94); }
+  .forline { position: absolute; left: 50%; top: var(--fy, 70%); transform: translateX(-50%); z-index: 1; margin: 0; white-space: nowrap; max-width: 90%; overflow: hidden; text-overflow: ellipsis; font: italic 500 clamp(17px, 2.6vw, 24px)/1.2 Georgia, "Times New Roman", serif; color: var(--ink); opacity: 0; animation: fadeIn 1.2s ease 2.2s forwards; pointer-events: none; }
+  .forline b { color: var(--accent); font-weight: 700; }
+  @keyframes fadeIn { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 0.92; transform: translate(-50%, 0); } }
+
+  /* control dock */
+  .dock {
+    position: absolute; left: 50%; bottom: 16px; z-index: 2;
+    width: min(760px, calc(100% - 24px));
+    transform: translateX(-50%);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 10px;
+    border-radius: 22px;
+    background: var(--glass); border: 1px solid var(--line);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    box-shadow: 0 20px 40px -24px var(--shadow);
+    animation: up 1s cubic-bezier(0.3, 1.4, 0.5, 1) 0.5s both;
+    transition: opacity 0.5s, transform 0.6s cubic-bezier(0.3, 1.4, 0.5, 1);
+  }
+  @keyframes up { from { opacity: 0; transform: translate(-50%, 30px); } }
+  .fld { flex: 1 1 140px; min-width: 0; display: grid; gap: 2px; padding: 4px 12px; border-radius: 14px; background: color-mix(in srgb, var(--card) 70%, transparent); border: 1px solid var(--line); transition: border-color 0.2s; }
+  .fld:focus-within { border-color: var(--accent); }
+  .fld span { font-size: 10.5px; font-weight: 750; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .fld input { border: 0; background: none; color: var(--ink); font-size: 15px; padding: 0 0 2px; width: 100%; outline: none; }
+  .tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .swatches { display: flex; gap: 6px; border: 0; margin: 0; padding: 0; }
+  .swatches legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .sw { position: relative; width: 30px; height: 30px; cursor: pointer; }
+  .sw input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+  .sw i { position: absolute; inset: 3px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px var(--line); transition: transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1), box-shadow 0.2s; pointer-events: none; }
+  .sw input:checked + i { transform: scale(1.12); box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--c); }
+  .sw input:focus-visible + i { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .sw:hover i { transform: scale(1.18); }
+  .ib { width: 40px; height: 40px; border-radius: 13px; border: 1px solid var(--line); background: color-mix(in srgb, var(--card) 70%, transparent); color: var(--ink); display: grid; place-items: center; cursor: pointer; transition: transform 0.25s cubic-bezier(0.3, 1.8, 0.5, 1), background 0.2s, color 0.2s; }
+  .ib:hover { transform: translateY(-2px); }
+  .ib:active { transform: scale(0.9); }
+  .ib[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .ib svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .ib.burst svg { fill: currentColor; stroke: none; }
+  .ib.pop { animation: popb 0.5s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes popb { 40% { transform: scale(0.8) rotate(-12deg); } 75% { transform: scale(1.15) rotate(6deg); } }
+  .hint { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); z-index: 2; margin: 0; font-size: 12.5px; color: var(--muted); white-space: nowrap; animation: fadeHint 6s ease 3s both; pointer-events: none; }
+  @keyframes fadeHint { 0% { opacity: 0; } 10%, 75% { opacity: 1; } 100% { opacity: 0; } }
+
+  /* clean view hides everything but the heart */
+  body.clean .head, body.clean .dock, body.clean .hint { opacity: 0; pointer-events: none; }
+  body.clean .head { transform: translateY(-20px); }
+  body.clean .dock { transform: translate(-50%, 30px); }
+  .exit { position: absolute; right: 14px; top: 14px; z-index: 3; opacity: 0; pointer-events: none; transition: opacity 0.4s; }
+  body.clean .exit { opacity: 0.35; pointer-events: auto; }
+  body.clean .exit:hover, body.clean .exit:focus-visible { opacity: 1; }
+  body.clean { overflow: hidden; }
+
+  /* ---------- Sections ---------- */
+  .wrap { width: min(1040px, 100% - 32px); margin: 0 auto; }
+  section.block { padding: 64px 0 10px; }
+  .block h2 { font: 700 clamp(26px, 4.6vw, 40px)/1.1 Georgia, "Times New Roman", serif; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .block .lead { color: var(--muted); margin: 0 0 22px; max-width: 620px; }
+  .share { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; background: var(--card); border-radius: 22px; padding: 20px; box-shadow: 0 0 0 1px var(--line), 0 24px 40px -30px var(--shadow); }
+  @media (max-width: 680px) { .share { grid-template-columns: 1fr; } }
+  .linkbox { margin: 0; font-size: 13px; color: var(--muted); word-break: break-all; background: color-mix(in srgb, var(--line) 50%, transparent); padding: 12px 14px; border-radius: 14px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 12px 20px; font-weight: 750; cursor: pointer; background: var(--accent); color: var(--accent-ink); box-shadow: 0 12px 24px -14px var(--accent); transition: transform 0.25s cubic-bezier(0.3, 1.8, 0.5, 1), background 0.3s; text-decoration: none; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: scale(0.95); }
+  .btn.alt { background: var(--line); color: var(--ink); box-shadow: none; }
+  .btn.done { background: #1d9a6c; color: #fff; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
+  .card { height: 100%; background: var(--card); border-radius: 22px; padding: 20px; box-shadow: 0 0 0 1px var(--line); transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1), box-shadow 0.3s; }
+  .card:hover { transform: translateY(-6px); box-shadow: 0 0 0 1px var(--line), 0 24px 44px -30px var(--shadow); }
+  .card .art { height: 96px; border-radius: 14px; margin-bottom: 14px; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 50% 60%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); }
+  .card .art p { margin: 0; font-size: 12px; line-height: 1.05; text-align: center; color: var(--accent); white-space: pre; transition: transform 0.6s cubic-bezier(0.3, 1.6, 0.5, 1), letter-spacing 0.6s; }
+  .card:hover .art p { transform: scale(1.1) rotate(-3deg); letter-spacing: 0.08em; }
+  .card h3 { margin: 0 0 4px; font-size: 18px; }
+  .card p.d { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .reveal { opacity: 0; transform: translateY(34px); transition: opacity 0.8s ease, transform 0.9s cubic-bezier(0.3, 1.4, 0.5, 1); transition-delay: var(--rd, 0s); }
+  .reveal.in { opacity: 1; transform: none; }
+  footer { padding: 50px 0 40px; text-align: center; color: var(--muted); font-size: 13px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 520px) {
+    .dock { gap: 8px; padding: 8px; border-radius: 18px; }
+    .fld { flex-basis: 120px; }
+    .tools { width: 100%; justify-content: space-between; }
+    .hint { display: none; }
+  }
+
+  /* ---------- Reduced motion: no spin or flight; drag and every control still work ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .head, .dock, .brand svg, .forline, .hint, .ib.pop { animation: none !important; }
+    .forline { opacity: 0.92; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    #cv { transform: none; opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<section class="hero" id="top" aria-label="Verse Heart">
+  <canvas id="cv" role="img" aria-label="A turning 3D heart made of many lines of the words i love you"></canvas>
+
+  <header class="head">
+    <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-8-5.3-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.7-8 11-8 11z"/></svg>Verse Heart</div>
+    <button class="pill" type="button" id="cleanBtn">Clean view</button>
+  </header>
+  <p class="hint">Drag to turn it · tap to burst</p>
+  <p class="forline" id="forline">for <b id="forName">Amna</b></p>
+
+  <div class="dock" role="group" aria-label="Heart controls">
+    <label class="fld"><span>Words</span><input id="inWords" class="mono" maxlength="24" value="i love you" autocomplete="off" spellcheck="false"></label>
+    <label class="fld"><span>For</span><input id="inFor" maxlength="22" value="Amna" autocomplete="off"></label>
+    <div class="tools">
+      <fieldset class="swatches">
+        <legend>Colour</legend>
+        <label class="sw" title="Crimson"><input type="radio" name="pal" value="crimson" aria-label="Crimson" checked><i style="--c:#ff2d55"></i></label>
+        <label class="sw" title="Rose gold"><input type="radio" name="pal" value="rose" aria-label="Rose gold"><i style="--c:#ffa48a"></i></label>
+        <label class="sw" title="Violet"><input type="radio" name="pal" value="violet" aria-label="Violet"><i style="--c:#b67cff"></i></label>
+        <label class="sw" title="Moonlight"><input type="radio" name="pal" value="moon" aria-label="Moonlight"><i style="--c:#d9e2ff"></i></label>
+      </fieldset>
+      <button class="ib" type="button" id="spinBtn" aria-pressed="true" aria-label="Spin">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></svg>
+      </button>
+      <button class="ib" type="button" id="beatBtn" aria-pressed="true" aria-label="Heartbeat">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-5 3 10 2-5h7"/></svg>
+      </button>
+      <button class="ib burst" type="button" id="burstBtn" aria-label="Burst the letters">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l1.8 6.2L20 6l-3.6 5.4L22 14l-6.4.6L16 21l-4-5-4 5 .4-6.4L2 14l5.6-2.6L4 6l6.2 2.2z"/></svg>
+      </button>
+    </div>
+  </div>
+  <button class="pill exit" type="button" id="exitBtn">Show controls</button>
+</section>
+<p class="sr-only" id="status" aria-live="polite"></p>
+
+<div class="wrap">
+  <section class="block" id="share">
+    <h2 class="reveal">Send your heart</h2>
+    <p class="lead reveal" style="--rd: 0.08s">The link keeps your words, the name and the colour. For a video, press Clean view and use your phone's screen recorder.</p>
+    <div class="share reveal" style="--rd: 0.14s">
+      <p class="linkbox" id="linkBox"></p>
+      <div class="actions">
+        <button class="btn" type="button" id="copyLink"><span>Copy link</span></button>
+        <button class="btn alt" type="button" id="savePng">Save a picture</button>
+        <button class="btn alt" type="button" id="replay">Build it again</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="how">
+    <h2 class="reveal">How the heart is made</h2>
+    <p class="lead reveal" style="--rd: 0.08s">No images and no 3D library: just a little maths on a canvas.</p>
+    <div class="cards">
+      <div class="reveal" style="--rd: 0s"><div class="card"><div class="art" aria-hidden="true"><p class="mono">  i love you
+ i love you i
+love you i lov
+ e you i love </p></div><h3>Thirty slices</h3><p class="d">The classic heart curve is cut into thirty thin slices. Each slice becomes one or two rings of letters, so the top grows two round lobes.</p></div></div>
+      <div class="reveal" style="--rd: 0.1s"><div class="card"><div class="art" aria-hidden="true"><p class="mono" style="font-size:22px;opacity:.9">i <span style="opacity:.6">l</span><span style="opacity:.4">o</span><span style="opacity:.25">v</span></p></div><h3>Depth and glow</h3><p class="d">Every letter is turned in 3D, then drawn smaller and dimmer the further back it sits. Letters that face you get a soft glow.</p></div></div>
+      <div class="reveal" style="--rd: 0.2s"><div class="card"><div class="art" aria-hidden="true"><p class="mono" style="font-size:18px">you · always</p></div><h3>Your own words</h3><p class="d">Type anything up to 24 characters. Drag to turn it, tap to burst the letters out and watch them spring back.</p></div></div>
+    </div>
+  </section>
+  <footer>Verse Heart · a Chill and Craft template · free to use</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s) { return document.querySelector(s); };
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var darkQ = window.matchMedia("(prefers-color-scheme: dark)");
+  var hero = $(".hero"), cv = $("#cv"), ctx = cv.getContext("2d"), dock = $(".dock"), statusEl = $("#status");
+  var forline = $("#forline");
+
+  /* ---------- Palettes for light and dark ---------- */
+  var PAL = {
+    crimson: { dark: ["#ff3b64", "#ff2d55", "#ff8aa3"], light: ["#c8102e", "rgba(200,16,46,.35)", "#e8607a"] },
+    rose: { dark: ["#ffb199", "#ff8a65", "#ffd9c9"], light: ["#b5543c", "rgba(220,110,80,.35)", "#d98c72"] },
+    violet: { dark: ["#c79bff", "#a855f7", "#e6d2ff"], light: ["#6b2fc0", "rgba(130,60,220,.35)", "#9a6ad8"] },
+    moon: { dark: ["#f2f5ff", "#a5b4fc", "#ffffff"], light: ["#1d2550", "rgba(60,80,180,.3)", "#4c5aa0"] }
+  };
+  function isDark() {
+    var t = document.documentElement.getAttribute("data-theme");
+    return t ? t === "dark" : darkQ.matches;
+  }
+
+  /* ---------- Settings from the link ---------- */
+  var q = new URLSearchParams(location.search);
+  var S = {
+    words: (q.get("words") || "i love you").slice(0, 24),
+    who: (q.get("for") || "Amna").slice(0, 22),
+    pal: PAL[q.get("pal")] ? q.get("pal") : "crimson",
+    spin: true, beat: true
+  };
+  $("#inWords").value = S.words;
+  $("#inFor").value = S.who;
+  document.querySelector('input[name="pal"][value="' + S.pal + '"]').checked = true;
+
+  /* ---------- Heart geometry: slice the 2D heart curve into rings of letters ---------- */
+  var poly = [];
+  for (var i = 0; i < 720; i++) {
+    var t = (i / 720) * Math.PI * 2;
+    poly.push([16 * Math.pow(Math.sin(t), 3), 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)]);
+  }
+  var rings = [], SLICES = 30, TOP = 11.7, BOT = -16.2;
+  for (var k = 0; k < SLICES; k++) {
+    var y = TOP - ((TOP - BOT) * k) / (SLICES - 1), xs = [];
+    for (var e = 0; e < poly.length; e++) {
+      var p = poly[e], n = poly[(e + 1) % poly.length];
+      if ((p[1] <= y && n[1] > y) || (n[1] <= y && p[1] > y)) xs.push(p[0] + ((y - p[1]) / (n[1] - p[1])) * (n[0] - p[0]));
+    }
+    xs.sort(function (a, b) { return a - b; });
+    for (var m = 0; m + 1 < xs.length; m += 2) {
+      rings.push({ y: y, cx: (xs[m] + xs[m + 1]) / 2, r: (xs[m + 1] - xs[m]) / 2, two: xs.length >= 4, k: k });
+    }
+  }
+
+  var items = [];
+  function build() {
+    var text = (S.words.trim() || "i love you") + "   ";
+    items = [];
+    rings.forEach(function (rg) {
+      var rz = rg.r * (rg.two ? 0.95 : 0.72);
+      var per = 2 * Math.PI * Math.sqrt((rg.r * rg.r + rz * rz) / 2);
+      var n = Math.max(6, Math.round(per / 0.92));
+      var off = rg.k * 5 + (rg.cx > 0 ? 2 : 0);
+      for (var j = 0; j < n; j++) {
+        var ch = text[(j + off) % text.length];
+        if (ch === " ") continue;
+        var th = (j / n) * Math.PI * 2 - Math.PI / 2 + rg.k * 0.21;
+        var nx = Math.cos(th), nz = Math.sin(th);
+        // a random start point far away, for the entrance
+        var a = Math.random() * Math.PI * 2, b = Math.acos(Math.random() * 2 - 1), R = 40 + Math.random() * 20;
+        items.push({
+          x: rg.cx + rg.r * nx, y: rg.y, z: rz * nz, nx: nx, nz: nz, ch: ch,
+          sx: R * Math.sin(b) * Math.cos(a), sy: R * Math.cos(b), sz: R * Math.sin(b) * Math.sin(a),
+          delay: rg.k * 0.035 + Math.random() * 0.5, rnd: 0.6 + Math.random() * 0.8,
+          px: 0, py: 0, pz: 0, s: 0, al: 0, glow: false
+        });
+      }
+    });
+    buildAtlas();
+  }
+
+  /* ---------- Glyph atlas: each letter is drawn once, plain and glowing ---------- */
+  var FS = 1.15; // font size in heart units
+  var atlas = {}, glyphPx = 0, W = 0, H = 0, dpr = 1, U = 10, CX = 0, CY = 0;
+  function buildAtlas() {
+    var pal = PAL[S.pal][isDark() ? "dark" : "light"];
+    glyphPx = Math.max(10, Math.round(U * FS * dpr * 1.3)); // drawn a bit large so front letters stay sharp
+    var box = Math.ceil(glyphPx * 1.9);
+    atlas = {};
+    var chars = {};
+    items.forEach(function (it) { chars[it.ch] = 1; });
+    Object.keys(chars).forEach(function (ch) {
+      var pair = [false, true].map(function (glow) {
+        var c = document.createElement("canvas");
+        c.width = c.height = box;
+        var g = c.getContext("2d");
+        g.font = "700 " + glyphPx + 'px ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace';
+        g.textAlign = "center"; g.textBaseline = "middle";
+        if (glow) { g.shadowColor = pal[1]; g.shadowBlur = glyphPx * 0.45; g.fillStyle = pal[2]; }
+        else g.fillStyle = pal[0];
+        g.fillText(ch, box / 2, box / 2);
+        if (glow) { g.shadowBlur = 0; g.fillStyle = pal[0]; g.globalAlpha = 0.55; g.fillText(ch, box / 2, box / 2); }
+        return c;
+      });
+      atlas[ch] = pair;
+    });
+  }
+
+  /* ---------- Sizing ---------- */
+  function resize() {
+    var r = hero.getBoundingClientRect();
+    W = r.width; H = r.height;
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var dockTop = dock.offsetTop || H - 120;
+    var top = 64, avail = Math.max(200, dockTop - top - 56);
+    U = Math.max(4, Math.min((W * 0.82) / 34, (avail * 0.94) / 30));
+    CX = W / 2;
+    CY = top + avail / 2 - 2.5 * U; // the heart's middle (y = -2.5) sits in the middle of the free space
+    var tipY = CY + 17.5 * U;
+    hero.style.setProperty("--fy", Math.min(tipY + 8, dockTop - 40) + "px");
+    buildAtlas();
+    makeDust();
+  }
+
+  /* drifting background specks */
+  var dust = [];
+  function makeDust() {
+    dust = [];
+    var n = Math.round((W * H) / 18000);
+    for (var i = 0; i < n; i++) dust.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.6 + 0.4, v: Math.random() * 12 + 4, a: Math.random() * 0.5 + 0.15 });
+  }
+
+  /* ---------- Motion state ---------- */
+  var phi = 0.5, vel = 0, tilt = -0.12, introAt = 0, burstAt = -10, last = 0, running = true, visible = true;
+  var pointer = { x: -9999, y: -9999, in: false };
+  var drag = null;
+  var BASE_SPIN = 0.42;
+
+  function easeOutBack(x) { var c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }
+  function lubdub(time) {
+    var ph = (time % 1.15) / 1.15;
+    return Math.exp(-Math.pow((ph - 0.08) / 0.05, 2)) + 0.65 * Math.exp(-Math.pow((ph - 0.27) / 0.05, 2));
+  }
+  function burstAmt(bt) {
+    if (bt < 0 || bt > 3) return 0;
+    if (bt < 0.16) return 10 * Math.sin((bt / 0.16) * Math.PI / 2);
+    return 10 * Math.exp(-(bt - 0.16) * 3) * Math.cos((bt - 0.16) * 6.5);
+  }
+
+  var scheduled = false;
+  function frame(now) {
+    scheduled = false;
+    if (!running) return;
+    var time = now / 1000, dt = Math.min(0.05, last ? time - last : 0.016);
+    last = time;
+    var rm = reduce.matches;
+
+    // spin with inertia; drag sets the speed directly
+    if (!drag) {
+      var target = S.spin && !rm ? BASE_SPIN : 0;
+      vel += (target - vel) * Math.min(1, dt * 2.2);
+      phi += vel * dt;
+    }
+    var dark = isDark(), pal = PAL[S.pal][dark ? "dark" : "light"];
+    var beat = S.beat ? lubdub(time) : 0;
+    var scale = 1 + (rm ? 0 : beat * 0.045);
+    var bt = time - burstAt, bm = rm ? 0 : burstAmt(bt);
+    var flash = rm && bt < 0.6 ? 1 - bt / 0.6 : 0;
+    var it0 = rm ? 99 : time - introAt;
+
+    // background
+    var g = ctx.createRadialGradient(CX, CY + 2 * U, 10, CX, CY + 2 * U, Math.max(W, H) * 0.75);
+    g.addColorStop(0, dark ? "#2a0a1a" : "#fff9f6");
+    g.addColorStop(1, dark ? "#050103" : "#ffdbe4");
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    // soft glow behind the heart, swelling with each beat
+    var glowR = U * (15 + beat * 1.6);
+    var gg = ctx.createRadialGradient(CX, CY + 1 * U, 0, CX, CY + 1 * U, glowR * 1.4);
+    gg.addColorStop(0, dark ? "rgba(255,40,90,0.22)" : "rgba(255,120,150,0.22)");
+    gg.addColorStop(1, "rgba(255,40,90,0)");
+    ctx.fillStyle = gg;
+    ctx.fillRect(0, 0, W, H);
+    // dust
+    ctx.fillStyle = pal[2];
+    dust.forEach(function (d) {
+      if (!rm) { d.y -= d.v * dt; if (d.y < -4) { d.y = H + 4; d.x = Math.random() * W; } }
+      ctx.globalAlpha = d.a * (dark ? 1 : 0.6);
+      ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill();
+    });
+
+    // turn, push and project every letter
+    var cp = Math.cos(phi), sp = Math.sin(phi), ct = Math.cos(tilt), st = Math.sin(tilt);
+    var D = 70, R = 80;
+    for (var i = 0; i < items.length; i++) {
+      var o = items[i];
+      var x = o.x, y = o.y, z = o.z, a = 1;
+      if (bm) { var f = bm * o.rnd; x += o.nx * f; z += o.nz * f; y += (o.y + 2.5) * 0.04 * f; }
+      if (it0 < 3.2) {
+        var pr = Math.max(0, Math.min(1, (it0 - o.delay) / 1.5));
+        var ee = easeOutBack(pr);
+        x = o.sx + (x - o.sx) * ee; y = o.sy + (y - o.sy) * ee; z = o.sz + (z - o.sz) * ee;
+        a = pr;
+      }
+      x *= scale; y *= scale; z *= scale;
+      var x1 = x * cp + z * sp, z1 = -x * sp + z * cp;
+      var y2 = y * ct - z1 * st, z2 = y * st + z1 * ct;
+      var nz1 = -o.nx * sp + o.nz * cp;
+      var face = -(nz1 * ct); // above 0 means the letter faces you
+      var k = D / (D + z2);
+      var sx = CX + x1 * k * U, sy = CY - y2 * k * U;
+      // letters near the pointer lean away
+      if (pointer.in && !drag) {
+        var dx = sx - pointer.x, dy = sy - pointer.y, dd = Math.sqrt(dx * dx + dy * dy);
+        if (dd < R && dd > 0.1) { var push = Math.pow(1 - dd / R, 2) * 24; sx += (dx / dd) * push; sy += (dy / dd) * push; }
+      }
+      o.px = sx; o.py = sy; o.pz = z2; o.s = k;
+      var shade = Math.max(0, Math.min(1, (face + 0.35) / 1.1));
+      o.al = a * (0.14 + 0.86 * shade) * Math.min(1, 0.55 + flash + shade);
+      o.glow = face > 0.55;
+      o.sq = 0.4 + 0.6 * Math.abs(face);
+    }
+    items.sort(function (p, q) { return q.pz - p.pz; });
+    var boxCss = U * FS * 1.9; // css size of one glyph box at depth scale 1
+    for (var j = 0; j < items.length; j++) {
+      var it = items[j], img = atlas[it.ch];
+      if (!img || it.al < 0.02) continue;
+      var sz = boxCss * it.s;
+      var w = sz * it.sq; // letters turned sideways get narrower
+      ctx.globalAlpha = Math.min(1, it.al + flash * 0.4);
+      ctx.drawImage(img[it.glow ? 1 : 0], it.px - w / 2, it.py - sz / 2, w, sz);
+    }
+    ctx.globalAlpha = 1;
+    scheduled = true;
+    requestAnimationFrame(frame);
+  }
+
+  function start() { running = true; if (!scheduled) { scheduled = true; last = 0; requestAnimationFrame(frame); } }
+  function stop() { running = false; }
+
+  /* ---------- Pointer: drag to turn, tap to burst ---------- */
+  cv.addEventListener("pointerdown", function (e) {
+    drag = { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0, id: e.pointerId };
+    cv.setPointerCapture(e.pointerId);
+    cv.classList.add("drag");
+  });
+  cv.addEventListener("pointermove", function (e) {
+    var r = cv.getBoundingClientRect();
+    pointer.x = e.clientX - r.left; pointer.y = e.clientY - r.top; pointer.in = e.pointerType === "mouse";
+    if (!drag) return;
+    var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag.moved += Math.abs(dx) + Math.abs(dy);
+    drag.x = e.clientX; drag.y = e.clientY;
+    phi += dx * 0.008;
+    vel = dx * 0.5;
+    tilt = Math.max(-0.6, Math.min(0.6, tilt + dy * 0.004));
+  });
+  function endDrag(e) {
+    if (!drag) return;
+    if (drag.moved < 8) burst();
+    drag = null;
+    cv.classList.remove("drag");
+  }
+  cv.addEventListener("pointerup", endDrag);
+  cv.addEventListener("pointercancel", function () { drag = null; cv.classList.remove("drag"); });
+  cv.addEventListener("pointerleave", function () { pointer.in = false; });
+
+  function burst() {
+    burstAt = performance.now() / 1000;
+    var b = $("#burstBtn");
+    if (!reduce.matches) { b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop"); }
+    statusEl.textContent = "The letters burst out and spring back.";
+  }
+  $("#burstBtn").addEventListener("click", burst);
+
+  /* keyboard: arrows turn the heart when the canvas has focus */
+  cv.tabIndex = 0;
+  cv.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft") { phi -= 0.25; e.preventDefault(); }
+    else if (e.key === "ArrowRight") { phi += 0.25; e.preventDefault(); }
+    else if (e.key === "ArrowUp") { tilt = Math.max(-0.6, tilt - 0.1); e.preventDefault(); }
+    else if (e.key === "ArrowDown") { tilt = Math.min(0.6, tilt + 0.1); e.preventDefault(); }
+    else if (e.key === "Enter" || e.key === " ") { burst(); e.preventDefault(); }
+  });
+
+  /* ---------- Controls ---------- */
+  function toggle(btn, key, label) {
+    btn.addEventListener("click", function () {
+      S[key] = !S[key];
+      btn.setAttribute("aria-pressed", String(S[key]));
+      statusEl.textContent = label + (S[key] ? " on." : " off.");
+    });
+  }
+  toggle($("#spinBtn"), "spin", "Spin");
+  toggle($("#beatBtn"), "beat", "Heartbeat");
+
+  $("#inWords").addEventListener("input", function () {
+    S.words = this.value.slice(0, 24);
+    build();
+    updateLink();
+  });
+  $("#inFor").addEventListener("input", function () {
+    S.who = this.value.trim();
+    applyFor();
+    updateLink();
+  });
+  document.querySelectorAll('input[name="pal"]').forEach(function (r) {
+    r.addEventListener("change", function () {
+      S.pal = r.value;
+      buildAtlas();
+      updateLink();
+      statusEl.textContent = r.getAttribute("aria-label") + " colour.";
+    });
+  });
+  function applyFor() {
+    $("#forName").textContent = S.who;
+    forline.style.visibility = S.who ? "visible" : "hidden";
+  }
+
+  /* clean view for recording a video */
+  function setClean(on) {
+    document.body.classList.toggle("clean", on);
+    if (on) { window.scrollTo(0, 0); $("#exitBtn").focus({ preventScroll: true }); statusEl.textContent = "Clean view. Press Escape or Show controls to bring them back."; }
+    else { $("#cleanBtn").focus({ preventScroll: true }); statusEl.textContent = "Controls are back."; }
+  }
+  $("#cleanBtn").addEventListener("click", function () { setClean(true); });
+  $("#exitBtn").addEventListener("click", function () { setClean(false); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && document.body.classList.contains("clean")) setClean(false); });
+
+  /* ---------- Share, save, replay ---------- */
+  function shareLink() {
+    var u = new URL(location.href), theme = u.searchParams.get("theme");
+    u.hash = ""; u.search = "";
+    u.searchParams.set("words", S.words); u.searchParams.set("for", S.who); u.searchParams.set("pal", S.pal);
+    if (theme) u.searchParams.set("theme", theme);
+    return u.toString();
+  }
+  function updateLink() { $("#linkBox").textContent = shareLink(); }
+  var copyBtn = $("#copyLink");
+  copyBtn.addEventListener("click", function () {
+    var label = copyBtn.querySelector("span");
+    var ok = function () {
+      copyBtn.classList.add("done"); label.textContent = "Link copied";
+      statusEl.textContent = "Link copied.";
+      setTimeout(function () { copyBtn.classList.remove("done"); label.textContent = "Copy link"; }, 1800);
+    };
+    var fallback = function () {
+      var r = document.createRange(); r.selectNodeContents($("#linkBox"));
+      var sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      try { if (document.execCommand("copy")) { ok(); return; } } catch (e) { /* ignore */ }
+      label.textContent = "Press Ctrl+C";
+      statusEl.textContent = "The link is selected. Press Control C to copy it.";
+    };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(shareLink()).then(ok, fallback); else fallback();
+  });
+  $("#savePng").addEventListener("click", function () {
+    try {
+      var a = document.createElement("a");
+      a.download = "verse-heart.png";
+      a.href = cv.toDataURL("image/png");
+      document.body.appendChild(a); a.click(); a.remove();
+      statusEl.textContent = "Picture saved.";
+    } catch (e) { statusEl.textContent = "This browser could not save the picture."; }
+  });
+  $("#replay").addEventListener("click", function () {
+    $("#top").scrollIntoView({ behavior: reduce.matches ? "auto" : "smooth" });
+    build();
+    introAt = performance.now() / 1000 + 0.3;
+    statusEl.textContent = "The letters fly in and build the heart again.";
+  });
+
+  /* ---------- Scroll: the heart eases back; pause it when off screen ---------- */
+  var ticking = false;
+  window.addEventListener("scroll", function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      ticking = false;
+      hero.style.setProperty("--sc", Math.min(1, window.scrollY / Math.max(1, H)).toFixed(3));
+    });
+  }, { passive: true });
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver(function (es) { visible = es[0].isIntersecting; if (visible) start(); else stop(); }).observe(hero);
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+    }, { threshold: 0.15 });
+    document.querySelectorAll(".reveal").forEach(function (el) { io.observe(el); });
+  } else document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("in"); });
+
+  var rt = 0;
+  window.addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(resize, 120); });
+  darkQ.addEventListener("change", buildAtlas);
+
+  build();
+  resize();
+  applyFor();
+  updateLink();
+  introAt = performance.now() / 1000 + 0.2;
+  start();
+})();
+</script>
+</body>
+</html>

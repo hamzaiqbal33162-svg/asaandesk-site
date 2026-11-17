@@ -1,0 +1,693 @@
+<!doctype html>
+<!-- Chill and Craft · Neon Range · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neon Range · a neon shooting game</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens (--mode tells the canvas whether to glow) ---------- */
+  :root {
+    --mode: light;
+    --bg: #f3f1fb;
+    --bg2: #e6e0f7;
+    --ink: #1c1633;
+    --muted: #5f5880;
+    --grid: rgba(110, 60, 200, 0.28);
+    --panel: rgba(255, 255, 255, 0.86);
+    --line: rgba(28, 22, 51, 0.14);
+    --c1: #0091b3;
+    --c2: #cc1688;
+    --c3: #3a9200;
+    --c4: #c98300;
+    --c5: #e0262f;
+    --btn: #1c1633;
+    --btn-ink: #ffffff;
+    --focus: #cc1688;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --mode: dark;
+      --bg: #07060f; --bg2: #160d2c; --ink: #f2eeff; --muted: #a59cc8;
+      --grid: rgba(255, 61, 220, 0.34); --panel: rgba(16, 10, 34, 0.82); --line: rgba(242, 238, 255, 0.14);
+      --c1: #22e7ff; --c2: #ff3df2; --c3: #9dff3d; --c4: #ffd23d; --c5: #ff3b4a;
+      --btn: #22e7ff; --btn-ink: #07060f; --focus: #ffd23d;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --mode: dark;
+    --bg: #07060f; --bg2: #160d2c; --ink: #f2eeff; --muted: #a59cc8;
+    --grid: rgba(255, 61, 220, 0.34); --panel: rgba(16, 10, 34, 0.82); --line: rgba(242, 238, 255, 0.14);
+    --c1: #22e7ff; --c2: #ff3df2; --c3: #9dff3d; --c4: #ffd23d; --c5: #ff3b4a;
+    --btn: #22e7ff; --btn-ink: #07060f; --focus: #ffd23d;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page shell ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 480px;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button { font: inherit; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- HUD ---------- */
+  .hud {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--bg2), var(--bg));
+    position: relative;
+    z-index: 2;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; font-size: 15px; }
+  .brand svg { width: 22px; height: 22px; color: var(--c1); }
+  .stats { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 0 auto; }
+  .stats div { display: flex; align-items: baseline; gap: 6px; }
+  .stats dt { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .stats dd { margin: 0; font-weight: 900; font-size: 18px; font-variant-numeric: tabular-nums; min-width: 2ch; display: inline-block; }
+  .stats dd.bump { animation: bump 0.25s ease-out; }
+  @keyframes bump { 40% { transform: scale(1.35); color: var(--c2); } }
+  #time.low { color: var(--c5); animation: pulse 0.5s ease-in-out infinite alternate; }
+  @keyframes pulse { to { opacity: 0.45; } }
+  .lives { display: inline-flex; gap: 4px; }
+  .lives i { width: 11px; height: 11px; border-radius: 3px; transform: rotate(45deg); background: var(--c5); display: inline-block; transition: opacity 0.2s, transform 0.2s; }
+  .lives i.gone { opacity: 0.18; transform: rotate(45deg) scale(0.7); }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line);
+    background: transparent; color: var(--ink); cursor: pointer; display: grid; place-items: center;
+  }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  /* ---------- Field and overlays ---------- */
+  .field { position: relative; flex: 1; min-height: 0; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: none; touch-action: none; }
+  canvas:focus-visible { outline-offset: -4px; }
+  .flash { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle, transparent 40%, var(--c5)); opacity: 0; transition: opacity 0.35s ease; }
+  .flash.on { opacity: 0.55; transition: none; }
+  .panel {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(460px, calc(100% - 28px));
+    max-height: calc(100% - 24px);
+    overflow: auto;
+    padding: 22px 20px;
+    border-radius: 20px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    animation: panelIn 0.35s cubic-bezier(.2,.9,.3,1.2);
+  }
+  .panel[hidden] { display: none; }
+  @keyframes panelIn { from { opacity: 0; transform: translate(-50%, -46%) scale(0.94); } }
+  .title {
+    margin: 0 0 6px;
+    font-size: clamp(32px, 9vw, 52px);
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--c1);
+    text-shadow: 0 0 18px var(--c1);
+    animation: neon 3.4s infinite;
+  }
+  @keyframes neon { 0%, 18%, 22%, 62%, 66%, 100% { opacity: 1; } 20%, 64% { opacity: 0.55; } }
+  .panel h2 { margin: 0 0 6px; font-size: 28px; font-weight: 900; text-transform: uppercase; color: var(--c2); text-shadow: 0 0 14px var(--c2); }
+  .panel p { margin: 6px 0; color: var(--muted); line-height: 1.45; font-size: 15px; }
+  .legend { list-style: none; padding: 0; margin: 14px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px 10px; text-align: left; font-size: 14px; }
+  .legend li { display: flex; align-items: center; gap: 8px; }
+  .legend svg { width: 22px; height: 22px; flex: none; }
+  .legend b { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .cta {
+    margin-top: 10px; border: 0; border-radius: 999px; padding: 13px 26px; font-weight: 900; font-size: 16px;
+    letter-spacing: 0.06em; text-transform: uppercase; background: var(--btn); color: var(--btn-ink); cursor: pointer;
+    box-shadow: 0 0 22px color-mix(in srgb, var(--btn) 60%, transparent);
+    transition: transform 0.15s;
+  }
+  .cta:hover { transform: translateY(-2px); }
+  .cta:active { transform: scale(0.96); }
+  .ghost { margin-top: 10px; margin-left: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 12px 20px; font-weight: 800; background: transparent; color: var(--ink); cursor: pointer; }
+  .keys { font-size: 13px !important; }
+  kbd { font: 700 12px ui-monospace, monospace; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); }
+  .results { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 14px 0 6px; }
+  .results div { padding: 10px; border-radius: 12px; border: 1px solid var(--line); }
+  .results span { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+  .results strong { font-size: 24px; font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; margin: 4px 0; padding: 4px 12px; border-radius: 999px; background: var(--c4); color: #1a1200; font-weight: 900; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; animation: bump 0.6s ease-out 2; }
+  .badge[hidden] { display: none; }
+
+  @media (max-width: 520px) {
+    .stats dd { font-size: 16px; }
+    .brand span { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .title, .stats dd.bump, #time.low, .badge, .panel { animation: none; }
+    .flash { display: none; }
+    .cta { transition: none; }
+  }
+</style>
+</head>
+<body>
+<header class="hud">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
+    <span>Neon Range</span>
+  </div>
+  <dl class="stats">
+    <div><dt>Score</dt><dd id="score">0</dd></div>
+    <div><dt>Combo</dt><dd id="combo">x1</dd></div>
+    <div><dt>Time</dt><dd id="time">60</dd></div>
+    <div><dt>Lives</dt><dd><span class="lives" id="lives" role="img" aria-label="3 lives left"><i></i><i></i><i></i></span></dd></div>
+  </dl>
+  <button class="icon-btn" id="pauseBtn" type="button" aria-label="Pause game">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+  </button>
+</header>
+
+<main class="field" id="field">
+  <canvas id="game" tabindex="0" role="img" aria-label="Game field. Aim with the mouse or arrow keys, fire with a click or Space."></canvas>
+  <div class="flash" id="flash"></div>
+
+  <section class="panel" id="startPanel" aria-labelledby="startTitle">
+    <h1 class="title" id="startTitle">Neon Range</h1>
+    <p>Aim, fire, chain combos. Gold stars add time. Never hit the red spikes.</p>
+    <ul class="legend">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="var(--c1)" stroke-width="3"/></svg>Ring <b>100</b></li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12Z" fill="none" stroke="var(--c2)" stroke-width="3"/></svg>Diamond <b>150</b></li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 21 7 21 17 12 22 3 17 3 7Z" fill="none" stroke="var(--c3)" stroke-width="3"/></svg>Splitter <b>200</b></li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 7 7 .6-5.4 4.6 1.7 7.3L12 17.6 5.7 21.5l1.7-7.3L2 9.6 9 9z" fill="var(--c4)"/></svg>Star <b>500 +5s</b></li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1l2.5 6 6-2.5-2.5 6 6 2.5-6 2.5 2.5 6-6-2.5-2.5 6-2.5-6-6 2.5 2.5-6-6-2.5 6-2.5-2.5-6 6 2.5z" fill="var(--c5)"/></svg>Spike <b>−1 life</b></li>
+    </ul>
+    <button class="cta" id="startBtn" type="button">Start game</button>
+    <p class="keys">Keyboard: <kbd>Arrows</kbd> aim · <kbd>Space</kbd> fire · <kbd>P</kbd> pause</p>
+    <p class="keys" id="bestLine">Best score: 0</p>
+  </section>
+
+  <section class="panel" id="pausePanel" aria-labelledby="pauseTitle" hidden>
+    <h2 id="pauseTitle">Paused</h2>
+    <p>Take a breath. The targets will wait.</p>
+    <button class="cta" id="resumeBtn" type="button">Resume</button>
+    <button class="ghost" id="quitBtn" type="button">Restart</button>
+  </section>
+
+  <section class="panel" id="overPanel" aria-labelledby="overTitle" hidden>
+    <h2 id="overTitle">Round over</h2>
+    <span class="badge" id="newBest" hidden>New best!</span>
+    <div class="results">
+      <div><span>Score</span><strong id="rScore">0</strong></div>
+      <div><span>Accuracy</span><strong id="rAcc">0%</strong></div>
+      <div><span>Hits</span><strong id="rHits">0</strong></div>
+      <div><span>Best combo</span><strong id="rCombo">0</strong></div>
+    </div>
+    <p id="rBest">Best score: 0</p>
+    <button class="cta" id="againBtn" type="button">Play again</button>
+  </section>
+</main>
+<p class="sr" id="live" aria-live="polite"></p>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (id) { return document.getElementById(id); };
+    var field = $("field"), canvas = $("game"), ctx = canvas.getContext("2d");
+    var live = $("live"), flashEl = $("flash");
+
+    /* ---------- Theme colours for the canvas ---------- */
+    var COL = {}, glow = false;
+    function readColours() {
+      var cs = getComputedStyle(document.documentElement);
+      ["c1", "c2", "c3", "c4", "c5", "grid", "ink", "muted", "bg"].forEach(function (k) { COL[k] = cs.getPropertyValue("--" + k).trim(); });
+      glow = cs.getPropertyValue("--mode").trim() === "dark";
+    }
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColours);
+
+    /* ---------- Sizing ---------- */
+    var W = 0, H = 0, K = 1;
+    function layout() {
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      W = field.clientWidth; H = field.clientHeight;
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      K = Math.max(0.75, Math.min(1.2, Math.min(W, H) / 640));
+      if (!aim.set) { aim.x = W / 2; aim.y = H * 0.4; }
+    }
+    var aim = { x: 0, y: 0, set: false };
+    new ResizeObserver(layout).observe(field);
+
+    /* ---------- Target types ---------- */
+    var TYPES = {
+      ring:    { r: 24, pts: 100, col: "c1", speed: [90, 140] },
+      diamond: { r: 20, pts: 150, col: "c2", speed: [160, 220] },
+      hex:     { r: 30, pts: 200, col: "c3", speed: [70, 110], split: true },
+      shard:   { r: 13, pts: 75,  col: "c3", speed: [0, 0] },
+      star:    { r: 22, pts: 500, col: "c4", speed: [220, 280], bonus: 5 },
+      spike:   { r: 24, pts: 0,   col: "c5", speed: [80, 130], bad: true }
+    };
+    function rand(a, b) { return a + Math.random() * (b - a); }
+
+    /* ---------- Game state ---------- */
+    var ROUND = 60;
+    var state = "menu", score = 0, shown = 0, combo = 0, bestCombo = 0, lives = 3, timeLeft = ROUND, elapsed = 0;
+    var shots = 0, hits = 0, best = 0, spawnIn = 0.5, freeze = 0;
+    var targets = [], sparks = [], rings = [], pops = [], banner = null, beam = null;
+    var shakeAmp = 0, recoil = 0, gridScroll = 0;
+    try { best = +localStorage.getItem("neon-range-best") || 0; } catch (e) { best = 0; }
+    $("bestLine").textContent = "Best score: " + best;
+
+    var stars = [];
+    for (var i = 0; i < 90; i++) stars.push({ x: Math.random(), y: Math.random() * 0.62, z: 0.2 + Math.random() * 0.8, ph: Math.random() * 6.28 });
+
+    /* ---------- HUD ---------- */
+    var scoreEl = $("score"), comboEl = $("combo"), timeEl = $("time"), livesEl = $("lives");
+    function bump(elm) { elm.classList.remove("bump"); void elm.offsetWidth; elm.classList.add("bump"); }
+    function hudLives() {
+      var dots = livesEl.querySelectorAll("i");
+      for (var i = 0; i < dots.length; i++) dots[i].classList.toggle("gone", i >= lives);
+      livesEl.setAttribute("aria-label", lives + (lives === 1 ? " life" : " lives") + " left");
+    }
+    function mult() { return Math.min(5, 1 + Math.floor(combo / 5)); }
+    function hudCombo() { comboEl.textContent = "x" + mult(); }
+
+    /* ---------- Spawning ---------- */
+    function spawn() {
+      var roll = Math.random();
+      var type = roll < 0.07 ? "star" : roll < 0.2 ? "spike" : roll < 0.38 ? "hex" : roll < 0.62 ? "diamond" : "ring";
+      var T = TYPES[type], sp = rand(T.speed[0], T.speed[1]) * (1 + elapsed / 70) * K, r = T.r * K, side = Math.random();
+      var t = { type: type, r: r, rot: 0, vr: rand(-2, 2), wob: rand(0, 6.28), age: 0 };
+      if (side < 0.4) { t.x = -r - 10; t.y = rand(H * 0.12, H * 0.62); t.vx = sp; t.vy = rand(-25, 25); }
+      else if (side < 0.8) { t.x = W + r + 10; t.y = rand(H * 0.12, H * 0.62); t.vx = -sp; t.vy = rand(-25, 25); }
+      else { t.x = rand(W * 0.15, W * 0.85); t.y = -r - 10; t.vx = rand(-60, 60); t.vy = sp * 0.6; }
+      targets.push(t);
+    }
+
+    /* ---------- Juice helpers ---------- */
+    function shake(n) { if (!reduce.matches) shakeAmp = Math.max(shakeAmp, n); }
+    function explode(x, y, color, n, power) {
+      var count = reduce.matches ? Math.ceil(n / 4) : n;
+      for (var i = 0; i < count; i++) {
+        var a = rand(0, 6.283), v = rand(0.3, 1) * power * (reduce.matches ? 0.3 : 1);
+        sparks.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.35, 0.8), max: 0.8, color: color, w: rand(1.5, 3) });
+      }
+      rings.push({ x: x, y: y, r: 6, grow: reduce.matches ? 60 : 260, life: 0.45, max: 0.45, color: color });
+    }
+    function pop(x, y, text, color, size) { pops.push({ x: x, y: y, text: text, color: color, size: size || 1, life: 1, max: 1 }); }
+    function say(text) { live.textContent = text; }
+
+    /* ---------- Shooting ---------- */
+    function shoot() {
+      if (state !== "play") return;
+      shots++;
+      recoil = 1;
+      beam = { x: aim.x, y: aim.y, life: 0.12 };
+      var hit = -1;
+      for (var i = targets.length - 1; i >= 0; i--) {
+        var t = targets[i];
+        if (Math.hypot(t.x - aim.x, t.y - aim.y) < t.r * 1.2) { hit = i; break; }
+      }
+      if (hit < 0) {
+        if (combo > 0) pop(aim.x, aim.y - 18, "combo lost", COL.muted, 0.8);
+        combo = 0; hudCombo();
+        rings.push({ x: aim.x, y: aim.y, r: 4, grow: 70, life: 0.25, max: 0.25, color: COL.muted });
+        return;
+      }
+      var tg = targets.splice(hit, 1)[0], T = TYPES[tg.type], color = COL[T.col];
+      if (T.bad) {
+        lives--; combo = 0;
+        hudLives(); hudCombo();
+        explode(tg.x, tg.y, color, 50, 520);
+        pop(tg.x, tg.y - 20, "−1 life", color, 1.4);
+        shake(18);
+        if (!reduce.matches) { flashEl.classList.add("on"); setTimeout(function () { flashEl.classList.remove("on"); }, 60); }
+        say("Ouch, a spike. " + lives + " lives left.");
+        if (lives <= 0) endGame("Out of lives");
+        return;
+      }
+      hits++; combo++;
+      bestCombo = Math.max(bestCombo, combo);
+      var gained = T.pts * mult();
+      score += gained;
+      bump(scoreEl);
+      if (combo % 5 === 0) { banner = { text: "x" + mult() + " combo!", life: 1.1, max: 1.1 }; bump(comboEl); }
+      hudCombo();
+      explode(tg.x, tg.y, color, tg.type === "star" ? 50 : 28, tg.type === "star" ? 480 : 340);
+      pop(tg.x, tg.y - 10, "+" + gained, color, mult() > 1 ? 1.3 : 1);
+      shake(tg.type === "star" ? 10 : 4);
+      if (T.bonus) {
+        timeLeft = Math.min(99, timeLeft + T.bonus);
+        pop(tg.x, tg.y + 22, "+" + T.bonus + "s", COL.c4, 1.1);
+        freeze = 0.07; // a tiny hit-stop sells the big hit
+        bump(timeEl);
+      }
+      if (T.split) {
+        for (var s = 0; s < 3; s++) {
+          var a = (s / 3) * 6.283 + rand(-0.3, 0.3), v = rand(170, 250) * K;
+          targets.push({ type: "shard", r: TYPES.shard.r * K, x: tg.x, y: tg.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, rot: 0, vr: rand(-6, 6), wob: 0, age: 0.3 });
+        }
+      }
+    }
+
+    /* ---------- Flow: start, pause, end ---------- */
+    function show(panel) {
+      ["startPanel", "pausePanel", "overPanel"].forEach(function (id) { $(id).hidden = id !== panel; });
+    }
+    function startGame() {
+      state = "play";
+      score = 0; shown = 0; combo = 0; bestCombo = 0; lives = 3; timeLeft = ROUND; elapsed = 0;
+      shots = 0; hits = 0; spawnIn = 0.4; targets = []; sparks = []; rings = []; pops = []; banner = null;
+      scoreEl.textContent = "0"; hudCombo(); hudLives();
+      show(null);
+      canvas.focus();
+      say("Game started. 60 seconds on the clock.");
+    }
+    function pause() {
+      if (state !== "play") return;
+      state = "paused";
+      show("pausePanel");
+      $("resumeBtn").focus();
+      say("Paused.");
+    }
+    function resume() {
+      if (state !== "paused") return;
+      state = "play";
+      show(null);
+      canvas.focus();
+      say("Resumed.");
+    }
+    function endGame(reason) {
+      state = "over";
+      var acc = shots ? Math.round((hits / shots) * 100) : 0, isBest = score > best;
+      if (isBest) { best = score; try { localStorage.setItem("neon-range-best", String(best)); } catch (e) { /* storage may be blocked */ } }
+      $("overTitle").textContent = reason;
+      $("rScore").textContent = score;
+      $("rAcc").textContent = acc + "%";
+      $("rHits").textContent = hits;
+      $("rCombo").textContent = bestCombo;
+      $("rBest").textContent = "Best score: " + best;
+      $("bestLine").textContent = "Best score: " + best;
+      $("newBest").hidden = !isBest;
+      timeEl.classList.remove("low");
+      shake(12);
+      setTimeout(function () { show("overPanel"); $("againBtn").focus(); }, reduce.matches ? 0 : 450);
+      say(reason + ". Score " + score + ", accuracy " + acc + " percent." + (isBest ? " New best!" : ""));
+    }
+    $("startBtn").addEventListener("click", startGame);
+    $("againBtn").addEventListener("click", startGame);
+    $("quitBtn").addEventListener("click", startGame);
+    $("resumeBtn").addEventListener("click", resume);
+    $("pauseBtn").addEventListener("click", function () { if (state === "play") pause(); else resume(); });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) pause(); });
+
+    /* ---------- Input ---------- */
+    canvas.addEventListener("pointermove", function (e) { aim.x = e.offsetX; aim.y = e.offsetY; aim.set = true; });
+    canvas.addEventListener("pointerdown", function (e) {
+      if (e.button !== 0) return;
+      aim.x = e.offsetX; aim.y = e.offsetY; aim.set = true;
+      shoot();
+    });
+    var keys = {};
+    window.addEventListener("keydown", function (e) {
+      var tag = e.target && e.target.tagName;
+      if (e.key === "p" || e.key === "P" || e.key === "Escape") {
+        if (state === "play") { pause(); e.preventDefault(); } else if (state === "paused") { resume(); e.preventDefault(); }
+        return;
+      }
+      if (tag === "BUTTON" || tag === "INPUT") return; // let buttons work normally
+      if (state !== "play") return;
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (!e.repeat) shoot(); return; }
+      if (/^(Arrow|w$|a$|s$|d$|W$|A$|S$|D$)/.test(e.key)) { keys[e.key.toLowerCase()] = true; e.preventDefault(); }
+    });
+    window.addEventListener("keyup", function (e) { keys[e.key.toLowerCase()] = false; });
+
+    /* ---------- Update ---------- */
+    function update(dt) {
+      // keyboard aiming
+      var kx = (keys.arrowright || keys.d ? 1 : 0) - (keys.arrowleft || keys.a ? 1 : 0);
+      var ky = (keys.arrowdown || keys.s ? 1 : 0) - (keys.arrowup || keys.w ? 1 : 0);
+      if (kx || ky) { aim.x = Math.max(0, Math.min(W, aim.x + kx * 520 * dt)); aim.y = Math.max(0, Math.min(H, aim.y + ky * 520 * dt)); aim.set = true; }
+
+      if (state === "play") {
+        elapsed += dt;
+        timeLeft -= dt;
+        timeEl.classList.toggle("low", timeLeft <= 10);
+        spawnIn -= dt;
+        if (spawnIn <= 0) { spawn(); spawnIn = Math.max(0.33, 0.9 - elapsed * 0.012) * rand(0.7, 1.2); }
+        for (var i = targets.length - 1; i >= 0; i--) {
+          var t = targets[i];
+          t.age += dt;
+          t.x += t.vx * dt;
+          t.y += t.vy * dt + Math.sin(t.age * 3 + t.wob) * (t.type === "star" ? 90 : 25) * dt;
+          t.rot += t.vr * dt;
+          if (t.x < -120 || t.x > W + 120 || t.y > H + 120 || t.y < -160 || t.age > 14) targets.splice(i, 1);
+        }
+        if (timeLeft <= 0) { timeLeft = 0; endGame("Time's up"); }
+      }
+      var shownBefore = Math.round(shown);
+      shown += (score - shown) * Math.min(1, dt * 10); // rolling score counter
+      if (Math.abs(score - shown) < 1) shown = score;
+      if (Math.round(shown) !== shownBefore) scoreEl.textContent = Math.round(shown);
+      timeEl.textContent = Math.ceil(timeLeft);
+
+      for (var s = sparks.length - 1; s >= 0; s--) {
+        var p = sparks[s];
+        p.life -= dt;
+        if (p.life <= 0) { sparks.splice(s, 1); continue; }
+        p.vx *= 1 - 3 * dt; p.vy = p.vy * (1 - 3 * dt) + 200 * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt;
+      }
+      for (var r = rings.length - 1; r >= 0; r--) { rings[r].life -= dt; rings[r].r += rings[r].grow * dt; if (rings[r].life <= 0) rings.splice(r, 1); }
+      for (var q = pops.length - 1; q >= 0; q--) { pops[q].life -= dt; if (!reduce.matches) pops[q].y -= 50 * dt; if (pops[q].life <= 0) pops.splice(q, 1); }
+      if (banner) { banner.life -= dt; if (banner.life <= 0) banner = null; }
+      if (beam) { beam.life -= dt; if (beam.life <= 0) beam = null; }
+      recoil = Math.max(0, recoil - dt * 6);
+      shakeAmp *= Math.pow(0.002, dt);
+      if (shakeAmp < 0.3) shakeAmp = 0;
+      if (!reduce.matches) gridScroll = (gridScroll + dt * (state === "play" ? 0.9 : 0.35)) % 1;
+    }
+
+    /* ---------- Drawing ---------- */
+    function glowOn(color, blur) { if (glow) { ctx.shadowColor = color; ctx.shadowBlur = blur; } }
+    function glowOff() { ctx.shadowBlur = 0; }
+
+    function drawBackground(t) {
+      var g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, COL.bg);
+      g.addColorStop(1, glow ? "#1a0b33" : "#ddd5f5");
+      ctx.fillStyle = g;
+      ctx.fillRect(-30, -30, W + 60, H + 60);
+      // stars drift with the aim for a sense of depth
+      var px = (aim.x / (W || 1) - 0.5), py = (aim.y / (H || 1) - 0.5);
+      ctx.fillStyle = COL.ink;
+      stars.forEach(function (s) {
+        ctx.globalAlpha = (0.15 + 0.5 * s.z) * (0.6 + 0.4 * Math.sin(t * 2 + s.ph));
+        ctx.fillRect(s.x * W - px * 30 * s.z, s.y * H - py * 16 * s.z, 1.6 * s.z + 0.4, 1.6 * s.z + 0.4);
+      });
+      ctx.globalAlpha = 1;
+      // synth floor: lines run to a vanishing point and scroll toward you
+      var hz = H * 0.66, vx = W / 2 - px * 40;
+      var hg = ctx.createLinearGradient(0, hz - 60, 0, hz + 10);
+      hg.addColorStop(0, "rgba(0,0,0,0)");
+      hg.addColorStop(1, COL.c2);
+      ctx.globalAlpha = glow ? 0.25 : 0.12;
+      ctx.fillStyle = hg;
+      ctx.fillRect(0, hz - 60, W, 70);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = COL.grid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (var i = -14; i <= 14; i++) { ctx.moveTo(vx + i * 14, hz); ctx.lineTo(vx + i * W * 0.16, H); }
+      for (var j = 0; j < 12; j++) {
+        var f = (j + gridScroll) / 12, y = hz + (H - hz) * f * f;
+        ctx.moveTo(0, y); ctx.lineTo(W, y);
+      }
+      ctx.stroke();
+    }
+
+    function shapePath(type, r) {
+      ctx.beginPath();
+      if (type === "ring") { ctx.arc(0, 0, r, 0, 6.283); ctx.moveTo(r * 0.45, 0); ctx.arc(0, 0, r * 0.45, 0, 6.283); }
+      else if (type === "diamond") { ctx.moveTo(0, -r); ctx.lineTo(r * 0.8, 0); ctx.lineTo(0, r); ctx.lineTo(-r * 0.8, 0); ctx.closePath(); }
+      else if (type === "hex" || type === "shard") {
+        var n = type === "hex" ? 6 : 3;
+        for (var i = 0; i <= n; i++) { var a = (i / n) * 6.283 - Math.PI / 2; ctx[i ? "lineTo" : "moveTo"](Math.cos(a) * r, Math.sin(a) * r); }
+      } else if (type === "star") {
+        for (var k = 0; k <= 10; k++) { var b = (k / 10) * 6.283 - Math.PI / 2, rr = k % 2 ? r * 0.45 : r; ctx[k ? "lineTo" : "moveTo"](Math.cos(b) * rr, Math.sin(b) * rr); }
+      } else {
+        for (var m = 0; m <= 16; m++) { var c = (m / 16) * 6.283, r2 = m % 2 ? r * 0.55 : r; ctx[m ? "lineTo" : "moveTo"](Math.cos(c) * r2, Math.sin(c) * r2); }
+      }
+    }
+
+    function drawTargets(t) {
+      targets.forEach(function (tg) {
+        var T = TYPES[tg.type], color = COL[T.col];
+        // new targets pop in with an ease-out scale
+        var grow = Math.min(1, tg.age / 0.25), s = 1 - Math.pow(1 - grow, 3);
+        var pulse = tg.type === "spike" ? 1 + Math.sin(t * 10) * 0.08 : 1;
+        ctx.save();
+        ctx.translate(tg.x, tg.y);
+        ctx.rotate(tg.rot);
+        ctx.scale(s * pulse, s * pulse);
+        glowOn(color, 18);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        shapePath(tg.type, tg.r);
+        if (tg.type === "star" || tg.type === "spike") { ctx.fillStyle = color; ctx.globalAlpha = 0.85; ctx.fill(); ctx.globalAlpha = 1; }
+        else { ctx.fillStyle = color; ctx.globalAlpha = 0.12; ctx.fill(); ctx.globalAlpha = 1; }
+        ctx.stroke();
+        glowOff();
+        ctx.restore();
+      });
+    }
+
+    function drawFx() {
+      if (glow) ctx.globalCompositeOperation = "lighter";
+      sparks.forEach(function (p) {
+        ctx.globalAlpha = p.life / p.max;
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = p.w;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * 0.035, p.y - p.vy * 0.035);
+        ctx.stroke();
+      });
+      rings.forEach(function (r) {
+        ctx.globalAlpha = r.life / r.max;
+        ctx.strokeStyle = r.color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 6.283); ctx.stroke();
+      });
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      pops.forEach(function (p) {
+        var k = p.life / p.max, grow = reduce.matches ? 1 : 1 + (1 - Math.min(1, (1 - k) * 6)) * 0.6;
+        ctx.globalAlpha = Math.min(1, k * 2);
+        ctx.font = "900 " + Math.round(20 * p.size * grow * K) + "px system-ui, sans-serif";
+        glowOn(p.color, 12);
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, p.x, p.y);
+        glowOff();
+      });
+      if (banner) {
+        var bk = banner.life / banner.max, in1 = Math.min(1, (1 - bk) * 5);
+        ctx.globalAlpha = Math.min(1, bk * 2.5);
+        ctx.font = "900 " + Math.round((reduce.matches ? 46 : 30 + 22 * in1) * K) + "px system-ui, sans-serif";
+        glowOn(COL.c4, 24);
+        ctx.fillStyle = COL.c4;
+        ctx.fillText(banner.text.toUpperCase(), W / 2, H * 0.3);
+        glowOff();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawTurretAndAim(t) {
+      var bx = W / 2, by = H + 6, ang = Math.atan2(aim.y - by, aim.x - bx), len = 46 * K - recoil * 12;
+      if (beam) {
+        ctx.globalAlpha = beam.life / 0.12;
+        glowOn(COL.c1, 20);
+        ctx.strokeStyle = COL.c1;
+        ctx.lineWidth = 3 + 3 * (beam.life / 0.12);
+        ctx.beginPath();
+        ctx.moveTo(bx + Math.cos(ang) * len, by + Math.sin(ang) * len);
+        ctx.lineTo(beam.x, beam.y);
+        ctx.stroke();
+        glowOff();
+        ctx.globalAlpha = 1;
+      }
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(ang);
+      ctx.fillStyle = COL.ink;
+      ctx.fillRect(0, -6 * K, len, 12 * K);
+      ctx.restore();
+      glowOn(COL.c1, 14);
+      ctx.fillStyle = COL.ink;
+      ctx.beginPath(); ctx.arc(bx, by, 30 * K, Math.PI, 0); ctx.fill();
+      ctx.strokeStyle = COL.c1; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(bx, by, 30 * K, Math.PI, 0); ctx.stroke();
+      glowOff();
+
+      // crosshair: tightens and turns pink over a target, kicks out when firing
+      var over = targets.some(function (tg) { return Math.hypot(tg.x - aim.x, tg.y - aim.y) < tg.r * 1.2; });
+      var cr = (over ? 12 : 17) + recoil * 10, col = over ? COL.c2 : COL.c1;
+      ctx.save();
+      ctx.translate(aim.x, aim.y);
+      ctx.rotate(reduce.matches ? 0 : t * 0.8);
+      glowOn(col, 12);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, cr, 0, 6.283); ctx.stroke();
+      ctx.beginPath();
+      for (var i = 0; i < 4; i++) { ctx.rotate(Math.PI / 2); ctx.moveTo(cr - 5, 0); ctx.lineTo(cr + 7, 0); }
+      ctx.stroke();
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(0, 0, 2, 0, 6.283); ctx.fill();
+      glowOff();
+      ctx.restore();
+    }
+
+    function drawTimeBar() {
+      var f = Math.max(0, Math.min(1, timeLeft / ROUND));
+      ctx.fillStyle = COL.grid;
+      ctx.fillRect(0, 0, W, 4);
+      glowOn(timeLeft <= 10 ? COL.c5 : COL.c3, 10);
+      ctx.fillStyle = timeLeft <= 10 ? COL.c5 : COL.c3;
+      ctx.fillRect(0, 0, W * f, 4);
+      glowOff();
+    }
+
+    /* ---------- Loop ---------- */
+    var prev = performance.now();
+    function loop(now) {
+      var dt = Math.min(0.05, (now - prev) / 1000), t = now / 1000;
+      prev = now;
+      if (freeze > 0) { freeze -= dt; dt = 0; }
+      if (state === "paused") dt = 0;
+      update(dt);
+      ctx.save();
+      if (shakeAmp > 0) ctx.translate(rand(-1, 1) * shakeAmp, rand(-1, 1) * shakeAmp);
+      drawBackground(t);
+      drawTargets(t);
+      drawFx();
+      drawTurretAndAim(t);
+      ctx.restore();
+      drawTimeBar();
+      requestAnimationFrame(loop);
+    }
+
+    readColours();
+    layout();
+    hudLives();
+    requestAnimationFrame(loop);
+  })();
+</script>
+</body>
+</html>

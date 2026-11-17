@@ -1,0 +1,379 @@
+<!doctype html>
+<!-- Chill and Craft · Letter Drop · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Letter Drop · delete button</title>
+<script>
+  // Theme: ?theme=light|dark overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colours and motion curves ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #fff6f8;
+    --bg2: #ffe1e9;
+    --pill: #ffffff;
+    --pink: #ff4f7b;
+    --ink: #e11d58;
+    --text: #3b1d27;
+    --muted: #8d6170;
+    --bubble: #ffffff;
+    --toast: #3b1d27;
+    --toast-text: #fff3f6;
+    --toast-link: #ff9ab5;
+    --focus: #7c3aed;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg1: #23121a;
+      --bg2: #0f080b;
+      --pill: #2a1720;
+      --pink: #ff6b93;
+      --ink: #ff8fb0;
+      --text: #fbe7ee;
+      --muted: #c497a7;
+      --bubble: #2a1720;
+      --toast: #fbe7ee;
+      --toast-text: #3b1d27;
+      --toast-link: #d1124c;
+      --focus: #c4b5fd;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #23121a;
+    --bg2: #0f080b;
+    --pill: #2a1720;
+    --pink: #ff6b93;
+    --ink: #ff8fb0;
+    --text: #fbe7ee;
+    --muted: #c497a7;
+    --bubble: #2a1720;
+    --toast: #fbe7ee;
+    --toast-text: #3b1d27;
+    --toast-link: #d1124c;
+    --focus: #c4b5fd;
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  body { overflow-x: hidden; } /* particles may fly past the edges */
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(160deg, var(--bg1), var(--bg2));
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 24px 16px; width: 100%; }
+
+  /* ---------- Message bubble (what gets deleted) ---------- */
+  .bubble {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    width: 280px;
+    max-width: 100%;
+    padding: 14px 16px;
+    border-radius: 18px 18px 18px 6px;
+    background: var(--bubble);
+    box-shadow: 0 12px 30px -20px rgba(150, 20, 60, .6);
+  }
+  .avatar { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #ff9ab5, #ff4f7b); color: #fff; font-size: 13px; font-weight: 700; }
+  .msg { margin: 0; font-size: 14px; line-height: 1.45; }
+  .msg b { display: block; font-size: 13px; color: var(--ink); margin-bottom: 2px; }
+  .msg span { display: inline-block; }
+  .bubble.is-deleted .msg span { font-style: italic; color: var(--muted); }
+
+  /* ---------- Delete pill ---------- */
+  .btn {
+    position: relative;
+    width: 240px;
+    height: 60px;
+    padding: 0;
+    border: 2px solid var(--pink);
+    border-radius: 30px;
+    background: var(--pill);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+    box-shadow: 0 10px 24px -16px rgba(225, 29, 88, .8);
+    transition: transform .4s var(--spring), box-shadow .25s;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 16px 30px -14px rgba(225, 29, 88, .9); }
+  .btn:active { transform: scale(.96); transition-duration: .1s; }
+  .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .btn[aria-disabled="true"] { cursor: default; transform: none; }
+
+  .word, .gone { position: absolute; left: 30px; top: 0; bottom: 0; display: flex; align-items: center; font-size: 21px; font-weight: 750; letter-spacing: .02em; }
+  .word span { display: inline-block; will-change: transform; }
+  /* Hover: the letters do a little wave */
+  .btn:not([aria-disabled="true"]):hover .word span { animation: wave .55s ease-in-out; animation-delay: calc(var(--i) * 55ms); }
+  .word.fade-in { animation: fadeIn .45s var(--spring); }
+  .gone { font-size: 17px; font-weight: 650; opacity: 0; transform: translateY(10px) scale(.9); transition: opacity .3s, transform .6s var(--spring); }
+
+  /* Bin in a pink circle on the right */
+  .binwrap { position: absolute; right: 5px; top: 5px; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: var(--pink); transition: transform .4s var(--spring); }
+  .btn:not([aria-disabled="true"]):hover .binwrap { transform: rotate(-8deg) scale(1.06); }
+  .binwrap svg { width: 24px; height: 26px; overflow: visible; fill: none; stroke: #fff; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+  .lid { transform-box: fill-box; transform-origin: 100% 100%; transition: transform .35s var(--spring); }
+  .btn:not([aria-disabled="true"]):hover .lid { transform: rotate(18deg); }
+  .binwrap .check { stroke-dasharray: 20; stroke-dashoffset: 20; transition: stroke-dashoffset .4s .15s ease-out; }
+  .binwrap .can { transition: opacity .2s, transform .3s; transform-box: fill-box; transform-origin: 50% 50%; }
+
+  /* Pink particles from the bin */
+  .fx { position: absolute; right: 28px; top: 28px; width: 0; height: 0; pointer-events: none; }
+  .particle { position: absolute; width: 7px; height: 7px; border-radius: 50%; pointer-events: none; }
+  .particle.heart { width: 10px; height: 10px; border-radius: 0; clip-path: path("M5 9.2L1.2 5.4A2.3 2.3 0 0 1 5 2.6a2.3 2.3 0 0 1 3.8 2.8z"); }
+
+  /* ---------- States ---------- */
+  .btn:is([data-state="eating"], [data-state="undo"]) .lid { transform: rotate(42deg); }
+  .btn[data-state="done"] .gone { opacity: 1; transform: none; }
+  .btn[data-state="done"] .can { opacity: 0; transform: scale(.5); }
+  .btn[data-state="done"] .check { stroke-dashoffset: 0; }
+  .btn[data-state="done"] .binwrap { animation: boing .7s var(--spring); }
+
+  /* ---------- Undo toast ---------- */
+  .toast {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 10px 10px 16px;
+    border-radius: 14px;
+    background: var(--toast);
+    color: var(--toast-text);
+    font-size: 14px;
+    overflow: hidden;
+    animation: rise .55s var(--spring);
+  }
+  .toast[hidden] { display: none; }
+  .toast .bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--toast-link); transform-origin: left; animation: shrink 6s linear forwards; }
+  .undo { border: 0; padding: 6px 12px; border-radius: 9px; background: transparent; color: var(--toast-link); font: inherit; font-weight: 700; cursor: pointer; transition: transform .3s var(--spring), background-color .2s; }
+  .undo:hover { background: rgba(255, 255, 255, .1); transform: scale(1.06); }
+  .undo:active { transform: scale(.94); }
+  .undo:focus-visible { outline: 2px solid var(--toast-link); outline-offset: 2px; }
+
+  @keyframes wave { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-5px) rotate(-4deg); } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px) scale(.9); } to { opacity: 1; transform: none; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px) scale(.92); } to { opacity: 1; transform: none; } }
+  @keyframes shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+  @keyframes boing { 0% { transform: scale(1); } 30% { transform: scale(1.25, .8); } 100% { transform: scale(1); } }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  /* Calm mode: same steps, no big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; animation-delay: 0s !important; }
+    .toast .bar, .fx { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="bubble" id="bubble">
+    <span class="avatar" aria-hidden="true">AK</span>
+    <p class="msg"><b>Ayesha Khan</b><span id="msgText">Meeting moved to 4 pm. Please bring the fabric samples.</span></p>
+  </div>
+
+  <button class="btn" type="button" data-state="idle">
+    <span class="sr-only" id="btnName">Delete message</span>
+    <span class="word" aria-hidden="true"><span style="--i:0">D</span><span style="--i:1">e</span><span style="--i:2">l</span><span style="--i:3">e</span><span style="--i:4">t</span><span style="--i:5">e</span></span>
+    <span class="gone" aria-hidden="true">Deleted</span>
+    <span class="binwrap" aria-hidden="true">
+      <svg viewBox="0 0 24 26">
+        <g class="can">
+          <g class="lid"><path d="M2.5 6.5h19" /><path d="M9 6.5V4c0-.6.4-1 1-1h4c.6 0 1 .4 1 1v2.5" /></g>
+          <path d="M5 10l1.2 12.2A2 2 0 0 0 8.2 24h7.6a2 2 0 0 0 2-1.8L19 10" />
+          <path d="M10 13v7M14 13v7" />
+        </g>
+        <path class="check" d="M6 13.5l4 4 8-8.5" />
+      </svg>
+    </span>
+    <span class="fx" aria-hidden="true"></span>
+  </button>
+
+  <div class="toast" id="toast" hidden>
+    <span>Message deleted.</span>
+    <button class="undo" type="button">Undo</button>
+    <span class="bar" aria-hidden="true"></span>
+  </div>
+
+  <p class="sr-only" id="status" aria-live="polite"></p>
+</main>
+
+<script>
+  // ---------- Letter Drop delete button ----------
+  const btn = document.querySelector(".btn");
+  const word = btn.querySelector(".word");
+  const letters = [...word.children];
+  const binwrap = btn.querySelector(".binwrap");
+  const fx = btn.querySelector(".fx");
+  const btnName = document.getElementById("btnName");
+  const toast = document.getElementById("toast");
+  const undoBtn = toast.querySelector(".undo");
+  const bubble = document.getElementById("bubble");
+  const msgText = document.getElementById("msgText");
+  const status = document.getElementById("status");
+
+  const MESSAGE = msgText.textContent;
+  const SPRING = "cubic-bezier(.34, 1.56, .64, 1)";
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduceMotion.matches;
+  const dur = (ms) => (calm() ? 1 : ms);
+  let state = "idle";
+  let flights = [];
+  let paths = [];
+  let undoTimer = 0;
+
+  function setState(s) {
+    state = s;
+    btn.dataset.state = s;
+  }
+
+  function play(el, frames, options) {
+    if (calm() || !el.animate) return Promise.resolve();
+    return el.animate(frames, options).finished.catch(() => {});
+  }
+
+  // Hearts and dots popping out of the bin
+  function burst(count) {
+    if (calm()) return;
+    const colors = ["#ff4f7b", "#ff9ab5", "#ffc2d3", "#e11d58"];
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement("i");
+      p.className = "particle" + (i % 2 ? " heart" : "");
+      p.style.background = colors[i % colors.length];
+      fx.appendChild(p);
+      const a = -Math.PI / 2 + (Math.random() - .5) * 2.4;
+      const d = 34 + Math.random() * 30;
+      p.animate([
+        { transform: "translate(-50%, -50%) scale(.3)", opacity: 1 },
+        { transform: "translate(calc(-50% + " + (Math.cos(a) * d).toFixed(1) + "px), calc(-50% + " + (Math.sin(a) * d).toFixed(1) + "px)) scale(1.1) rotate(" + Math.round(Math.random() * 60 - 30) + "deg)", opacity: 1, offset: .6 },
+        { transform: "translate(calc(-50% + " + (Math.cos(a) * d * 1.15).toFixed(1) + "px), calc(-50% + " + (Math.sin(a) * d + 14).toFixed(1) + "px)) scale(.6)", opacity: 0 }
+      ], { duration: 900 + Math.random() * 300, easing: "cubic-bezier(.2, .7, .4, 1)" }).onfinish = () => p.remove();
+    }
+  }
+
+  // Distance from a letter (at rest) to the bin's mouth
+  function offsetToBin(letter) {
+    const a = letter.getBoundingClientRect();
+    const b = binwrap.getBoundingClientRect();
+    return { dx: b.left + b.width / 2 - (a.left + a.width / 2), dy: b.top + 14 - (a.top + a.height / 2) };
+  }
+
+  // A hop: up in an arc, spinning, shrinking into the bin
+  function hopFrames(dx, dy) {
+    return [
+      { transform: "translate(0px, 0px) rotate(0deg) scale(1)", opacity: 1 },
+      { transform: "translate(" + (dx * .5).toFixed(1) + "px, " + (dy - 42).toFixed(1) + "px) rotate(150deg) scale(.95)", opacity: 1, offset: .55 },
+      { transform: "translate(" + dx.toFixed(1) + "px, " + dy.toFixed(1) + "px) rotate(320deg) scale(.3)", opacity: 0 }
+    ];
+  }
+
+  function gulp() {
+    play(binwrap, [{ transform: "scale(1)" }, { transform: "scale(1.16, .86)" }, { transform: "scale(.96, 1.05)" }, { transform: "scale(1)" }], { duration: 300, easing: "ease-out" });
+  }
+
+  async function deleteIt() {
+    setState("eating");
+    btn.setAttribute("aria-disabled", "true");
+    status.textContent = "Deleting message.";
+    paths = letters.map(offsetToBin); // measure before anything moves
+
+    // 1. Anticipation: the letters lean back, the pill squeezes
+    await Promise.all([
+      play(btn, [{ transform: "scale(1)" }, { transform: "scale(.96, 1.04)" }, { transform: "scale(1)" }], { duration: 320, easing: "ease-out" }),
+      ...letters.map((l, i) => play(l, [{ transform: "rotate(0)" }, { transform: "translateX(-3px) rotate(-12deg)" }, { transform: "rotate(0)" }], { duration: 320, delay: i * 18, easing: "ease-in-out" }))
+    ]);
+
+    // 2. Letters hop in, last letter first (it is closest to the bin)
+    const order = letters.slice().reverse();
+    flights = order.map((letter, i) => {
+      const { dx, dy } = paths[letters.indexOf(letter)];
+      const anim = letter.animate(hopFrames(dx, dy), { duration: dur(560), delay: dur(i * 115), easing: "cubic-bezier(.3, .1, .5, 1)", fill: "forwards" });
+      anim.finished.then(gulp).catch(() => {});
+      return anim;
+    });
+    await Promise.all(flights.map((a) => a.finished.catch(() => {})));
+
+    // 3. Finish: the bin boings, hearts pop, the result springs in
+    setState("done");
+    burst(12);
+    btnName.textContent = "Deleted";
+    bubble.classList.add("is-deleted");
+    play(msgText, [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 400, easing: SPRING });
+    msgText.textContent = "This message was deleted.";
+    toast.hidden = false;
+    status.textContent = "Message deleted. Undo is available for 6 seconds.";
+    undoTimer = setTimeout(resetQuietly, 6000);
+  }
+
+  // Undo: the letters jump back out with a bouncy landing
+  async function undo() {
+    if (state !== "done") return;
+    clearTimeout(undoTimer);
+    toast.hidden = true;
+    btn.focus();
+    setState("undo");
+    bubble.classList.remove("is-deleted");
+    msgText.textContent = MESSAGE;
+    play(msgText, [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 400, easing: SPRING });
+    const back = letters.map((letter, i) => {
+      const { dx, dy } = paths[i];
+      const frames = [
+        { transform: "translate(" + dx.toFixed(1) + "px, " + dy.toFixed(1) + "px) rotate(320deg) scale(.3)", opacity: 0 },
+        { transform: "translate(" + (dx * .5).toFixed(1) + "px, " + (dy - 42).toFixed(1) + "px) rotate(150deg) scale(.95)", opacity: 1, offset: .45 },
+        { transform: "translate(0px, 3px) rotate(-6deg) scale(1.15, .85)", opacity: 1, offset: .85 },
+        { transform: "translate(0px, 0px) rotate(0deg) scale(1)", opacity: 1 }
+      ];
+      return letter.animate(frames, { duration: dur(620), delay: dur(i * 90), easing: "cubic-bezier(.4, 0, .6, 1)", fill: "forwards" });
+    });
+    await Promise.all(back.map((a) => a.finished.catch(() => {})));
+    back.concat(flights).forEach((a) => a.cancel());
+    flights = [];
+    play(btn, [{ transform: "rotate(0)" }, { transform: "rotate(-3deg)" }, { transform: "rotate(3deg)" }, { transform: "rotate(0)" }], { duration: 400, easing: "ease-in-out" });
+    finish("Message restored.");
+  }
+
+  // No undo: tidy up so the demo can run again
+  function resetQuietly() {
+    if (state !== "done") return;
+    toast.hidden = true;
+    bubble.classList.remove("is-deleted");
+    msgText.textContent = MESSAGE;
+    flights.forEach((a) => a.cancel());
+    flights = [];
+    word.classList.remove("fade-in");
+    void word.offsetWidth; // restart the fade
+    word.classList.add("fade-in");
+    finish("Demo reset. The message is back.");
+  }
+
+  function finish(message) {
+    setState("idle");
+    btnName.textContent = "Delete message";
+    btn.removeAttribute("aria-disabled");
+    status.textContent = message;
+  }
+
+  btn.addEventListener("click", () => {
+    if (state === "idle") deleteIt();
+  });
+  undoBtn.addEventListener("click", undo);
+</script>
+</body>
+</html>

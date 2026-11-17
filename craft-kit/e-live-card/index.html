@@ -1,0 +1,919 @@
+<!doctype html>
+<!-- Chill and Craft · Live Card · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Card Checkout · Chill and Craft</title>
+<script>
+  /* Theme: ?theme=light|dark wins, otherwise follow the system setting */
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg: #f4f5f1;
+    --surface: #ffffff;
+    --ink: #13221f;
+    --muted: #5f706b;
+    --line: #dfe4de;
+    --field: #fbfcfa;
+    --accent: #0f766e;
+    --accent-ink: #ffffff;
+    --soft: #e3f1ee;
+    --bad: #c2410c;
+    --good: #15803d;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b100f;
+    --surface: #131b19;
+    --ink: #e6efec;
+    --muted: #93a6a0;
+    --line: #26332f;
+    --field: #0f1614;
+    --accent: #2dd4bf;
+    --accent-ink: #062521;
+    --soft: #15302b;
+    --bad: #fb923c;
+    --good: #4ade80;
+    color-scheme: dark;
+  }
+
+  /* ---------- Base ---------- */
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  a { color: var(--accent); }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .skip { position: absolute; left: 12px; top: -60px; padding: 8px 12px; background: var(--ink); color: var(--surface); border-radius: 8px; z-index: 10; }
+  .skip:focus { top: 12px; }
+  .wrap { width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+
+  /* ---------- Header ---------- */
+  .top { background: var(--surface); border-bottom: 1px solid var(--line); }
+  .top-in { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; padding-top: 14px; padding-bottom: 14px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-weight: 800; font-size: 18px; }
+  .brand svg { width: 30px; height: 30px; }
+  .crumbs { display: flex; gap: 6px; list-style: none; margin: 0 0 0 auto; padding: 0; font-size: 13px; color: var(--muted); }
+  .crumbs li { display: flex; align-items: center; gap: 6px; }
+  .crumbs li + li::before { content: "›"; color: var(--line); font-size: 16px; }
+  .crumbs .done { color: var(--good); }
+  .crumbs [aria-current] { color: var(--ink); font-weight: 700; }
+  .secure { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .secure svg { width: 16px; height: 16px; }
+
+  /* ---------- Layout ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    grid-template-areas: "pay sum";
+    gap: 28px;
+    padding-top: 32px; padding-bottom: 48px;
+    align-items: start;
+  }
+  .pay { grid-area: pay; min-width: 0; }
+  .sum { grid-area: sum; min-width: 0; position: sticky; top: 20px; }
+  h1 { margin: 0; font-size: clamp(24px, 3.4vw, 32px); line-height: 1.15; }
+  .lead { margin: 6px 0 22px; color: var(--muted); font-size: 14.5px; }
+
+  /* ---------- Live card ---------- */
+  .card3d {
+    width: min(100%, 400px);
+    aspect-ratio: 1.586;
+    perspective: 1200px;
+    margin: 0 0 26px;
+    container-type: inline-size;
+  }
+  /* Tilt follows the pointer (--rx, --ry); --flip turns it over for the CVV */
+  .inner {
+    position: relative; width: 100%; height: 100%;
+    transform-style: preserve-3d;
+    transform: rotateX(var(--rx, 0deg)) rotateY(calc(var(--ry, 0deg) + var(--flip, 0deg)));
+    transition: transform .8s cubic-bezier(.3, 1.3, .4, 1);
+  }
+  .card3d.tilting .inner { transition: transform .15s ease-out; }
+  .card3d.flipped { --flip: 180deg; }
+  .card3d { animation: cardIn 1s cubic-bezier(.3, 1.3, .4, 1) .15s backwards; }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(40px) rotateX(40deg) rotateZ(-8deg) scale(.85); } }
+  .glare {
+    position: absolute; inset: 0; z-index: 3; border-radius: inherit; pointer-events: none;
+    background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, .35), transparent 45%);
+    opacity: 0; transition: opacity .3s;
+  }
+  .card3d.tilting .glare { opacity: 1; }
+  .sweep { position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; z-index: 3; pointer-events: none; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .45), transparent); transform: skewX(-18deg); opacity: 0; }
+  .card3d.shine .sweep { animation: sweep .9s ease-out; }
+  @keyframes sweep { 0% { left: -60%; opacity: 1; } 100% { left: 130%; opacity: 1; } }
+  .net svg { animation: netIn .5s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes netIn { from { transform: scale(0) rotate(-30deg); opacity: 0; } }
+  .face {
+    position: absolute; inset: 0;
+    border-radius: 18px;
+    padding: 6% 7%;
+    color: #f8fbfa;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    background: radial-gradient(circle at 85% 10%, rgba(255, 255, 255, .22), transparent 40%), linear-gradient(135deg, #134e4a, #0b2a28 60%, #1f2937);
+    box-shadow: 0 24px 40px -22px rgba(4, 30, 28, .8), inset 0 1px 0 rgba(255, 255, 255, .2);
+    overflow: hidden;
+    transition: background .5s;
+  }
+  .face::after { /* soft wave pattern */
+    content: ""; position: absolute; inset: 0;
+    background: repeating-radial-gradient(circle at 0% 100%, transparent 0 18px, rgba(255, 255, 255, .05) 18px 19px);
+    pointer-events: none;
+  }
+  .back { transform: rotateY(180deg); padding: 0; }
+  .card3d[data-net="orbit"] .face { background: radial-gradient(circle at 85% 10%, rgba(255, 255, 255, .25), transparent 40%), linear-gradient(135deg, #1d4ed8, #0e7490 70%, #0f766e); }
+  .card3d[data-net="lumen"] .face { background: radial-gradient(circle at 85% 10%, rgba(255, 255, 255, .25), transparent 40%), linear-gradient(135deg, #b45309, #be123c 70%, #831843); }
+  .card3d[data-net="kestrel"] .face { background: radial-gradient(circle at 85% 10%, rgba(255, 255, 255, .25), transparent 40%), linear-gradient(135deg, #334155, #166534 75%, #14532d); }
+  .card3d[data-net="mira"] .face { background: radial-gradient(circle at 85% 10%, rgba(255, 255, 255, .25), transparent 40%), linear-gradient(135deg, #6d28d9, #c026d3 70%, #9d174d); }
+
+  .row1 { position: relative; display: flex; align-items: center; gap: 4%; height: 22%; }
+  .chip { width: 15%; height: auto; }
+  .wave { width: 7%; height: auto; opacity: .85; }
+  .net { margin-left: auto; height: 100%; display: flex; align-items: center; font-weight: 800; font-style: italic; letter-spacing: .02em; font-size: 16px; font-size: 5cqw; }
+  .net svg { height: 70%; width: auto; }
+  .num {
+    position: relative;
+    display: flex; gap: 5%;
+    margin-top: 11%;
+    font: 600 20px/1 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 6.6cqw;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+    white-space: nowrap;
+  }
+  .grp { display: flex; }
+  .num span { display: inline-block; width: .64em; text-align: center; }
+  .num span.ph { opacity: .45; }
+  .num span.flip { animation: digit .28s ease-out; }
+  @keyframes digit { from { transform: translateY(-60%); opacity: 0; } }
+  .row3 { position: absolute; left: 7%; right: 7%; bottom: 8%; display: flex; justify-content: space-between; gap: 6%; align-items: flex-end; }
+  .row3 small { display: block; font-size: 9px; font-size: 2.6cqw; text-transform: uppercase; letter-spacing: .12em; opacity: .7; }
+  .row3 span { display: block; font-weight: 650; font-size: 14px; font-size: 4.2cqw; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .holder { min-width: 0; flex: 1; }
+  .exp { flex: none; text-align: right; }
+  .ring {
+    position: absolute; left: 0; top: 0; z-index: 2;
+    border: 2px solid rgba(255, 255, 255, .85); border-radius: 10px;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, .15);
+    opacity: 0; pointer-events: none;
+    transition: transform .35s cubic-bezier(.3, .8, .3, 1), width .35s, height .35s, opacity .2s;
+  }
+  .ring.on { opacity: 1; }
+  .stripe { height: 20%; margin-top: 8%; background: #0b0f0e; }
+  .sign { display: flex; align-items: center; gap: 4%; margin: 7% 7% 0; }
+  .sign i { flex: 1; height: 13cqw; min-height: 34px; border-radius: 4px; background: repeating-linear-gradient(-45deg, #f2f2ef 0 6px, #e2e3de 6px 12px); }
+  .sign b { min-width: 22%; padding: 6px 10px; border-radius: 6px; background: #fff; color: #13221f; text-align: center; font: 700 15px ui-monospace, Menlo, Consolas, monospace; font-size: 4.4cqw; letter-spacing: .1em; }
+  .fine { position: absolute; left: 7%; right: 7%; bottom: 8%; display: flex; justify-content: space-between; align-items: center; font-size: 9px; font-size: 2.5cqw; opacity: .75; }
+  .fine .net { margin: 0; height: auto; font-size: 13px; font-size: 4cqw; }
+
+  /* ---------- Form ---------- */
+  .form { display: grid; gap: 16px; }
+  .field label { display: block; font-size: 13.5px; font-weight: 650; margin-bottom: 6px; transition: color .2s, transform .35s cubic-bezier(.34, 1.56, .64, 1); }
+  .field:focus-within label { color: var(--accent); transform: translateX(3px); }
+  .field.shake .control { animation: shake .4s ease; }
+  @keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+
+  /* Entrances: form rows rise in one after another, other blocks reveal on scroll */
+  .form > * { animation: up .6s cubic-bezier(.34, 1.56, .64, 1) backwards; animation-delay: calc(var(--i, 0) * 70ms + .35s); }
+  @keyframes up { from { opacity: 0; transform: translateY(16px); } }
+  .reveal { opacity: 0; transform: translateY(22px); transition: opacity .6s ease, transform .8s cubic-bezier(.34, 1.56, .64, 1); transition-delay: var(--d, 0s); }
+  .reveal.in { opacity: 1; transform: none; }
+  .top { animation: down .6s cubic-bezier(.34, 1.56, .64, 1) backwards; }
+  @keyframes down { from { opacity: 0; transform: translateY(-100%); } }
+  .crumbs [aria-current]::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: beat 1.4s ease-in-out infinite; }
+  @keyframes beat { 50% { transform: scale(1.6); opacity: .5; } }
+  .brand svg { transition: transform .6s cubic-bezier(.34, 1.56, .64, 1); }
+  .brand:hover svg { transform: rotate(-12deg) scale(1.1); }
+  .control { position: relative; }
+  .field input {
+    width: 100%; height: 50px;
+    padding: 0 44px 0 14px;
+    border: 1.5px solid var(--line); border-radius: 12px;
+    background: var(--field); color: var(--ink);
+    font: 16px system-ui, sans-serif;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .field input::placeholder { color: var(--muted); opacity: .7; }
+  .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--soft); }
+  .field.bad input { border-color: var(--bad); }
+  .field .mark { position: absolute; right: 14px; top: 50%; width: 20px; height: 20px; margin-top: -10px; opacity: 0; transform: scale(.6); transition: opacity .2s, transform .25s; color: var(--good); }
+  .field.good .mark { opacity: 1; transform: none; }
+  .err { margin: 6px 0 0; font-size: 13px; color: var(--bad); min-height: 0; }
+  .err:empty { display: none; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .check { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+  .check input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .hint { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--soft); font-size: 13px; }
+  .linkish { border: 0; background: none; padding: 0; color: var(--accent); font: 700 13px system-ui, sans-serif; text-decoration: underline; cursor: pointer; }
+
+  .paybtn {
+    position: relative; overflow: hidden;
+    width: 100%; height: 56px; border: 0; border-radius: 14px;
+    justify-self: center;
+    background: var(--accent); color: var(--accent-ink);
+    font: 800 17px system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    cursor: pointer;
+    box-shadow: 0 12px 24px -14px var(--accent);
+    transition: filter .2s, transform .4s cubic-bezier(.34, 1.56, .64, 1), box-shadow .3s, width .45s cubic-bezier(.6, 0, .3, 1), border-radius .45s;
+  }
+  .paybtn:hover { filter: brightness(1.06); transform: translateY(-2px); box-shadow: 0 18px 30px -14px var(--accent); }
+  .paybtn:hover .lock { animation: jiggle .5s ease; }
+  @keyframes jiggle { 30% { transform: rotate(-12deg); } 60% { transform: rotate(8deg); } }
+  .paybtn:active { transform: scale(.97); transition-duration: .08s; }
+  .paybtn::before { /* shine on hover */
+    content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .35), transparent); transform: skewX(-18deg);
+  }
+  .paybtn:hover::before { animation: shineBtn .9s ease; }
+  @keyframes shineBtn { to { left: 130%; } }
+  .paybtn::after { /* progress while processing */
+    content: ""; position: absolute; left: 0; bottom: 0; height: 4px; width: 0; background: rgba(255, 255, 255, .7);
+  }
+  .paybtn.loading::after { width: 100%; transition: width 1.6s cubic-bezier(.4, 0, .2, 1); }
+  .paybtn svg { width: 18px; height: 18px; }
+  .spin { display: none; width: 20px; height: 20px; border-radius: 50%; border: 3px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+  .paybtn.loading .spin { display: block; }
+  .paybtn.loading .lock { display: none; }
+  .paybtn[aria-disabled="true"] { cursor: progress; }
+  .paybtn.press { animation: squash .35s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes squash { 35% { transform: scale(1.02, .86); } 70% { transform: scale(.99, 1.04); } }
+  /* Success: the button shrinks into a round tick */
+  .done-tick { display: none; width: 26px !important; height: 26px !important; }
+  .done-tick path { stroke-dasharray: 26; stroke-dashoffset: 26; }
+  .paybtn.morph { width: 56px; border-radius: 50%; background: var(--good); }
+  .paybtn.morph > :not(.done-tick) { display: none; }
+  .paybtn.morph .done-tick { display: block; }
+  .paybtn.morph .done-tick path { stroke-dashoffset: 0; transition: stroke-dashoffset .35s ease-out .35s; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .bit { position: fixed; z-index: 40; width: 8px; height: 12px; margin: -6px 0 0 -4px; border-radius: 2px; pointer-events: none; }
+  .bit.round { width: 9px; height: 9px; border-radius: 50%; }
+
+  /* ---------- Success ---------- */
+  .success { padding: 26px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); text-align: center; }
+  .success[hidden] { display: none; }
+  .success svg { width: 72px; height: 72px; }
+  .success circle { fill: none; stroke: var(--good); stroke-width: 4; stroke-dasharray: 202; stroke-dashoffset: 202; animation: draw .6s ease-out forwards; }
+  .success path { fill: none; stroke: var(--good); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 50; stroke-dashoffset: 50; animation: draw .4s ease-out .5s forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .success { animation: pop .6s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes pop { from { opacity: 0; transform: scale(.85) translateY(10px); } }
+  .success h2 { margin: 10px 0 6px; font-size: 22px; outline: none; }
+  .success p { margin: 0 0 6px; color: var(--muted); }
+  .success > * { animation: up .55s cubic-bezier(.34, 1.56, .64, 1) backwards; }
+  .success > :nth-child(2) { animation-delay: .25s; }
+  .success > :nth-child(3) { animation-delay: .35s; }
+  .success > :nth-child(4) { animation-delay: .45s; }
+  .success > :nth-child(5) { animation-delay: .55s; }
+  .again { margin-top: 14px; height: 46px; padding: 0 18px; border-radius: 12px; border: 1.5px solid var(--line); background: transparent; color: var(--ink); font: 700 15px system-ui, sans-serif; cursor: pointer; transition: transform .4s cubic-bezier(.34, 1.56, .64, 1), border-color .2s; }
+  .again:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .again:active { transform: scale(.95); transition-duration: .08s; }
+
+  /* ---------- Order summary ---------- */
+  .sum-box { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 20px; }
+  .sum h2 { margin: 0 0 14px; font-size: 18px; }
+  .items { list-style: none; margin: 0; padding: 0; }
+  .items li { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .thumb { position: relative; width: 52px; height: 52px; border-radius: 12px; background: var(--soft); display: grid; place-items: center; }
+  .thumb svg { width: 38px; height: 38px; }
+  .thumb b { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; border-radius: 10px; background: var(--ink); color: var(--surface); font-size: 11px; line-height: 20px; text-align: center; }
+  .items strong { display: block; font-size: 14px; line-height: 1.3; }
+  .items small { color: var(--muted); font-size: 12.5px; }
+  .items .p { font-weight: 700; font-size: 14px; white-space: nowrap; }
+  .items li { transition: transform .4s cubic-bezier(.34, 1.56, .64, 1); }
+  .items li:hover { transform: translateX(4px); }
+  .thumb { transition: transform .5s cubic-bezier(.34, 1.56, .64, 1); }
+  .items li:hover .thumb { transform: rotate(-8deg) scale(1.08); }
+  .promo button { transition: transform .4s cubic-bezier(.34, 1.56, .64, 1), opacity .2s; }
+  .promo button:hover { transform: translateY(-2px); }
+  .promo button:active { transform: scale(.94); transition-duration: .08s; }
+  .promo.shake input { animation: shake .4s ease; }
+  #discRow:not([hidden]) { animation: up .5s cubic-bezier(.34, 1.56, .64, 1); }
+  #tTotal { display: inline-block; }
+  #tTotal.tick { animation: tick .5s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes tick { 40% { transform: scale(1.2); color: var(--accent); } }
+  .trust li svg { transition: transform .5s cubic-bezier(.34, 1.56, .64, 1); }
+  .trust li:hover svg { transform: rotate(-14deg) scale(1.2); }
+  .foot a { text-decoration: none; background: linear-gradient(currentColor, currentColor) 0 100% / 0 2px no-repeat; transition: background-size .3s; }
+  .foot a:hover { background-size: 100% 2px; }
+  .promo { display: flex; gap: 8px; margin: 16px 0 4px; }
+  .promo input { flex: 1; min-width: 0; height: 44px; padding: 0 12px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); font: 15px system-ui, sans-serif; text-transform: uppercase; }
+  .promo input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--soft); }
+  .promo button { height: 44px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--ink); color: var(--surface); font: 700 14px system-ui, sans-serif; cursor: pointer; }
+  .promo-msg { margin: 4px 0 0; font-size: 13px; min-height: 1.3em; }
+  .promo-msg.ok { color: var(--good); }
+  .promo-msg.no { color: var(--bad); }
+  .totals { margin: 12px 0 0; }
+  .totals div { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; }
+  .totals dt { color: var(--muted); }
+  .totals dd { margin: 0; font-weight: 650; }
+  .totals div[hidden] { display: none; }
+  .totals .grand { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 18px; }
+  .totals .grand dt { color: var(--ink); font-weight: 800; }
+  .totals .grand dd { font-weight: 800; }
+  .trust { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; font-size: 13px; color: var(--muted); }
+  .trust li { display: flex; gap: 8px; align-items: center; }
+  .trust svg { width: 16px; height: 16px; flex: none; color: var(--accent); }
+
+  .foot { border-top: 1px solid var(--line); padding: 18px 0 26px; font-size: 13px; color: var(--muted); }
+  .foot .wrap { display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: space-between; }
+  .foot nav { display: flex; gap: 16px; flex-wrap: wrap; }
+
+  /* ---------- Small screens ---------- */
+  @media (max-width: 880px) {
+    .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "sum" "pay"; gap: 22px; padding-top: 22px; }
+    .sum { position: static; }
+    .card3d { margin-left: auto; margin-right: auto; }
+  }
+  @media (max-width: 520px) {
+    .wrap { padding: 0 16px; }
+    .crumbs { order: 3; margin: 0; width: 100%; }
+    .secure { margin-left: auto; }
+    .secure span { display: none; }
+    .two { gap: 10px; }
+    .sum-box { padding: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#cardNumber">Skip to payment</a>
+
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="#" aria-label="Kiran Crafts, home">
+      <svg viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="9" fill="#0f766e"/><path d="M9 21V9m0 6 8-6m-5 4 7 8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="22" cy="9" r="2.5" fill="#fbbf24"/></svg>
+      Kiran Crafts
+    </a>
+    <ol class="crumbs" aria-label="Checkout steps">
+      <li class="done">Bag</li>
+      <li class="done">Delivery</li>
+      <li aria-current="step">Payment</li>
+    </ol>
+    <span class="secure">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      <span>Secure checkout</span>
+    </span>
+  </div>
+</header>
+
+<main class="wrap grid">
+  <!-- ========== Payment ========== -->
+  <section class="pay" aria-labelledby="payTitle">
+    <h1 id="payTitle">Payment</h1>
+    <p class="lead">Type your card details and watch the card fill in. This is a demo, no money moves.</p>
+
+    <!-- Card preview: mirrors the form, so it is hidden from screen readers -->
+    <div class="card3d" id="card3d" aria-hidden="true">
+      <div class="inner">
+        <div class="face front" id="front">
+          <div class="row1">
+            <svg class="chip" viewBox="0 0 48 36"><rect x="1" y="1" width="46" height="34" rx="7" fill="#e9c46a" stroke="#b08a2e"/><path d="M1 12h14M1 24h14M33 12h14M33 24h14M15 1v34M33 1v34M15 18h18" stroke="#b08a2e" stroke-width="1.5" fill="none"/></svg>
+            <svg class="wave" viewBox="0 0 24 24"><path d="M6 6c3 3.5 3 8.5 0 12M11 3.5c4.5 5 4.5 12 0 17M16 1c6 6.5 6 15.5 0 22" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+            <span class="net" id="netFront"></span>
+          </div>
+          <div class="num" id="cNum"></div>
+          <div class="row3">
+            <div class="holder" id="cHolderBox"><small>Card holder</small><span id="cName">Your name</span></div>
+            <div class="exp" id="cExpBox"><small>Expires</small><span id="cExp">MM/YY</span></div>
+          </div>
+          <span class="ring" id="ring"></span>
+          <span class="glare"></span>
+          <span class="sweep"></span>
+        </div>
+        <div class="face back">
+          <div class="stripe"></div>
+          <div class="sign"><i></i><b id="cCvv">CVV</b></div>
+          <div class="fine"><span>Demo card. Not valid for payment.</span><span class="net" id="netBack"></span></div>
+          <span class="glare"></span>
+        </div>
+      </div>
+    </div>
+
+    <form class="form" id="form" novalidate>
+      <div class="field" data-field="num">
+        <label for="cardNumber">Card number</label>
+        <div class="control">
+          <input id="cardNumber" name="cardNumber" type="text" inputmode="numeric" autocomplete="cc-number" placeholder="1234 5678 9012 3456" maxlength="19" aria-describedby="numErr">
+          <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <p class="err" id="numErr"></p>
+      </div>
+
+      <div class="field" data-field="name">
+        <label for="cardName">Name on card</label>
+        <div class="control">
+          <input id="cardName" name="cardName" type="text" autocomplete="cc-name" placeholder="Sana Malik" maxlength="26" aria-describedby="nameErr">
+          <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <p class="err" id="nameErr"></p>
+      </div>
+
+      <div class="two">
+        <div class="field" data-field="exp">
+          <label for="cardExp">Expiry (MM/YY)</label>
+          <div class="control">
+            <input id="cardExp" name="cardExp" type="text" inputmode="numeric" autocomplete="cc-exp" placeholder="08/29" maxlength="5" aria-describedby="expErr">
+            <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <p class="err" id="expErr"></p>
+        </div>
+        <div class="field" data-field="cvv">
+          <label for="cardCvv">CVV</label>
+          <div class="control">
+            <input id="cardCvv" name="cardCvv" type="text" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4" aria-describedby="cvvErr">
+            <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <p class="err" id="cvvErr"></p>
+        </div>
+      </div>
+
+      <div class="field" data-field="email">
+        <label for="email">Email for the receipt</label>
+        <div class="control">
+          <input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com" aria-describedby="emailErr">
+          <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <p class="err" id="emailErr"></p>
+      </div>
+
+      <label class="check"><input type="checkbox" id="save"> Save this card for next time</label>
+
+      <p class="hint">Demo: try 4111 1111 1111 1111 with any future date. <button class="linkish" type="button" id="demoFill">Fill demo card</button></p>
+
+      <button class="paybtn" id="payBtn" type="submit">
+        <span class="spin" aria-hidden="true"></span>
+        <svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>
+        <span id="payText">Pay Rs 8,880</span>
+        <svg class="done-tick" viewBox="0 0 26 26" aria-hidden="true"><path d="m6 13.5 4.5 4.5L20 8.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </form>
+
+    <div class="success" id="success" hidden>
+      <svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="32"/><path d="m22 37 10 10 19-21"/></svg>
+      <h2 id="successTitle" tabindex="-1">Payment received</h2>
+      <p id="successText"></p>
+      <p id="successMail"></p>
+      <button class="again" type="button" id="again">Start a new checkout</button>
+    </div>
+  </section>
+
+  <!-- ========== Order summary ========== -->
+  <aside class="sum" aria-labelledby="sumTitle">
+    <div class="sum-box reveal">
+      <h2 id="sumTitle">Order summary</h2>
+      <ul class="items">
+        <li>
+          <span class="thumb" aria-hidden="true">
+            <svg viewBox="0 0 38 38"><rect x="4" y="9" width="30" height="20" rx="5" fill="#f59e0b"/><rect x="8" y="13" width="22" height="12" rx="3" fill="#0f766e"/><circle cx="19" cy="19" r="3.5" fill="#fde68a"/><path d="M10 15l4 4-4 4M28 15l-4 4 4 4" stroke="#fde68a" stroke-width="1.6" fill="none"/></svg>
+            <b>1</b>
+          </span>
+          <span><strong>Truck-art serving tray</strong><small>Hand-painted tin</small></span>
+          <span class="p">Rs 3,200</span>
+        </li>
+        <li>
+          <span class="thumb" aria-hidden="true">
+            <svg viewBox="0 0 38 38"><rect x="6" y="6" width="26" height="26" rx="3" fill="#be123c"/><path d="M19 9l5 5-5 5-5-5Zm0 10 5 5-5 5-5-5Z" fill="#fbbf24"/><path d="M6 12h4M6 19h4M6 26h4M28 12h4M28 19h4M28 26h4" stroke="#fde68a" stroke-width="1.5"/></svg>
+            <b>1</b>
+          </span>
+          <span><strong>Phulkari table runner</strong><small>Cotton, 6 ft</small></span>
+          <span class="p">Rs 2,450</span>
+        </li>
+        <li>
+          <span class="thumb" aria-hidden="true">
+            <svg viewBox="0 0 38 38"><path d="M5 15h28c0 9-6 15-14 15S5 24 5 15Z" fill="#1d4ed8"/><path d="M5 15h28" stroke="#93c5fd" stroke-width="3" stroke-linecap="round"/><path d="M12 21c2 2 4 2 7 0s5-2 7 0" stroke="#e0f2fe" stroke-width="1.8" fill="none"/></svg>
+            <b>2</b>
+          </span>
+          <span><strong>Blue pottery bowl</strong><small>Rs 1,490 each</small></span>
+          <span class="p">Rs 2,980</span>
+        </li>
+      </ul>
+
+      <form class="promo" id="promoForm" novalidate>
+        <label class="sr" for="promoCode">Promo code</label>
+        <input id="promoCode" type="text" placeholder="Promo code" autocomplete="off" aria-describedby="promoMsg">
+        <button type="submit">Apply</button>
+      </form>
+      <p class="promo-msg" id="promoMsg">Try CRAFT10 for 10% off.</p>
+
+      <dl class="totals">
+        <div><dt>Subtotal</dt><dd id="tSub">Rs 8,630</dd></div>
+        <div><dt>Delivery, 3 to 5 days</dt><dd id="tDel">Rs 250</dd></div>
+        <div id="discRow" hidden><dt>Promo CRAFT10</dt><dd id="tDisc">-Rs 0</dd></div>
+        <div class="grand"><dt>Total</dt><dd id="tTotal">Rs 8,880</dd></div>
+      </dl>
+
+      <ul class="trust reveal" style="--d:.15s">
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6Z" fill="none" stroke="currentColor" stroke-width="2"/></svg>Card details are never stored in this demo</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>7-day easy returns</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="7" cy="18" r="1.8" fill="currentColor"/><circle cx="17" cy="18" r="1.8" fill="currentColor"/></svg>Ships from Multan</li>
+      </ul>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap reveal">
+    <span>© Kiran Crafts · Demo checkout page</span>
+    <nav aria-label="Footer"><a href="#">Help</a><a href="#">Returns</a><a href="#">Privacy</a></nav>
+  </div>
+</footer>
+
+<p class="sr" id="live" aria-live="polite"></p>
+
+<script>
+  (function () {
+    "use strict";
+    var RM = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    /* ---------- Entrances: stagger the form rows, reveal blocks on scroll ---------- */
+    Array.prototype.forEach.call(document.querySelectorAll(".form > *"), function (el, i) { el.style.setProperty("--i", i); });
+    var reveals = document.querySelectorAll(".reveal");
+    if (RM || !("IntersectionObserver" in window)) {
+      reveals.forEach(function (el) { el.classList.add("in"); });
+    } else {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+      }, { threshold: 0.15 });
+      reveals.forEach(function (el) { io.observe(el); });
+    }
+
+    /* Confetti from the middle of an element */
+    function confetti(el, n) {
+      if (RM || !el.animate) return;
+      var r = el.getBoundingClientRect();
+      var colors = ["#0f766e", "#2dd4bf", "#fbbf24", "#be123c", "#1d4ed8"];
+      for (var i = 0; i < n; i++) {
+        var b = document.createElement("i");
+        b.className = "bit" + (i % 3 ? "" : " round");
+        b.style.left = r.left + r.width / 2 + "px";
+        b.style.top = r.top + r.height / 2 + "px";
+        b.style.background = colors[i % colors.length];
+        document.body.appendChild(b);
+        var a = -Math.PI / 2 + (Math.random() - 0.5) * 3;
+        var d = 90 + Math.random() * 110;
+        var x = Math.cos(a) * d, y = Math.sin(a) * d, spin = (Math.random() - 0.5) * 900;
+        b.animate([
+          { transform: "translate(0,0) scale(.3)", opacity: 1 },
+          { transform: "translate(" + x + "px," + y + "px) rotate(" + spin / 2 + "deg) scale(1)", opacity: 1, offset: 0.4 },
+          { transform: "translate(" + x * 1.2 + "px," + (y + 140) + "px) rotate(" + spin + "deg) scale(.7)", opacity: 0 }
+        ], { duration: 1300 + Math.random() * 500, easing: "cubic-bezier(.15,.7,.35,1)" }).onfinish = (function (node) { return function () { node.remove(); }; })(b);
+      }
+    }
+
+    /* ---------- Prices ---------- */
+    var SUBTOTAL = 8630;
+    var DELIVERY = 250;
+    var promoOn = false;
+    function money(n) { return "Rs " + n.toLocaleString("en-US"); }
+    function totals() {
+      var disc = promoOn ? Math.round(SUBTOTAL * 0.1) : 0;
+      return { disc: disc, total: SUBTOTAL + DELIVERY - disc };
+    }
+    function paintTotals() {
+      var t = totals();
+      document.getElementById("discRow").hidden = !promoOn;
+      document.getElementById("tDisc").textContent = "-" + money(t.disc);
+      document.getElementById("tTotal").textContent = money(t.total);
+      document.getElementById("payText").textContent = "Pay " + money(t.total);
+    }
+
+    /* ---------- Elements ---------- */
+    var $ = function (id) { return document.getElementById(id); };
+    var form = $("form"), card3d = $("card3d"), front = $("front"), ring = $("ring");
+    var live = $("live"), payBtn = $("payBtn");
+    var fields = { num: $("cardNumber"), name: $("cardName"), exp: $("cardExp"), cvv: $("cardCvv"), email: $("email") };
+
+    /* ---------- Card number digits on the card ---------- */
+    var numBox = $("cNum");
+    var digitEls = [];
+    for (var g = 0; g < 4; g++) {
+      var grp = document.createElement("span");
+      grp.className = "grp";
+      for (var i = 0; i < 4; i++) {
+        var s = document.createElement("span");
+        s.textContent = "#";
+        s.className = "ph";
+        grp.appendChild(s);
+        digitEls.push(s);
+      }
+      numBox.appendChild(grp);
+    }
+
+    /* Invented card networks, picked from the first digits */
+    var NETS = {
+      orbit: '<svg viewBox="0 0 54 30"><circle cx="17" cy="15" r="12" fill="none" stroke="#fff" stroke-width="3"/><circle cx="37" cy="15" r="12" fill="#fff" fill-opacity=".55"/></svg>',
+      lumen: '<svg viewBox="0 0 54 30"><circle cx="27" cy="15" r="7" fill="#fff"/><path d="M27 2v4M27 24v4M14 15h4M36 15h4M18 6l3 3M33 21l3 3M36 6l-3 3M21 21l-3 3" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>',
+      kestrel: '<svg viewBox="0 0 54 30"><path d="M6 22 27 6l21 16-21-7Z" fill="#fff"/></svg>',
+      mira: '<svg viewBox="0 0 54 30"><path d="M27 3l3.5 8.5L39 15l-8.5 3.5L27 27l-3.5-8.5L15 15l8.5-3.5Z" fill="#fff"/></svg>'
+    };
+    function network(d) {
+      if (/^4/.test(d)) return "orbit";
+      if (/^(5[1-5]|2[2-7])/.test(d)) return "lumen";
+      if (/^3[47]/.test(d)) return "kestrel";
+      if (/^6/.test(d)) return "mira";
+      return "";
+    }
+    function paintNetwork(d) {
+      var net = network(d);
+      if ((card3d.getAttribute("data-net") || "") === net) return;
+      card3d.setAttribute("data-net", net);
+      // A shine sweeps across the card when its network (and colour) changes
+      card3d.classList.remove("shine"); void card3d.offsetWidth; card3d.classList.add("shine");
+      var html = net ? NETS[net] + '<span class="sr">' + net + "</span>" : "";
+      $("netFront").innerHTML = html;
+      $("netBack").innerHTML = html;
+    }
+
+    function paintNumber(digits) {
+      digitEls.forEach(function (el, i) {
+        var ch = digits[i] || "#";
+        if (el.textContent !== ch) {
+          el.textContent = ch;
+          el.classList.toggle("ph", ch === "#");
+          el.classList.remove("flip"); void el.offsetWidth; el.classList.add("flip");
+        }
+      });
+      paintNetwork(digits);
+    }
+
+    /* ---------- Formatting while typing ---------- */
+    function formatNumber(input) {
+      var caret = input.selectionStart || 0;
+      var before = input.value.slice(0, caret).replace(/\D/g, "").length;
+      var digits = input.value.replace(/\D/g, "").slice(0, 16);
+      var out = digits.replace(/(\d{4})(?=\d)/g, "$1 ");
+      input.value = out;
+      var pos = 0, seen = 0;
+      while (pos < out.length && seen < before) { if (/\d/.test(out[pos])) seen++; pos++; }
+      if (document.activeElement === input) input.setSelectionRange(pos, pos);
+      return digits;
+    }
+    function formatExpiry(input) {
+      var d = input.value.replace(/\D/g, "").slice(0, 4);
+      if (d.length === 1 && d > "1") d = "0" + d; // "4" becomes "04"
+      input.value = d.length > 2 ? d.slice(0, 2) + "/" + d.slice(2) : d;
+      return input.value;
+    }
+
+    function paintAll() {
+      paintNumber(fields.num.value.replace(/\D/g, ""));
+      $("cName").textContent = fields.name.value.trim() || "Your name";
+      var e = fields.exp.value;
+      $("cExp").textContent = e + "MM/YY".slice(e.length);
+      $("cCvv").textContent = fields.cvv.value || "CVV";
+    }
+
+    fields.num.addEventListener("input", function () { paintNumber(formatNumber(fields.num)); liveCheck("num"); });
+    fields.name.addEventListener("input", function () {
+      fields.name.value = fields.name.value.replace(/[^A-Za-z .'-]/g, "");
+      $("cName").textContent = fields.name.value.trim() || "Your name";
+      liveCheck("name");
+    });
+    fields.exp.addEventListener("input", function () {
+      var e = formatExpiry(fields.exp);
+      $("cExp").textContent = e + "MM/YY".slice(e.length);
+      liveCheck("exp");
+    });
+    fields.cvv.addEventListener("input", function () {
+      fields.cvv.value = fields.cvv.value.replace(/\D/g, "").slice(0, 4);
+      $("cCvv").textContent = fields.cvv.value || "CVV";
+      liveCheck("cvv");
+    });
+    fields.email.addEventListener("input", function () { liveCheck("email"); });
+
+    /* ---------- Focus ring on the card, flip for the CVV ---------- */
+    var targets = { num: numBox, name: $("cHolderBox"), exp: $("cExpBox") };
+    var focused = null;
+    function ringTo(key) {
+      var el = targets[key];
+      if (!el) { ring.classList.remove("on"); return; }
+      ring.style.transform = "translate(" + (el.offsetLeft - 8) + "px," + (el.offsetTop - 6) + "px)";
+      ring.style.width = el.offsetWidth + 16 + "px";
+      ring.style.height = el.offsetHeight + 12 + "px";
+      ring.classList.add("on");
+    }
+    Object.keys(fields).forEach(function (key) {
+      fields[key].addEventListener("focus", function () {
+        focused = key;
+        card3d.classList.toggle("flipped", key === "cvv");
+        ringTo(key);
+      });
+      fields[key].addEventListener("blur", function () {
+        focused = null;
+        setTimeout(function () {
+          if (!focused) { card3d.classList.remove("flipped"); ring.classList.remove("on"); }
+        }, 0);
+        if (fields[key].value) check(key);
+      });
+    });
+    window.addEventListener("resize", function () { if (focused) ringTo(focused); });
+
+    /* ---------- Card tilts toward the pointer, with a moving glare ---------- */
+    if (!RM) {
+      card3d.addEventListener("pointermove", function (e) {
+        if (e.pointerType === "touch") return;
+        var r = card3d.getBoundingClientRect();
+        var px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+        card3d.classList.add("tilting");
+        card3d.style.setProperty("--ry", (px - 0.5) * 16 + "deg");
+        card3d.style.setProperty("--rx", (0.5 - py) * 14 + "deg");
+        card3d.style.setProperty("--gx", px * 100 + "%");
+        card3d.style.setProperty("--gy", py * 100 + "%");
+      });
+      card3d.addEventListener("pointerleave", function () {
+        card3d.classList.remove("tilting");
+        card3d.style.setProperty("--rx", "0deg");
+        card3d.style.setProperty("--ry", "0deg");
+      });
+    }
+
+    /* ---------- Validation ---------- */
+    function luhn(d) {
+      var sum = 0, alt = false;
+      for (var i = d.length - 1; i >= 0; i--) {
+        var n = Number(d[i]);
+        if (alt) { n *= 2; if (n > 9) n -= 9; }
+        sum += n; alt = !alt;
+      }
+      return sum % 10 === 0;
+    }
+    var RULES = {
+      num: function (v) {
+        var d = v.replace(/\D/g, "");
+        if (!d) return "Enter your card number.";
+        if (d.length < 16) return "The card number needs 16 digits.";
+        if (!luhn(d)) return "This card number does not look right. Check the digits.";
+        return "";
+      },
+      name: function (v) {
+        v = v.trim();
+        if (!v) return "Enter the name printed on the card.";
+        if (v.length < 3) return "The name looks too short.";
+        return "";
+      },
+      exp: function (v) {
+        var m = v.match(/^(\d{2})\/(\d{2})$/);
+        if (!m) return "Use the format MM/YY.";
+        var mm = Number(m[1]), yy = Number(m[2]);
+        if (mm < 1 || mm > 12) return "The month must be 01 to 12.";
+        if (new Date(2000 + yy, mm, 1) <= new Date()) return "This card has expired.";
+        return "";
+      },
+      cvv: function (v) { return /^\d{3,4}$/.test(v) ? "" : "Enter the 3 or 4 digits on the back."; },
+      email: function (v) {
+        v = v.trim();
+        if (!v) return "Enter an email so we can send the receipt.";
+        return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v) ? "" : "Check the email address.";
+      }
+    };
+    var ERR_IDS = { num: "numErr", name: "nameErr", exp: "expErr", cvv: "cvvErr", email: "emailErr" };
+
+    function check(key) {
+      var input = fields[key];
+      var msg = RULES[key](input.value);
+      var box = input.closest(".field");
+      // Shake a field the moment it turns invalid
+      if (msg && !box.classList.contains("bad") && !RM) { box.classList.remove("shake"); void box.offsetWidth; box.classList.add("shake"); }
+      $(ERR_IDS[key]).textContent = msg;
+      input.setAttribute("aria-invalid", msg ? "true" : "false");
+      box.classList.toggle("bad", !!msg);
+      box.classList.toggle("good", !msg);
+      return msg;
+    }
+    // While a field shows an error, re-check it on every key so it clears as soon as it is right
+    function liveCheck(key) {
+      var box = fields[key].closest(".field");
+      if (box.classList.contains("bad")) check(key);
+      else if (box.classList.contains("good") && RULES[key](fields[key].value)) box.classList.remove("good");
+      else if (!RULES[key](fields[key].value)) { box.classList.add("good"); }
+    }
+    function clearChecks() {
+      Object.keys(fields).forEach(function (key) {
+        $(ERR_IDS[key]).textContent = "";
+        fields[key].removeAttribute("aria-invalid");
+        fields[key].closest(".field").classList.remove("bad", "good");
+      });
+    }
+
+    /* ---------- Demo filler ---------- */
+    $("demoFill").addEventListener("click", function () {
+      var yy = String((new Date().getFullYear() + 2) % 100).padStart(2, "0");
+      fields.num.value = "4111 1111 1111 1111";
+      fields.name.value = "Sana Malik";
+      fields.exp.value = "08/" + yy;
+      fields.cvv.value = "123";
+      if (!fields.email.value) fields.email.value = "sana@example.com";
+      paintAll();
+      Object.keys(fields).forEach(check);
+      live.textContent = "Demo card filled in.";
+      payBtn.focus();
+    });
+
+    /* ---------- Pay ---------- */
+    var paying = false;
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (paying) return;
+      var first = null;
+      Object.keys(fields).forEach(function (key) {
+        if (check(key) && !first) first = fields[key];
+      });
+      if (first) {
+        first.focus();
+        live.textContent = "Please fix the highlighted fields.";
+        return;
+      }
+      paying = true;
+      // 1. Anticipation: the button squashes
+      payBtn.classList.remove("press"); void payBtn.offsetWidth; payBtn.classList.add("press");
+      payBtn.setAttribute("aria-disabled", "true");
+      live.textContent = "Processing your payment.";
+      // 2. Progress: spinner and a bar along the bottom of the button
+      setTimeout(function () {
+        payBtn.classList.add("loading");
+        $("payText").textContent = "Processing…";
+      }, RM ? 0 : 200);
+      // 3. Success: the button shrinks into a round tick
+      setTimeout(function () {
+        payBtn.classList.remove("loading");
+        payBtn.classList.add("morph");
+      }, RM ? 300 : 1900);
+      // 4. Confetti and the receipt panel
+      setTimeout(function () {
+        var t = totals();
+        var d = fields.num.value.replace(/\D/g, "");
+        var net = network(d);
+        var order = "KC-" + Math.floor(10000 + Math.random() * 90000);
+        $("successText").textContent = "Order " + order + " · " + money(t.total) + " paid with " + (net ? net.charAt(0).toUpperCase() + net.slice(1) + " card" : "card") + " ending " + d.slice(-4) + ".";
+        $("successMail").textContent = "A receipt is on its way to " + fields.email.value.trim() + ".";
+        form.hidden = true;
+        $("success").hidden = false;
+        $("successTitle").focus();
+        confetti($("success"), 34);
+        live.textContent = "Payment received. " + $("successText").textContent;
+        payBtn.classList.remove("loading", "morph", "press");
+        payBtn.removeAttribute("aria-disabled");
+        paying = false;
+      }, RM ? 600 : 2700);
+    });
+
+    $("again").addEventListener("click", function () {
+      form.reset();
+      clearChecks();
+      paintAll();
+      paintTotals();
+      card3d.classList.remove("flipped");
+      $("success").hidden = true;
+      form.hidden = false;
+      fields.num.focus();
+      live.textContent = "Checkout reset.";
+    });
+
+    /* ---------- Promo code ---------- */
+    $("promoForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var code = $("promoCode").value.trim().toUpperCase();
+      var msg = $("promoMsg");
+      if (code === "CRAFT10") {
+        promoOn = true;
+        msg.className = "promo-msg ok";
+        msg.textContent = "CRAFT10 applied: 10% off your items.";
+      } else {
+        promoOn = false;
+        msg.className = "promo-msg no";
+        msg.textContent = code ? "That code is not valid. Try CRAFT10." : "Enter a code first.";
+        var pf = $("promoForm");
+        pf.classList.remove("shake"); void pf.offsetWidth; pf.classList.add("shake");
+      }
+      paintTotals();
+      var tt = $("tTotal");
+      tt.classList.remove("tick"); void tt.offsetWidth; tt.classList.add("tick");
+      live.textContent = msg.textContent + " Total " + $("tTotal").textContent + ".";
+    });
+
+    paintAll();
+    paintTotals();
+  })();
+</script>
+</body>
+</html>

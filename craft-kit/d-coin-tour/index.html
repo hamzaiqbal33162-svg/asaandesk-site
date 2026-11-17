@@ -1,0 +1,540 @@
+<!doctype html>
+<!-- Chill and Craft · Coin Tour · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Coin Tour · wallet welcome screens with a 3D coin</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours (light first, dark below) ---------- */
+  :root {
+    --bg: #dcefe5;
+    --phone: #fbfffd;
+    --phone-edge: #cfe5d9;
+    --screen-a: #f4fbf7;
+    --screen-b: #dff3e8;
+    --ink: #0b2a1e;
+    --muted: #557566;
+    --accent: #0f9d63;
+    --accent-ink: #ffffff;
+    --ring: rgba(15, 157, 99, 0.28);
+    --chip: #ffffff;
+    --shadow: rgba(10, 60, 40, 0.3);
+    --focus: #0b2a1e;
+    --gold-1: #fff1bf;
+    --gold-2: #f7c948;
+    --gold-3: #d99a1e;
+    --gold-4: #9c6608;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #030b08;
+    --phone: #0b1712;
+    --phone-edge: #183026;
+    --screen-a: #0a1f17;
+    --screen-b: #04110c;
+    --ink: #eafff4;
+    --muted: #8db7a4;
+    --accent: #3ee6a0;
+    --accent-ink: #04140d;
+    --ring: rgba(62, 230, 160, 0.25);
+    --chip: #12291f;
+    --shadow: rgba(0, 0, 0, 0.7);
+    --focus: #3ee6a0;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: radial-gradient(100% 80% at 50% 10%, color-mix(in srgb, var(--accent) 16%, var(--bg)), var(--bg));
+  }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+
+  .stage { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+  .phone {
+    width: min(340px, 100%);
+    height: min(620px, calc(100vh - 32px));
+    min-height: 500px;
+    padding: 10px;
+    border-radius: 42px;
+    background: var(--phone);
+    border: 1px solid var(--phone-edge);
+    box-shadow: 0 40px 70px -40px var(--shadow);
+    display: flex;
+  }
+  .screen {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    border-radius: 33px;
+    background: linear-gradient(180deg, var(--screen-a), var(--screen-b));
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .screen:focus-visible { outline-offset: -4px; }
+  .top { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 0; position: relative; z-index: 3; }
+  .logo { display: flex; align-items: center; gap: 7px; font-weight: 900; letter-spacing: -0.03em; font-size: 18px; }
+  .logo i { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, var(--gold-1), var(--gold-2) 50%, var(--gold-3)); box-shadow: inset 0 0 0 2px var(--gold-3); }
+  .skip {
+    border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; font-weight: 650;
+    padding: 8px 10px; border-radius: 999px; cursor: pointer; transition: opacity 0.3s, color 0.2s, transform 0.2s;
+  }
+  .skip:hover { color: var(--ink); }
+  .skip:active { transform: scale(0.92); }
+  .skip[hidden] { display: block; opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0s 0.3s; }
+
+  /* ---------- Hero: the coin and the decorations for each step ---------- */
+  .hero { position: relative; flex: 1 1 54%; min-height: 220px; perspective: 900px; }
+  .deco {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transform: scale(0.86);
+    transition: opacity 0.5s, transform 0.8s cubic-bezier(0.3, 1.3, 0.45, 1);
+    pointer-events: none;
+  }
+  .hero[data-step="0"] .d0, .hero[data-step="1"] .d1, .hero[data-step="2"] .d2, .hero[data-step="3"] .d3 { opacity: 1; transform: none; transition-delay: 0.18s; }
+  .deco svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .orbit-ring { fill: none; stroke: var(--ring); stroke-width: 1.5; }
+  .spin-slow { transform-origin: 50% 50%; transform-box: view-box; animation: whirl 14s linear infinite; }
+  .spin-rev { transform-origin: 50% 50%; transform-box: view-box; animation: whirl 20s linear infinite reverse; }
+  @keyframes whirl { to { transform: rotate(360deg); } }
+  .mini { fill: var(--gold-2); stroke: var(--gold-3); stroke-width: 1.5; }
+  .dash { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 2 9; animation: march 0.9s linear infinite; }
+  @keyframes march { to { stroke-dashoffset: -22; } }
+  .chip {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 11px;
+    border-radius: 14px;
+    background: var(--chip);
+    box-shadow: 0 10px 24px -14px var(--shadow);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    transform: translateY(10px) scale(0.9);
+    opacity: 0;
+    transition: transform 0.6s cubic-bezier(0.3, 1.5, 0.5, 1), opacity 0.4s;
+  }
+  .chip small { display: block; font-weight: 500; color: var(--muted); font-size: 11px; }
+  .chip .av { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 11px; }
+  .hero[data-step="1"] .d1 .chip, .hero[data-step="2"] .d2 .chip, .hero[data-step="3"] .d3 .chip, .hero[data-step="0"] .d0 .chip { transform: none; opacity: 1; transition-delay: 0.45s; }
+  .shield { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 8; opacity: 0.55; }
+  .chart-line { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 320; stroke-dashoffset: 320; transition: stroke-dashoffset 1.2s 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+  .chart-fill { fill: var(--ring); opacity: 0; transition: opacity 0.8s 0.9s; }
+  .hero[data-step="3"] .chart-line { stroke-dashoffset: 0; }
+  .hero[data-step="3"] .chart-fill { opacity: 0.6; }
+
+  /* the coin: position (per step) → spin (per step, follows drags) → idle float */
+  .coin-pos {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    perspective: 700px;
+    transition: transform 0.95s cubic-bezier(0.3, 1.25, 0.4, 1);
+    z-index: 2;
+  }
+  .coin-shadow {
+    position: absolute;
+    left: -60px;
+    top: 82px;
+    width: 120px;
+    height: 18px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, var(--shadow), transparent);
+    animation: shadow 3.6s ease-in-out infinite;
+  }
+  .coin-spin {
+    position: absolute;
+    left: -70px;
+    top: -70px;
+    width: 140px;
+    height: 140px;
+    transform-style: preserve-3d;
+    transition: transform 1.05s cubic-bezier(0.3, 1.15, 0.4, 1);
+  }
+  .screen.dragging .coin-spin, .screen.dragging .coin-pos, .screen.dragging .track { transition: none; }
+  .coin { position: absolute; inset: 0; transform-style: preserve-3d; animation: bob 3.6s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-10px) rotateX(10deg); } }
+  @keyframes shadow { 50% { transform: scale(0.82); opacity: 0.7; } }
+  .face, .edge { position: absolute; inset: 0; border-radius: 50%; }
+  .edge { background: linear-gradient(90deg, var(--gold-4), var(--gold-3) 40%, var(--gold-2) 55%, var(--gold-4)); }
+  .face {
+    background: radial-gradient(circle at 35% 30%, var(--gold-1), var(--gold-2) 45%, var(--gold-3) 85%);
+    box-shadow: inset 0 0 0 5px var(--gold-3), inset 0 0 0 9px var(--gold-2), inset 0 0 0 10px var(--gold-4);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+  }
+  .face.front { transform: translateZ(8px); }
+  .face.back { transform: rotateY(180deg) translateZ(8px); }
+  .face svg { width: 58%; height: 58%; }
+  .face svg .em { fill: none; stroke: var(--gold-4); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+  .face svg .hi { fill: none; stroke: var(--gold-1); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; opacity: 0.8; }
+  /* light sweeping across the coin face */
+  .face::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.65) 48%, transparent 60%);
+    background-size: 260% 100%;
+    animation: gleam 3.8s ease-in-out infinite;
+  }
+  @keyframes gleam { 0%, 55% { background-position: 120% 0; } 100% { background-position: -40% 0; } }
+
+  /* sparkles when the wallet is ready */
+  .sparks { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+  .sparks i { position: absolute; width: 8px; height: 8px; margin: -4px; background: var(--gold-2); opacity: 0; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+  .sparks.go i { animation: sparkle 0.9s cubic-bezier(0.2, 0.8, 0.3, 1); }
+  @keyframes sparkle {
+    0% { opacity: 1; transform: rotate(var(--a)) translateY(-60px) scale(0.4); }
+    100% { opacity: 0; transform: rotate(var(--a)) translateY(-120px) scale(1.4) rotate(180deg); }
+  }
+
+  /* ---------- Text slides ---------- */
+  .slides { position: relative; overflow: hidden; flex: none; }
+  .track { display: flex; transition: transform 0.6s cubic-bezier(0.3, 1.1, 0.4, 1); }
+  .slide { flex: 0 0 100%; padding: 6px 24px 0; min-height: 132px; }
+  .slide .step { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; color: var(--accent); }
+  .slide h2 { margin: 6px 0 8px; font-size: 25px; line-height: 1.12; letter-spacing: -0.03em; }
+  .slide p.body { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .slide.active > * { animation: line-in 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards; }
+  .slide.active > :nth-child(2) { animation-delay: 0.08s; }
+  .slide.active > :nth-child(3) { animation-delay: 0.16s; }
+  @keyframes line-in { from { opacity: 0; transform: translateY(14px); } }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 20px; gap: 10px; }
+  .dots { display: flex; gap: 4px; }
+  .dot { width: 20px; height: 24px; border: 0; background: none; padding: 0; cursor: pointer; display: grid; place-items: center; }
+  .dot::after { content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--muted); opacity: 0.35; transition: width 0.5s cubic-bezier(0.3, 1.5, 0.5, 1), opacity 0.3s, background 0.3s; }
+  .dot[aria-current="step"] { width: 34px; }
+  .dot[aria-current="step"]::after { width: 26px; background: var(--accent); opacity: 1; }
+  .dot { transition: width 0.5s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  .next {
+    position: relative;
+    height: 56px;
+    width: 56px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: inherit;
+    font-weight: 750;
+    font-size: 15px;
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 14px 26px -14px var(--accent);
+    transition: width 0.55s cubic-bezier(0.3, 1.3, 0.45, 1), transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1), background 0.3s;
+  }
+  .next:hover { transform: translateY(-2px); }
+  .next:active { transform: scale(0.92); transition-duration: 0.08s; }
+  .next.wide { width: 176px; }
+  .next .arrow, .next .label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity 0.3s, transform 0.4s cubic-bezier(0.3, 1.5, 0.5, 1); white-space: nowrap; }
+  .next .arrow svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .next:hover .arrow svg { transform: translateX(3px); transition: transform 0.25s; }
+  .next .label { opacity: 0; transform: translateY(12px); }
+  .next.wide .arrow { opacity: 0; transform: translateX(-20px); }
+  .next.wide .label { opacity: 1; transform: none; }
+  .next[data-state="done"] { background: var(--gold-2); color: #3b2600; }
+  .spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: turn 0.7s linear infinite; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      transition-delay: 0s !important;
+    }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="phone">
+    <div class="screen" id="screen" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Kora wallet welcome. Swipe or use the arrow keys.">
+      <header class="top">
+        <span class="logo"><i aria-hidden="true"></i>kora</span>
+        <button class="skip" id="skip" type="button">Skip</button>
+      </header>
+
+      <div class="hero" id="hero" data-step="0" aria-hidden="true">
+        <!-- step 1: little coins orbit the big one -->
+        <div class="deco d0">
+          <svg viewBox="0 0 320 260" preserveAspectRatio="xMidYMid meet">
+            <g class="spin-slow"><ellipse class="orbit-ring" cx="160" cy="130" rx="128" ry="128"/><circle class="mini" cx="32" cy="130" r="9"/><circle class="mini" cx="288" cy="130" r="6"/></g>
+            <g class="spin-rev"><ellipse class="orbit-ring" cx="160" cy="130" rx="100" ry="100" stroke-dasharray="3 7"/><circle class="mini" cx="160" cy="30" r="7"/></g>
+          </svg>
+          <span class="chip" style="left:8%; bottom:8%"><span><small>Total balance</small>PKR 182,400</span></span>
+        </div>
+        <!-- step 2: money travels to a friend -->
+        <div class="deco d1">
+          <svg viewBox="0 0 320 260" preserveAspectRatio="xMidYMid meet">
+            <path class="dash" d="M120 150C170 190 220 170 252 110"/>
+            <path d="M244 112l9-4 2 10" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="chip" style="right:6%; top:18%"><span class="av" style="background:#e76f51">AH</span><span>To Ali Hassan<small>PKR 5,000 · 2 sec</small></span></span>
+        </div>
+        <!-- step 3: a shield around the coin -->
+        <div class="deco d2">
+          <svg viewBox="0 0 320 260" preserveAspectRatio="xMidYMid meet">
+            <g class="spin-slow"><circle class="shield" cx="160" cy="130" r="104"/></g>
+            <g class="spin-rev"><circle class="shield" cx="160" cy="130" r="88" stroke-dasharray="14 10"/></g>
+          </svg>
+          <span class="chip" style="left:6%; top:14%"><span class="av" style="background:var(--accent)">✓</span><span>Face unlock<small>Backup phrase saved</small></span></span>
+        </div>
+        <!-- step 4: a rising chart -->
+        <div class="deco d3">
+          <svg viewBox="0 0 320 260" preserveAspectRatio="xMidYMid meet">
+            <path class="chart-fill" d="M20 230L70 200L120 210L170 160L220 170L300 96V250H20Z"/>
+            <path class="chart-line" d="M20 230L70 200L120 210L170 160L220 170L300 96"/>
+          </svg>
+          <span class="chip" style="left:7%; top:16%"><span>This month<small style="color:var(--accent)">+12.4% ▲</small></span></span>
+        </div>
+
+        <div class="coin-pos" id="coin-pos">
+          <span class="coin-shadow"></span>
+          <div class="coin-spin" id="coin-spin">
+            <div class="coin" id="coin">
+              <div class="face back"><svg viewBox="0 0 100 100"><path class="em" d="M30 64 50 30l20 34M38 52h24"/><path class="hi" d="M30 61 50 27l20 34M38 49h24"/></svg></div>
+              <div class="face front"><svg viewBox="0 0 100 100"><path class="em" d="M34 26v50M34 52l28-26M44 44l22 32"/><path class="hi" d="M34 23v50M34 49l28-26M44 41l22 32"/></svg></div>
+            </div>
+          </div>
+          <span class="sparks" id="sparks"></span>
+        </div>
+      </div>
+
+      <div class="slides">
+        <div class="track" id="track">
+          <section class="slide active" aria-label="Step 1 of 4">
+            <p class="step">01 / 04</p>
+            <h2>All your coins in one calm place</h2>
+            <p class="body">Hold rupees and digital coins side by side, with one simple balance.</p>
+          </section>
+          <section class="slide" aria-label="Step 2 of 4">
+            <p class="step">02 / 04</p>
+            <h2>Send money in two seconds</h2>
+            <p class="body">Pick a friend, type an amount, done. No long account numbers.</p>
+          </section>
+          <section class="slide" aria-label="Step 3 of 4">
+            <p class="step">03 / 04</p>
+            <h2>Locked tight, always</h2>
+            <p class="body">Face unlock, a 12-word backup phrase and an alert for every move.</p>
+          </section>
+          <section class="slide" aria-label="Step 4 of 4">
+            <p class="step">04 / 04</p>
+            <h2>Watch your savings grow</h2>
+            <p class="body">Clear charts and gentle price alerts. No jargon, ever.</p>
+          </section>
+        </div>
+      </div>
+
+      <footer class="controls">
+        <div class="dots" id="dots">
+          <button class="dot" type="button" aria-label="Step 1" aria-current="step"></button>
+          <button class="dot" type="button" aria-label="Step 2"></button>
+          <button class="dot" type="button" aria-label="Step 3"></button>
+          <button class="dot" type="button" aria-label="Step 4"></button>
+        </div>
+        <button class="next" id="next" type="button" data-state="idle" aria-label="Next step">
+          <span class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+          <span class="label" id="next-label" aria-hidden="true">Create wallet</span>
+        </button>
+      </footer>
+      <p class="sr-only" id="status" aria-live="polite"></p>
+    </div>
+  </div>
+</main>
+
+<script>
+  (function () {
+    var screen = document.getElementById("screen");
+    var hero = document.getElementById("hero");
+    var coinPos = document.getElementById("coin-pos");
+    var coinSpin = document.getElementById("coin-spin");
+    var coin = document.getElementById("coin");
+    var sparks = document.getElementById("sparks");
+    var track = document.getElementById("track");
+    var slides = Array.prototype.slice.call(track.children);
+    var dots = Array.prototype.slice.call(document.querySelectorAll(".dot"));
+    var next = document.getElementById("next");
+    var nextLabel = document.getElementById("next-label");
+    var skip = document.getElementById("skip");
+    var status = document.getElementById("status");
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+
+    // ---------- The coin is built from two faces and a stack of thin edge discs ----------
+    for (var z = -7; z <= 7; z += 1.4) {
+      var e = document.createElement("div");
+      e.className = "edge";
+      e.style.transform = "translateZ(" + z.toFixed(1) + "px)";
+      coin.insertBefore(e, coin.lastElementChild);
+    }
+    for (var k = 0; k < 10; k++) {
+      var s = document.createElement("i");
+      s.style.setProperty("--a", k * 36 + "deg");
+      sparks.appendChild(s);
+    }
+
+    // Where the coin sits on each step (x, y in a 320 px wide hero), its size and how far it has turned
+    var POSES = [
+      { x: 0, y: -4, s: 1, turn: 0 },
+      { x: -78, y: 18, s: 0.66, turn: 200 },
+      { x: 0, y: 0, s: 0.8, turn: 360 },
+      { x: 74, y: -34, s: 0.58, turn: 560 }
+    ];
+    var step = 0, extraTurn = 0, timers = [];
+
+    function poseCoin(dragPx) {
+      var p = POSES[step];
+      var k = hero.clientWidth / 320;
+      var drag = dragPx || 0;
+      coinPos.style.transform = "translate(" + (p.x * k + drag * 0.25) + "px," + p.y * k + "px) scale(" + p.s + ")";
+      coinSpin.style.transform = "rotateY(" + (p.turn + extraTurn + drag * 0.6) + "deg)";
+    }
+    function placeTrack(dragPx) {
+      track.style.transform = "translateX(calc(" + -step * 100 + "% + " + (dragPx || 0) + "px))";
+    }
+
+    function setNextButton() {
+      var last = step === slides.length - 1;
+      next.classList.toggle("wide", last);
+      next.setAttribute("aria-label", last ? "Create wallet" : "Next step");
+      skip.hidden = last;
+    }
+
+    function go(i, announce) {
+      i = Math.max(0, Math.min(slides.length - 1, i));
+      if (i === step) { poseCoin(); placeTrack(); return; }
+      slides[step].classList.remove("active");
+      dots[step].removeAttribute("aria-current");
+      step = i;
+      slides[step].classList.add("active");
+      dots[step].setAttribute("aria-current", "step");
+      slides.forEach(function (s, k) { s.setAttribute("aria-hidden", k === step ? "false" : "true"); });
+      hero.dataset.step = step;
+      poseCoin();
+      placeTrack();
+      setNextButton();
+      if (announce !== false) status.textContent = "Step " + (step + 1) + " of 4: " + slides[step].querySelector("h2").textContent;
+    }
+
+    // ---------- Create wallet: idle → working → done → idle ----------
+    function createWallet() {
+      if (next.dataset.state !== "idle") return;
+      next.dataset.state = "working";
+      nextLabel.innerHTML = '<span class="spin"></span>Creating…';
+      extraTurn += 1080; // the coin whirls while it works
+      poseCoin();
+      status.textContent = "Creating your wallet";
+      timers.push(setTimeout(function () {
+        next.dataset.state = "done";
+        nextLabel.textContent = "Wallet ready ✓";
+        sparks.classList.remove("go");
+        void sparks.offsetWidth;
+        sparks.classList.add("go");
+        status.textContent = "Your wallet is ready";
+        timers.push(setTimeout(function () {
+          next.dataset.state = "idle";
+          nextLabel.textContent = "Create wallet";
+        }, 2600));
+      }, 1500));
+    }
+
+    next.addEventListener("click", function () {
+      if (step === slides.length - 1) createWallet();
+      else go(step + 1);
+    });
+    skip.addEventListener("click", function () { go(slides.length - 1); });
+    dots.forEach(function (d, i) { d.addEventListener("click", function () { go(i); }); });
+    screen.addEventListener("keydown", function (e) {
+      if (e.target !== screen) return;
+      if (e.key === "ArrowRight") { e.preventDefault(); go(step + 1); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); go(step - 1); }
+    });
+
+    // ---------- Swipe: the text and the coin follow your finger ----------
+    var startX = 0, lastX = 0, lastT = 0, vel = 0, dx = 0, down = false, dragging = false;
+    screen.addEventListener("pointerdown", function (e) {
+      if (e.target.closest("button")) return;
+      down = true;
+      dragging = false;
+      startX = lastX = e.clientX;
+      lastT = performance.now();
+      dx = vel = 0;
+    });
+    screen.addEventListener("pointermove", function (e) {
+      if (!down) return;
+      dx = e.clientX - startX;
+      if (!dragging && Math.abs(dx) > 8) {
+        dragging = true;
+        screen.classList.add("dragging");
+        if (screen.setPointerCapture) screen.setPointerCapture(e.pointerId);
+      }
+      if (!dragging) return;
+      var now = performance.now();
+      vel = (e.clientX - lastX) / Math.max(1, now - lastT);
+      lastX = e.clientX;
+      lastT = now;
+      // resist at the two ends
+      var edge = (step === 0 && dx > 0) || (step === slides.length - 1 && dx < 0);
+      var d = edge ? dx * 0.3 : dx;
+      placeTrack(d);
+      poseCoin(d);
+    });
+    function release() {
+      if (!down) return;
+      down = false;
+      if (!dragging) return;
+      dragging = false;
+      screen.classList.remove("dragging");
+      var w = screen.clientWidth || 300;
+      if (dx < -w * 0.18 || vel < -0.5) go(step + 1);
+      else if (dx > w * 0.18 || vel > 0.5) go(step - 1);
+      else { poseCoin(); placeTrack(); }
+      // a fling at an end still springs back
+      poseCoin();
+      placeTrack();
+    }
+    screen.addEventListener("pointerup", release);
+    screen.addEventListener("pointercancel", release);
+
+    window.addEventListener("resize", function () { poseCoin(); });
+    slides.forEach(function (s, k) { s.setAttribute("aria-hidden", k === 0 ? "false" : "true"); });
+    poseCoin();
+    placeTrack();
+    setNextButton();
+  })();
+</script>
+</body>
+</html>

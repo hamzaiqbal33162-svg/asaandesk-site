@@ -1,0 +1,792 @@
+<!doctype html>
+<!-- Chill and Craft · Sky Glass · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sky Glass · a glass weather card</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens (blob colours --c1..--c3 are set per weather by the script) ---------- */
+  :root {
+    --mode: light;
+    --bg: #e9eef5;
+    --glass: rgba(255, 255, 255, 0.36);
+    --glass-line: rgba(255, 255, 255, 0.7);
+    --ink: #141c2b;
+    --muted: rgba(20, 28, 43, 0.62);
+    --tile: rgba(255, 255, 255, 0.38);
+    --tab-on: rgba(255, 255, 255, 0.78);
+    --focus: #1d4ed8;
+    --shadow: rgba(30, 40, 70, 0.22);
+    --blob-alpha: 0.85;
+    --c1: #ffb347;
+    --c2: #ff7e5f;
+    --c3: #ffd86f;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --mode: dark;
+      --bg: #090d17; --glass: rgba(18, 24, 38, 0.4); --glass-line: rgba(255, 255, 255, 0.16);
+      --ink: #f2f5fb; --muted: rgba(242, 245, 251, 0.66); --tile: rgba(255, 255, 255, 0.07);
+      --tab-on: rgba(255, 255, 255, 0.17); --focus: #9ad7ff; --shadow: rgba(0, 0, 0, 0.5); --blob-alpha: 0.72;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --mode: dark;
+    --bg: #090d17; --glass: rgba(18, 24, 38, 0.4); --glass-line: rgba(255, 255, 255, 0.16);
+    --ink: #f2f5fb; --muted: rgba(242, 245, 251, 0.66); --tile: rgba(255, 255, 255, 0.07);
+    --tab-on: rgba(255, 255, 255, 0.17); --focus: #9ad7ff; --shadow: rgba(0, 0, 0, 0.5); --blob-alpha: 0.72;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and moving colour blobs ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh;
+    overflow-x: hidden;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .blobs { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+  .blob {
+    position: absolute;
+    width: 55vmax;
+    height: 55vmax;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: var(--blob-alpha);
+    transition: background-color 1.4s ease;
+  }
+  .blob.a { background-color: var(--c1); left: -18vmax; top: -16vmax; animation: driftA 19s ease-in-out infinite alternate; }
+  .blob.b { background-color: var(--c2); right: -20vmax; top: 10vh; animation: driftB 23s ease-in-out infinite alternate; }
+  .blob.c { background-color: var(--c3); left: 10vw; bottom: -26vmax; animation: driftC 17s ease-in-out infinite alternate; }
+  .blob.d { background-color: var(--c2); left: 40vw; top: -30vmax; width: 40vmax; height: 40vmax; animation: driftA 27s ease-in-out infinite alternate-reverse; }
+  @keyframes driftA { to { transform: translate(14vmax, 10vmax) scale(1.15); } }
+  @keyframes driftB { to { transform: translate(-12vmax, 14vmax) scale(0.9); } }
+  @keyframes driftC { to { transform: translate(10vmax, -12vmax) scale(1.1); } }
+  .page-flash { position: fixed; inset: 0; background: #e8eeff; opacity: 0; pointer-events: none; }
+
+  .stage { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+
+  /* ---------- Glass card ---------- */
+  .card {
+    position: relative;
+    width: min(440px, calc(100vw - 32px));
+    border-radius: 28px;
+    padding: 18px;
+    background: var(--glass);
+    border: 1px solid var(--glass-line);
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    box-shadow: 0 30px 60px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    overflow: hidden;
+    will-change: transform;
+    --mx: 30%;
+    --my: 10%;
+  }
+  .card::after {
+    /* light sheen that follows the pointer */
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, 0.32), transparent 48%);
+    pointer-events: none;
+    z-index: 3;
+  }
+  .fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+  .flash { position: absolute; inset: 0; background: #f4f7ff; opacity: 0; pointer-events: none; z-index: 2; }
+  .content { position: relative; z-index: 1; display: grid; gap: 14px; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .place { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .place svg { flex: none; }
+  .place strong { font-size: 18px; display: block; }
+  .place span { font-size: 12px; color: var(--muted); display: block; }
+  .unit {
+    display: inline-flex;
+    padding: 3px;
+    gap: 2px;
+    border-radius: 999px;
+    border: 1px solid var(--glass-line);
+    background: var(--tile);
+    color: var(--ink);
+    font: 700 13px system-ui, sans-serif;
+    cursor: pointer;
+  }
+  .unit span[aria-hidden] { padding: 4px 9px; border-radius: 999px; transition: background 0.25s; }
+  .unit[aria-pressed="false"] .u-c, .unit[aria-pressed="true"] .u-f { background: var(--tab-on); }
+
+  /* hero: big icon + temperature */
+  .when { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; }
+  .hero { display: flex; align-items: center; gap: 12px; }
+  .icon { position: relative; flex: none; width: clamp(104px, 30vw, 132px); aspect-ratio: 1; }
+  .icon .wx { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; transition: opacity 0.5s ease, transform 0.6s cubic-bezier(.2,.8,.2,1), filter 0.5s ease; }
+  .icon .wx.enter { opacity: 0; transform: scale(0.7) translateY(10px); filter: blur(6px); }
+  .icon .wx.leave { opacity: 0; transform: scale(1.25) translateY(-8px); filter: blur(8px); }
+  .now { min-width: 0; }
+  .temp { display: flex; align-items: flex-start; font-size: clamp(58px, 17vw, 86px); font-weight: 200; line-height: 0.95; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+  .temp .deg { font-size: 0.45em; margin-top: 0.12em; font-weight: 300; }
+  .cond { margin: 4px 0 0; font-size: 18px; font-weight: 700; }
+  .hilo { margin: 2px 0 0; font-size: 14px; color: var(--muted); }
+  .swap { animation: rise 0.5s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+
+  /* detail tiles with a staggered entrance */
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tile { background: var(--tile); border: 1px solid var(--glass-line); border-radius: 16px; padding: 9px 12px; min-width: 0; }
+  .tile .k { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .tile strong { display: block; font-size: 15px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tiles.swap .tile { animation: rise 0.5s cubic-bezier(.2,.8,.2,1) both; }
+  .tiles.swap .tile:nth-child(2) { animation-delay: 0.06s; }
+  .tiles.swap .tile:nth-child(3) { animation-delay: 0.12s; }
+  .tiles.swap .tile:nth-child(4) { animation-delay: 0.18s; }
+  .tiles.swap { animation: none; }
+
+  /* forecast strip (tabs) with a sliding pill */
+  .strip { position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .pill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    border-radius: 14px;
+    background: var(--tab-on);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+    transition: transform 0.45s cubic-bezier(.3,1.4,.5,1), width 0.3s ease;
+  }
+  .tab {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    padding: 8px 0;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+    min-width: 0;
+  }
+  .tab .d { font-size: 12px; font-weight: 700; }
+  .tab .mini { width: 28px; height: 28px; transition: transform 0.3s ease; }
+  .tab .mini svg { width: 100%; height: 100%; overflow: visible; }
+  .tab[aria-selected="true"] .mini { transform: scale(1.15); }
+  .tab .h { font-size: 13px; font-weight: 700; }
+  .tab .l { font-size: 12px; color: var(--muted); }
+  .tab:hover .mini { transform: translateY(-2px) scale(1.08); }
+  .tab:focus-visible, .unit:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- Weather icons (SVG parts animated with CSS) ---------- */
+  .wx .spin, .wx .pulse, .wx .leaf { transform-box: fill-box; transform-origin: 50% 50%; }
+  .wx .spin { animation: spin 16s linear infinite; }
+  .wx .pulse { animation: pulse 3.2s ease-in-out infinite; }
+  .wx .drift { animation: drift 6s ease-in-out infinite alternate; }
+  .wx .band { animation: band 5s ease-in-out infinite alternate; }
+  .wx .band.b2 { animation-delay: -1.7s; }
+  .wx .band.b3 { animation-delay: -3.4s; }
+  .wx .speck { animation: speck 4s ease-in-out infinite; }
+  .wx .drop { animation: drop 0.9s linear infinite; }
+  .wx .gust { stroke-dasharray: 70 140; animation: gust 1.9s linear infinite; }
+  .wx .leaf { animation: leaf 2.8s ease-in-out infinite; }
+  .wx .fogbar { animation: fogbar 6s ease-in-out infinite alternate; }
+  .wx .fogbar.f2 { animation-delay: -2s; }
+  .wx .fogbar.f3 { animation-delay: -4s; }
+  .wx .bolt { opacity: 0.85; transition: opacity 0.1s; }
+  .strike .wx .bolt { opacity: 1; filter: drop-shadow(0 0 8px #ffe066); }
+  .wx.still * { animation: none !important; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 50% { transform: scale(1.14); opacity: 0.34; } }
+  @keyframes drift { from { transform: translateX(-4px); } to { transform: translateX(6px); } }
+  @keyframes band { from { transform: translateX(-8px); } to { transform: translateX(8px); } }
+  @keyframes speck { 0% { transform: translate(0, 0); opacity: 0; } 30% { opacity: 0.9; } 100% { transform: translate(12px, -16px); opacity: 0; } }
+  @keyframes drop { 0% { transform: translateY(-6px); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(22px); opacity: 0; } }
+  @keyframes gust { to { stroke-dashoffset: -210; } }
+  @keyframes leaf { 0% { transform: translate(-34px, 8px) rotate(0deg); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(40px, -10px) rotate(380deg); opacity: 0; } }
+  @keyframes fogbar { from { transform: translateX(-9px); } to { transform: translateX(11px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .blob { animation: none; }
+    .wx * { animation: none !important; }
+    .icon .wx, .pill, .tab .mini { transition: opacity 0.3s ease; }
+    .icon .wx.enter, .icon .wx.leave { transform: none; filter: none; }
+    .swap, .tiles.swap .tile { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div class="blobs" aria-hidden="true"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div><div class="blob d"></div></div>
+<div class="page-flash" id="pageFlash" aria-hidden="true"></div>
+
+<main class="stage" id="stage">
+  <h1 class="sr">Sky Glass: a glass weather card with a seven-day forecast</h1>
+  <article class="card" id="card">
+    <canvas class="fx" id="fx" aria-hidden="true"></canvas>
+    <div class="flash" id="flash" aria-hidden="true"></div>
+
+    <div class="content">
+      <div class="top">
+        <div class="place">
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z" fill="currentColor" opacity="0.85"/><circle cx="12" cy="10" r="2.6" style="fill: var(--bg)"/></svg>
+          <div><strong>Lahore</strong><span>Pakistan · demo forecast</span></div>
+        </div>
+        <button class="unit" id="unit" type="button" aria-pressed="false">
+          <span class="u-c" aria-hidden="true">°C</span><span class="u-f" aria-hidden="true">°F</span>
+          <span class="sr">Show temperatures in Fahrenheit</span>
+        </button>
+      </div>
+
+      <section id="panel" role="tabpanel" aria-labelledby="tab-0">
+        <p class="when" id="when"></p>
+        <div class="hero">
+          <div class="icon" id="icon" aria-hidden="true"></div>
+          <div class="now">
+            <div class="temp"><span id="temp">0</span><span class="deg">°</span></div>
+            <p class="cond" id="cond"></p>
+            <p class="hilo" id="hilo"></p>
+          </div>
+        </div>
+        <div class="tiles" id="tiles" style="margin-top:14px">
+          <div class="tile"><span class="k">Feels like</span><strong id="feels"></strong></div>
+          <div class="tile"><span class="k">Humidity</span><strong id="hum"></strong></div>
+          <div class="tile"><span class="k">Wind</span><strong id="wind"></strong></div>
+          <div class="tile"><span class="k" id="xk"></span><strong id="xv"></strong></div>
+        </div>
+      </section>
+
+      <div class="strip" id="strip" role="tablist" aria-label="Seven-day forecast">
+        <span class="pill" id="pill" aria-hidden="true"></span>
+      </div>
+    </div>
+  </article>
+  <p class="sr" id="live" aria-live="polite"></p>
+</main>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (id) { return document.getElementById(id); };
+    var card = $("card"), stage = $("stage"), strip = $("strip"), pill = $("pill"), iconBox = $("icon");
+    var canvas = $("fx"), ctx = canvas.getContext("2d"), flashEl = $("flash"), pageFlash = $("pageFlash");
+
+    /* ---------- 1. Weather types: label and background blob colours ---------- */
+    var TYPES = {
+      sun:    { label: "Sunny",         light: ["#ffb347", "#ff7e5f", "#ffd86f"], dark: ["#ff8a3d", "#b4400f", "#6b2a14"] },
+      partly: { label: "Partly cloudy", light: ["#7cc4ff", "#ffd27f", "#a7b8ff"], dark: ["#2f63aa", "#a86f24", "#3e4296"] },
+      haze:   { label: "Hazy with smog", light: ["#dcb58c", "#c99e78", "#bdb3a4"], dark: ["#7a5f45", "#5e4b3a", "#4a4540"] },
+      rain:   { label: "Rain showers",  light: ["#5f8fd6", "#78a7cc", "#9aa9c7"], dark: ["#1f3b73", "#21506b", "#2c3550"] },
+      storm:  { label: "Thunderstorm",  light: ["#6b5ca5", "#41507d", "#8b7fc7"], dark: ["#2a1f4f", "#1b2440", "#3d2f6e"] },
+      wind:   { label: "Windy",         light: ["#7fd6c2", "#9ad0ff", "#c1f0d8"], dark: ["#1f6b5e", "#245a7a", "#2f6d55"] },
+      fog:    { label: "Foggy morning", light: ["#c9d3dc", "#e2e8ee", "#aab7c4"], dark: ["#3b4652", "#4b5664", "#2c333c"] }
+    };
+    var KEYS = Object.keys(TYPES);
+
+    /* A made-up week of weather (temperatures in Celsius) */
+    var WEEK = [
+      { type: "sun", now: 26, hi: 27, lo: 14, feels: 27, hum: 38, wind: "8 km/h NW", xk: "UV index", xv: "6 · High" },
+      { type: "partly", now: 24, hi: 25, lo: 13, feels: 24, hum: 45, wind: "11 km/h N", xk: "UV index", xv: "4 · Moderate" },
+      { type: "haze", now: 21, hi: 23, lo: 12, feels: 22, hum: 62, wind: "4 km/h E", xk: "Air quality", xv: "AQI 182 · Unhealthy" },
+      { type: "rain", now: 18, hi: 20, lo: 11, feels: 17, hum: 84, wind: "14 km/h SW", xk: "Rain", xv: "12 mm" },
+      { type: "storm", now: 16, hi: 18, lo: 10, feels: 14, hum: 90, wind: "26 km/h W", xk: "Rain", xv: "28 mm" },
+      { type: "wind", now: 21, hi: 22, lo: 11, feels: 19, hum: 40, wind: "34 km/h NW", xk: "Gusts", xv: "48 km/h" },
+      { type: "fog", now: 12, hi: 21, lo: 9, feels: 11, hum: 96, wind: "3 km/h S", xk: "Visibility", xv: "400 m" }
+    ];
+    var today = new Date();
+    WEEK.forEach(function (d, i) {
+      var date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+      d.short = i === 0 ? "Today" : date.toLocaleDateString("en-GB", { weekday: "short" });
+      d.full = date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+      d.day = date.toLocaleDateString("en-GB", { weekday: "long" });
+    });
+
+    /* ---------- 2. SVG weather icons ---------- */
+    var CLOUD = "M34 88 H88 A18 18 0 0 0 90 52 A26 26 0 0 0 41 46 A20 20 0 0 0 34 88 Z";
+    function sunGroup(cx, cy, r) {
+      var rays = "";
+      for (var i = 0; i < 12; i++) {
+        rays += '<rect x="' + (cx - 2) + '" y="' + (cy - r - 6 - r * 0.6) + '" width="4" height="' + (r * 0.6).toFixed(1) + '" rx="2" fill="#ffc53d" transform="rotate(' + i * 30 + " " + cx + " " + cy + ')"/>';
+      }
+      return '<circle class="pulse" cx="' + cx + '" cy="' + cy + '" r="' + r * 1.8 + '" fill="#ffd45c" opacity="0.2"/>' +
+        '<g class="spin">' + rays + "</g>" +
+        '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="#ffb92e"/>' +
+        '<circle cx="' + (cx - r * 0.3) + '" cy="' + (cy - r * 0.3) + '" r="' + r * 0.3 + '" fill="#fff" opacity="0.35"/>';
+    }
+    function cloud(front, back, transform) {
+      return '<g transform="' + (transform || "") + '"><g class="drift"><path d="' + CLOUD + '" fill="' + back + '" transform="translate(3 4)"/><path d="' + CLOUD + '" fill="' + front + '"/></g></g>';
+    }
+    function drops(xs, y, colour) {
+      return xs.map(function (x, i) {
+        return '<line class="drop" x1="' + x + '" y1="' + y + '" x2="' + (x - 4) + '" y2="' + (y + 11) + '" stroke="' + colour + '" stroke-width="4" stroke-linecap="round" style="animation-delay:' + (-i * 0.17).toFixed(2) + 's"/>';
+      }).join("");
+    }
+    var ICONS = {
+      sun: function () { return sunGroup(60, 60, 24); },
+      partly: function () { return '<g transform="translate(-12 -16)">' + sunGroup(60, 60, 17) + "</g>" + cloud("#f7f9fc", "#c6d2e3", "translate(8 14) scale(0.86)"); },
+      haze: function () {
+        return '<circle cx="60" cy="46" r="22" fill="#f0a35a" opacity="0.85"/>' +
+          '<g class="band"><rect x="16" y="60" width="88" height="8" rx="4" fill="#d9b48f"/></g>' +
+          '<g class="band b2"><rect x="24" y="74" width="74" height="8" rx="4" fill="#cfa982"/></g>' +
+          '<g class="band b3"><rect x="14" y="88" width="80" height="8" rx="4" fill="#c49e78"/></g>' +
+          '<circle class="speck" cx="30" cy="50" r="2" fill="#b08860"/><circle class="speck" cx="90" cy="40" r="1.6" fill="#b08860" style="animation-delay:-1.3s"/>' +
+          '<circle class="speck" cx="76" cy="58" r="1.8" fill="#b08860" style="animation-delay:-2.6s"/>';
+      },
+      rain: function () { return cloud("#cbd7e8", "#8fa3bf", "translate(0 -12)") + drops([42, 54, 66, 78, 88], 82, "#4f9dff"); },
+      storm: function () {
+        return cloud("#9aa1ba", "#5d6785", "translate(0 -14)") + drops([40, 86], 80, "#6aa8ff") +
+          '<path class="bolt" d="M66 68 L52 92 H62 L56 114 L80 84 H68 L76 68Z" fill="#ffd23f"/>';
+      },
+      wind: function () {
+        return '<path class="gust" d="M12 46 H72 a11 11 0 1 0 -11 -11" fill="none" stroke="#9fdcff" stroke-width="6" stroke-linecap="round"/>' +
+          '<path class="gust" style="animation-delay:-0.6s" d="M12 66 H90 a13 13 0 1 1 -13 13" fill="none" stroke="#7cc8f5" stroke-width="6" stroke-linecap="round"/>' +
+          '<path class="gust" style="animation-delay:-1.2s" d="M22 86 H60 a9 9 0 1 0 -9 -9" fill="none" stroke="#b9e8ff" stroke-width="5" stroke-linecap="round"/>' +
+          '<path class="leaf" d="M58 30 q10 -10 20 0 q-10 10 -20 0z" fill="#6cc070"/>';
+      },
+      fog: function () {
+        return cloud("#e9eef3", "#b5c0cd", "translate(0 -16)") +
+          '<g class="fogbar"><rect x="14" y="80" width="72" height="7" rx="3.5" fill="#cdd6e0"/></g>' +
+          '<g class="fogbar f2"><rect x="30" y="92" width="76" height="7" rx="3.5" fill="#bfc9d5"/></g>' +
+          '<g class="fogbar f3"><rect x="18" y="104" width="62" height="7" rx="3.5" fill="#d7dee6"/></g>';
+      }
+    };
+    function iconSVG(type, still) {
+      return '<svg class="wx' + (still ? " still" : "") + '" viewBox="0 0 120 120" aria-hidden="true" focusable="false">' + ICONS[type]() + "</svg>";
+    }
+
+    /* ---------- 3. Build the tabs ---------- */
+    var tabs = WEEK.map(function (d, i) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "tab";
+      b.id = "tab-" + i;
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-controls", "panel");
+      b.setAttribute("aria-selected", "false");
+      b.tabIndex = -1;
+      b.innerHTML = '<span class="d">' + d.short + '</span><span class="mini">' + iconSVG(d.type, true) + '</span><span class="h"></span><span class="l"></span>';
+      b.addEventListener("click", function () { select(i, true); });
+      strip.appendChild(b);
+      return b;
+    });
+    strip.addEventListener("keydown", function (e) {
+      var i = sel, n = tabs.length;
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") i = (sel + 1) % n;
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") i = (sel - 1 + n) % n;
+      else if (e.key === "Home") i = 0;
+      else if (e.key === "End") i = n - 1;
+      else return;
+      e.preventDefault();
+      select(i, true);
+      tabs[i].focus();
+    });
+
+    /* ---------- 4. Units ---------- */
+    var fahrenheit = false;
+    function conv(c) { return fahrenheit ? Math.round(c * 9 / 5 + 32) : c; }
+    function fmt(c) { return conv(c) + "°"; }
+    function paintTabTemps() {
+      tabs.forEach(function (b, i) {
+        b.querySelector(".h").textContent = fmt(WEEK[i].hi);
+        b.querySelector(".l").textContent = fmt(WEEK[i].lo);
+        b.setAttribute("aria-label", WEEK[i].day + ", " + TYPES[WEEK[i].type].label.toLowerCase() + ", high " + fmt(WEEK[i].hi) + ", low " + fmt(WEEK[i].lo));
+      });
+    }
+    $("unit").addEventListener("click", function () {
+      fahrenheit = !fahrenheit;
+      this.setAttribute("aria-pressed", String(fahrenheit));
+      this.querySelector(".sr").textContent = fahrenheit ? "Show temperatures in Celsius" : "Show temperatures in Fahrenheit";
+      paintTabTemps();
+      var d = WEEK[sel];
+      $("hilo").textContent = "H " + fmt(d.hi) + " · L " + fmt(d.lo);
+      $("feels").textContent = fmt(d.feels);
+      tempAnim = { from: shown, to: conv(d.now), start: performance.now(), dur: 500 };
+      $("live").textContent = "Temperatures now in " + (fahrenheit ? "Fahrenheit." : "Celsius.");
+    });
+
+    /* ---------- 5. Selecting a day ---------- */
+    var sel = -1, current = "sun", shown = 0, tempAnim = null, mode = "light";
+    function readMode() {
+      mode = getComputedStyle(document.documentElement).getPropertyValue("--mode").trim() === "dark" ? "dark" : "light";
+      if (sel >= 0) paintBlobs(WEEK[sel].type);
+    }
+    function paintBlobs(type) {
+      var c = TYPES[type][mode], s = document.documentElement.style;
+      s.setProperty("--c1", c[0]);
+      s.setProperty("--c2", c[1]);
+      s.setProperty("--c3", c[2]);
+    }
+    function restart(node, cls) {
+      node.classList.remove(cls);
+      void node.offsetWidth;
+      node.classList.add(cls);
+    }
+    function movePill() {
+      var t = tabs[sel];
+      pill.style.width = t.offsetWidth + "px";
+      pill.style.transform = "translateX(" + t.offsetLeft + "px)";
+    }
+
+    function select(i, announce) {
+      if (i === sel) return;
+      sel = i;
+      var d = WEEK[i], type = TYPES[d.type];
+      tabs.forEach(function (b, k) {
+        b.setAttribute("aria-selected", String(k === i));
+        b.tabIndex = k === i ? 0 : -1;
+      });
+      $("panel").setAttribute("aria-labelledby", tabs[i].id);
+      movePill();
+      current = d.type;
+      paintBlobs(d.type);
+
+      // crossfade the big icon
+      var old = iconBox.querySelectorAll(".wx");
+      old.forEach(function (o) {
+        o.classList.add("leave");
+        setTimeout(function () { o.remove(); }, 600);
+      });
+      iconBox.insertAdjacentHTML("beforeend", iconSVG(d.type, false));
+      var fresh = iconBox.lastElementChild;
+      fresh.classList.add("enter");
+      void fresh.getBoundingClientRect();
+      requestAnimationFrame(function () { fresh.classList.remove("enter"); });
+
+      // texts with a small staggered rise
+      $("when").textContent = d.full;
+      $("cond").textContent = type.label;
+      $("hilo").textContent = "H " + fmt(d.hi) + " · L " + fmt(d.lo);
+      $("feels").textContent = fmt(d.feels);
+      $("hum").textContent = d.hum + "%";
+      $("wind").textContent = d.wind;
+      $("xk").textContent = d.xk;
+      $("xv").textContent = d.xv;
+      restart($("cond"), "swap");
+      restart($("hilo"), "swap");
+      restart($("tiles"), "swap");
+
+      tempAnim = { from: shown, to: conv(d.now), start: performance.now(), dur: reduce.matches ? 0 : 750 };
+      if (announce) {
+        $("live").textContent = d.day + ": " + type.label.toLowerCase() + ", " + conv(d.now) + " degrees now, high " + conv(d.hi) + ", low " + conv(d.lo) + ".";
+      }
+      if (d.type === "storm") nextStrike = performance.now() + 700;
+    }
+
+    /* ---------- 6. Card tilt and sheen ---------- */
+    var tilt = { x: 0, y: 0 }, tiltTo = { x: 0, y: 0 }, lastPointer = -1e9;
+    stage.addEventListener("pointermove", function (e) {
+      var r = card.getBoundingClientRect();
+      card.style.setProperty("--mx", (((e.clientX - r.left) / r.width) * 100).toFixed(1) + "%");
+      card.style.setProperty("--my", (((e.clientY - r.top) / r.height) * 100).toFixed(1) + "%");
+      if (reduce.matches) return;
+      tiltTo.x = Math.max(-1.2, Math.min(1.2, (e.clientX - (r.left + r.width / 2)) / (r.width / 2)));
+      tiltTo.y = Math.max(-1.2, Math.min(1.2, (e.clientY - (r.top + r.height / 2)) / (r.height / 2)));
+      lastPointer = performance.now();
+    });
+    stage.addEventListener("pointerleave", function () { tiltTo.x = tiltTo.y = 0; lastPointer = -1e9; });
+
+    /* ---------- 7. Effect layer: rain, splashes, glass drops, glare, fog, wind, lightning ---------- */
+    var cw = 0, ch = 0, dpr = 1;
+    function resize() {
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      cw = card.clientWidth; ch = card.clientHeight;
+      canvas.width = Math.max(1, Math.round(cw * dpr));
+      canvas.height = Math.max(1, Math.round(ch * dpr));
+      if (sel >= 0) movePill();
+    }
+    new ResizeObserver(resize).observe(card);
+
+    var weight = {};
+    KEYS.forEach(function (k) { weight[k] = 0; });
+    var drops2 = [], splashes = [], beads = [], motes = [], dust = [], streaks = [], leaves = [], acc = {};
+    var fogBands = [], puffs = [];
+    for (var f = 0; f < 5; f++) fogBands.push({ y: 0.22 + f * 0.16, x: Math.random(), sp: 0.012 + Math.random() * 0.02, sc: 0.6 + Math.random() * 0.5 });
+    for (var p = 0; p < 4; p++) puffs.push({ x: Math.random(), y: 0.12 + Math.random() * 0.55, r: 0.22 + Math.random() * 0.18, sp: 0.008 + Math.random() * 0.012 });
+    var nextStrike = 0, strikeAt = -1e9, bolt = null;
+
+    function emit(key, rate, dt, make) {
+      acc[key] = (acc[key] || 0) + rate * dt;
+      while (acc[key] >= 1) { acc[key] -= 1; make(); }
+    }
+    function strike(now) {
+      strikeAt = now;
+      nextStrike = now + 2600 + Math.random() * 3600;
+      // a jagged bolt with one branch
+      var x = cw * (0.25 + Math.random() * 0.5), y = -10, pts = [[x, y]];
+      while (y < ch * 0.62) { y += 14 + Math.random() * 18; x += (Math.random() - 0.5) * 34; pts.push([x, y]); }
+      var j = 2 + Math.floor(Math.random() * (pts.length - 3)), bx = pts[j][0], by = pts[j][1], branch = [[bx, by]];
+      for (var b = 0; b < 4; b++) { bx += 10 + Math.random() * 14; by += 12 + Math.random() * 12; branch.push([bx, by]); }
+      bolt = [pts, branch];
+      card.classList.add("strike");
+      setTimeout(function () { card.classList.remove("strike"); }, 450);
+    }
+
+    function stepFx(dt, now) {
+      var calm = reduce.matches;
+      KEYS.forEach(function (k) { weight[k] += ((k === current ? 1 : 0) - weight[k]) * Math.min(1, dt * 2.2); });
+      var rainI = weight.rain + weight.storm * 1.7;
+      if (!calm) {
+        emit("drop", 120 * rainI, dt, function () {
+          drops2.push({ x: Math.random() * (cw + 90) - 20, y: -20, vy: 650 + Math.random() * 300, vx: -110 - weight.storm * 90, len: 12 + Math.random() * 12 });
+        });
+        emit("mote", 7 * weight.sun + 3 * weight.partly, dt, function () {
+          var ml = 3 + Math.random() * 3;
+          motes.push({ x: Math.random() * cw, y: ch * (0.3 + Math.random() * 0.7), vx: (Math.random() - 0.5) * 10, vy: -8 - Math.random() * 14, life: ml, max: ml, ph: Math.random() * 6 });
+        });
+        emit("dust", 24 * weight.haze, dt, function () {
+          dust.push({ x: -10, y: Math.random() * ch, vx: 14 + Math.random() * 26, vy: (Math.random() - 0.5) * 6, r: 0.8 + Math.random() * 1.6, life: 14, ph: Math.random() * 6 });
+        });
+        emit("streak", 34 * weight.wind + 6 * weight.storm, dt, function () {
+          streaks.push({ x: -160, y: Math.random() * ch, vx: 650 + Math.random() * 350, len: 60 + Math.random() * 90, ph: Math.random() * 6, a: 0.15 + Math.random() * 0.25 });
+        });
+        emit("leaf", 1.5 * weight.wind, dt, function () {
+          leaves.push({ x: -20, y: ch * (0.2 + Math.random() * 0.6), vx: 240 + Math.random() * 160, rot: 0, vr: 6 + Math.random() * 6, ph: Math.random() * 6, c: Math.random() < 0.5 ? "#7cc46a" : "#e0b84a" });
+        });
+      }
+      // drops on the glass: they slide down in bursts (calm mode: they appear and fade in place)
+      emit("bead", (calm ? 1.2 : 2.4) * rainI, dt, function () {
+        var bl = 4 + Math.random() * 4;
+        beads.push({ x: Math.random() * cw, y: Math.random() * ch * 0.85, r: 1.6 + Math.random() * 3.4, vy: 0, life: bl, max: bl });
+      });
+
+      var i;
+      for (i = drops2.length - 1; i >= 0; i--) {
+        var d = drops2[i];
+        d.x += d.vx * dt; d.y += d.vy * dt;
+        if (d.y > ch - 4) {
+          for (var s = 0; s < 3; s++) splashes.push({ x: d.x, y: ch - 3, vx: (Math.random() - 0.5) * 120, vy: -60 - Math.random() * 110, life: 0.35 });
+          drops2.splice(i, 1);
+        }
+      }
+      for (i = splashes.length - 1; i >= 0; i--) {
+        var sp = splashes[i];
+        sp.vy += 900 * dt; sp.x += sp.vx * dt; sp.y += sp.vy * dt; sp.life -= dt;
+        if (sp.life <= 0) splashes.splice(i, 1);
+      }
+      for (i = beads.length - 1; i >= 0; i--) {
+        var b = beads[i];
+        b.life -= dt;
+        if (!calm) {
+          // stick-slip: mostly still, sometimes a quick run down the glass
+          if (Math.random() < dt * 0.6) b.vy = 40 + Math.random() * 90;
+          b.vy *= Math.exp(-3 * dt);
+          b.y += b.vy * dt;
+        }
+        if (b.life <= 0 || b.y > ch + 6) beads.splice(i, 1);
+      }
+      for (i = motes.length - 1; i >= 0; i--) {
+        var m = motes[i];
+        m.life -= dt; m.x += (m.vx + Math.sin(now / 900 + m.ph) * 6) * dt; m.y += m.vy * dt;
+        if (m.life <= 0) motes.splice(i, 1);
+      }
+      for (i = dust.length - 1; i >= 0; i--) {
+        var u = dust[i];
+        u.life -= dt; u.x += u.vx * dt; u.y += (u.vy + Math.sin(now / 700 + u.ph) * 5) * dt;
+        if (u.life <= 0 || u.x > cw + 10) dust.splice(i, 1);
+      }
+      for (i = streaks.length - 1; i >= 0; i--) {
+        var st = streaks[i];
+        st.x += st.vx * dt;
+        if (st.x - st.len > cw) streaks.splice(i, 1);
+      }
+      for (i = leaves.length - 1; i >= 0; i--) {
+        var lf = leaves[i];
+        lf.x += lf.vx * dt; lf.y += Math.sin(now / 260 + lf.ph) * 60 * dt; lf.rot += lf.vr * dt;
+        if (lf.x > cw + 30) leaves.splice(i, 1);
+      }
+      if (!calm) {
+        fogBands.forEach(function (fb) { fb.x = (fb.x + fb.sp * dt) % 1.6; });
+        puffs.forEach(function (pf) { pf.x = (pf.x + pf.sp * dt) % 1.6; });
+      }
+      // lightning (skipped entirely with reduced motion: no flashing)
+      if (!calm && weight.storm > 0.6 && now > nextStrike) strike(now);
+      var since = (now - strikeAt) / 1000;
+      var flash = since < 0.6 ? Math.exp(-since / 0.06) + 0.6 * Math.exp(-Math.abs(since - 0.14) / 0.04) : 0;
+      flashEl.style.opacity = Math.min(0.6, flash * 0.55).toFixed(3);
+      pageFlash.style.opacity = Math.min(0.25, flash * 0.22).toFixed(3);
+    }
+
+    function drawFx(now) {
+      var dark = mode === "dark", calm = reduce.matches, i;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cw, ch);
+
+      // sun glare with slowly turning rays
+      if (weight.sun > 0.01) {
+        var gx = cw * 0.86, gy = ch * 0.06, g = ctx.createRadialGradient(gx, gy, 0, gx, gy, cw * 0.75);
+        g.addColorStop(0, "rgba(255,226,150," + (0.42 * weight.sun).toFixed(3) + ")");
+        g.addColorStop(1, "rgba(255,226,150,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, cw, ch);
+        ctx.save();
+        ctx.translate(gx, gy);
+        ctx.rotate(calm ? 0.3 : now * 0.00007);
+        ctx.fillStyle = "rgba(255,240,190," + (0.07 * weight.sun).toFixed(3) + ")";
+        for (i = 0; i < 9; i++) {
+          ctx.rotate((Math.PI * 2) / 9);
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(cw * 1.3, -26); ctx.lineTo(cw * 1.3, 26); ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+      }
+      // soft cloud puffs
+      if (weight.partly > 0.01) {
+        puffs.forEach(function (pf) {
+          var x = (pf.x - 0.3) * cw, y = pf.y * ch, r = pf.r * cw;
+          var pg = ctx.createRadialGradient(x, y, 0, x, y, r);
+          pg.addColorStop(0, "rgba(255,255,255," + (0.22 * weight.partly).toFixed(3) + ")");
+          pg.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.fillStyle = pg;
+          ctx.fillRect(x - r, y - r, r * 2, r * 2);
+        });
+      }
+      // smoggy tint
+      if (weight.haze > 0.01) {
+        var hg = ctx.createLinearGradient(0, 0, 0, ch);
+        hg.addColorStop(0, "rgba(214,170,120," + (0.08 * weight.haze).toFixed(3) + ")");
+        hg.addColorStop(1, "rgba(190,150,110," + (0.28 * weight.haze).toFixed(3) + ")");
+        ctx.fillStyle = hg;
+        ctx.fillRect(0, 0, cw, ch);
+        ctx.fillStyle = dark ? "rgba(230,200,160,0.55)" : "rgba(130,100,70,0.45)";
+        ctx.beginPath();
+        dust.forEach(function (u) { ctx.moveTo(u.x + u.r, u.y); ctx.arc(u.x, u.y, u.r, 0, Math.PI * 2); });
+        ctx.fill();
+      }
+      // drifting fog bands
+      var fogW = weight.fog + weight.haze * 0.3;
+      if (fogW > 0.01) {
+        fogBands.forEach(function (fb) {
+          var x = (fb.x - 0.3) * cw, y = fb.y * ch;
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.scale(3.2 * fb.sc, 1);
+          var fg = ctx.createRadialGradient(0, 0, 0, 0, 0, cw * 0.18);
+          fg.addColorStop(0, "rgba(255,255,255," + ((dark ? 0.2 : 0.42) * fogW).toFixed(3) + ")");
+          fg.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.fillStyle = fg;
+          ctx.fillRect(-cw * 0.18, -cw * 0.18, cw * 0.36, cw * 0.36);
+          ctx.restore();
+        });
+      }
+      // rain streaks and splashes
+      if (drops2.length) {
+        ctx.strokeStyle = dark ? "rgba(190,215,255,0.5)" : "rgba(40,80,140,0.38)";
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        drops2.forEach(function (d) {
+          var k = d.len / Math.hypot(d.vx, d.vy);
+          ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.vx * k, d.y - d.vy * k);
+        });
+        ctx.stroke();
+      }
+      if (splashes.length) {
+        ctx.fillStyle = dark ? "rgba(200,225,255,0.7)" : "rgba(40,80,140,0.45)";
+        ctx.beginPath();
+        splashes.forEach(function (sp) { ctx.moveTo(sp.x + 1.3, sp.y); ctx.arc(sp.x, sp.y, 1.3, 0, Math.PI * 2); });
+        ctx.fill();
+      }
+      // glass drops: a clear body, a dark rim below and a bright glint
+      beads.forEach(function (b) {
+        var a = Math.min(1, b.life / 1.5, (b.max - b.life) / 0.4 + 0.2);
+        ctx.globalAlpha = Math.max(0, a);
+        ctx.fillStyle = "rgba(255,255,255,0.16)";
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = dark ? "rgba(0,0,0,0.35)" : "rgba(30,50,90,0.28)";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0.2, Math.PI - 0.2); ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.beginPath(); ctx.arc(b.x - b.r * 0.35, b.y - b.r * 0.4, b.r * 0.28, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      // sunny motes
+      motes.forEach(function (m) {
+        var a = Math.sin(Math.PI * Math.max(0, Math.min(1, 1 - m.life / m.max))) * 0.8;
+        ctx.fillStyle = "rgba(255,244,200," + a.toFixed(3) + ")";
+        ctx.beginPath(); ctx.arc(m.x, m.y, 1.6, 0, Math.PI * 2); ctx.fill();
+      });
+      // wind streaks and tumbling leaves
+      streaks.forEach(function (st) {
+        var y = st.y + Math.sin(st.x / 60 + st.ph) * 6;
+        var lg = ctx.createLinearGradient(st.x - st.len, 0, st.x, 0);
+        lg.addColorStop(0, "rgba(255,255,255,0)");
+        lg.addColorStop(1, (dark ? "rgba(220,240,255," : "rgba(255,255,255,") + st.a.toFixed(2) + ")");
+        ctx.strokeStyle = lg;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(st.x - st.len, y); ctx.quadraticCurveTo(st.x - st.len / 2, y - 6, st.x, y); ctx.stroke();
+      });
+      leaves.forEach(function (lf) {
+        ctx.save();
+        ctx.translate(lf.x, lf.y);
+        ctx.rotate(lf.rot);
+        ctx.scale(1, 0.3 + Math.abs(Math.cos(lf.rot * 0.7)) * 0.7);
+        ctx.fillStyle = lf.c;
+        ctx.beginPath(); ctx.ellipse(0, 0, 6, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      });
+      // the bolt itself, for a moment
+      var since = now - strikeAt;
+      if (bolt && since < 220) {
+        ctx.save();
+        ctx.globalAlpha = 1 - since / 220;
+        ctx.strokeStyle = "#fffbe0";
+        ctx.shadowColor = "#fff2a8";
+        ctx.shadowBlur = 14;
+        bolt.forEach(function (line, n) {
+          ctx.lineWidth = n ? 1.4 : 2.6;
+          ctx.beginPath();
+          line.forEach(function (pt, k) { if (k) ctx.lineTo(pt[0], pt[1]); else ctx.moveTo(pt[0], pt[1]); });
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+    }
+
+    /* ---------- 8. Main loop: temperature count, tilt, effects ---------- */
+    var tempEl = $("temp"), prev = performance.now();
+    function loop(now) {
+      var dt = Math.min(0.05, (now - prev) / 1000);
+      prev = now;
+      if (tempAnim) {
+        var q = tempAnim.dur ? Math.min(1, (now - tempAnim.start) / tempAnim.dur) : 1;
+        var e = 1 - Math.pow(1 - q, 3);
+        var v = Math.round(tempAnim.from + (tempAnim.to - tempAnim.from) * e);
+        if (v !== shown) { shown = v; tempEl.textContent = String(v); }
+        if (q >= 1) tempAnim = null;
+      }
+      if (!reduce.matches) {
+        // with no pointer around, the card floats gently by itself
+        if (now - lastPointer > 2500) { tiltTo.x = Math.sin(now / 2400) * 0.25; tiltTo.y = Math.cos(now / 3100) * 0.2; }
+        tilt.x += (tiltTo.x - tilt.x) * Math.min(1, dt * 7);
+        tilt.y += (tiltTo.y - tilt.y) * Math.min(1, dt * 7);
+        card.style.transform = "perspective(1000px) rotateX(" + (-tilt.y * 7).toFixed(2) + "deg) rotateY(" + (tilt.x * 9).toFixed(2) + "deg)";
+        iconBox.style.transform = "translate(" + (tilt.x * 7).toFixed(1) + "px," + (tilt.y * 7).toFixed(1) + "px)";
+      } else if (card.style.transform) {
+        card.style.transform = "";
+        iconBox.style.transform = "";
+      }
+      stepFx(dt, now);
+      drawFx(now);
+      requestAnimationFrame(loop);
+    }
+
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readMode);
+    readMode();
+    paintTabTemps();
+    resize();
+    select(0, false);
+    requestAnimationFrame(loop);
+  })();
+</script>
+</body>
+</html>

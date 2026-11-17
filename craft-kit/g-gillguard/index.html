@@ -1,0 +1,800 @@
+<!doctype html>
+<!-- Chill and Craft · Gillguard · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gillguard · a password meter with a growing axolotl</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    --sea1: #e2f8f5; --sea2: #a6e1dd;
+    --card: #ffffff; --ink: #0d3440; --muted: #4b6e77; --line: #d3e7e7; --field: #f3fbfb;
+    --accent: #0f8a85; --accent-ink: #ffffff;
+    --l1: #ff6f7f; --l2: #f2a42a; --l3: #17b39e; --l4: #7a5cff; --gold: #f5c03e;
+    --err: #cf3449; --ok: #128f6b; --focus: #6b3cf0;
+    --tank1: #c4f0f1; --tank2: #66c3ca; --sand: #f0d7a4; --weed: #2fa37f;
+    --axo: #ffb7cb; --axo2: #f48fad; --belly: #ffe2ea; --gill: #ff6c98; --eye: #2a1220;
+    --shadow: rgba(10, 70, 80, 0.22);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --sea1: #062733; --sea2: #020d14;
+      --card: #0b2631; --ink: #e3fbfb; --muted: #95bac1; --line: #1c4452; --field: #082029;
+      --accent: #3fd5c5; --accent-ink: #03221f;
+      --l1: #ff6b7d; --l2: #ffb23f; --l3: #3fd5b5; --l4: #a18bff; --gold: #ffd25a;
+      --err: #ff6b7d; --ok: #3ddc9e; --focus: #ffd35a;
+      --tank1: #0e5161; --tank2: #052833; --sand: #5b5236; --weed: #2a8f70;
+      --axo: #ffaec6; --axo2: #ef85a6; --belly: #ffd6e2; --gill: #ff5f8f; --eye: #1d0c16;
+      --shadow: rgba(0, 0, 0, 0.5);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --sea1: #062733; --sea2: #020d14;
+    --card: #0b2631; --ink: #e3fbfb; --muted: #95bac1; --line: #1c4452; --field: #082029;
+    --accent: #3fd5c5; --accent-ink: #03221f;
+    --l1: #ff6b7d; --l2: #ffb23f; --l3: #3fd5b5; --l4: #a18bff; --gold: #ffd25a;
+    --err: #ff6b7d; --ok: #3ddc9e; --focus: #ffd35a;
+    --tank1: #0e5161; --tank2: #052833; --sand: #5b5236; --weed: #2a8f70;
+    --axo: #ffaec6; --axo2: #ef85a6; --belly: #ffd6e2; --gill: #ff5f8f; --eye: #1d0c16;
+    --shadow: rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+
+  /* ---------- Sea stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(180deg, var(--sea1), var(--sea2));
+    overflow-x: hidden;
+  }
+  .sea { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 16px 12px; overflow: hidden; }
+  .rays {
+    position: absolute; inset: -20% -10% auto; height: 120%;
+    background: repeating-linear-gradient(100deg, transparent 0 60px, rgba(255, 255, 255, 0.16) 60px 90px, transparent 90px 170px);
+    -webkit-mask: linear-gradient(180deg, #000, transparent 75%);
+    mask: linear-gradient(180deg, #000, transparent 75%);
+    animation: rays 9s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+  @keyframes rays { from { transform: translateX(-30px) skewX(-4deg); opacity: 0.7; } to { transform: translateX(30px) skewX(4deg); opacity: 1; } }
+  .float { position: absolute; inset: 0; pointer-events: none; }
+  .float i {
+    position: absolute; bottom: -20px;
+    width: var(--s, 10px); height: var(--s, 10px);
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.7), transparent 45%);
+    animation: up var(--d, 12s) linear infinite;
+    animation-delay: var(--w, 0s);
+  }
+  @keyframes up {
+    0% { transform: translate(0, 0); opacity: 0; }
+    10% { opacity: 1; }
+    50% { transform: translate(14px, -55vh); }
+    100% { transform: translate(-8px, -110vh); opacity: 0; }
+  }
+
+  /* ---------- Card ---------- */
+  .card {
+    position: relative;
+    width: min(420px, 100%);
+    background: var(--card);
+    border-radius: 26px;
+    padding: 18px 18px 20px;
+    box-shadow: 0 30px 70px -30px var(--shadow), 0 0 0 1px var(--line);
+  }
+  .card.enter { animation: cardIn 0.8s cubic-bezier(0.34, 1.4, 0.64, 1) backwards; }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(30px) scale(0.96); } }
+  .card.shake { animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+  @keyframes shake { 20% { transform: translateX(-10px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(3px); } }
+  h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+  .sub { margin: 2px 0 12px; color: var(--muted); font-size: 13.5px; }
+
+  /* ---------- Tank with the axolotl ---------- */
+  .tank {
+    position: relative;
+    height: 150px;
+    border-radius: 20px;
+    overflow: hidden;
+    background: linear-gradient(180deg, var(--tank1), var(--tank2));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25), inset 0 -20px 40px rgba(0, 0, 0, 0.08);
+  }
+  .tank svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .tag {
+    position: absolute; right: 10px; top: 10px;
+    font-size: 12px; font-weight: 700;
+    padding: 4px 10px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.82); color: #0d3440;
+    transition: background 0.3s;
+  }
+  .tag.pop { animation: tagPop 0.6s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes tagPop { 0% { transform: scale(0.6); } 100% { transform: scale(1); } }
+  .say {
+    position: absolute; left: 10px; top: 10px;
+    max-width: 46%;
+    font-size: 12.5px; font-weight: 600; line-height: 1.3;
+    padding: 7px 11px;
+    border-radius: 14px 14px 14px 4px;
+    background: rgba(255, 255, 255, 0.92); color: #0d3440;
+    box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.35);
+    transform-origin: 0 100%;
+  }
+  .say.pop { animation: sayPop 0.5s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  @keyframes sayPop { from { transform: scale(0.5) rotate(-6deg); opacity: 0; } }
+  .fx { position: absolute; inset: 0; pointer-events: none; }
+  .fx b { position: absolute; left: 0; top: 0; width: 10px; height: 10px; border-radius: 50%; }
+
+  /* svg parts */
+  .weed { transform-box: fill-box; transform-origin: 50% 100%; animation: sway 4s ease-in-out infinite alternate; }
+  .weed.w2 { animation-duration: 5.2s; animation-delay: -2s; }
+  .weed.w3 { animation-duration: 3.6s; animation-delay: -1s; }
+  @keyframes sway { from { transform: rotate(-6deg); } to { transform: rotate(7deg); } }
+  #grow { transform-origin: 160px 158px; transform: scale(0); }
+  .bob { animation: bob 3.2s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-3px); } }
+  .tail { transform-origin: 180px 134px; animation: tail 2.4s ease-in-out infinite alternate; }
+  @keyframes tail { from { transform: rotate(-7deg); } to { transform: rotate(6deg); } }
+  .gill { opacity: 0; transform: scale(0.2); transition: opacity 0.35s, transform 0.6s cubic-bezier(0.34, 1.8, 0.64, 1), fill 0.4s; fill: var(--gill); }
+  .gill-wave { animation: wave 1.8s ease-in-out infinite alternate; }
+  .gw2 { animation-delay: -0.6s; }
+  .gw3 { animation-delay: -1.2s; }
+  @keyframes wave { from { transform: rotate(-7deg); } to { transform: rotate(7deg); } }
+  .lvl-1 .gill.m, .lvl-2 .gill, .lvl-3 .gill, .lvl-4 .gill { opacity: 1; transform: scale(0.75); }
+  .lvl-3 .gill, .lvl-4 .gill { transform: scale(1); }
+  .fluff { opacity: 0; transition: opacity 0.4s; }
+  .lvl-3 .fluff, .lvl-4 .fluff { opacity: 1; }
+  .spot { opacity: 0; transform-box: fill-box; transform-origin: center; transform: scale(0); transition: opacity 0.3s, transform 0.5s cubic-bezier(0.34, 1.8, 0.64, 1); }
+  .lvl-3 .spot, .lvl-4 .spot { opacity: 0.55; transform: scale(1); }
+  .crown { opacity: 0; transform: translate(160px, 30px) scale(0.2) rotate(-30deg); transition: opacity 0.3s, transform 0.7s cubic-bezier(0.34, 1.8, 0.64, 1); }
+  .lvl-4 .crown { opacity: 1; transform: translate(160px, 58px) scale(1) rotate(0deg); }
+  .aura { opacity: 0; transition: opacity 0.6s; transform-box: fill-box; transform-origin: center; }
+  .lvl-4 .aura { opacity: 1; animation: aura 2.4s ease-in-out infinite; }
+  @keyframes aura { 50% { transform: scale(1.12); } }
+  .lvl-4 .gill { fill: var(--gold); filter: drop-shadow(0 0 4px var(--gold)); }
+  .cheek { opacity: 0.25; transition: opacity 0.4s; }
+  .lvl-2 .cheek { opacity: 0.45; } .lvl-3 .cheek, .lvl-4 .cheek { opacity: 0.75; }
+  .lid { transform-box: fill-box; transform-origin: center; transition: transform 0.12s; }
+  .blink .lid { transform: scaleY(0.1); }
+  .look { transform: translateX(var(--look, 0px)); transition: transform 0.25s cubic-bezier(0.34, 1.6, 0.64, 1); }
+  .mouth { opacity: 0; transition: opacity 0.2s; }
+  [data-mood="o"] .m-o, [data-mood="smile"] .m-smile, [data-mood="grin"] .m-grin, [data-mood="sad"] .m-sad { opacity: 1; }
+  .brow { opacity: 0; transition: opacity 0.2s; }
+  [data-mood="sad"] .brow { opacity: 1; }
+  .arm-in { transition: transform 0.5s cubic-bezier(0.34, 1.6, 0.64, 1); }
+  .peeking .arm-l .arm-in { transform: translate(8px, -44px) rotate(-25deg); }
+  .peeking .arm-r .arm-in { transform: translate(-8px, -44px) rotate(25deg); }
+  .egg-top, .egg-bot { transition: transform 0.7s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.5s; transform-box: fill-box; transform-origin: 50% 100%; }
+  .egg-top { transform: translate(-16px, -40px) rotate(-38deg); opacity: 0; }
+  .egg-bot { transform: translateY(10px) scaleY(0.4); opacity: 0; }
+  .lvl-0 .egg-top, .lvl-0 .egg-bot { transform: none; opacity: 1; }
+  .egg { transform-origin: 160px 158px; }
+  .wiggle .egg { animation: eggWiggle 0.6s ease-in-out; }
+  @keyframes eggWiggle { 25% { transform: rotate(-6deg); } 60% { transform: rotate(5deg); } }
+  .puff circle { animation: puff 3s ease-in infinite; opacity: 0; }
+  .puff circle:nth-child(2) { animation-delay: 1s; }
+  .puff circle:nth-child(3) { animation-delay: 2s; }
+  .lvl-0 .puff { display: none; }
+  @keyframes puff { 0% { transform: translate(0, 0); opacity: 0; } 15% { opacity: 0.8; } 100% { transform: translate(6px, -60px); opacity: 0; } }
+  .cheer .bob { animation: cheer 0.7s cubic-bezier(0.3, 1.6, 0.5, 1) 2; }
+  @keyframes cheer { 40% { transform: translateY(-16px) rotate(-4deg); } 70% { transform: translateY(0) rotate(3deg); } }
+  .swim .bob { animation: swim 1.3s ease-in-out infinite; }
+  @keyframes swim { 25% { transform: translate(-14px, -6px) rotate(-6deg); } 75% { transform: translate(14px, -6px) rotate(6deg); } }
+
+  /* ---------- Form ---------- */
+  form { margin-top: 14px; }
+  .lbl { display: block; font-size: 13px; font-weight: 650; margin: 0 0 6px 2px; }
+  .row { display: flex; gap: 8px; }
+  .input { position: relative; flex: 1; min-width: 0; }
+  .input input {
+    width: 100%; height: 46px;
+    border-radius: 14px;
+    border: 1.5px solid var(--line);
+    background: var(--field);
+    color: var(--ink);
+    font: inherit; font-size: 15px;
+    padding: 0 44px 0 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .input input:focus-visible { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent); }
+  .input.bad input { border-color: var(--err); }
+  .icon {
+    width: 46px; height: 46px; flex: none;
+    border-radius: 14px;
+    border: 1.5px solid var(--line);
+    background: var(--field);
+    color: var(--ink);
+    display: grid; place-items: center;
+    cursor: pointer;
+    transition: transform 0.25s cubic-bezier(0.34, 1.7, 0.64, 1), background 0.2s, border-color 0.2s;
+  }
+  .icon:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .icon:active { transform: scale(0.9); }
+  .icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .icon.spin svg { animation: roll 0.6s cubic-bezier(0.34, 1.5, 0.64, 1); }
+  @keyframes roll { from { transform: rotate(-360deg) scale(0.6); } }
+  .icon.copied { color: var(--ok); border-color: var(--ok); }
+  .eye {
+    position: absolute; right: 4px; top: 4px;
+    width: 38px; height: 38px;
+    border: 0; border-radius: 10px;
+    background: none; color: var(--muted);
+    display: grid; place-items: center; cursor: pointer;
+  }
+  .eye:hover { color: var(--ink); }
+  .eye svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .eye .slash { stroke-dasharray: 24; transition: stroke-dashoffset 0.3s; }
+  .eye[aria-pressed="true"] .slash { stroke-dashoffset: 24; }
+
+  .meter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0 6px; }
+  .meter i { height: 7px; border-radius: 999px; background: var(--line); overflow: hidden; position: relative; }
+  .meter i::after {
+    content: ""; position: absolute; inset: 0;
+    background: var(--c, var(--l1));
+    border-radius: inherit;
+    transform: scaleX(0); transform-origin: left;
+    transition: transform 0.5s cubic-bezier(0.34, 1.4, 0.64, 1), background 0.3s;
+  }
+  .meter i.on::after { transform: scaleX(1); }
+  .meter i:nth-child(2)::after { transition-delay: 0.05s; }
+  .meter i:nth-child(3)::after { transition-delay: 0.1s; }
+  .meter i:nth-child(4)::after { transition-delay: 0.15s; }
+  .read { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--muted); margin: 0 2px; min-height: 18px; }
+  .read b { color: var(--c, var(--muted)); font-weight: 750; transition: color 0.3s; }
+
+  .checks { list-style: none; padding: 0; margin: 10px 0 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; font-size: 12.5px; }
+  .checks li { display: flex; align-items: center; gap: 7px; color: var(--muted); transition: color 0.3s; }
+  .checks svg { width: 16px; height: 16px; flex: none; }
+  .checks circle { fill: none; stroke: var(--line); stroke-width: 2; transition: fill 0.3s, stroke 0.3s; }
+  .checks path { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 14; stroke-dashoffset: 14; transition: stroke-dashoffset 0.35s 0.1s; }
+  .checks li.yes { color: var(--ink); }
+  .checks li.yes circle { fill: var(--l3); stroke: var(--l3); }
+  .checks li.yes path { stroke-dashoffset: 0; }
+  .checks li.yes svg { animation: tickPop 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes tickPop { from { transform: scale(0.5); } }
+
+  .match {
+    position: absolute; right: 12px; top: 50%; margin-top: -11px;
+    width: 22px; height: 22px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 13px; font-weight: 800; color: #fff;
+    transform: scale(0); transition: transform 0.35s cubic-bezier(0.34, 1.8, 0.64, 1), background 0.2s;
+  }
+  .match.yes { background: var(--ok); transform: scale(1); }
+  .match.no { background: var(--err); transform: scale(1); }
+  .err { min-height: 18px; margin: 6px 2px 8px; font-size: 12.5px; color: var(--err); font-weight: 600; }
+
+  .save {
+    position: relative; overflow: hidden;
+    width: 100%; height: 50px;
+    border: 0; border-radius: 16px;
+    background: var(--accent); color: var(--accent-ink);
+    font: inherit; font-size: 15.5px; font-weight: 750;
+    cursor: pointer;
+    box-shadow: 0 12px 24px -14px var(--accent);
+    transition: transform 0.2s cubic-bezier(0.34, 1.7, 0.64, 1), background 0.3s, box-shadow 0.3s;
+  }
+  .save:hover { transform: translateY(-2px); box-shadow: 0 16px 28px -14px var(--accent); }
+  .save:active { transform: scale(0.97); }
+  .save .fill { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.25); transform: scaleX(0); transform-origin: left; }
+  .save.working .fill { transform: scaleX(1); transition: transform 1.5s cubic-bezier(0.6, 0, 0.3, 1); }
+  .save.done { background: var(--ok); }
+  .save span { position: relative; display: inline-flex; align-items: center; gap: 8px; }
+  .save .dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; animation: dot 0.9s ease-in-out infinite; }
+  .save .dots i:nth-child(2) { animation-delay: 0.15s; } .save .dots i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes dot { 50% { transform: translateY(-5px); opacity: 0.5; } }
+  .save .tk { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .save .tk path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: draw 0.45s 0.1s forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 380px) {
+    .card { padding: 14px 12px 16px; }
+    .checks { grid-template-columns: 1fr; }
+    .tank { height: 140px; }
+  }
+
+  /* ---------- Reduced motion: every state still shows, without big movement ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    .rays, .float i, .weed, .bob, .tail, .gill-wave, .puff circle, .aura, .lvl-4 .aura { animation: none !important; }
+    .float { display: none; }
+    .card, .card.shake, .tag.pop, .say.pop, .checks li.yes svg, .icon.spin svg, .cheer .bob, .swim .bob, .wiggle .egg { animation: none !important; }
+    .gill, .spot, .crown, .egg-top, .egg-bot, .arm-in, .meter i::after, .match { transition-duration: 0.01s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="sea">
+  <div class="rays" aria-hidden="true"></div>
+  <div class="float" aria-hidden="true" id="float"></div>
+
+  <section class="card enter" id="card" aria-labelledby="h">
+    <h1 id="h">Choose a password</h1>
+    <p class="sub">Your Gillguard grows as your password gets stronger.</p>
+
+    <!-- The tank: decoration only, the same info is in the meter and the list -->
+    <div class="tank" aria-hidden="true">
+      <svg viewBox="0 0 320 170" preserveAspectRatio="xMidYMax slice" id="axo" class="lvl-0" data-mood="smile">
+        <defs>
+          <radialGradient id="auraG"><stop offset="0" stop-color="var(--gold)" stop-opacity="0.7"/><stop offset="1" stop-color="var(--gold)" stop-opacity="0"/></radialGradient>
+          <linearGradient id="eggG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/><stop offset="1" stop-color="#ffd9e6" stop-opacity="0.65"/></linearGradient>
+        </defs>
+        <!-- caustic light and sand -->
+        <ellipse cx="90" cy="20" rx="90" ry="14" fill="#fff" opacity="0.12"/>
+        <ellipse cx="250" cy="34" rx="70" ry="10" fill="#fff" opacity="0.1"/>
+        <path class="weed" d="M30 165 C22 140 40 125 30 100 C24 85 34 72 30 60" stroke="var(--weed)" stroke-width="7" fill="none" stroke-linecap="round"/>
+        <path class="weed w2" d="M48 165 C56 145 42 132 50 112" stroke="var(--weed)" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.8"/>
+        <path class="weed w3" d="M285 165 C295 140 278 124 288 98 C292 88 286 80 290 70" stroke="var(--weed)" stroke-width="7" fill="none" stroke-linecap="round"/>
+        <path d="M0 160 C60 150 110 158 160 154 C220 150 270 160 320 152 V170 H0 Z" fill="var(--sand)"/>
+        <ellipse cx="250" cy="160" rx="10" ry="5" fill="#000" opacity="0.08"/>
+        <ellipse cx="72" cy="162" rx="7" ry="4" fill="#000" opacity="0.08"/>
+
+        <!-- glow behind the top level -->
+        <circle class="aura" cx="160" cy="104" r="86" fill="url(#auraG)"/>
+
+        <!-- the egg (level 0) -->
+        <g class="egg">
+          <path class="egg-bot" d="M136 128 L142 122 L148 130 L154 122 L160 130 L166 122 L172 130 L178 122 L184 128 A24 30 0 0 1 136 128 Z" fill="url(#eggG)" stroke="#fff" stroke-opacity="0.7"/>
+          <path class="egg-top" d="M136 128 A24 30 0 0 1 184 128 L178 122 L172 130 L166 122 L160 130 L154 122 L148 130 L142 122 Z" fill="url(#eggG)" stroke="#fff" stroke-opacity="0.7"/>
+          <g class="egg-bot"><g opacity="0.55">
+            <path d="M152 132 C150 120 166 116 170 126 C173 134 163 140 158 136" fill="none" stroke="var(--axo2)" stroke-width="5" stroke-linecap="round"/>
+            <circle cx="164" cy="124" r="1.6" fill="var(--eye)"/>
+          </g></g>
+        </g>
+
+        <!-- the axolotl, scaled per level from its feet -->
+        <g id="grow">
+          <g class="bob">
+            <path class="tail" d="M178 140 C206 142 224 128 228 110 C230 100 222 97 216 104 C211 120 198 128 178 128 Z" fill="var(--axo2)"/>
+            <ellipse cx="160" cy="134" rx="32" ry="24" fill="var(--axo)"/>
+            <ellipse cx="160" cy="139" rx="19" ry="15" fill="var(--belly)"/>
+            <ellipse cx="141" cy="156" rx="10" ry="5" fill="var(--axo2)"/>
+            <ellipse cx="179" cy="156" rx="10" ry="5" fill="var(--axo2)"/>
+            <!-- gills: left side, then the same group mirrored for the right -->
+            <g>
+              <g transform="translate(114 78) rotate(22)"><g class="gill-wave"><g class="gill t"><path d="M0 0 C-10 -10 -30 -11 -42 -4 C-31 2 -14 6 0 5 Z"/><g class="fluff" fill="var(--axo)"><circle cx="-14" cy="-6" r="2.2"/><circle cx="-24" cy="-6" r="2"/><circle cx="-33" cy="-4" r="1.7"/></g></g></g></g>
+              <g transform="translate(110 92)"><g class="gill-wave gw2"><g class="gill m"><path d="M0 0 C-10 -9 -32 -9 -46 -1 C-32 5 -14 8 0 5 Z"/><g class="fluff" fill="var(--axo)"><circle cx="-15" cy="-3" r="2.2"/><circle cx="-26" cy="-2" r="2"/><circle cx="-36" cy="-1" r="1.7"/></g></g></g></g>
+              <g transform="translate(114 106) rotate(-22)"><g class="gill-wave gw3"><g class="gill b"><path d="M0 0 C-10 -8 -28 -8 -40 -1 C-29 5 -13 7 0 4 Z"/><g class="fluff" fill="var(--axo)"><circle cx="-14" cy="-2" r="2.2"/><circle cx="-24" cy="-1" r="2"/><circle cx="-32" cy="0" r="1.7"/></g></g></g></g>
+            </g>
+            <g transform="translate(320 0) scale(-1 1)">
+              <g transform="translate(114 78) rotate(22)"><g class="gill-wave"><g class="gill t"><path d="M0 0 C-10 -10 -30 -11 -42 -4 C-31 2 -14 6 0 5 Z"/><g class="fluff" fill="var(--axo)"><circle cx="-14" cy="-6" r="2.2"/><circle cx="-24" cy="-6" r="2"/><circle cx="-33" cy="-4" r="1.7"/></g></g></g></g>
+              <g transform="translate(110 92)"><g class="gill-wave gw2"><g class="gill m"><path d="M0 0 C-10 -9 -32 -9 -46 -1 C-32 5 -14 8 0 5 Z"/><g class="fluff" fill="var(--axo)"><circle cx="-15" cy="-3" r="2.2"/><circle cx="-26" cy="-2" r="2"/><circle cx="-36" cy="-1" r="1.7"/></g></g></g></g>
+              <g transform="translate(114 106) rotate(-22)"><g class="gill-wave gw3"><g class="gill b"><path d="M0 0 C-10 -8 -28 -8 -40 -1 C-29 5 -13 7 0 4 Z"/><g class="fluff" fill="var(--axo)"><circle cx="-14" cy="-2" r="2.2"/><circle cx="-24" cy="-1" r="2"/><circle cx="-32" cy="0" r="1.7"/></g></g></g></g>
+            </g>
+            <!-- head -->
+            <ellipse cx="160" cy="92" rx="50" ry="36" fill="var(--axo)"/>
+            <ellipse cx="148" cy="70" rx="20" ry="8" fill="#fff" opacity="0.25"/>
+            <circle class="spot" cx="132" cy="74" r="3.5" fill="var(--axo2)"/>
+            <circle class="spot" cx="190" cy="70" r="3" fill="var(--axo2)"/>
+            <circle class="spot" cx="178" cy="62" r="2.2" fill="var(--axo2)"/>
+            <circle class="spot" cx="172" cy="128" r="3" fill="var(--axo2)"/>
+            <circle class="spot" cx="146" cy="124" r="2.4" fill="var(--axo2)"/>
+            <ellipse class="cheek" cx="128" cy="101" rx="8" ry="5" fill="var(--gill)"/>
+            <ellipse class="cheek" cx="192" cy="101" rx="8" ry="5" fill="var(--gill)"/>
+            <!-- eyes: .look moves the pupils, .lid blinks -->
+            <g class="look">
+              <g class="lid"><circle cx="140" cy="88" r="6.5" fill="var(--eye)"/><circle cx="138" cy="86" r="2.1" fill="#fff"/></g>
+              <g class="lid"><circle cx="180" cy="88" r="6.5" fill="var(--eye)"/><circle cx="178" cy="86" r="2.1" fill="#fff"/></g>
+            </g>
+            <path class="brow" d="M132 76 L146 79 M188 76 L174 79" stroke="var(--eye)" stroke-width="2.4" stroke-linecap="round"/>
+            <!-- mouths, one per mood -->
+            <ellipse class="mouth m-o" cx="160" cy="106" rx="4" ry="4.5" fill="var(--eye)"/>
+            <path class="mouth m-smile" d="M150 103 Q160 112 170 103" fill="none" stroke="var(--eye)" stroke-width="2.6" stroke-linecap="round"/>
+            <path class="mouth m-grin" d="M146 101 Q160 120 174 101 Z" fill="var(--eye)"/>
+            <path class="mouth m-sad" d="M151 109 Q160 102 169 109" fill="none" stroke="var(--eye)" stroke-width="2.6" stroke-linecap="round"/>
+            <!-- crown for the top level -->
+            <g class="crown"><path d="M-16 0 L-19 -16 L-8 -8 L0 -21 L8 -8 L19 -16 L16 0 Z" fill="var(--gold)" stroke="#b5840f" stroke-width="1.5" stroke-linejoin="round"/><circle cx="0" cy="-6" r="2.5" fill="#ff5a7a"/></g>
+            <!-- arms (they cover the eyes when the password is shown) -->
+            <g class="arm-l" transform="translate(134 130)"><g class="arm-in"><ellipse rx="7" ry="10" fill="var(--axo2)"/></g></g>
+            <g class="arm-r" transform="translate(186 130)"><g class="arm-in"><ellipse rx="7" ry="10" fill="var(--axo2)"/></g></g>
+            <!-- little bubbles from the mouth -->
+            <g class="puff" fill="none" stroke="#fff" stroke-width="1.4"><circle cx="168" cy="104" r="3"/><circle cx="164" cy="104" r="2.2"/><circle cx="170" cy="104" r="2.6"/></g>
+          </g>
+        </g>
+      </svg>
+      <div class="fx" id="fx"></div>
+      <div class="say" id="say">Hello! Feed me a password and I will grow.</div>
+      <span class="tag" id="tag">Lv 0 · Egg</span>
+    </div>
+
+    <form id="form" novalidate>
+      <label class="lbl" for="pw">New password</label>
+      <div class="row">
+        <div class="input" id="pwBox">
+          <input id="pw" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="off" aria-describedby="read checks">
+          <button type="button" class="eye" id="eye" aria-label="Show password" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M4 4l16 16"/></svg>
+          </button>
+        </div>
+        <button type="button" class="icon" id="gen" aria-label="Make a strong password for me">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/></svg>
+        </button>
+        <button type="button" class="icon" id="copy" aria-label="Copy password">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+        </button>
+      </div>
+
+      <div class="meter" id="meter" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <p class="read" id="read"><b id="word">Empty</b><span id="crack">Type to see how long it would take to crack</span></p>
+
+      <ul class="checks" id="checks" aria-label="Password rules">
+        <li data-k="len"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M4.5 8.3l2.3 2.3 4.7-4.8"/></svg><span>12 or more characters</span></li>
+        <li data-k="cases"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M4.5 8.3l2.3 2.3 4.7-4.8"/></svg><span>Upper and lower case</span></li>
+        <li data-k="digit"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M4.5 8.3l2.3 2.3 4.7-4.8"/></svg><span>A number</span></li>
+        <li data-k="symbol"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M4.5 8.3l2.3 2.3 4.7-4.8"/></svg><span>A symbol like # or !</span></li>
+        <li data-k="common"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M4.5 8.3l2.3 2.3 4.7-4.8"/></svg><span>Not a common word</span></li>
+        <li data-k="repeat"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M4.5 8.3l2.3 2.3 4.7-4.8"/></svg><span>No runs like aaa or 123</span></li>
+      </ul>
+
+      <label class="lbl" for="pw2">Confirm password</label>
+      <div class="input" id="pw2Box">
+        <input id="pw2" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="off" aria-describedby="err">
+        <span class="match" id="match" aria-hidden="true"></span>
+      </div>
+      <p class="err" id="err"></p>
+
+      <button class="save" id="save" type="submit"><i class="fill" aria-hidden="true"></i><span id="saveLabel">Save password</span></button>
+    </form>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s) { return document.querySelector(s); };
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  var axo = $("#axo"), grow = $("#grow"), fx = $("#fx"), say = $("#say"), tag = $("#tag");
+  var pw = $("#pw"), pw2 = $("#pw2"), eye = $("#eye"), gen = $("#gen"), copy = $("#copy");
+  var meter = $("#meter").children, word = $("#word"), crack = $("#crack"), read = $("#read");
+  var checks = $("#checks"), match = $("#match"), err = $("#err"), save = $("#save"), saveLabel = $("#saveLabel");
+  var form = $("#form"), card = $("#card"), statusEl = $("#status");
+
+  /* drifting background bubbles */
+  for (var b = 0; b < 14; b++) {
+    var i = document.createElement("i");
+    i.style.left = Math.round(Math.random() * 100) + "%";
+    i.style.setProperty("--s", (6 + Math.random() * 14).toFixed(0) + "px");
+    i.style.setProperty("--d", (9 + Math.random() * 10).toFixed(1) + "s");
+    i.style.setProperty("--w", (-Math.random() * 18).toFixed(1) + "s");
+    $("#float").appendChild(i);
+  }
+
+  /* ---------- Strength rules ---------- */
+  var COMMON = ["password", "passw0rd", "123456", "qwerty", "iloveyou", "admin", "welcome", "letmein", "abc123", "monkey", "dragon",
+    "football", "cricket", "pakistan", "karachi", "lahore", "islamabad", "sunshine", "princess", "superman", "111111", "000000", "asdfgh"];
+  var LEVELS = [
+    { name: "Egg", word: "Empty", colour: "var(--muted)" },
+    { name: "Hatchling", word: "Weak", colour: "var(--l1)" },
+    { name: "Paddler", word: "Fair", colour: "var(--l2)" },
+    { name: "Guardian", word: "Strong", colour: "var(--l3)" },
+    { name: "Gillguard", word: "Mighty", colour: "var(--l4)" }
+  ];
+  var SCALE = [0, 0.46, 0.6, 0.76, 0.9];
+
+  function hasRun(s) {
+    for (var i = 2; i < s.length; i++) {
+      var a = s.charCodeAt(i - 2), b = s.charCodeAt(i - 1), c = s.charCodeAt(i);
+      if (/[a-z0-9]/i.test(s[i]) && ((b - a === 1 && c - b === 1) || (a - b === 1 && b - c === 1))) return true;
+    }
+    return false;
+  }
+
+  function analyse(p) {
+    var lower = /[a-z]/.test(p), upper = /[A-Z]/.test(p), digit = /\d/.test(p), symbol = /[^A-Za-z0-9]/.test(p);
+    var pool = (lower ? 26 : 0) + (upper ? 26 : 0) + (digit ? 10 : 0) + (symbol ? 33 : 0);
+    var per = Math.log2(Math.max(pool, 1)), bits = 0, lp = p.toLowerCase();
+    // each new character adds full bits; a repeat or the next step of a run (abc, 321) adds almost nothing
+    for (var i = 0; i < p.length; i++) {
+      var same = i > 0 && p[i] === p[i - 1];
+      var step = i > 1 && hasRun(lp.slice(i - 2, i + 1));
+      bits += same || step ? 1 : per;
+    }
+    // a repeated chunk (abcabcabc) is only worth one chunk
+    var chunk = /^(.+?)\1+$/.exec(p);
+    if (chunk) bits = Math.min(bits, chunk[1].length * per + Math.log2(p.length / chunk[1].length));
+    var low = lp.replace(/[^a-z0-9]/g, "");
+    var common = "";
+    COMMON.forEach(function (w) { if (!common && low.indexOf(w) > -1) common = w; });
+    var repeat = /(.)\1\1/.test(p) || hasRun(lp);
+    if (common) bits = Math.min(bits, 30);
+    var c = {
+      len: p.length >= 12, cases: lower && upper, digit: digit, symbol: symbol,
+      common: !!p && !common, repeat: !!p && !repeat
+    };
+    var level = 0;
+    if (p) {
+      level = bits < 36 ? 1 : bits < 56 ? 2 : bits < 76 ? 3 : 4;
+      if (level === 4 && !(c.len && c.cases && (c.digit || c.symbol))) level = 3;
+    }
+    return { level: level, bits: Math.max(0, bits), checks: c, common: common };
+  }
+
+  function crackTime(bits) {
+    var s = Math.pow(2, bits) / 2 / 1e10; // ten billion guesses a second, offline
+    if (s < 1) return "instantly";
+    var units = [["second", 60], ["minute", 60], ["hour", 24], ["day", 365.25], ["year", 100]];
+    for (var i = 0; i < units.length; i++) {
+      if (s < units[i][1]) { var n = Math.max(1, Math.round(s)); return "in about " + n + " " + units[i][0] + (n > 1 ? "s" : ""); }
+      s /= units[i][1];
+    }
+    return "in centuries";
+  }
+
+  /* ---------- Creature reactions ---------- */
+  var level = 0, mood = "smile", sayTimer = 0, moodTimer = 0, growAnim = null;
+
+  function speak(text) {
+    if (say.textContent === text) return;
+    say.textContent = text;
+    if (!reduce.matches) { say.classList.remove("pop"); void say.offsetWidth; say.classList.add("pop"); }
+  }
+  function setMood(m, ms) {
+    clearTimeout(moodTimer);
+    axo.dataset.mood = m;
+    if (ms) moodTimer = setTimeout(function () { axo.dataset.mood = mood; }, ms);
+    else mood = m;
+  }
+
+  function setLevel(next, info) {
+    if (next === level) return;
+    var prev = level, up = next > prev;
+    level = next;
+    axo.classList.remove("lvl-" + prev, "wiggle");
+    axo.classList.add("lvl-" + next);
+    var from = SCALE[prev], to = SCALE[next];
+    grow.style.transform = "scale(" + to + ")";
+    if (growAnim) growAnim.cancel();
+    if (!reduce.matches) {
+      var frames = up
+        ? [{ transform: "scale(" + from + ")" }, { transform: "scale(" + (from * 1.08 + 0.02) + "," + from * 0.86 + ")", offset: 0.25 },
+           { transform: "scale(" + to * 1.12 + ")", offset: 0.65 }, { transform: "scale(" + to + ")" }]
+        : [{ transform: "scale(" + from + ")" }, { transform: "scale(" + to * 0.9 + "," + to * 1.04 + ")", offset: 0.6 }, { transform: "scale(" + to + ")" }];
+      growAnim = grow.animate(frames, { duration: up ? 700 : 500, easing: "ease-out" });
+      if (up) burst(next);
+      tag.classList.remove("pop"); void tag.offsetWidth; tag.classList.add("pop");
+    }
+    tag.textContent = "Lv " + next + " · " + LEVELS[next].name;
+    tag.style.background = next ? "color-mix(in srgb, " + LEVELS[next].colour + " 30%, #fff)" : "";
+    if (!up && next > 0) setMood("sad", 900);
+    mood = next >= 4 ? "grin" : next >= 2 ? "smile" : next === 1 ? "o" : "smile";
+    if (axo.dataset.mood !== "sad") axo.dataset.mood = mood;
+    if (next === 0) speak("Back in my egg. Feed me a password!");
+    else if (info.common) speak("Hmm, “" + info.common + "” is a word everyone tries first.");
+    else speak(["", "So tiny… more, please!", "Getting there, keep going!", "Ooh, I feel strong!", "I am the Gillguard. Nothing gets past me!"][next]);
+    clearTimeout(sayTimer);
+    sayTimer = setTimeout(function () { statusEl.textContent = "Strength: " + LEVELS[level].word + ". Your Gillguard is level " + level + "."; }, 500);
+  }
+
+  /* bubbles and stars burst from the creature on level up */
+  function burst(lv) {
+    var rect = fx.getBoundingClientRect();
+    var cx = rect.width / 2, cy = rect.height * 0.62;
+    var n = 10 + lv * 4;
+    for (var i = 0; i < n; i++) {
+      var p = document.createElement("b");
+      var star = i % 3 === 0;
+      var size = star ? 8 : 5 + Math.random() * 7;
+      p.style.width = p.style.height = size + "px";
+      if (star) { p.style.background = "var(--gold)"; p.style.borderRadius = "2px"; }
+      else { p.style.border = "1.5px solid rgba(255,255,255,.9)"; }
+      fx.appendChild(p);
+      var a = Math.random() * Math.PI * 2, d = 40 + Math.random() * 60;
+      var x1 = cx + Math.cos(a) * d, y1 = cy + Math.sin(a) * d * 0.7 - 20;
+      var anim = p.animate([
+        { transform: "translate(" + cx + "px," + cy + "px) scale(.2) rotate(0deg)", opacity: 1 },
+        { transform: "translate(" + x1 + "px," + y1 + "px) scale(1) rotate(180deg)", opacity: 1, offset: 0.6 },
+        { transform: "translate(" + x1 + "px," + (y1 - 30) + "px) scale(.4) rotate(260deg)", opacity: 0 }
+      ], { duration: 800 + Math.random() * 400, easing: "cubic-bezier(.2,.8,.3,1)" });
+      anim.onfinish = (function (el) { return function () { el.remove(); }; })(p);
+    }
+  }
+
+  /* pupils follow the caret while you type */
+  function look() {
+    var el = document.activeElement === pw2 ? pw2 : pw;
+    var pos = el.selectionStart == null ? el.value.length : el.selectionStart;
+    var ratio = Math.min(1, pos / Math.max(14, el.value.length + 2));
+    axo.style.setProperty("--look", (-3 + ratio * 6).toFixed(1) + "px");
+  }
+
+  /* blink now and then */
+  (function blinkLoop() {
+    setTimeout(function () {
+      axo.classList.add("blink");
+      setTimeout(function () { axo.classList.remove("blink"); blinkLoop(); }, 150);
+    }, 2400 + Math.random() * 3000);
+  })();
+
+  /* ---------- Update everything when the password changes ---------- */
+  function update() {
+    var p = pw.value, info = analyse(p);
+    for (var i = 0; i < 4; i++) {
+      meter[i].classList.toggle("on", i < info.level);
+      meter[i].style.setProperty("--c", LEVELS[info.level].colour);
+    }
+    word.textContent = LEVELS[info.level].word;
+    read.style.setProperty("--c", LEVELS[info.level].colour);
+    crack.textContent = p ? "Cracked " + crackTime(info.bits) : "Type to see how long it would take to crack";
+    Array.prototype.forEach.call(checks.children, function (li) {
+      var yes = !!info.checks[li.dataset.k];
+      if (yes !== li.classList.contains("yes")) li.classList.toggle("yes", yes);
+      li.setAttribute("aria-label", li.textContent + (yes ? ": done" : ": not yet"));
+    });
+    setLevel(info.level, info);
+    updateMatch();
+    look();
+    if (err.textContent && info.level >= 3) clear();
+  }
+  axo.addEventListener("animationend", function (e) { if (e.target.classList && e.target.classList.contains("egg")) axo.classList.remove("wiggle"); });
+
+  function updateMatch() {
+    var a = pw.value, b = pw2.value;
+    match.className = "match";
+    match.textContent = "";
+    if (!b) return;
+    if (a === b) { match.classList.add("yes"); match.textContent = "✓"; }
+    else if (a.indexOf(b) !== 0) { match.classList.add("no"); match.textContent = "×"; }
+  }
+  function clear() { err.textContent = ""; $("#pwBox").classList.remove("bad"); $("#pw2Box").classList.remove("bad"); }
+
+  pw.addEventListener("input", update);
+  pw2.addEventListener("input", function () { updateMatch(); look(); if (pw2.value === pw.value) clear(); });
+  ["keyup", "click", "focus"].forEach(function (ev) { pw.addEventListener(ev, look); pw2.addEventListener(ev, look); });
+  [pw, pw2].forEach(function (el) { el.addEventListener("blur", function () { axo.style.setProperty("--look", "0px"); }); });
+  /* the egg trembles when you start, as if about to hatch */
+  pw.addEventListener("focus", function () {
+    if (level === 0 && !reduce.matches) { axo.classList.remove("wiggle"); void axo.getBoundingClientRect(); axo.classList.add("wiggle"); speak("Ooh, is that a password coming?"); }
+  });
+
+  /* ---------- Show / hide: the creature covers its eyes ---------- */
+  function setShown(show) {
+    eye.setAttribute("aria-pressed", String(show));
+    eye.setAttribute("aria-label", show ? "Hide password" : "Show password");
+    pw.type = pw2.type = show ? "text" : "password";
+    axo.classList.toggle("peeking", show);
+    if (level > 0) speak(show ? "I am not looking, promise!" : "Thanks. Safe again.");
+  }
+  eye.addEventListener("click", function () { setShown(eye.getAttribute("aria-pressed") !== "true"); });
+
+  /* ---------- Generate: types a strong password in, letter by letter ---------- */
+  var typing = 0;
+  function makePassword() {
+    var sets = ["abcdefghijkmnpqrstuvwxyz", "ABCDEFGHJKLMNPQRSTUVWXYZ", "23456789", "#!%*+-=?@"];
+    var all = sets.join(""), pass = "";
+    for (var tries = 0; tries < 30; tries++) {
+      var rnd = new Uint32Array(32), out = [];
+      crypto.getRandomValues(rnd);
+      sets.forEach(function (s, i) { out.push(s[rnd[i] % s.length]); }); // one of each kind
+      for (var i = 4; i < 16; i++) out.push(all[rnd[i] % all.length]);
+      for (var j = out.length - 1; j > 0; j--) { var k = rnd[16 + j] % (j + 1); var t = out[j]; out[j] = out[k]; out[k] = t; }
+      pass = out.join("");
+      var a = analyse(pass);
+      if (a.level === 4 && a.checks.repeat && a.checks.common) break; // no runs, no common words
+    }
+    return pass;
+  }
+  gen.addEventListener("click", function () {
+    clearInterval(typing);
+    var pass = makePassword();
+    if (!reduce.matches) { gen.classList.remove("spin"); void gen.offsetWidth; gen.classList.add("spin"); }
+    setShown(true);
+    pw2.value = "";
+    if (reduce.matches) { pw.value = pass; update(); finishGen(pass); return; }
+    pw.value = "";
+    update();
+    var n = 0;
+    typing = setInterval(function () {
+      n++;
+      pw.value = pass.slice(0, n);
+      update();
+      if (n >= pass.length) { clearInterval(typing); finishGen(pass); }
+    }, 55);
+  });
+  function finishGen(pass) {
+    pw2.value = pass;
+    updateMatch();
+    statusEl.textContent = "Made a strong password and filled both fields. It is shown so you can save it somewhere safe.";
+  }
+
+  /* ---------- Copy ---------- */
+  copy.addEventListener("click", function () {
+    if (!pw.value) { speak("Nothing to copy yet!"); pw.focus(); return; }
+    var done = function () {
+      copy.classList.add("copied");
+      copy.setAttribute("aria-label", "Copied");
+      statusEl.textContent = "Password copied.";
+      setTimeout(function () { copy.classList.remove("copied"); copy.setAttribute("aria-label", "Copy password"); }, 1500);
+    };
+    var fallback = function () {
+      var was = pw.type; pw.type = "text"; pw.select();
+      try { document.execCommand("copy"); done(); } catch (e) { statusEl.textContent = "Select the password and press Ctrl+C to copy."; }
+      pw.type = was;
+    };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(pw.value).then(done, fallback);
+    else fallback();
+  });
+
+  /* ---------- Save: check → working → saved → start over ---------- */
+  var saved = false;
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (save.classList.contains("working")) return;
+    if (saved) { reset(); return; }
+    var info = analyse(pw.value);
+    clear();
+    if (info.level < 3) {
+      err.textContent = pw.value ? "Make it at least Strong (3 of 4 bars) to save it." : "Type a password first.";
+      $("#pwBox").classList.add("bad");
+      return fail(pw, "Not strong enough yet. Feed me more!");
+    }
+    if (pw.value !== pw2.value) {
+      err.textContent = pw2.value ? "The two passwords do not match." : "Type the password again to confirm it.";
+      $("#pw2Box").classList.add("bad");
+      return fail(pw2, "Those two do not match…");
+    }
+    save.classList.add("working");
+    save.setAttribute("aria-busy", "true");
+    saveLabel.innerHTML = 'Saving <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>';
+    statusEl.textContent = "Saving your password…";
+    axo.classList.add("swim");
+    speak("Taking it somewhere safe…");
+    setTimeout(function () {
+      save.classList.remove("working");
+      save.classList.add("done");
+      save.removeAttribute("aria-busy");
+      saveLabel.innerHTML = '<svg class="tk" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Saved · set another';
+      axo.classList.remove("swim");
+      axo.classList.add("cheer");
+      setTimeout(function () { axo.classList.remove("cheer"); }, 1500);
+      setMood("grin", 0);
+      speak("Saved! I will guard it day and night.");
+      if (!reduce.matches) { burst(4); setTimeout(function () { burst(4); }, 250); }
+      statusEl.textContent = "Password saved. This is a demo, nothing left your device. Press the button again to set another.";
+      saved = true;
+    }, reduce.matches ? 500 : 1600);
+  });
+
+  function fail(field, line) {
+    if (!reduce.matches) { card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake"); }
+    setMood("sad", 1200);
+    speak(line);
+    statusEl.textContent = err.textContent;
+    field.focus();
+  }
+  card.addEventListener("animationend", function (e) { if (e.target === card) card.classList.remove("shake", "enter"); });
+
+  /* smooth reset: the creature curls back into its egg */
+  function reset() {
+    saved = false;
+    clearInterval(typing);
+    save.classList.remove("done");
+    saveLabel.textContent = "Save password";
+    pw.value = ""; pw2.value = "";
+    setShown(false);
+    clear();
+    update();
+    pw.focus();
+    statusEl.textContent = "Cleared. Type a new password.";
+  }
+
+  update();
+})();
+</script>
+</body>
+</html>

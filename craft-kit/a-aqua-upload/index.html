@@ -1,0 +1,428 @@
+<!doctype html>
+<!-- Chill and Craft · Aqua Lift · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aqua Lift · upload button</title>
+<script>
+  // Theme: ?theme=light|dark overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #effdf9;
+    --bg2: #c8efe5;
+    --glass: rgba(13, 148, 136, .06);
+    --rim: #14b8a6;
+    --liquid1: #2dd4bf;
+    --liquid2: #0d9488;
+    --wave-back: #99f6e4;
+    --ink: #0f5f58;
+    --note: #2c6e66;
+    --link: #0d7d73;
+    --tile: #ffffff;
+    --focus: #f97316;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  /* A real spring curve where the browser supports linear() */
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg1: #072522;
+      --bg2: #020b0a;
+      --glass: rgba(94, 234, 212, .06);
+      --rim: #2dd4bf;
+      --liquid1: #14b8a6;
+      --liquid2: #0f766e;
+      --wave-back: #115e59;
+      --ink: #99f6e4;
+      --note: #86c9bf;
+      --link: #5eead4;
+      --tile: #0f2a27;
+      --focus: #fdba74;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #072522;
+    --bg2: #020b0a;
+    --glass: rgba(94, 234, 212, .06);
+    --rim: #2dd4bf;
+    --liquid1: #14b8a6;
+    --liquid2: #0f766e;
+    --wave-back: #115e59;
+    --ink: #99f6e4;
+    --note: #86c9bf;
+    --link: #5eead4;
+    --tile: #0f2a27;
+    --focus: #fdba74;
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  body { overflow-x: hidden; } /* particles may fly past the edges */
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at 50% 30%, var(--bg1), var(--bg2) 80%);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px 16px; width: 100%; }
+
+  /* ---------- Glass button ---------- */
+  .glass {
+    --p: 0; /* fill level, 0 to 1 */
+    --lift: 0; /* extra water on hover */
+    position: relative;
+    width: 290px;
+    max-width: 100%;
+    height: 72px;
+    padding: 0;
+    border: 2px solid var(--rim);
+    border-radius: 36px;
+    background: var(--glass);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+    overflow: hidden;
+    isolation: isolate;
+    box-shadow: 0 16px 34px -22px rgba(13, 148, 136, .9), inset 0 2px 0 rgba(255, 255, 255, .35);
+    transition: transform .45s var(--spring), box-shadow .25s;
+  }
+  .glass:hover { transform: translateY(-3px); box-shadow: 0 22px 38px -22px rgba(13, 148, 136, 1), inset 0 2px 0 rgba(255, 255, 255, .35); }
+  .glass:not([aria-disabled="true"]):hover { --lift: .1; }
+  .glass:active { transform: scale(.96); transition-duration: .1s; }
+  .glass:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .glass[aria-disabled="true"] { cursor: progress; transform: none; }
+  .glass[data-drag="on"] { outline: 2px dashed var(--rim); outline-offset: 6px; }
+
+  /* The liquid block slides up; its waves ride on top */
+  .liquid {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, var(--liquid1), var(--liquid2));
+    transform: translateY(calc((1 - var(--p) - var(--lift)) * 100%));
+    transition: transform .6s var(--spring);
+  }
+  /* Droplets that splash out at the finish */
+  .fx { position: absolute; left: 50%; top: 0; width: 0; height: 0; pointer-events: none; }
+  .particle { position: absolute; width: 7px; height: 9px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; pointer-events: none; }
+  .wave { position: absolute; left: 0; bottom: calc(100% - 1px); width: 200%; height: 12px; }
+  .wave path { fill: var(--liquid1); }
+  .wave.back { bottom: calc(100% - 2px); height: 14px; animation: roll 3.2s linear infinite reverse; }
+  .wave.back path { fill: var(--wave-back); }
+  .wave.front { animation: roll 2.2s linear infinite; }
+  .liquid i { position: absolute; bottom: -10px; width: var(--s); height: var(--s); left: var(--x); border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .7); opacity: 0; }
+
+  /* Two copies of the label: the white one is clipped to the liquid */
+  .txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16.5px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .txt.base { clip-path: inset(0 0 calc(var(--p) * 100%) 0); transition: clip-path .6s var(--spring); }
+  .txt.over { color: #fff; clip-path: inset(calc((1 - var(--p)) * 100%) 0 0 0); transition: clip-path .6s var(--spring); }
+  .txt .label { display: inline-block; }
+  .txt svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .txt .tick { display: none; }
+
+  /* ---------- Thumbnails of the chosen photos ---------- */
+  .thumbs { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0; padding: 0; list-style: none; min-height: 40px; max-width: 290px; }
+  .thumbs li { position: relative; width: 40px; height: 40px; border-radius: 12px; overflow: hidden; background: var(--tile); box-shadow: 0 6px 14px -10px rgba(0, 0, 0, .6); animation: pop .55s var(--spring) backwards; animation-delay: calc(var(--i) * 70ms); }
+  .thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumbs .ext { display: grid; place-items: center; width: 100%; height: 100%; font-size: 10px; font-weight: 700; color: var(--ink); text-transform: uppercase; }
+  /* Tint + springy tick when that photo is sent */
+  .thumbs li::after { content: ""; position: absolute; inset: 0; background: rgba(13, 148, 136, .55); opacity: 0; transition: opacity .25s; }
+  .thumbs li::before {
+    content: "";
+    position: absolute;
+    z-index: 1;
+    left: 50%;
+    top: 45%;
+    width: 7px;
+    height: 13px;
+    border: solid #fff;
+    border-width: 0 3px 3px 0;
+    transform: translate(-50%, -50%) rotate(45deg) scale(0);
+    transition: transform .5s var(--spring);
+  }
+  .thumbs li.sent::after { opacity: 1; }
+  .thumbs li.sent::before { transform: translate(-50%, -50%) rotate(45deg) scale(1); }
+  .glass[data-state="done"] { animation: boing .7s var(--spring); }
+  @keyframes boing { 0% { transform: scale(1); } 25% { transform: scale(1.06, .9); } 100% { transform: scale(1); } }
+  .vessel { position: relative; width: 290px; max-width: 100%; }
+  .vessel .glass { width: 100%; }
+
+  .note { margin: 0; font-size: 13.5px; color: var(--note); text-align: center; line-height: 1.5; max-width: 300px; }
+  .demo { padding: 0; border: 0; background: none; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .demo:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+  /* ---------- States ---------- */
+  .glass[data-state="working"] .liquid i { animation: bubble 2.4s ease-in infinite; animation-delay: var(--d); }
+  .glass[data-state="done"] .txt .arrow { display: none; }
+  .glass[data-state="done"] .txt .tick { display: inline; }
+  .glass[data-state="draining"] .liquid,
+  .glass[data-state="draining"] .txt { transition-duration: .9s; }
+
+  @keyframes roll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @keyframes bubble {
+    0% { opacity: 0; transform: translateY(0); }
+    20% { opacity: .9; }
+    100% { opacity: 0; transform: translateY(-58px); }
+  }
+  @keyframes pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  /* Calm mode: same steps, no big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; animation-delay: 0s !important; }
+    .liquid i { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="vessel">
+  <button class="glass" type="button" data-state="idle" aria-describedby="note">
+    <span class="liquid" aria-hidden="true">
+      <svg class="wave back" viewBox="0 0 120 14" preserveAspectRatio="none"><path d="M0 7Q15 0 30 7T60 7T90 7T120 7V14H0z" /></svg>
+      <svg class="wave front" viewBox="0 0 120 12" preserveAspectRatio="none"><path d="M0 6Q15 12 30 6T60 6T90 6T120 6V12H0z" /></svg>
+      <i style="--x:14%; --s:7px; --d:0s"></i>
+      <i style="--x:32%; --s:5px; --d:.7s"></i>
+      <i style="--x:55%; --s:8px; --d:1.3s"></i>
+      <i style="--x:72%; --s:5px; --d:.4s"></i>
+      <i style="--x:86%; --s:6px; --d:1.8s"></i>
+    </span>
+    <span class="txt base">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><g class="arrow"><path d="M10 13V3.5M6 7.5l4-4 4 4" /><path d="M3.5 12.5v2.5a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-2.5" /></g><path class="tick" d="M4 10.5l4 4 8-9" /></svg>
+      <span class="label">Upload photos</span>
+    </span>
+    <span class="txt over" aria-hidden="true">
+      <svg viewBox="0 0 20 20"><g class="arrow"><path d="M10 13V3.5M6 7.5l4-4 4 4" /><path d="M3.5 12.5v2.5a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-2.5" /></g><path class="tick" d="M4 10.5l4 4 8-9" /></svg>
+      <span class="label">Upload photos</span>
+    </span>
+  </button>
+  <span class="fx" aria-hidden="true"></span>
+  </div>
+
+  <ul class="thumbs" aria-label="Chosen photos"></ul>
+
+  <p class="note" id="note">Up to 6 images, 10 MB each. Drop them on the button or <button class="demo" type="button">use 3 sample photos</button>.</p>
+  <input type="file" id="picker" accept="image/*" multiple hidden>
+  <p class="sr-only" id="status" aria-live="polite"></p>
+</main>
+
+<script>
+  // ---------- Aqua Lift upload button ----------
+  const glass = document.querySelector(".glass");
+  const labels = glass.querySelectorAll(".label");
+  const thumbs = document.querySelector(".thumbs");
+  const picker = document.getElementById("picker");
+  const note = document.getElementById("note");
+  const status = document.getElementById("status");
+
+  const MB = 1024 * 1024;
+  const MAX_FILES = 6;
+  const MAX_SIZE = 10 * MB;
+  const fx = document.querySelector(".fx");
+  const liquid = glass.querySelector(".liquid");
+  const NOTE_HTML = note.innerHTML;
+  const SPRING = "cubic-bezier(.34, 1.56, .64, 1)";
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduceMotion.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 400) : ms));
+  let busy = false;
+  let objectUrls = [];
+
+  function play(el, frames, options) {
+    if (calm() || !el.animate) return Promise.resolve();
+    return el.animate(frames, options).finished.catch(() => {});
+  }
+
+  // Droplets jump out of the top of the full glass and fall back
+  function splash(count) {
+    if (calm()) return;
+    const colors = ["#2dd4bf", "#99f6e4", "#5eead4"];
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement("i");
+      p.className = "particle";
+      p.style.background = colors[i % colors.length];
+      fx.appendChild(p);
+      const dx = (i / (count - 1) - .5) * 220 + (Math.random() - .5) * 16;
+      const up = -22 - Math.random() * 30;
+      p.animate([
+        { transform: "translate(-50%, 6px) scale(.5)", opacity: 1 },
+        { transform: "translate(calc(-50% + " + (dx * .55).toFixed(1) + "px), " + up.toFixed(1) + "px) scale(1)", opacity: 1, offset: .45, easing: "cubic-bezier(.3, .6, .6, 1)" },
+        { transform: "translate(calc(-50% + " + dx.toFixed(1) + "px), 34px) scale(.6)", opacity: 0 }
+      ], { duration: 850 + Math.random() * 300, easing: "cubic-bezier(.5, 0, .9, .6)" }).onfinish = () => p.remove();
+    }
+  }
+
+  // Slide every copy of the label to new words
+  async function swapLabel(text) {
+    const els = [...labels];
+    await Promise.all(els.map((l) => play(l, [{ transform: "translateY(0)", opacity: 1 }, { transform: "translateY(-8px)", opacity: 0 }], { duration: 120, easing: "ease-in" })));
+    setLabel(text);
+    els.forEach((l) => play(l, [{ transform: "translateY(8px)", opacity: 0 }, { transform: "translateY(0)", opacity: 1 }], { duration: 420, easing: SPRING }));
+  }
+
+  // Pretend photos for the demo, painted with CSS gradients
+  const SAMPLES = [
+    { name: "Hunza-Valley.jpg", size: 2.6 * MB, paint: "linear-gradient(160deg,#9bd3ff 0 45%,#5b8c5a 45% 70%,#3d6b3c 70%)" },
+    { name: "Clifton-Beach.jpg", size: 1.9 * MB, paint: "linear-gradient(180deg,#ffd29d 0 40%,#4fb3d9 40% 72%,#f1d7a6 72%)" },
+    { name: "Lahore-Fort.jpg", size: 3.1 * MB, paint: "linear-gradient(180deg,#f9c784 0 50%,#b5543b 50% 80%,#7a3324 80%)" }
+  ];
+
+  const setLabel = (text) => labels.forEach((l) => (l.textContent = text));
+  const setLevel = (p) => glass.style.setProperty("--p", (p / 100).toFixed(3));
+  const formatSize = (b) => (b >= MB ? (b / MB).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB");
+
+  // Show a small tile for every photo
+  function showThumbs(files) {
+    thumbs.innerHTML = "";
+    files.forEach((file, i) => {
+      const li = document.createElement("li");
+      li.style.setProperty("--i", i);
+      li.title = file.name + " · " + formatSize(file.size);
+      if (file.paint) {
+        li.style.background = file.paint;
+      } else if (file.type && file.type.startsWith("image/")) {
+        const img = document.createElement("img");
+        const url = URL.createObjectURL(file);
+        objectUrls.push(url);
+        img.src = url;
+        img.alt = "";
+        li.appendChild(img);
+      } else {
+        const ext = document.createElement("span");
+        ext.className = "ext";
+        ext.textContent = (file.name.split(".").pop() || "file").slice(0, 4);
+        li.appendChild(ext);
+      }
+      thumbs.appendChild(li);
+    });
+  }
+
+  // Fake upload sized by the total bytes
+  function simulateUpload(totalBytes, onTick) {
+    const ms = Math.min(6000, Math.max(2200, (totalBytes / (2 * MB)) * 1000));
+    return new Promise((resolve) => {
+      let p = 0;
+      (function step() {
+        p = Math.min(100, p + (100 * 110 / ms) * (.4 + Math.random() * 1.2));
+        onTick(p);
+        if (p >= 100) resolve();
+        else setTimeout(step, 110);
+      })();
+    });
+  }
+
+  async function upload(list) {
+    if (busy) return;
+    // Keep images under the size limit, at most 6
+    const all = Array.from(list);
+    let files = all.filter((f) => (f.paint || (f.type || "").startsWith("image/")) && f.size <= MAX_SIZE);
+    const skipped = all.length - files.length;
+    const extra = Math.max(0, files.length - MAX_FILES);
+    files = files.slice(0, MAX_FILES);
+    if (!files.length) {
+      note.textContent = "No photos to send: pick images under 10 MB.";
+      status.textContent = note.textContent;
+      setTimeout(() => (note.innerHTML = NOTE_HTML, wireDemo()), 3200);
+      return;
+    }
+
+    busy = true;
+    glass.setAttribute("aria-disabled", "true");
+
+    // 1. Anticipation: the glass squashes and the water jumps
+    await Promise.all([
+      play(glass, [{ transform: "scale(1)" }, { transform: "scale(1.05, .86)" }, { transform: "scale(.98, 1.04)" }, { transform: "scale(1)" }], { duration: 380, easing: "ease-out" }),
+      play(liquid, [{ transform: "translateY(100%)" }, { transform: "translateY(78%)" }, { transform: "translateY(100%)" }], { duration: 380, easing: "ease-in-out" })
+    ]);
+
+    // 2. Photos pop in below; the water starts to rise
+    glass.dataset.state = "working";
+    showThumbs(files);
+    const parts = [];
+    if (skipped) parts.push(skipped + " skipped (not an image or over 10 MB)");
+    if (extra) parts.push(extra + " left out (limit is 6)");
+    note.textContent = parts.length ? parts.join(" · ") : "Sending " + files.length + " photo" + (files.length > 1 ? "s" : "") + "…";
+
+    // Work out where each photo ends, so its tile can tick on time
+    const total = files.reduce((s, f) => s + f.size, 0);
+    let running = 0;
+    const ends = files.map((f) => (running += f.size) / total * 100);
+    const tiles = [...thumbs.children];
+    status.textContent = "Uploading " + files.length + " photos.";
+
+    await simulateUpload(total, (p) => {
+      setLevel(p);
+      const sent = ends.filter((e) => p >= e - .01).length;
+      tiles.forEach((t, i) => t.classList.toggle("sent", i < sent));
+      setLabel("Uploading " + Math.min(files.length, sent + 1) + " of " + files.length + " · " + Math.round(p) + "%");
+    });
+
+    // 3. Full glass: a bounce and a splash
+    glass.dataset.state = "done";
+    splash(12);
+    const word = files.length + " photo" + (files.length > 1 ? "s" : "");
+    swapLabel(word + " uploaded");
+    note.textContent = formatSize(total) + " sent. The glass drains in a moment.";
+    status.textContent = "Upload complete. " + word + " uploaded.";
+    await wait(2600);
+
+    // 4. Drain, the photos hop away, and reset
+    glass.dataset.state = "draining";
+    setLevel(0);
+    [...thumbs.children].forEach((t, i) => play(t, [{ transform: "scale(1)", opacity: 1 }, { transform: "translateY(-6px) scale(1.08)", opacity: 1, offset: .35 }, { transform: "translateY(10px) scale(.2)", opacity: 0 }], { duration: 450, delay: i * 60, easing: "ease-in", fill: "forwards" }));
+    await wait(900);
+    glass.dataset.state = "idle";
+    swapLabel("Upload photos");
+    thumbs.innerHTML = "";
+    objectUrls.forEach((u) => URL.revokeObjectURL(u));
+    objectUrls = [];
+    note.innerHTML = NOTE_HTML;
+    wireDemo();
+    picker.value = "";
+    glass.removeAttribute("aria-disabled");
+    busy = false;
+  }
+
+  // The note is rebuilt after messages, so (re)attach the demo handler
+  function wireDemo() {
+    const btn = note.querySelector(".demo");
+    if (btn) btn.addEventListener("click", () => upload(SAMPLES));
+  }
+  wireDemo();
+
+  glass.addEventListener("click", () => {
+    if (!busy) picker.click();
+  });
+  picker.addEventListener("change", () => {
+    if (picker.files && picker.files.length) upload(picker.files);
+  });
+
+  // Drag and drop
+  glass.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    if (!busy) glass.dataset.drag = "on";
+  });
+  glass.addEventListener("dragleave", () => glass.removeAttribute("data-drag"));
+  glass.addEventListener("drop", (e) => {
+    e.preventDefault();
+    glass.removeAttribute("data-drag");
+    if (e.dataTransfer && e.dataTransfer.files.length) upload(e.dataTransfer.files);
+  });
+  ["dragover", "drop"].forEach((type) => document.addEventListener(type, (e) => e.preventDefault()));
+</script>
+</body>
+</html>

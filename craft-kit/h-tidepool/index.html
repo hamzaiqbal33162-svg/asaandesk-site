@@ -1,0 +1,1056 @@
+<!doctype html>
+<!-- Chill and Craft · Tidepool · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · Ripplet</title>
+<script>
+  /* Theme: ?theme=light|dark wins, otherwise follow the system setting */
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+    document.documentElement.classList.add("js");
+  })();
+</script>
+<style>
+  /* ---------- Colours: shallow lagoon (light) and deep pool (dark) ---------- */
+  :root {
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+    --ease: cubic-bezier(.22, 1, .36, 1);
+    /* water colours used by the canvas, as "r g b" */
+    --w-top: 230 251 255;
+    --w-bot: 164 226 238;
+    --w-hi: 255 255 255;
+    --w-lo: 70 150 172;
+    --ink: #052c36;
+    --muted: #3a6873;
+    --glass: rgba(255, 255, 255, .5);
+    --glass-2: rgba(255, 255, 255, .28);
+    --glass-line: rgba(255, 255, 255, .7);
+    --field: rgba(255, 255, 255, .55);
+    --field-line: rgba(5, 44, 54, .14);
+    --accent: #0a7c90;
+    --accent-2: #12a4b8;
+    --accent-ink: #ffffff;
+    --glow: #36d6ec;
+    --ring: rgba(10, 124, 144, .2);
+    --wave: rgba(18, 164, 184, .2);
+    --ok: #0f9a6a;
+    --err: #d23f4b;
+    --err-bg: rgba(210, 63, 75, .1);
+    --shadow: 0 30px 60px -30px rgba(10, 80, 100, .45);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --w-top: 3 17 30;
+    --w-bot: 6 50 68;
+    --w-hi: 110 240 255;
+    --w-lo: 0 5 12;
+    --ink: #e4fbff;
+    --muted: #8db6c2;
+    --glass: rgba(8, 40, 56, .45);
+    --glass-2: rgba(8, 40, 56, .3);
+    --glass-line: rgba(140, 236, 255, .22);
+    --field: rgba(2, 20, 30, .5);
+    --field-line: rgba(160, 236, 255, .16);
+    --accent: #3ad6ea;
+    --accent-2: #7cecff;
+    --accent-ink: #032029;
+    --glow: #5ef2ff;
+    --ring: rgba(58, 214, 234, .2);
+    --wave: rgba(94, 242, 255, .16);
+    --ok: #3ee0a1;
+    --err: #ff7c86;
+    --err-bg: rgba(255, 124, 134, .12);
+    --shadow: 0 30px 70px -30px rgba(0, 0, 0, .8);
+    color-scheme: dark;
+  }
+
+  /* ---------- Base ---------- */
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: rgb(var(--w-bot));
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* The water canvas fills the screen behind everything (scaled up softly) */
+  #water { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; }
+  .page { position: relative; z-index: 2; min-height: 100vh; overflow: hidden; }
+
+  /* ---------- Header ---------- */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px clamp(16px, 4vw, 48px); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.15rem; letter-spacing: -.01em; }
+  .brand svg { width: 30px; height: 36px; filter: drop-shadow(0 0 8px var(--glow)); transition: transform .6s var(--spring); }
+  .brand:hover svg { transform: translateY(-3px) scale(1.08, .92); }
+  .ghost {
+    border: 1px solid var(--glass-line);
+    background: var(--glass-2);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-weight: 650;
+    font-size: .9rem;
+    cursor: pointer;
+    transition: transform .4s var(--spring), border-color .2s, box-shadow .3s;
+  }
+  .ghost:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 0 22px -6px var(--glow); }
+  .ghost:active { transform: scale(.94); }
+
+  /* ---------- Stage: card left, liquid headline right ---------- */
+  .stage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+    align-items: center;
+    max-width: 1160px;
+    margin: 0 auto;
+    padding: 6px 16px 40px;
+  }
+  @media (min-width: 920px) {
+    .stage { grid-template-columns: minmax(0, 440px) minmax(0, 1fr); gap: 56px; padding: 10px 44px 48px; min-height: calc(100vh - 84px); }
+    .intro { order: 2; }
+  }
+  .eyebrow { margin: 0 0 6px; font-size: .8rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+  .liquid {
+    margin: 0;
+    font-size: clamp(2.6rem, 9vw, 5.6rem);
+    line-height: .98;
+    letter-spacing: -.04em;
+    font-weight: 850;
+    background: linear-gradient(100deg, var(--accent) 0%, var(--glow) 40%, var(--accent-2) 60%, var(--accent) 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: url(#liquidF);
+    animation: sheen 7s linear infinite;
+  }
+  @keyframes sheen { to { background-position: -200% 0; } }
+  .liquid .ch { display: inline-block; }
+  .ready .liquid .ch { animation: dropIn .9s var(--spring) backwards; animation-delay: calc(var(--i) * 55ms + 250ms); }
+  @keyframes dropIn { 0% { opacity: 0; transform: translateY(-50px) scale(.6, 1.4); } 60% { opacity: 1; transform: translateY(4px) scale(1.15, .85); } 100% { transform: none; } }
+  .lede { margin: 16px 0 0; max-width: 34ch; color: var(--muted); font-size: 1.05rem; }
+  .ticks { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 8px; }
+  .ticks li { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: .95rem; }
+  .ticks svg { flex: none; width: 22px; height: 22px; }
+  @media (max-width: 919px) { .ticks { display: none; } .lede { font-size: .98rem; margin-top: 10px; } }
+
+  /* ---------- Liquid glass card ---------- */
+  .card {
+    position: relative;
+    width: min(100%, 440px);
+    margin: 0 auto;
+    padding: clamp(22px, 5vw, 34px);
+    border-radius: 28px;
+    background: linear-gradient(150deg, var(--glass) 0%, var(--glass-2) 100%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+    border: 1px solid var(--glass-line);
+    box-shadow: var(--shadow), inset 0 1px 0 var(--glass-line);
+    isolation: isolate;
+  }
+  /* Soft highlight that follows the pointer across the glass */
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: radial-gradient(300px circle at var(--mx, 30%) var(--my, 0%), rgba(255, 255, 255, .28), transparent 60%);
+    pointer-events: none;
+  }
+  /* A bright ripple runs around the rim */
+  @property --ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+  .card::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: conic-gradient(from var(--ang), transparent 0 60%, var(--glow) 72%, transparent 84%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    animation: rim 6s linear infinite;
+    pointer-events: none;
+    opacity: .9;
+  }
+  @keyframes rim { to { --ang: 360deg; } }
+  .card.shake { animation: shake .5s ease-in-out; }
+  @keyframes shake { 20% { transform: translateX(-9px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(2px); } }
+  .card h2 { margin: 0; font-size: clamp(1.45rem, 4.6vw, 1.8rem); letter-spacing: -.02em; }
+  .sub { margin: 4px 0 0; color: var(--muted); font-size: .95rem; }
+
+  /* Fields hold a little water that rises when focused */
+  .field { margin-top: 16px; }
+  label { font-weight: 650; font-size: .92rem; }
+  .label-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .control {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-top: 6px;
+    border-radius: 16px;
+    background: var(--field);
+    border: 1px solid var(--field-line);
+    overflow: hidden;
+    transition: border-color .25s, box-shadow .35s, transform .4s var(--spring);
+  }
+  .control:hover { transform: translateY(-1px); }
+  .control:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--ring), 0 0 28px -8px var(--glow); }
+  .control.bad { border-color: var(--err); }
+  .control.shake { animation: shake .42s ease-in-out; }
+  .control > :not(.tank):not(.ring) { position: relative; z-index: 1; }
+  .tank { position: absolute; inset: 0; z-index: 0; pointer-events: none; transform: translateY(84%); transition: transform .8s var(--spring); }
+  .control:focus-within .tank { transform: translateY(58%); }
+  .tank svg { position: absolute; left: 0; top: 0; width: 200%; height: 100%; animation: flow 3.2s linear infinite; }
+  .tank path { fill: var(--wave); transition: fill .3s; }
+  .control.bad .tank path { fill: var(--err-bg); }
+  @keyframes flow { to { transform: translateX(-50%); } }
+  .ico { flex: none; width: 20px; height: 20px; margin-left: 14px; color: var(--muted); transition: transform .5s var(--spring), color .2s; }
+  .control:focus-within .ico { color: var(--accent); transform: scale(1.16) rotate(-6deg); }
+  .control input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--ink); font: inherit; font-size: 16px; padding: 14px 12px; }
+  .control input::placeholder { color: var(--muted); opacity: .7; }
+  .ring { position: absolute; z-index: 0; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; border: 2px solid var(--accent); pointer-events: none; animation: ringOut .65s var(--ease) forwards; }
+  @keyframes ringOut { from { opacity: .9; transform: scale(.4); } to { opacity: 0; transform: scale(5); } }
+  .eye {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-right: 3px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: transform .4s var(--spring), background .2s, color .2s;
+  }
+  .eye:hover { background: var(--ring); color: var(--accent); }
+  .eye:active { transform: scale(.85); }
+  .eye svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .eye .drop { transform-origin: 12px 12px; transform: scale(0); transition: transform .4s var(--spring); fill: currentColor; stroke: none; }
+  .eye.on .drop { transform: scale(1); }
+  .eye .shut { stroke-dasharray: 30; stroke-dashoffset: 0; transition: stroke-dashoffset .35s var(--ease); }
+  .eye.on .shut { stroke-dashoffset: 30; }
+  .err { margin: 0 2px; font-size: .84rem; color: var(--err); max-height: 0; opacity: 0; overflow: hidden; transform: translateY(-4px); transition: max-height .3s, opacity .25s, transform .4s var(--spring), margin .3s; }
+  .err.on { max-height: 3.2em; opacity: 1; transform: none; margin-top: 6px; }
+  .link { border: 0; background: none; padding: 2px 0; color: var(--accent); font-weight: 650; font-size: .86rem; cursor: pointer; position: relative; }
+  .link::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: currentColor; transform: scaleX(0); transform-origin: right; transition: transform .4s var(--ease); }
+  .link:hover::after { transform: scaleX(1); transform-origin: left; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .check { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: .92rem; user-select: none; }
+  .check input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .bubble { position: relative; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--field-line); background: var(--field); transition: border-color .2s, transform .45s var(--spring); }
+  .bubble::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff, var(--accent) 60%); transform: scale(0); transition: transform .45s var(--spring); box-shadow: 0 0 10px var(--glow); }
+  .check input:checked + .bubble { border-color: var(--accent); }
+  .check input:checked + .bubble::after { transform: scale(1); }
+  .check:active .bubble { transform: scale(.82); }
+  .check input:focus-visible + .bubble { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .form-msg { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 0 12px; border-radius: 14px; background: var(--err-bg); color: var(--err); font-size: .88rem; max-height: 0; opacity: 0; overflow: hidden; transition: max-height .45s var(--ease), opacity .3s, padding .3s, margin .3s; }
+  .form-msg.on { max-height: 140px; opacity: 1; padding: 10px 12px; margin-top: 14px; }
+  .form-msg svg { flex: none; width: 18px; height: 18px; margin-top: 2px; }
+
+  /* Submit: water rises inside the button as it loads */
+  .submit {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 54px;
+    margin-top: 18px;
+    border: 0;
+    border-radius: 16px;
+    font-weight: 750;
+    font-size: 1.02rem;
+    color: var(--accent-ink);
+    background: linear-gradient(120deg, var(--accent), var(--accent-2));
+    box-shadow: 0 14px 30px -14px var(--glow);
+    cursor: pointer;
+    overflow: hidden;
+    isolation: isolate;
+    transition: transform .45s var(--spring), box-shadow .3s, background .4s;
+  }
+  .submit:hover { transform: translateY(-2px); box-shadow: 0 18px 38px -14px var(--glow); }
+  .submit:active { transform: scale(.97); }
+  .water { position: absolute; inset: 0; z-index: -1; transform: translateY(100%); transition: transform .7s var(--spring); }
+  .water svg { position: absolute; left: 0; top: -8px; width: 200%; height: calc(100% + 8px); animation: flow 2.2s linear infinite; }
+  .water path { fill: rgba(255, 255, 255, .3); }
+  .submit:hover .water { transform: translateY(72%); }
+  .submit[data-state="loading"] .water { transform: translateY(6%); transition: transform 1.8s cubic-bezier(.3, .1, .3, 1); }
+  .submit[data-state="done"] .water { transform: translateY(-10%); }
+  .submit[data-state="fail"] .water { transform: translateY(100%); transition-duration: .35s; }
+  .submit .lbl { display: inline-flex; align-items: center; gap: 8px; transition: transform .45s var(--spring), opacity .2s; }
+  .submit .lbl svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; transition: transform .45s var(--spring); }
+  .submit:hover .lbl svg { transform: translateX(4px); }
+  .submit[data-state="loading"] { cursor: progress; }
+  .state-ico { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transform: scale(.3); transition: opacity .2s, transform .5s var(--spring); }
+  .state-ico svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .submit[data-state="done"] { background: var(--ok); }
+  .submit[data-state="fail"] { background: var(--err); animation: shake .45s ease-in-out; }
+  .submit[data-state="done"] .lbl, .submit[data-state="fail"] .lbl { opacity: 0; transform: translateY(-14px); }
+  .submit[data-state="done"] .i-ok, .submit[data-state="fail"] .i-no { opacity: 1; transform: none; }
+
+  .demo { margin-top: 18px; padding: 12px 14px; border-radius: 14px; border: 1px dashed var(--field-line); background: var(--glass-2); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; font-size: .85rem; color: var(--muted); }
+  .demo p { margin: 0; min-width: 0; }
+  .demo code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .84rem; color: var(--ink); background: var(--ring); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+  .pill { border: 1px solid var(--accent); border-radius: 999px; padding: 7px 14px; font-weight: 700; font-size: .85rem; color: var(--accent); background: transparent; cursor: pointer; transition: transform .4s var(--spring), background .2s, color .2s, box-shadow .3s; }
+  .pill:hover { background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 18px -4px var(--glow); transform: translateY(-2px); }
+  .pill:active { transform: scale(.92); }
+  .pill[disabled] { opacity: .55; cursor: default; }
+
+  /* Panes */
+  .panes { display: grid; }
+  .pane { grid-area: 1 / 1; min-width: 0; transition: opacity .4s ease, transform .6s var(--spring), filter .4s, visibility 0s; }
+  .pane.off { opacity: 0; transform: translateY(14px) scale(.97); filter: blur(6px); visibility: hidden; pointer-events: none; transition: opacity .3s, transform .35s, filter .3s, visibility 0s .35s; }
+  .pane.enter > * { animation: surface .7s var(--spring) backwards; animation-delay: calc(var(--i, 0) * 80ms); }
+  .card.entering .f-item { animation: surface .8s var(--spring) backwards; animation-delay: calc(var(--i, 0) * 70ms + 450ms); }
+  @keyframes surface { from { opacity: 0; transform: translateY(18px); filter: blur(4px); } }
+  .done { text-align: center; }
+  .orb { display: block; width: 112px; height: 112px; margin: 0 auto 8px; }
+  .orb .ripple { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0; transform-origin: 56px 56px; }
+  .done:not(.off) .orb .ripple { animation: orbRing 2.4s var(--ease) infinite; }
+  .done:not(.off) .orb .ripple.r2 { animation-delay: .8s; }
+  .done:not(.off) .orb .ripple.r3 { animation-delay: 1.6s; }
+  @keyframes orbRing { from { opacity: .8; transform: scale(.45); } to { opacity: 0; transform: scale(1); } }
+  .done h3 { margin: 0 0 4px; font-size: 1.45rem; letter-spacing: -.02em; }
+  .done h3:focus { outline: none; }
+  .done p { margin: 0; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 16px 0 20px; padding: 0; list-style: none; }
+  .chips li { padding: 6px 12px; border-radius: 999px; background: var(--ring); font-weight: 650; font-size: .84rem; }
+
+  /* ---------- Drip, the drop of light ---------- */
+  .drip { position: fixed; left: 0; top: 0; z-index: 40; width: 60px; height: 72px; pointer-events: none; will-change: transform; transition: opacity .3s; }
+  .drip.behind { z-index: 1; }
+  .drip-in { position: absolute; inset: 0; transform-origin: 50% 64%; transition: transform 1.8s var(--ease); }
+  .drip.pouring .drip-in { transform: scale(.72); }
+  .drip-in.squash { animation: squash .38s var(--spring); }
+  .drip-in.dip { animation: dip .45s var(--ease); }
+  .drip-in.wobble { animation: wobble .9s ease-in-out; }
+  .drip-in.spin { animation: spin 1s var(--spring); }
+  @keyframes squash { 40% { transform: scale(1.18, .82); } }
+  @keyframes dip { 40% { transform: scale(1.3, .6) translateY(8px); opacity: .4; } }
+  @keyframes wobble { 20% { transform: rotate(-12deg) scale(.95, 1.05); } 45% { transform: rotate(10deg); } 70% { transform: rotate(-5deg); } }
+  @keyframes spin { 50% { transform: translateY(-14px) rotate(180deg) scale(1.1); } 100% { transform: rotate(360deg); } }
+  .d-body, .d-face { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .d-body { transform-origin: 50% 64%; filter: drop-shadow(0 0 12px var(--glow)) drop-shadow(0 0 3px var(--glow)); transition: filter .4s; }
+  .drip.sad .d-body { filter: hue-rotate(160deg) saturate(1.4) drop-shadow(0 0 10px #ff7c86); }
+  .drip.behind .d-body { filter: drop-shadow(0 0 22px var(--glow)) drop-shadow(0 0 6px var(--glow)); }
+  .drip.behind ~ .trail { z-index: 1; }
+  .trail { position: fixed; left: 0; top: 0; z-index: 39; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff, var(--glow) 70%); box-shadow: 0 0 12px var(--glow); pointer-events: none; will-change: transform; }
+  .face-part { opacity: 0; transition: opacity .18s; }
+  [data-face="open"] .f-open, [data-face="closed"] .f-closed, [data-face="wink"] .f-wink, [data-face="happy"] .f-happy, [data-face="sad"] .f-sad { opacity: 1; }
+  [data-face="open"] .m-smile, [data-face="wink"] .m-smile, [data-face="closed"] .m-tiny, [data-face="happy"] .m-grin, [data-face="sad"] .m-frown { opacity: 1; }
+  .d-eye { fill: #fff; }
+  .d-pupil { fill: #05303a; }
+  .d-line { fill: none; stroke: #05303a; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .d-blush { fill: #ff9fb7; opacity: .7; }
+  .d-mouth { fill: #05303a; }
+
+  /* ---------- Below the fold ---------- */
+  .perks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px; max-width: 1160px; margin: 0 auto; padding: 10px 16px 24px; }
+  @media (min-width: 920px) { .perks { padding: 10px 44px 30px; } }
+  .perk { padding: 20px; border-radius: 22px; background: var(--glass-2); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--glass-line); transition: transform .45s var(--spring), box-shadow .3s; }
+  .perk:hover { transform: translateY(-5px); box-shadow: 0 0 34px -10px var(--glow); }
+  .perk svg { width: 36px; height: 36px; }
+  .perk h3 { margin: 8px 0 2px; font-size: 1rem; }
+  .perk p { margin: 0; color: var(--muted); font-size: .9rem; }
+  .js .reveal { opacity: 0; transform: translateY(28px); filter: blur(6px); }
+  .js .reveal.in { opacity: 1; transform: none; filter: none; transition: opacity .7s ease, transform .9s var(--spring), filter .7s; transition-delay: calc(var(--i, 0) * 110ms); }
+  footer { text-align: center; padding: 6px 16px 30px; font-size: .85rem; color: var(--muted); }
+
+  .toast { position: fixed; left: 50%; bottom: 22px; z-index: 60; max-width: calc(100vw - 32px); padding: 12px 18px; border-radius: 16px; background: var(--glass); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border: 1px solid var(--glass-line); color: var(--ink); font-size: .92rem; font-weight: 600; box-shadow: var(--shadow); transform: translate(-50%, 160%); transition: transform .55s var(--spring); }
+  .toast.on { transform: translate(-50%, 0); }
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 55; pointer-events: none; }
+
+  /* ---------- Entrance ---------- */
+  .ready #water { animation: fadeIn 1.2s ease backwards; }
+  .ready .top { animation: surface .8s var(--spring) .1s backwards; }
+  .ready .card { animation: rise 1s var(--spring) .2s backwards; }
+  .ready .eyebrow, .ready .lede { animation: surface .9s var(--spring) .7s backwards; }
+  @keyframes fadeIn { from { opacity: 0; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(40px) scale(.96); filter: blur(10px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+    .liquid { filter: none; }
+    .trail { display: none; }
+  }
+</style>
+</head>
+<body>
+<!-- Liquid filter for the headline (turbulence slowly changes) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" id="filters">
+  <filter id="liquidF" x="-5%" y="-20%" width="110%" height="140%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.035" numOctaves="2" seed="4" result="noise">
+      <animate attributeName="baseFrequency" dur="12s" values="0.012 0.035;0.02 0.05;0.012 0.035" repeatCount="indefinite"/>
+    </feTurbulence>
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="9" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
+<canvas id="water" aria-hidden="true"></canvas>
+
+<div class="page" id="page">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 30 36" aria-hidden="true"><path d="M15 2S27 16 27 23a12 12 0 0 1-24 0C3 16 15 2 15 2z" fill="var(--accent)"/><ellipse cx="10.5" cy="21" rx="3" ry="4.5" fill="#fff" opacity=".6"/></svg>
+      <span>Ripplet</span>
+    </div>
+    <button class="ghost" type="button" id="join">Create account</button>
+  </header>
+
+  <main class="stage">
+    <section class="intro" aria-label="About Ripplet">
+      <p class="eyebrow">Notes that flow</p>
+      <h1 class="liquid" id="headline">Dive back in.</h1>
+      <p class="lede">Sign in and pick up where your thoughts left off. Type, and watch the pool ripple.</p>
+      <ul class="ticks">
+        <li><svg viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="10" fill="var(--ring)"/><path d="M6.5 11.5l3 3 6-6.5" stroke="var(--accent)" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Your notes sync in seconds</li>
+        <li><svg viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="10" fill="var(--ring)"/><path d="M6.5 11.5l3 3 6-6.5" stroke="var(--accent)" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Calm reminders, never noisy</li>
+        <li><svg viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="10" fill="var(--ring)"/><path d="M6.5 11.5l3 3 6-6.5" stroke="var(--accent)" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Private by default</li>
+      </ul>
+    </section>
+
+    <section class="card" id="card" aria-labelledby="cardTitle">
+      <div class="f-item" style="--i:0">
+        <h2 id="cardTitle">Sign in to Ripplet</h2>
+        <p class="sub">Drip will keep you company. It is very shy about passwords.</p>
+      </div>
+      <div class="panes">
+        <form class="pane" id="form" novalidate>
+          <p class="form-msg" id="formMsg"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v6M12 16.5v.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg><span id="formMsgText"></span></p>
+
+          <div class="field f-item" style="--i:1">
+            <label for="email">Email</label>
+            <div class="control">
+              <span class="tank" aria-hidden="true"><svg viewBox="0 0 400 40" preserveAspectRatio="none"><path d="M0 8Q50 0 100 8T200 8T300 8T400 8V40H0Z"/></svg></span>
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7l8 6 8-6"/></svg>
+              <input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.pk" aria-describedby="emailErr" required>
+            </div>
+            <p class="err" id="emailErr"></p>
+          </div>
+
+          <div class="field f-item" style="--i:2">
+            <div class="label-row"><label for="pass">Password</label><button class="link" type="button" id="forgot">Forgot password?</button></div>
+            <div class="control">
+              <span class="tank" aria-hidden="true"><svg viewBox="0 0 400 40" preserveAspectRatio="none"><path d="M0 8Q50 0 100 8T200 8T300 8T400 8V40H0Z"/></svg></span>
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+              <input id="pass" name="password" type="password" autocomplete="current-password" placeholder="At least 6 characters" aria-describedby="passErr" required>
+              <button class="eye" id="eye" type="button" aria-pressed="false" aria-label="Show password" aria-controls="pass">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><path class="drop" d="M12 8.5s3 3.2 3 5a3 3 0 0 1-6 0c0-1.8 3-5 3-5z"/><path class="shut" d="M5 13c4 3.5 10 3.5 14 0"/></svg>
+              </button>
+            </div>
+            <p class="err" id="passErr"></p>
+          </div>
+
+          <div class="row f-item" style="--i:3">
+            <label class="check"><input type="checkbox" id="remember" checked><span class="bubble"></span>Stay signed in</label>
+          </div>
+
+          <button class="submit f-item" id="submit" type="submit" data-state="idle" style="--i:4">
+            <span class="water" aria-hidden="true"><svg viewBox="0 0 400 60" preserveAspectRatio="none"><path d="M0 8Q50 0 100 8T200 8T300 8T400 8V60H0Z"/></svg></span>
+            <span class="lbl"><span id="submitText">Sign in</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></span>
+            <span class="state-ico i-ok" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+            <span class="state-ico i-no" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></span>
+          </button>
+
+          <div class="demo f-item" style="--i:5">
+            <p>Demo: <code>hira@demo.pk</code> · <code>ripple99</code><br>Other details show the error state.</p>
+            <button class="pill" type="button" id="fill">Fill demo</button>
+          </div>
+        </form>
+
+        <div class="pane done off" id="done" aria-hidden="true" inert>
+          <svg class="orb" viewBox="0 0 112 112" aria-hidden="true" style="--i:0">
+            <circle class="ripple" cx="56" cy="56" r="54"/><circle class="ripple r2" cx="56" cy="56" r="54"/><circle class="ripple r3" cx="56" cy="56" r="54"/>
+            <path d="M56 22s20 22 20 36a20 20 0 0 1-40 0c0-14 20-36 20-36z" fill="var(--accent)"/>
+            <path d="M47 58l6 6 12-13" stroke="var(--accent-ink)" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <h3 id="doneTitle" tabindex="-1" style="--i:1">You're back in the flow!</h3>
+          <p style="--i:2">Your notes are synced and waiting.</p>
+          <ul class="chips" style="--i:3"><li>8 notes today</li><li>1 shared pool</li><li>Synced just now</li></ul>
+          <button class="submit" type="button" id="signout" style="--i:4"><span class="lbl">Sign out</span></button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section class="perks" aria-label="Why Ripplet">
+    <article class="perk reveal" style="--i:0">
+      <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="17" fill="var(--ring)"/><path d="M8 20q5-6 10 0t10 0" stroke="var(--accent)" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M8 14q5-6 10 0t10 0" stroke="var(--accent)" stroke-width="2.6" fill="none" stroke-linecap="round" opacity=".5"/></svg>
+      <h3>Smooth sync</h3><p>Start a note on your phone at the bus stop and finish it on your laptop.</p>
+    </article>
+    <article class="perk reveal" style="--i:1">
+      <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="17" fill="var(--ring)"/><path d="M18 9v9l6 4" stroke="var(--accent)" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>
+      <h3>Gentle reminders</h3><p>A soft nudge before your evening class, never a flood of alerts.</p>
+    </article>
+    <article class="perk reveal" style="--i:2">
+      <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="17" fill="var(--ring)"/><path d="M18 8l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10v-6z" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round"/></svg>
+      <h3>Private by default</h3><p>Your notes are encrypted and only you can read them.</p>
+    </article>
+  </section>
+  <footer>Ripplet · a Chill and Craft demo · no real accounts are created</footer>
+</div>
+
+<!-- Drip: the glowing drop that follows you -->
+<div class="drip" id="drip" data-face="open" aria-hidden="true">
+  <div class="drip-in" id="dripIn">
+    <svg class="d-body" id="dBody" viewBox="0 0 60 72">
+      <defs>
+        <radialGradient id="dripGrad" cx=".42" cy=".55" r=".7">
+          <stop offset="0" stop-color="#e9feff"/>
+          <stop offset=".45" stop-color="#6ff0ff"/>
+          <stop offset="1" stop-color="#1497c2"/>
+        </radialGradient>
+      </defs>
+      <path d="M30 3S54 32 54 46a24 24 0 0 1-48 0C6 32 30 3 30 3z" fill="url(#dripGrad)"/>
+      <ellipse cx="19" cy="38" rx="4.5" ry="8" fill="#fff" opacity=".7" transform="rotate(20 19 38)"/>
+    </svg>
+    <svg class="d-face" id="dFace" viewBox="0 0 60 72">
+      <g class="face-part f-open f-sad"><ellipse class="d-eye" cx="22" cy="45" rx="5.2" ry="6"/><ellipse class="d-eye" cx="38" cy="45" rx="5.2" ry="6"/>
+        <g id="pupils"><circle class="d-pupil" cx="22" cy="45.5" r="2.9"/><circle class="d-pupil" cx="38" cy="45.5" r="2.9"/></g></g>
+      <g class="face-part f-closed"><path class="d-line" d="M17 42l6 3.5-6 3.5M43 42l-6 3.5 6 3.5"/></g>
+      <g class="face-part f-wink"><path class="d-line" d="M17 45q5 3 10 0"/><ellipse class="d-eye" cx="38" cy="45" rx="5.2" ry="6"/><circle class="d-pupil" cx="38" cy="46" r="2.9"/></g>
+      <g class="face-part f-happy"><path class="d-line" d="M17 47q5-6 10 0M33 47q5-6 10 0"/></g>
+      <g class="face-part f-sad"><path class="d-line" d="M16 37l8 2.5M44 37l-8 2.5"/></g>
+      <ellipse class="d-blush" cx="15" cy="53" rx="4" ry="2.4"/><ellipse class="d-blush" cx="45" cy="53" rx="4" ry="2.4"/>
+      <path class="face-part m-smile d-line" d="M26 54q4 3.5 8 0"/>
+      <ellipse class="face-part m-tiny d-mouth" cx="30" cy="55" rx="2" ry="2.4"/>
+      <path class="face-part m-grin d-mouth" d="M24 52q6 9 12 0z"/>
+      <path class="face-part m-frown d-line" d="M26 57q4-3.5 8 0"/>
+    </svg>
+  </div>
+</div>
+<i class="trail" aria-hidden="true"></i><i class="trail" aria-hidden="true"></i><i class="trail" aria-hidden="true"></i><i class="trail" aria-hidden="true"></i>
+
+<canvas id="fx" aria-hidden="true"></canvas>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<p class="sr" id="status" aria-live="polite"></p>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (s) => document.querySelector(s);
+  const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let calm = motionQuery.matches;
+
+  const card = $("#card"), form = $("#form"), done = $("#done");
+  const email = $("#email"), pass = $("#pass"), eyeBtn = $("#eye");
+  const submit = $("#submit"), submitText = $("#submitText"), formMsg = $("#formMsg"), formMsgText = $("#formMsgText");
+  const dripEl = $("#drip"), dripIn = $("#dripIn"), dBody = $("#dBody"), dFace = $("#dFace"), pupils = $("#pupils");
+  const trails = Array.from(document.querySelectorAll(".trail"));
+  const DEMO = { email: "hira@demo.pk", pass: "ripple99" };
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  let state = "idle", passVisible = false, pointer = null, moodUntil = 0, filling = false;
+
+  /* ---------- Helpers ---------- */
+  function say(text) { const s = $("#status"); s.textContent = ""; setTimeout(() => { s.textContent = text; }, 30); }
+  let toastTimer = 0;
+  function toast(text) {
+    const t = $("#toast");
+    t.textContent = text;
+    t.classList.add("on");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("on"), 2800);
+  }
+  function retrigger(el, cls, ms) {
+    el._fx = el._fx || {};
+    clearTimeout(el._fx[cls]);
+    el.classList.remove(cls);
+    el.getBoundingClientRect();
+    el.classList.add(cls);
+    if (ms) el._fx[cls] = setTimeout(() => el.classList.remove(cls), ms);
+  }
+  function centerOf(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+
+  /* ================= Water: a small wave simulation drawn on a low-res canvas ================= */
+  const water = $("#water"), wctx = water.getContext("2d");
+  const CELL = 5, DAMP = 0.982;
+  let W = 0, H = 0, cur = null, prev = null, img = null, rows = null, pal = null;
+
+  function readPalette() {
+    const cs = getComputedStyle(document.documentElement);
+    const rgb = (n) => cs.getPropertyValue(n).trim().split(/[\s,]+/).map(Number);
+    pal = { top: rgb("--w-top"), bot: rgb("--w-bot"), hi: rgb("--w-hi"), lo: rgb("--w-lo") };
+    rows = new Float32Array(H * 3);
+    for (let y = 0; y < H; y++) {
+      const t = y / Math.max(1, H - 1);
+      for (let c = 0; c < 3; c++) rows[y * 3 + c] = pal.top[c] + (pal.bot[c] - pal.top[c]) * t;
+    }
+  }
+  function sizeWater() {
+    W = Math.max(40, Math.ceil(innerWidth / CELL));
+    H = Math.max(40, Math.ceil(innerHeight / CELL));
+    water.width = W;
+    water.height = H;
+    cur = new Float32Array(W * H);
+    prev = new Float32Array(W * H);
+    img = wctx.createImageData(W, H);
+    readPalette();
+    render();
+  }
+  /* Drop energy into the water at a screen point */
+  function ripple(cx, cy, strength, radius) {
+    if (!cur || calm) return;
+    const gx = Math.round((cx / innerWidth) * W), gy = Math.round((cy / innerHeight) * H), r = radius || 2;
+    for (let y = -r; y <= r; y++) {
+      for (let x = -r; x <= r; x++) {
+        const px = gx + x, py = gy + y, d = Math.hypot(x, y);
+        if (px < 1 || py < 1 || px >= W - 1 || py >= H - 1 || d > r) continue;
+        cur[py * W + px] += strength * (1 - d / (r + 1));
+      }
+    }
+  }
+  function simulate() {
+    for (let y = 1; y < H - 1; y++) {
+      let i = y * W + 1;
+      for (let x = 1; x < W - 1; x++, i++) {
+        prev[i] = ((cur[i - 1] + cur[i + 1] + cur[i - W] + cur[i + W]) * 0.5 - prev[i]) * DAMP;
+      }
+    }
+    const t = cur; cur = prev; prev = t;
+  }
+  /* Slopes of the surface become highlights and shadows */
+  function render() {
+    if (!img) return;
+    const d = img.data, hi = pal.hi, lo = pal.lo;
+    for (let y = 0; y < H; y++) {
+      const br = rows[y * 3], bg = rows[y * 3 + 1], bb = rows[y * 3 + 2];
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x, o = i * 4;
+        let s = 0;
+        if (x > 0 && x < W - 1 && y > 0 && y < H - 1) s = ((cur[i - 1] - cur[i + 1]) * 0.7 + (cur[i - W] - cur[i + W]) * 0.5) * 0.32;
+        if (s > 1) s = 1; else if (s < -1) s = -1;
+        if (s >= 0) { d[o] = br + (hi[0] - br) * s; d[o + 1] = bg + (hi[1] - bg) * s; d[o + 2] = bb + (hi[2] - bb) * s; }
+        else { d[o] = br + (br - lo[0]) * s; d[o + 1] = bg + (bg - lo[1]) * s; d[o + 2] = bb + (bb - lo[2]) * s; }
+        d[o + 3] = 255;
+      }
+    }
+    wctx.putImageData(img, 0, 0);
+  }
+  sizeWater();
+  window.addEventListener("resize", () => { sizeWater(); sizeFx(); });
+  new MutationObserver(() => { readPalette(); render(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  /* Gentle rain: a soft drop now and then */
+  setInterval(() => {
+    if (!calm && !document.hidden) ripple(Math.random() * innerWidth, Math.random() * innerHeight, 2 + Math.random() * 2, 2);
+  }, 1300);
+
+  /* ================= Drip: spring physics + moods ================= */
+  const drip = { x: innerWidth * .5, y: -80, vx: 0, vy: 0, ang: 0 };
+  const history = [];
+  let frameNo = 0, lastFace = "";
+
+  function setFace(face) { if (face !== lastFace) { dripEl.dataset.face = face; lastFace = face; } }
+  /* Diving behind the frosted glass: squash, then swap layers mid-dive */
+  let behindWanted = false;
+  function setBehind(on) {
+    if (on === behindWanted) return;
+    behindWanted = on;
+    retrigger(dripIn, "dip", 460);
+    setTimeout(() => dripEl.classList.toggle("behind", behindWanted), calm ? 0 : 180);
+  }
+
+  const measure = document.createElement("canvas").getContext("2d");
+  function caretPoint(input) {
+    const r = input.getBoundingClientRect(), cs = getComputedStyle(input);
+    measure.font = cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
+    const pos = input.selectionStart == null ? input.value.length : input.selectionStart;
+    let text = input.value.slice(0, pos);
+    if (input.type === "password") text = "•".repeat(text.length);
+    const pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
+    const w = Math.max(0, Math.min(measure.measureText(text).width - input.scrollLeft, r.width - pl - pr));
+    return { x: r.left + pl + w, y: r.top + r.height / 2 };
+  }
+  window.addEventListener("pointermove", (e) => {
+    if (e.pointerType === "touch") return;
+    pointer = { x: e.clientX, y: e.clientY };
+    /* glass highlight follows the pointer */
+    const r = card.getBoundingClientRect();
+    card.style.setProperty("--mx", (e.clientX - r.left) + "px");
+    card.style.setProperty("--my", (e.clientY - r.top) + "px");
+  }, { passive: true });
+  document.addEventListener("pointerout", (e) => { if (!e.relatedTarget) pointer = null; });
+
+  /* Where Drip wants to be, and what it looks at */
+  function plan() {
+    const a = document.activeElement;
+    const cr = card.getBoundingClientRect();
+    const restSpot = { x: cr.right - 26, y: cr.top - 30 + Math.sin(performance.now() / 650) * 5 };
+    if (state === "loading") {
+      const r = submit.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top - 30, look: { x: r.left + r.width / 2, y: r.bottom }, face: "open", behind: false };
+    }
+    if (state === "success") return { x: cr.left + cr.width / 2, y: cr.top - 34 + Math.sin(performance.now() / 380) * 6, look: null, face: "happy", behind: false };
+    if (Date.now() < moodUntil) return { x: restSpot.x, y: restSpot.y + 14, look: centerOf(submit), face: "sad", behind: false };
+    if (a === pass || a === eyeBtn) {
+      const c = caretPoint(pass);
+      if (passVisible) {
+        const r = pass.closest(".control").getBoundingClientRect();
+        return { x: Math.min(c.x + 8, r.right - 70), y: r.top - 22, look: c, face: "wink", behind: false };
+      }
+      return { x: c.x, y: c.y + 6, look: null, face: "closed", behind: true };
+    }
+    if (a === email) {
+      const c = caretPoint(email);
+      return { x: c.x + 4, y: c.y - 46, look: c, face: "open", behind: false };
+    }
+    if (pointer) return { x: pointer.x + 26, y: pointer.y + 34, look: pointer, face: "open", behind: false };
+    return { x: restSpot.x, y: restSpot.y, look: centerOf(email), face: "open", behind: false };
+  }
+
+  function updateDrip() {
+    const p = plan();
+    const tx = Math.max(30, Math.min(innerWidth - 30, p.x)), ty = Math.max(36, Math.min(innerHeight - 36, p.y));
+    if (calm) { drip.x = tx; drip.y = ty; drip.vx = drip.vy = 0; }
+    else {
+      drip.vx = (drip.vx + (tx - drip.x) * 0.075) * 0.78;
+      drip.vy = (drip.vy + (ty - drip.y) * 0.075) * 0.78;
+      drip.x += drip.vx;
+      drip.y += drip.vy;
+    }
+    setFace(p.face);
+    setBehind(p.behind);
+    dripEl.classList.toggle("sad", p.face === "sad");
+
+    /* Stretch along the motion; the tip trails behind */
+    const sp = Math.hypot(drip.vx, drip.vy);
+    const stretch = Math.min(.42, sp / 26);
+    let ang = sp > .4 ? Math.atan2(-drip.vy, -drip.vx) * 180 / Math.PI + 90 : 0;
+    if (ang > 180) ang -= 360;
+    drip.ang += (ang * Math.min(1, sp / 6) - drip.ang) * 0.25;
+    dripEl.style.transform = "translate(" + (drip.x - 30).toFixed(1) + "px," + (drip.y - 46).toFixed(1) + "px)";
+    dBody.style.transform = "rotate(" + drip.ang.toFixed(1) + "deg) scale(" + (1 - stretch * .45).toFixed(3) + "," + (1 + stretch).toFixed(3) + ")";
+    dFace.style.transform = "translate(" + (-drip.vx * .5).toFixed(1) + "px," + (-drip.vy * .5).toFixed(1) + "px)";
+
+    /* Pupils look at the caret, the pointer or the button */
+    let lx = 0, ly = 0;
+    if (p.look) {
+      const dx = p.look.x - drip.x, dy = p.look.y - (drip.y - 1), dd = Math.hypot(dx, dy) || 1, k = Math.min(1, dd / 60);
+      lx = (dx / dd) * 2.3 * k; ly = (dy / dd) * 2.6 * k;
+    }
+    pupils.style.transform = "translate(" + lx.toFixed(2) + "px," + ly.toFixed(2) + "px)";
+
+    /* Trail of light and wake ripples */
+    history.unshift({ x: drip.x, y: drip.y + 8 });
+    if (history.length > 24) history.pop();
+    trails.forEach((t, n) => {
+      const h = history[Math.min(history.length - 1, (n + 1) * 5)];
+      const s = Math.max(0, Math.min(1, sp / 5)) * (1 - n * .2);
+      t.style.transform = "translate(" + h.x.toFixed(1) + "px," + h.y.toFixed(1) + "px) scale(" + s.toFixed(2) + ")";
+      t.style.opacity = s.toFixed(2);
+    });
+    frameNo++;
+    if (sp > 2.5 && frameNo % 3 === 0) ripple(drip.x, drip.y + 10, Math.min(5, sp * .3), 2);
+  }
+
+  function frame() {
+    if (!calm) { simulate(); render(); }
+    updateDrip();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  if (motionQuery.addEventListener) motionQuery.addEventListener("change", (e) => { calm = e.matches; if (calm) { cur.fill(0); prev.fill(0); render(); } });
+
+  /* ================= Form ================= */
+  function setErr(input, el, msg) {
+    const ctl = input.closest(".control");
+    const was = input.getAttribute("aria-invalid") === "true";
+    input.setAttribute("aria-invalid", msg ? "true" : "false");
+    el.textContent = msg;
+    el.classList.toggle("on", !!msg);
+    ctl.classList.toggle("bad", !!msg);
+    if (msg && !was) retrigger(ctl, "shake", 440);
+  }
+  function checkEmail() {
+    const v = email.value.trim();
+    const msg = !v ? "Enter your email address." : !EMAIL_RE.test(v) ? "That email looks unfinished. Try name@example.pk." : "";
+    setErr(email, $("#emailErr"), msg);
+    return !msg;
+  }
+  function checkPass() {
+    const v = pass.value;
+    const msg = !v ? "Enter your password." : v.length < 6 ? "Passwords have at least 6 characters." : "";
+    setErr(pass, $("#passErr"), msg);
+    return !msg;
+  }
+  /* Every keystroke: a ring in the field, a ripple in the pool, a hop from Drip */
+  function keyRipple(input) {
+    const c = caretPoint(input), ctl = input.closest(".control"), r = ctl.getBoundingClientRect();
+    if (!calm) {
+      const ring = document.createElement("span");
+      ring.className = "ring";
+      ring.style.left = (c.x - r.left) + "px";
+      ctl.appendChild(ring);
+      setTimeout(() => ring.remove(), 700);
+    }
+    ripple(c.x, c.y, 7, 3);
+    drip.vy -= 3.2;
+    retrigger(dripIn, "squash", 400);
+  }
+  [email, pass].forEach((input) => {
+    const check = input === email ? checkEmail : checkPass;
+    input.addEventListener("input", () => {
+      input.dataset.touched = "1";
+      if (state === "error") clearFailure();
+      if (input.getAttribute("aria-invalid") === "true") check();
+      keyRipple(input);
+    });
+    input.addEventListener("blur", () => {
+      if (input.dataset.touched && !filling && state !== "loading" && state !== "success") check();
+    });
+  });
+
+  eyeBtn.addEventListener("click", () => {
+    passVisible = pass.type === "password";
+    pass.type = passVisible ? "text" : "password";
+    eyeBtn.classList.toggle("on", passVisible);
+    eyeBtn.setAttribute("aria-pressed", String(passVisible));
+    eyeBtn.setAttribute("aria-label", passVisible ? "Hide password" : "Show password");
+    pass.focus();
+  });
+
+  function setLabel(text) { submitText.textContent = text; }
+  let pourTimer = 0;
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (state === "loading" || state === "success") return;
+    const okE = checkEmail(), okP = checkPass();
+    if (!okE || !okP) {
+      (okE ? pass : email).focus();
+      retrigger(dripIn, "wobble", 900);
+      say("Please fix the highlighted fields.");
+      return;
+    }
+    state = "loading";
+    form.setAttribute("aria-busy", "true");
+    submit.setAttribute("aria-disabled", "true");
+    submit.dataset.state = "loading";
+    email.readOnly = pass.readOnly = true;
+    dripEl.classList.add("pouring");
+    say("Signing you in.");
+    /* Drip pours little drops into the button while the water rises */
+    clearInterval(pourTimer);
+    pourTimer = setInterval(() => splash(drip.x, drip.y + 18, 2, "pour"), 120);
+    setTimeout(finish, calm ? 500 : 1850);
+  });
+
+  function finish() {
+    clearInterval(pourTimer);
+    dripEl.classList.remove("pouring");
+    form.removeAttribute("aria-busy");
+    submit.removeAttribute("aria-disabled");
+    email.readOnly = pass.readOnly = false;
+    const ok = email.value.trim().toLowerCase() === DEMO.email && pass.value === DEMO.pass;
+    ok ? win() : lose();
+  }
+  function firstName() {
+    const local = email.value.trim().split("@")[0].split(/[._-]/)[0] || "friend";
+    return local.charAt(0).toUpperCase() + local.slice(1);
+  }
+
+  function win() {
+    state = "success";
+    submit.dataset.state = "done";
+    const b = centerOf(submit);
+    drip.vy -= 16;
+    retrigger(dripIn, "spin", 1000);
+    splash(b.x, b.y - 10, 70, "splash");
+    [0, 160, 320].forEach((t, n) => setTimeout(() => ripple(b.x + (n - 1) * 120, b.y, 26, 5), t));
+    $("#doneTitle").textContent = "Back in the flow, " + firstName() + "!";
+    say("Signed in. Welcome back, " + firstName() + ".");
+    setTimeout(() => { swapPane(done, form); $("#doneTitle").focus(); }, calm ? 120 : 950);
+  }
+
+  function lose() {
+    state = "error";
+    submit.dataset.state = "fail";
+    formMsgText.textContent = "That email and password do not match. Try the demo login below.";
+    formMsg.classList.add("on");
+    retrigger(card, "shake", 520);
+    retrigger(dripIn, "wobble", 900);
+    moodUntil = Date.now() + 2300;
+    say("That email and password do not match.");
+    setTimeout(() => {
+      if (submit.dataset.state === "fail") submit.dataset.state = "idle";
+      setLabel("Try again");
+    }, 700);
+  }
+
+  function clearFailure() {
+    state = "idle";
+    moodUntil = 0;
+    formMsg.classList.remove("on");
+    setLabel("Sign in");
+  }
+
+  function swapPane(show, hide) {
+    hide.classList.add("off");
+    hide.setAttribute("aria-hidden", "true");
+    hide.setAttribute("inert", "");
+    show.classList.remove("off");
+    show.removeAttribute("aria-hidden");
+    show.removeAttribute("inert");
+    retrigger(show, "enter", 1300);
+  }
+
+  $("#signout").addEventListener("click", () => {
+    state = "idle";
+    pass.value = "";
+    pass.type = "password";
+    passVisible = false;
+    eyeBtn.classList.remove("on");
+    eyeBtn.setAttribute("aria-pressed", "false");
+    eyeBtn.setAttribute("aria-label", "Show password");
+    submit.dataset.state = "idle";
+    setLabel("Sign in");
+    formMsg.classList.remove("on");
+    swapPane(form, done);
+    email.focus();
+    say("Signed out. Drip will wait for you.");
+  });
+
+  /* Demo fill */
+  function typeInto(input, text, speed) {
+    return new Promise((resolve) => {
+      input.focus();
+      input.value = "";
+      if (calm) { input.value = text; input.dispatchEvent(new Event("input", { bubbles: true })); resolve(); return; }
+      let i = 0;
+      (function step() {
+        input.value = text.slice(0, ++i);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        if (i < text.length) setTimeout(step, speed);
+        else setTimeout(resolve, 280);
+      })();
+    });
+  }
+  $("#fill").addEventListener("click", async (e) => {
+    if (filling || state === "loading" || state === "success") return;
+    filling = true;
+    e.currentTarget.disabled = true;
+    if (state === "error") clearFailure();
+    await typeInto(email, DEMO.email, 60);
+    await typeInto(pass, DEMO.pass, 95);
+    checkEmail(); checkPass();
+    filling = false;
+    $("#fill").disabled = false;
+    submit.focus();
+    say("Demo login filled in. Press Sign in.");
+  });
+
+  $("#forgot").addEventListener("click", () => {
+    const v = email.value.trim();
+    toast(EMAIL_RE.test(v) ? "A reset link is on its way to " + v + " (demo)." : "Type your email first and we will send a reset link (demo).");
+  });
+  $("#join").addEventListener("click", () => toast("Sign-up lives in the full app. This page is a demo."));
+
+  /* ================= Splash particles ================= */
+  const fx = $("#fx"), ctx = fx.getContext("2d");
+  let parts = [], running = false;
+  function sizeFx() {
+    const d = Math.min(window.devicePixelRatio || 1, 2);
+    fx.width = innerWidth * d;
+    fx.height = innerHeight * d;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+  }
+  sizeFx();
+  function splash(x, y, n, kind) {
+    if (calm) return;
+    for (let i = 0; i < n; i++) {
+      const pour = kind === "pour";
+      const a = pour ? Math.PI / 2 + (Math.random() - .5) * .5 : -Math.PI / 2 + (Math.random() - .5) * 2.8;
+      const sp = pour ? 1 + Math.random() * 2 : 4 + Math.random() * 8;
+      parts.push({ x: x + (Math.random() - .5) * 8, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, s: pour ? 2 + Math.random() * 2 : 2.5 + Math.random() * 4.5, life: 1, fade: pour ? .045 : .012 });
+    }
+    if (!running) { running = true; requestAnimationFrame(loop); }
+  }
+  function loop() {
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    parts = parts.filter((p) => p.life > 0);
+    const glow = getComputedStyle(document.documentElement).getPropertyValue("--glow").trim() || "#5ef2ff";
+    for (const p of parts) {
+      p.vy += .22;
+      p.vx *= .99;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= p.fade;
+      const sp = Math.hypot(p.vx, p.vy), ang = Math.atan2(p.vy, p.vx);
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.4));
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, p.s * (1 + Math.min(1.2, sp / 10)), p.s, ang, 0, 6.28); // drops stretch as they fly
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.8)";
+      ctx.beginPath();
+      ctx.arc(p.x - p.s * .3, p.y - p.s * .3, p.s * .35, 0, 6.28);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (parts.length) requestAnimationFrame(loop);
+    else { running = false; ctx.clearRect(0, 0, innerWidth, innerHeight); }
+  }
+
+  /* ================= Reveal + entrance ================= */
+  const reveals = document.querySelectorAll(".reveal");
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((en) => { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } });
+    }, { threshold: .2 });
+    reveals.forEach((el) => io.observe(el));
+  } else reveals.forEach((el) => el.classList.add("in"));
+
+  /* Split the headline into letters so they can drop in like rain */
+  const headline = $("#headline");
+  const fullText = headline.textContent;
+  const words = fullText.split(" ");
+  headline.textContent = "";
+  const srText = document.createElement("span");
+  srText.className = "sr";
+  srText.textContent = fullText;
+  headline.appendChild(srText);
+  let n = 0;
+  words.forEach((w, wi) => {
+    const word = document.createElement("span");
+    word.style.whiteSpace = "nowrap";
+    word.setAttribute("aria-hidden", "true");
+    for (const ch of w) {
+      const s = document.createElement("span");
+      s.className = "ch";
+      s.style.setProperty("--i", n++);
+      s.textContent = ch;
+      word.appendChild(s);
+    }
+    headline.appendChild(word);
+    if (wi < words.length - 1) headline.appendChild(document.createTextNode(" "));
+  });
+  if (calm) { const f = $("#filters"); if (f.pauseAnimations) f.pauseAnimations(); }
+
+  document.body.classList.add("ready");
+  card.classList.add("entering");
+  setTimeout(() => card.classList.remove("entering"), 1800);
+  setTimeout(() => document.body.classList.remove("ready"), calm ? 100 : 2400);
+  /* Drip falls into the pool with a splash */
+  setTimeout(() => { const c = card.getBoundingClientRect(); ripple(c.right - 26, c.top - 10, 30, 4); }, 900);
+})();
+</script>
+</body>
+</html>

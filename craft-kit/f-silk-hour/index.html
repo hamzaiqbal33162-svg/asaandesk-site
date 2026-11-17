@@ -1,0 +1,588 @@
+<!doctype html>
+<!-- Chill and Craft · Silk Hour · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silk Hour · a spider web clock</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens (light first, dark below) ---------- */
+  :root {
+    --bg1: #fbf3e2;
+    --bg2: #e2d2b5;
+    --ink: #2b2217;
+    --muted: #6f604b;
+    --silk: rgba(64, 52, 36, 0.32);
+    --silk-hi: rgba(64, 52, 36, 0.62);
+    --dew: #2f9fb2;
+    --dew-hi: #e2f9fc;
+    --brass-a: #f0c46e;
+    --brass-b: #b07433;
+    --brass-c: #6a3f17;
+    --mark: #2a1508;
+    --twig: #7a5634;
+    --leaf: #6f9a4a;
+    --orb: #fff1c9;
+    --orb-glow: rgba(255, 214, 140, 0.55);
+    --mote: #b8894c;
+    --star: transparent;
+    --chip-bg: rgba(255, 255, 255, 0.6);
+    --chip-line: rgba(64, 52, 36, 0.24);
+    --chip-on: #2b2217;
+    --chip-on-ink: #fbf5ea;
+    --bubble: #fffdf7;
+    --focus: #0d7f92;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg1: #251f4b; --bg2: #0a091a; --ink: #f1ebff; --muted: #a9a1cc;
+      --silk: rgba(220, 212, 255, 0.24); --silk-hi: rgba(220, 212, 255, 0.58);
+      --dew: #6fd9e8; --dew-hi: #f4feff;
+      --brass-a: #ffd47f; --brass-b: #c8873f; --brass-c: #7c4a1c; --mark: #1c0e04;
+      --twig: #a07a52; --leaf: #87b35c;
+      --orb: #fff6dc; --orb-glow: rgba(190, 200, 255, 0.35); --mote: #c9f3ff; --star: #ffffff;
+      --chip-bg: rgba(255, 255, 255, 0.06); --chip-line: rgba(220, 212, 255, 0.2);
+      --chip-on: #f1ebff; --chip-on-ink: #17142f;
+      --bubble: #2c2758; --focus: #8fe9f5;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg1: #251f4b; --bg2: #0a091a; --ink: #f1ebff; --muted: #a9a1cc;
+    --silk: rgba(220, 212, 255, 0.24); --silk-hi: rgba(220, 212, 255, 0.58);
+    --dew: #6fd9e8; --dew-hi: #f4feff;
+    --brass-a: #ffd47f; --brass-b: #c8873f; --brass-c: #7c4a1c; --mark: #1c0e04;
+    --twig: #a07a52; --leaf: #87b35c;
+    --orb: #fff6dc; --orb-glow: rgba(190, 200, 255, 0.35); --mote: #c9f3ff; --star: #ffffff;
+    --chip-bg: rgba(255, 255, 255, 0.06); --chip-line: rgba(220, 212, 255, 0.2);
+    --chip-on: #f1ebff; --chip-on-ink: #17142f;
+    --bubble: #2c2758; --focus: #8fe9f5;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background: radial-gradient(120% 90% at 50% 8%, var(--bg1), var(--bg2));
+  }
+  .stage { width: 100%; padding: 14px 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Clock (SVG) ---------- */
+  .clock { position: relative; width: min(350px, 88vw, calc((100vh - 190px) * 0.905)); min-width: 250px; }
+  .clock svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: manipulation; }
+  .orb { fill: var(--orb); }
+  .orb-glow { fill: var(--orb-glow); }
+  .star { fill: var(--star); animation: twinkle 2.6s ease-in-out infinite alternate; }
+  @keyframes twinkle { from { opacity: 0.15; } to { opacity: 0.9; } }
+  .mote { fill: var(--mote); }
+  .twig { fill: none; stroke: var(--twig); stroke-width: 7; stroke-linecap: round; }
+  .leaf { fill: var(--leaf); transform-box: fill-box; transform-origin: 0% 100%; animation: leafSway 4s ease-in-out infinite; }
+  @keyframes leafSway { 50% { transform: rotate(-8deg); } }
+  .spoke, .ring { fill: none; stroke: var(--silk); stroke-width: 1.1; stroke-linejoin: round; }
+  .ring { stroke-width: 1.3; }
+  .thread { stroke: var(--silk-hi); stroke-width: 1.5; }
+  .dew { fill: url(#dewGrad); }
+  .glint { fill: #fff; animation: glint 3.2s ease-in-out infinite; }
+  @keyframes glint { 0%, 70%, 100% { opacity: 0.15; } 80% { opacity: 1; } }
+  .num { fill: var(--muted); font: 700 14px system-ui, sans-serif; text-anchor: middle; dominant-baseline: central; }
+  .b-a { stop-color: var(--brass-a); }
+  .b-b { stop-color: var(--brass-b); }
+  .b-c { stop-color: var(--brass-c); }
+  .d-hi { stop-color: var(--dew-hi); }
+  .d-lo { stop-color: var(--dew); }
+  .limb { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .hand-hour .limb { stroke: var(--brass-b); stroke-width: 6.5; }
+  .hand-min .limb { stroke: var(--brass-a); stroke-width: 4.2; }
+  .hand path.claw { stroke-width: 2.4; }
+  .joint { fill: var(--brass-c); }
+  .legs path { fill: none; stroke: var(--brass-c); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+  .mark { fill: var(--mark); }
+  .eye-white { transform-box: fill-box; transform-origin: center; transition: transform 0.12s ease; }
+  .blink .eye-white, .blink .pupil { transform: scaleY(0.1); }
+  .pupil { transform-box: fill-box; transform-origin: center; }
+  .chime { fill: none; stroke: var(--dew); stroke-width: 3; opacity: 0; }
+  .chime.go { animation: chime 1.6s ease-out; }
+  @keyframes chime { 0% { opacity: 0.9; transform: scale(0.2); } 100% { opacity: 0; transform: scale(1.15); } }
+  .chime { transform-box: fill-box; transform-origin: center; }
+
+  /* Invisible button over the spider: it carries focus and the poke */
+  .poke {
+    position: absolute;
+    left: 50%;
+    top: 55.24%;
+    width: 22%;
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+  }
+  .poke:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+
+  /* Speech bubble that tells the time */
+  .bubble {
+    position: absolute;
+    left: 50%;
+    top: 72%;
+    margin: 0;
+    max-width: 86%;
+    width: max-content;
+    padding: 9px 14px;
+    border-radius: 14px;
+    background: var(--bubble);
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    transform: translate(-50%, 10px) scale(0.9);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.35s cubic-bezier(.34,1.56,.64,1);
+  }
+  .bubble::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: -7px;
+    width: 14px;
+    height: 14px;
+    background: inherit;
+    transform: translateX(-50%) rotate(45deg);
+    border-radius: 3px;
+  }
+  .bubble.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  .bubble:empty { visibility: hidden; }
+
+  /* ---------- Digital readout and options ---------- */
+  .readout { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .digits {
+    font-size: clamp(26px, 7vw, 36px);
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .date { color: var(--muted); font-size: 14px; }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .chip {
+    font: 600 14px system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--chip-bg);
+    border: 1px solid var(--chip-line);
+    border-radius: 999px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, transform 0.15s;
+  }
+  .chip:active { transform: scale(0.96); }
+  .chip[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-ink); border-color: transparent; }
+  .chip:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .hint { margin: 0; color: var(--muted); font-size: 13px; text-align: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bubble, .eye-white, .chip { transition: none; }
+    .star, .leaf, .glint { animation: none; }
+    .chime.go { animation: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Silk Hour: a clock told by a hanging brass spider</h1>
+
+  <div class="clock">
+    <svg id="svg" viewBox="-190 -232 380 420" role="img" aria-labelledby="clockTitle">
+      <title id="clockTitle">A brass spider on its web. Its long legs point to the hour and the minute; a dewdrop runs round the rim for the seconds.</title>
+      <defs>
+        <radialGradient id="brass" cx="35%" cy="30%" r="75%">
+          <stop offset="0" class="b-a"/>
+          <stop offset="0.55" class="b-b"/>
+          <stop offset="1" class="b-c"/>
+        </radialGradient>
+        <radialGradient id="dewGrad" cx="35%" cy="30%" r="70%">
+          <stop offset="0" class="d-hi"/>
+          <stop offset="1" class="d-lo"/>
+        </radialGradient>
+      </defs>
+
+      <!-- Far layer: a moon (or soft sun), stars and drifting motes -->
+      <g id="sky">
+        <circle class="orb-glow" cx="128" cy="-160" r="46"/>
+        <circle class="orb" cx="128" cy="-160" r="22"/>
+        <g id="stars"></g>
+      </g>
+      <g id="motes"></g>
+
+      <!-- Twig the silk hangs from -->
+      <path class="twig" d="M-120 -222 Q-20 -236 120 -214"/>
+      <path class="leaf" d="M70 -219 q20 -22 44 -14 q-16 22 -44 14z"/>
+
+      <!-- The web sways as one piece; its threads ripple when touched -->
+      <g id="webSway">
+        <g id="web"></g>
+        <g id="marks"></g>
+        <circle id="chime" class="chime" cx="0" cy="0" r="150"/>
+        <!-- Seconds: a dewdrop (with a fading trail) that runs around the rim -->
+        <g id="trail"></g>
+        <g id="secG"><circle class="dew" cx="0" cy="-150" r="6.5"/><circle class="glint" cx="-2" cy="-152.5" r="1.8"/></g>
+        <g id="drops"></g>
+      </g>
+
+      <!-- Silk thread from the twig to the spider -->
+      <line id="thread" class="thread" x1="0" y1="-224" x2="0" y2="-29"/>
+
+      <!-- The spider: six idle legs, two clock-hand legs, then the body on top -->
+      <g id="spider">
+        <g id="legs" class="legs"></g>
+        <g id="minLeg" class="hand hand-min"></g>
+        <g id="hourLeg" class="hand hand-hour"></g>
+        <g id="body">
+          <ellipse cx="0" cy="-10" rx="17" ry="20" fill="url(#brass)"/>
+          <path class="mark" d="M-5.5 -21 L5.5 -21 L0 -11.5 L5.5 -2 L-5.5 -2 L0 -11.5 Z"/>
+          <ellipse cx="-6" cy="-18" rx="3.6" ry="6" fill="#fff" opacity="0.35"/>
+          <circle cx="0" cy="14" r="11.5" fill="url(#brass)"/>
+          <circle class="eye-white" cx="-4.4" cy="14" r="3.6" fill="#fff"/>
+          <circle class="eye-white" cx="4.4" cy="14" r="3.6" fill="#fff"/>
+          <circle id="pupilL" class="pupil" cx="-4.4" cy="14.4" r="1.8" fill="#1b1206"/>
+          <circle id="pupilR" class="pupil" cx="4.4" cy="14.4" r="1.8" fill="#1b1206"/>
+          <circle cx="-7.5" cy="19" r="1.8" fill="#ff9a8a" opacity="0.6"/>
+          <circle cx="7.5" cy="19" r="1.8" fill="#ff9a8a" opacity="0.6"/>
+        </g>
+      </g>
+    </svg>
+
+    <button id="poke" class="poke" type="button"><span class="sr">Poke the spider to hear the time</span></button>
+    <p id="bubble" class="bubble" role="status" aria-live="polite"></p>
+  </div>
+
+  <div class="readout">
+    <time id="digits" class="digits">--:--:--</time>
+    <span id="date" class="date"></span>
+  </div>
+
+  <div class="chips" role="group" aria-label="Clock options">
+    <button type="button" class="chip" id="mode24" aria-pressed="false">24-hour</button>
+    <button type="button" class="chip" id="smooth" aria-pressed="true">Smooth seconds</button>
+  </div>
+  <p class="hint">Brush the web to make it ripple. Tap the spider and it tells you the time.</p>
+</main>
+
+<script>
+  (function () {
+    "use strict";
+    var NS = "http://www.w3.org/2000/svg";
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (id) { return document.getElementById(id); };
+
+    var svg = $("svg"), spider = $("spider"), thread = $("thread"), body = $("body");
+    var secG = $("secG"), minLeg = $("minLeg"), hourLeg = $("hourLeg"), webSway = $("webSway");
+    var digits = $("digits"), dateEl = $("date"), bubble = $("bubble"), chime = $("chime");
+    var btn24 = $("mode24"), btnSmooth = $("smooth"), poke = $("poke");
+    var pupilL = $("pupilL"), pupilR = $("pupilR");
+
+    function el(tag, attrs, parent) {
+      var n = document.createElementNS(NS, tag);
+      for (var k in attrs) n.setAttribute(k, attrs[k]);
+      if (parent) parent.appendChild(n);
+      return n;
+    }
+    function f1(n) { return n.toFixed(1); }
+    var seed = 5;
+    function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+
+    /* ---------- 1. Far layer: stars and motes ---------- */
+    for (var s = 0; s < 26; s++) {
+      var st = el("circle", { cx: f1(-185 + rnd() * 370), cy: f1(-225 + rnd() * 150), r: (0.5 + rnd()).toFixed(2), "class": "star" }, $("stars"));
+      st.style.animationDelay = (-rnd() * 3).toFixed(2) + "s";
+    }
+    var motes = [];
+    for (var m = 0; m < 22; m++) {
+      motes.push({
+        node: el("circle", { r: (0.8 + rnd() * 1.6).toFixed(2), "class": "mote" }, $("motes")),
+        x: -185 + rnd() * 370, y: -230 + rnd() * 420, v: 5 + rnd() * 10, ph: rnd() * 6.28, a: 0.2 + rnd() * 0.5
+      });
+    }
+
+    /* ---------- 2. Web geometry (base points, bent every frame by ripples) ---------- */
+    var SPOKES = 12, R = 150, RINGS = [30, 54, 80, 106, 132];
+    function polar(i, r) { var a = (i / SPOKES) * Math.PI * 2; return [Math.sin(a) * r, -Math.cos(a) * r]; }
+    var ringPts = RINGS.map(function (r, ring) {
+      var pts = [];
+      for (var k = 0; k < SPOKES; k++) {
+        var rr = r * (1 + 0.035 * Math.sin(k * 2.3 + ring)); // a little hand-spun wobble
+        pts.push({ p: polar(k, rr), c: polar(k + 0.5, rr * 0.9) }); // c = sag control toward the centre
+      }
+      return pts;
+    });
+    var ringEls = RINGS.map(function () { return el("path", { "class": "ring" }, $("web")); });
+    var spokeEls = [];
+    for (var sp = 0; sp < SPOKES; sp++) spokeEls.push(el("path", { "class": "spoke" }, $("web")));
+
+    // Hour dewdrops with glints, and the four main numerals
+    var hourDew = [];
+    for (var h = 0; h < 12; h++) {
+      var q = polar(h, R), big = h % 3 === 0;
+      var g = el("g", {}, $("marks"));
+      el("circle", { cx: 0, cy: 0, r: big ? 6 : 3.6, "class": "dew" }, g);
+      var gl = el("circle", { cx: big ? -1.8 : -1, cy: big ? -2 : -1.2, r: big ? 1.6 : 1, "class": "glint" }, g);
+      gl.style.animationDelay = (h * 0.27).toFixed(2) + "s";
+      hourDew.push({ g: g, x: q[0], y: q[1], grow: 1 });
+      if (big) {
+        var nn = polar(h, R + 22);
+        el("text", { x: f1(nn[0]), y: f1(nn[1]), "class": "num" }, $("marks")).textContent = h === 0 ? "12" : String(h);
+      }
+    }
+
+    /* Ripples: each one is a wave that travels out from where the web was touched */
+    var waves = [];
+    function addWave(x, y, amp) { if (!reduce.matches) waves.push({ x: x, y: y, t0: performance.now(), amp: amp }); }
+    function bend(pt, now) {
+      var x = pt[0], y = pt[1], len = Math.sqrt(x * x + y * y) || 1, d = 0;
+      for (var i = 0; i < waves.length; i++) {
+        var w = waves[i], age = (now - w.t0) / 1000, dist = Math.hypot(x - w.x, y - w.y);
+        if (dist > age * 320) continue; // the wave front has not reached this point yet
+        d += w.amp * Math.exp(-age * 2.2) * Math.sin(age * 15 - dist * 0.07);
+      }
+      return [x + (x / len) * d, y + (y / len) * d];
+    }
+    function drawWeb(now) {
+      for (var i = waves.length - 1; i >= 0; i--) if (now - waves[i].t0 > 2600) waves.splice(i, 1);
+      var bent = ringPts.map(function (ring) {
+        return ring.map(function (o) { return { p: bend(o.p, now), c: bend(o.c, now) }; });
+      });
+      bent.forEach(function (ring, j) {
+        var d = "M" + f1(ring[0].p[0]) + " " + f1(ring[0].p[1]);
+        for (var k = 1; k <= SPOKES; k++) {
+          var to = ring[k % SPOKES], ctl = ring[k - 1].c;
+          d += " Q" + f1(ctl[0]) + " " + f1(ctl[1]) + " " + f1(to.p[0]) + " " + f1(to.p[1]);
+        }
+        ringEls[j].setAttribute("d", d);
+      });
+      for (var k2 = 0; k2 < SPOKES; k2++) {
+        var dd = "M0 0";
+        for (var j2 = 0; j2 < bent.length; j2++) dd += " L" + f1(bent[j2][k2].p[0]) + " " + f1(bent[j2][k2].p[1]);
+        var tip = bend(polar(k2, R + 8), now);
+        spokeEls[k2].setAttribute("d", dd + " L" + f1(tip[0]) + " " + f1(tip[1]));
+      }
+      hourDew.forEach(function (dw) {
+        var b = bend([dw.x, dw.y], now);
+        dw.grow = Math.min(1, dw.grow + 0.012);
+        dw.g.setAttribute("transform", "translate(" + f1(b[0]) + " " + f1(b[1]) + ") scale(" + dw.grow.toFixed(2) + ")");
+      });
+    }
+
+    /* ---------- 3. Legs ---------- */
+    function buildHand(gr, L, k) {
+      var kx = k, ky = -L * 0.42, ax = -k * 0.35, ay = -L * 0.84;
+      gr.innerHTML =
+        '<path class="limb" d="M0 0 L' + kx + " " + ky + " L" + ax + " " + ay + " L0 " + (-L) + '"/>' +
+        '<path class="limb claw" d="M-4 ' + (-L + 6) + " L0 " + (-L) + " L4 " + (-L + 6) + '"/>' +
+        '<circle class="joint" cx="' + kx + '" cy="' + ky + '" r="3"/>' +
+        '<circle class="joint" cx="' + ax + '" cy="' + ay + '" r="2.4"/>';
+    }
+    buildHand(hourLeg, 84, 10);
+    buildHand(minLeg, 124, 8);
+
+    var IDLE = [
+      { x: 8, y: -16, d: "M8 -16 Q24 -42 40 -36 L50 -22" },
+      { x: 12, y: -6, d: "M12 -6 Q34 -16 48 -6 L56 8" },
+      { x: 11, y: 6, d: "M11 6 Q30 8 42 20 L46 36" }
+    ];
+    var idleLegs = [];
+    [1, -1].forEach(function (side) {
+      var wrap = el("g", { transform: "scale(" + side + " 1)" }, $("legs"));
+      IDLE.forEach(function (leg) { idleLegs.push({ node: el("path", { d: leg.d }, wrap), x: leg.x, y: leg.y }); });
+    });
+
+    /* Seconds trail: three fading ghosts behind the running dewdrop */
+    var trail = [0.45, 0.28, 0.14].map(function (o, i) {
+      return el("circle", { cx: 0, cy: -150, r: (5.5 - i).toFixed(1), "class": "dew", opacity: o }, $("trail"));
+    });
+
+    /* ---------- 4. Options and readout ---------- */
+    var use24 = false, smooth = true, lastSec = -1, lastMin = -1;
+    function pad(n) { return String(n).padStart(2, "0"); }
+    function writeReadout(d) {
+      var hh = d.getHours(), mm = d.getMinutes(), ss = d.getSeconds();
+      digits.textContent = use24
+        ? pad(hh) + ":" + pad(mm) + ":" + pad(ss)
+        : (hh % 12 || 12) + ":" + pad(mm) + ":" + pad(ss) + (hh < 12 ? " am" : " pm");
+      digits.setAttribute("datetime", pad(hh) + ":" + pad(mm) + ":" + pad(ss));
+      dateEl.textContent = d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+    }
+    function toggle(button, value) { button.setAttribute("aria-pressed", String(value)); return value; }
+    btn24.addEventListener("click", function () { use24 = toggle(btn24, !use24); writeReadout(new Date()); });
+    btnSmooth.addEventListener("click", function () { smooth = toggle(btnSmooth, !smooth); });
+
+    /* ---------- 5. Pointer: eyes follow, brushing the web makes ripples ---------- */
+    var look = { x: 0, y: 60 }, lastBrush = 0;
+    function toSvg(e) {
+      var pt = svg.createSVGPoint(), m = svg.getScreenCTM();
+      pt.x = e.clientX; pt.y = e.clientY;
+      return m ? pt.matrixTransform(m.inverse()) : { x: 0, y: 0 };
+    }
+    window.addEventListener("pointermove", function (e) {
+      var p = toSvg(e), now = performance.now();
+      look.x = p.x; look.y = p.y;
+      var r = Math.hypot(p.x, p.y);
+      if (r < R + 10 && r > 26 && now - lastBrush > 140) { lastBrush = now; addWave(p.x, p.y, 2.6); }
+    });
+
+    /* ---------- 6. Poke: bounce, ripple, falling dew, and the time in a bubble ---------- */
+    var dropY = 0, dropV = 0, swing = 0, swingV = 0, flail = 0, bubbleTimer = 0, falling = [];
+    function sayTime() {
+      var d = new Date(), hh = d.getHours(), mm = d.getMinutes();
+      var part = hh < 5 ? "at night" : hh < 12 ? "in the morning" : hh < 17 ? "in the afternoon" : hh < 21 ? "in the evening" : "at night";
+      var t = use24 ? pad(hh) + ":" + pad(mm) : (hh % 12 || 12) + ":" + pad(mm);
+      bubble.textContent = "It's " + t + " " + part + ".";
+      bubble.classList.add("show");
+      clearTimeout(bubbleTimer);
+      bubbleTimer = setTimeout(function () { bubble.classList.remove("show"); }, 3200);
+    }
+    function shedDew(count) {
+      for (var i = 0; i < count; i++) {
+        var dw = hourDew[Math.floor(Math.random() * 12)];
+        if (dw.grow < 1) continue;
+        dw.grow = 0; // it regrows slowly
+        falling.push({ node: el("circle", { r: 4, "class": "dew" }, $("drops")), x: dw.x, y: dw.y, vx: (Math.random() - 0.5) * 30, vy: -20, life: 1.6 });
+      }
+    }
+    poke.addEventListener("click", function () {
+      sayTime();
+      if (reduce.matches) return;
+      dropV = 260;
+      swingV += (Math.random() < 0.5 ? -1 : 1) * 40;
+      flail = 1;
+      addWave(0, 0, 7);
+      shedDew(3);
+    });
+
+    function blinkLater() {
+      setTimeout(function () {
+        if (!reduce.matches) {
+          body.classList.add("blink");
+          setTimeout(function () { body.classList.remove("blink"); }, 140);
+        }
+        blinkLater();
+      }, 2600 + Math.random() * 3000);
+    }
+    blinkLater();
+
+    /* ---------- 7. The clock loop ---------- */
+    var prev = performance.now(), acc = 0, STEP = 1 / 120;
+    function frame(now) {
+      var dt = Math.min(0.05, (now - prev) / 1000);
+      prev = now;
+      var calm = reduce.matches, sx = 0;
+      var d = new Date(), sNow = d.getSeconds(), mNow = d.getMinutes();
+      var sec = smooth && !calm ? sNow + d.getMilliseconds() / 1000 : sNow;
+      var min = mNow + sec / 60;
+      var hr = (d.getHours() % 12) + min / 60;
+      secG.setAttribute("transform", "rotate(" + (sec * 6).toFixed(2) + ")");
+      trail.forEach(function (c, i) {
+        c.setAttribute("transform", "rotate(" + ((sec - (i + 1) * 0.22) * 6).toFixed(2) + ")");
+        c.style.display = smooth && !calm ? "" : "none";
+      });
+      minLeg.setAttribute("transform", "rotate(" + (min * 6).toFixed(2) + ")");
+      hourLeg.setAttribute("transform", "rotate(" + (hr * 30).toFixed(2) + ")");
+
+      if (sNow !== lastSec) {
+        lastSec = sNow;
+        writeReadout(d);
+        if (lastMin !== -1 && mNow !== lastMin) {
+          // each new minute the minute leg taps the web; on the hour the web chimes
+          var tipA = (mNow * 6) * Math.PI / 180;
+          addWave(Math.sin(tipA) * 124, -Math.cos(tipA) * 124, 3.5);
+          if (mNow === 0 && !calm) {
+            chime.classList.remove("go"); void chime.getBoundingClientRect(); chime.classList.add("go");
+            addWave(0, 0, 6);
+          }
+        }
+        lastMin = mNow;
+      }
+
+      if (calm) {
+        dropY = 0; dropV = 0; swing = 0; flail = 0;
+      } else {
+        var tt = now / 1000;
+        flail = Math.max(0, flail - dt * 0.8);
+        for (var i = 0; i < idleLegs.length; i++) {
+          var L = idleLegs[i], amp = 5 + flail * 22, spd = 1.6 + flail * 14;
+          L.node.setAttribute("transform", "rotate(" + (Math.sin(tt * spd + i * 1.3) * amp).toFixed(2) + " " + L.x + " " + L.y + ")");
+        }
+        // springs: the bungee bounce and a soft pendulum swing on the silk
+        acc += dt;
+        while (acc > STEP) {
+          dropV += (-dropY * 90 - dropV * 7) * STEP;
+          dropY += dropV * STEP;
+          swingV += (-swing * 14 - swingV * 1.6) * STEP;
+          swing += swingV * STEP;
+          acc -= STEP;
+        }
+        // a light breeze sways the web and the spider; the spring adds the poke swing on top
+        var breeze = Math.sin(tt * 0.7) * 1.6;
+        webSway.setAttribute("transform", "rotate(" + (Math.sin(tt * 0.5) * 0.8).toFixed(2) + " 0 -222)");
+        sx = swing + breeze;
+        spider.setAttribute("transform", "translate(" + sx.toFixed(2) + " " + dropY.toFixed(2) + ")");
+        thread.setAttribute("x2", sx.toFixed(2));
+
+        // motes drift up and sway; they wrap back to the bottom
+        motes.forEach(function (mo) {
+          mo.y -= mo.v * dt;
+          if (mo.y < -235) { mo.y = 195; mo.x = -185 + Math.random() * 370; }
+          mo.node.setAttribute("cx", f1(mo.x + Math.sin(tt * 0.8 + mo.ph) * 8));
+          mo.node.setAttribute("cy", f1(mo.y));
+          mo.node.style.opacity = (mo.a * (0.6 + 0.4 * Math.sin(tt * 2 + mo.ph))).toFixed(2);
+        });
+      }
+      if (calm) {
+        spider.setAttribute("transform", "translate(0 0)");
+        thread.setAttribute("x2", "0");
+        webSway.removeAttribute("transform");
+        motes.forEach(function (mo) {
+          mo.node.setAttribute("cx", f1(mo.x)); mo.node.setAttribute("cy", f1(mo.y)); mo.node.style.opacity = mo.a;
+        });
+      }
+      thread.setAttribute("y2", (dropY - 29).toFixed(2));
+
+      // falling dewdrops
+      for (var f = falling.length - 1; f >= 0; f--) {
+        var D = falling[f];
+        D.life -= dt; D.vy += 420 * dt; D.x += D.vx * dt; D.y += D.vy * dt;
+        if (D.life <= 0 || D.y > 200) { D.node.remove(); falling.splice(f, 1); continue; }
+        D.node.setAttribute("cx", f1(D.x)); D.node.setAttribute("cy", f1(D.y));
+        D.node.style.opacity = Math.min(1, D.life).toFixed(2);
+      }
+
+      // pupils look toward the pointer
+      var ex = look.x - sx, ey = look.y - (14 + dropY), el2 = Math.hypot(ex, ey) || 1, k = Math.min(1.6, el2 / 40);
+      var ox = (ex / el2) * k, oy = (ey / el2) * k;
+      pupilL.setAttribute("transform", "translate(" + ox.toFixed(2) + " " + oy.toFixed(2) + ")");
+      pupilR.setAttribute("transform", "translate(" + ox.toFixed(2) + " " + oy.toFixed(2) + ")");
+
+      drawWeb(now);
+      requestAnimationFrame(frame);
+    }
+    writeReadout(new Date());
+    requestAnimationFrame(frame);
+  })();
+</script>
+</body>
+</html>

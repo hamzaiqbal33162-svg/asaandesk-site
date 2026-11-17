@@ -1,0 +1,598 @@
+<!doctype html>
+<!-- Chill and Craft · Year Tree · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Year Tree · one tree through four seasons</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens (--mode picks the sky palette in the script) ---------- */
+  :root {
+    --mode: light;
+    --page: #f3efe6;
+    --card: #fffdf8;
+    --ink: #2e2a22;
+    --muted: #6f675a;
+    --line: rgba(46, 42, 34, 0.14);
+    --track: #e6dfd0;
+    --accent: #2f8f4e;
+    --accent-ink: #ffffff;
+    --chip: #f1ece1;
+    --focus: #c2410c;
+    --bark: #5b3b2a;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --mode: dark;
+      --page: #0f1115; --card: #181b22; --ink: #f0ece4; --muted: #a8a294;
+      --line: rgba(240, 236, 228, 0.14); --track: #2a2e38; --accent: #6fd08c; --accent-ink: #0d1a12;
+      --chip: #232733; --focus: #ffb86b; --bark: #3e2a20;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --mode: dark;
+    --page: #0f1115; --card: #181b22; --ink: #f0ece4; --muted: #a8a294;
+    --line: rgba(240, 236, 228, 0.14); --track: #2a2e38; --accent: #6fd08c; --accent-ink: #0d1a12;
+    --chip: #232733; --focus: #ffb86b; --bark: #3e2a20;
+    color-scheme: dark;
+  }
+
+  /* ---------- Layout ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .stage { width: 100%; padding: 16px; display: grid; place-items: center; }
+  .card {
+    width: 100%;
+    max-width: max(320px, min(660px, calc((100vh - 250px) * 1.4286 + 28px)));
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    padding: 14px;
+    display: grid;
+    gap: 10px;
+    box-shadow: 0 18px 40px rgba(30, 24, 10, 0.12);
+  }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Scene ---------- */
+  .scene { position: relative; width: 100%; aspect-ratio: 600 / 420; border-radius: 16px; overflow: hidden; }
+  .scene svg, .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .limb { fill: none; stroke: var(--bark); stroke-linecap: round; }
+  .snowline { fill: none; stroke: #f7fbff; stroke-linecap: round; opacity: var(--snow, 0); }
+  .ground-snow { fill: #f4f8fc; opacity: var(--snow, 0); }
+  .carpet { opacity: var(--carpet, 0); }
+  .star { fill: #fff; opacity: var(--stars, 0); }
+  .blossom { fill: #ffb3cf; stroke: #fff2f7; stroke-width: 1; }
+
+  .badge {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    display: grid;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.72);
+    color: #2e2a22;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    line-height: 1.15;
+  }
+  .badge strong { font-size: clamp(16px, 3.6vw, 22px); }
+  .badge span { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6f675a; }
+  .desc { margin: 0; font-size: 15px; color: var(--muted); min-height: 1.4em; }
+
+  /* ---------- Year slider ---------- */
+  .slider { display: grid; gap: 2px; }
+  .slider input {
+    width: 100%;
+    margin: 0;
+    height: 30px;
+    background: transparent;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .slider input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
+  .ticks { display: grid; grid-template-columns: repeat(12, 1fr); font-size: 11px; color: var(--muted); text-align: center; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .seasons { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font: 600 13px system-ui, sans-serif;
+    border: 1px solid var(--line);
+    background: var(--chip);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  .chip.now { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .play {
+    font: 700 14px system-ui, sans-serif;
+    border: 0;
+    border-radius: 999px;
+    padding: 9px 16px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    cursor: pointer;
+  }
+  .chip:focus-visible, .play:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chip, .play { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Year Tree: drag through the year and watch one tree change with the seasons</h1>
+  <div class="card">
+    <div class="scene" id="scene">
+      <svg id="svg" viewBox="0 0 600 420" aria-hidden="true">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+            <stop id="skyTop" offset="0" stop-color="#7ec3f0"/>
+            <stop id="skyBot" offset="1" stop-color="#e9f7ff"/>
+          </linearGradient>
+          <radialGradient id="sunGlow">
+            <stop id="glowIn" offset="0" stop-color="#fff3b0" stop-opacity="0.8"/>
+            <stop id="glowOut" offset="1" stop-color="#fff3b0" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect width="600" height="420" fill="url(#sky)"/>
+        <g id="stars"></g>
+        <circle id="glow" cx="120" cy="100" r="70" fill="url(#sunGlow)"/>
+        <circle id="sun" cx="120" cy="100" r="22" fill="#ffe27a"/>
+        <path id="hillFar" d="M0 300 C120 250 220 280 320 270 C430 258 520 230 600 262 L600 420 L0 420Z"/>
+        <path id="hillMid" d="M0 330 C140 300 260 320 360 315 C460 310 540 296 600 312 L600 420 L0 420Z"/>
+        <path id="ground"/>
+        <path id="groundSnow" class="ground-snow"/>
+        <g id="carpet" class="carpet"></g>
+        <g id="tree"></g>
+      </svg>
+      <canvas id="fx" aria-hidden="true"></canvas>
+      <div class="badge"><strong id="month">April</strong><span id="season">Spring</span></div>
+    </div>
+
+    <p class="desc" id="desc"></p>
+
+    <div class="slider">
+      <label for="year" class="sr">Time of year</label>
+      <input id="year" type="range" min="0" max="1000" step="1" value="280">
+      <div class="ticks" aria-hidden="true"><span>J</span><span>F</span><span>M</span><span>A</span><span>M</span><span>J</span><span>J</span><span>A</span><span>S</span><span>O</span><span>N</span><span>D</span></div>
+    </div>
+
+    <div class="row">
+      <div class="seasons" role="group" aria-label="Jump to a season">
+        <button class="chip" type="button" data-t="0.04">Winter</button>
+        <button class="chip" type="button" data-t="0.3">Spring</button>
+        <button class="chip" type="button" data-t="0.55">Summer</button>
+        <button class="chip" type="button" data-t="0.81">Autumn</button>
+      </div>
+      <button class="play" id="play" type="button" aria-pressed="false">Play the year</button>
+    </div>
+    <p class="sr" id="live" aria-live="polite"></p>
+  </div>
+</main>
+
+<script>
+  (function () {
+    "use strict";
+    var NS = "http://www.w3.org/2000/svg";
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (id) { return document.getElementById(id); };
+    var svg = $("svg"), scene = $("scene"), canvas = $("fx"), ctx = canvas.getContext("2d");
+    var slider = $("year"), playBtn = $("play"), live = $("live");
+
+    function el(tag, attrs, parent) {
+      var n = document.createElementNS(NS, tag);
+      for (var k in attrs) n.setAttribute(k, attrs[k]);
+      if (parent) parent.appendChild(n);
+      return n;
+    }
+    function clamp(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+    function smooth(a, b, x) { var q = clamp((x - a) / (b - a)); return q * q * (3 - 2 * q); }
+    function hex(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+    function mixArr(A, B, f) { return "rgb(" + Math.round(A[0] + (B[0] - A[0]) * f) + "," + Math.round(A[1] + (B[1] - A[1]) * f) + "," + Math.round(A[2] + (B[2] - A[2]) * f) + ")"; }
+    function mix(a, b, f) { return mixArr(hex(a), hex(b), f); }
+    // distance between two points on the looping year (0..1)
+    function yearDist(a, b) { var d = Math.abs(a - b) % 1; return Math.min(d, 1 - d); }
+    function wrapYear(x) { return ((x % 1) + 1) % 1; }
+
+    var seed = 20;
+    function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+
+    /* ---------- Colour keys through the year ---------- */
+    var SKY = {
+      light: [[0, "#a9bfd8", "#e6edf5"], [0.25, "#7ec3f0", "#e9f7ff"], [0.5, "#4aa6ee", "#c4e8ff"], [0.75, "#86a9d4", "#ffd8a6"], [1, "#a9bfd8", "#e6edf5"]],
+      dark:  [[0, "#0b1430", "#2b3b62"], [0.25, "#1c1f4c", "#6a4c86"], [0.5, "#14204a", "#b55a73"], [0.75, "#1b1232", "#8e4a32"], [1, "#0b1430", "#2b3b62"]]
+    };
+    var GROUND = [[0, "#8a9178"], [0.22, "#9ccf62"], [0.5, "#5aa646"], [0.78, "#c7963f"], [0.92, "#9b8463"], [1, "#8a9178"]];
+    function keyAt(keys, t, idx) {
+      for (var i = 0; i < keys.length - 1; i++) {
+        if (t >= keys[i][0] && t <= keys[i + 1][0]) {
+          return mix(keys[i][idx], keys[i + 1][idx], (t - keys[i][0]) / (keys[i + 1][0] - keys[i][0]));
+        }
+      }
+      return mix(keys[0][idx], keys[0][idx], 0);
+    }
+    var FRESH = hex("#a8d86a"), SUMMER = hex("#3f9a4b");
+    var AUTUMN = ["#e8892b", "#d1452c", "#f2c14e", "#b5651d"].map(hex);
+    var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    var SEASON_OF = ["Winter", "Winter", "Spring", "Spring", "Spring", "Summer", "Summer", "Summer", "Autumn", "Autumn", "Autumn", "Winter"];
+    var NOTES = [
+      "Bare branches under fresh snow.", "Deep winter: snow sits on every branch.", "Buds swell and the first blossoms open.",
+      "Blossoms drift down as new leaves unfold.", "Fresh green leaves fill the crown.", "A full, deep green canopy.",
+      "High summer: warm air and floating seeds.", "Late summer, heavy with leaves.", "The first leaves turn gold.",
+      "Gold, orange and red all over.", "Leaves let go and tumble down.", "Bare again, waiting for snow."
+    ];
+
+    /* ---------- 1. Ground, stars and leaf carpet ---------- */
+    function groundAt(x) { return 350 + 0.00042 * (x - 300) * (x - 300); }
+    var gd = "M0 420", gs = "M0 420";
+    for (var x = 0; x <= 600; x += 20) {
+      gd += " L" + x + " " + groundAt(x).toFixed(1);
+      gs += " L" + x + " " + (groundAt(x) - 3).toFixed(1);
+    }
+    $("ground").setAttribute("d", gd + " L600 420Z");
+    $("groundSnow").setAttribute("d", gs + " L600 420Z");
+    for (var s = 0; s < 40; s++) el("circle", { cx: (rnd() * 600).toFixed(1), cy: (rnd() * 200).toFixed(1), r: (0.5 + rnd()).toFixed(1), "class": "star" }, $("stars"));
+    for (var c = 0; c < 46; c++) {
+      var cx = 120 + rnd() * 360, cy = groundAt(cx) + 2 + rnd() * 14;
+      el("ellipse", { cx: cx.toFixed(1), cy: cy.toFixed(1), rx: 4, ry: 2, transform: "rotate(" + (rnd() * 180).toFixed(0) + " " + cx.toFixed(1) + " " + cy.toFixed(1) + ")", fill: mixArr(AUTUMN[c % 4], AUTUMN[c % 4], 0) }, $("carpet"));
+    }
+
+    /* ---------- 2. Grow the tree: nested groups so each branch can sway ---------- */
+    var MAXD = 6, nodes = [], leaves = [], blossoms = [];
+    function addLeaves(g, len, n) {
+      for (var k = 0; k < n; k++) {
+        var a = (rnd() - 0.5) * 150, y = -len * (0.5 + rnd() * 0.5), xx = (rnd() - 0.5) * 6;
+        var e = el("ellipse", { cx: 5.5, cy: 0, rx: 6, ry: 3.4 }, g);
+        leaves.push({ e: e, base: "translate(" + xx.toFixed(1) + " " + y.toFixed(1) + ") rotate(" + a.toFixed(0) + ")", r: rnd(), au: AUTUMN[Math.floor(rnd() * 4)], last: "" });
+      }
+    }
+    function branch(parent, len, w, depth, angle, parentLen) {
+      var g = el("g", {}, parent);
+      var node = { g: g, angle: angle, depth: depth, parentLen: parentLen, ph: rnd() * 6.283 };
+      nodes.push(node);
+      var bend = (rnd() - 0.5) * len * 0.2;
+      var d = "M0 0 Q" + bend.toFixed(1) + " " + (-len / 2).toFixed(1) + " 0 " + (-len).toFixed(1);
+      el("path", { d: d, "class": "limb", "stroke-width": w.toFixed(1) }, g);
+      el("path", { d: d, "class": "snowline", "stroke-width": (w * 0.42).toFixed(1), transform: "translate(" + (-w * 0.22).toFixed(1) + " 0)" }, g);
+      if (depth < MAXD) {
+        var spread = depth === 0 ? [-30, 3, 28] : [-20 - rnd() * 14, 18 + rnd() * 14];
+        spread.forEach(function (a) { branch(g, len * (0.72 + rnd() * 0.1), w * 0.66, depth + 1, a + (rnd() - 0.5) * 8, len); });
+        if (depth === MAXD - 1) addLeaves(g, len, 1);
+      } else {
+        addLeaves(g, len, 3);
+        var b = el("circle", { cx: 0, cy: (-len).toFixed(1), r: 3.8, "class": "blossom" }, g);
+        blossoms.push({ e: b, r: rnd(), last: -1 });
+      }
+      return node;
+    }
+    branch($("tree"), 92, 17, 0, 0, 0);
+
+    /* ---------- 3. Sizes ---------- */
+    var cw = 0, ch = 0, dpr = 1, k = 1;
+    function resize() {
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      cw = scene.clientWidth; ch = scene.clientHeight;
+      canvas.width = Math.max(1, Math.round(cw * dpr));
+      canvas.height = Math.max(1, Math.round(ch * dpr));
+      k = cw / 600;
+    }
+    new ResizeObserver(resize).observe(scene);
+
+    /* ---------- 4. Season state ---------- */
+    var mode = "light", t = 0.28, applied = -1, lastMonth = -1, gust = 0;
+    function readMode() {
+      mode = getComputedStyle(document.documentElement).getPropertyValue("--mode").trim() === "dark" ? "dark" : "light";
+      applied = -1; // force a repaint
+    }
+    function winterness(x) { return clamp(1 - yearDist(x, 0.04) / 0.13); }
+
+    // particles that should start where a real leaf or petal let go
+    var parts = [];
+    function spawnFromElement(node, type, colour) {
+      if (parts.length > 420) return;
+      var r = node.getBoundingClientRect(), base = canvas.getBoundingClientRect();
+      if (!r.width && !r.height) return;
+      parts.push(makePart(type, r.left + r.width / 2 - base.left, r.top + r.height / 2 - base.top, colour));
+    }
+
+    function applySeason(prevT) {
+      // 1) reads first: leaves and petals that just let go become falling particles
+      var forward = prevT >= 0 && ((t > prevT && t - prevT < 0.3) || (t < prevT && prevT - t > 0.7));
+      if (forward && !reduce.matches) {
+        var hi = t < prevT ? 1.001 : t, spawned = 0;
+        leaves.forEach(function (L) {
+          var drop = 0.74 + L.r * 0.16 + 0.008;
+          if (spawned < 40 && prevT < drop && drop <= hi) { spawned++; spawnFromElement(L.e, 2, mixArr(L.au, L.au, 0)); }
+        });
+        blossoms.forEach(function (B) {
+          var drop = 0.31 + B.r * 0.07 + 0.015;
+          if (spawned < 60 && prevT < drop && drop <= hi) { spawned++; spawnFromElement(B.e, 1, "#ffb3cf"); }
+        });
+      }
+
+      // 2) writes: sky, sun, hills, ground, leaves
+      var sky = SKY[mode];
+      var top = keyAt(sky, t, 1), bot = keyAt(sky, t, 2);
+      $("skyTop").setAttribute("stop-color", top);
+      $("skyBot").setAttribute("stop-color", bot);
+      var elev = 0.5 - 0.5 * Math.cos(2 * Math.PI * (t - 0.04));
+      var sx = 110 + 40 * Math.sin(2 * Math.PI * t), sy = 178 - 108 * elev;
+      var dark = mode === "dark";
+      $("sun").setAttribute("cx", sx.toFixed(1));
+      $("sun").setAttribute("cy", sy.toFixed(1));
+      $("sun").setAttribute("r", dark ? 16 : 20 + elev * 6);
+      $("sun").setAttribute("fill", dark ? "#f3efdc" : mix("#ffd27a", "#fff1a0", elev));
+      $("glow").setAttribute("cx", sx.toFixed(1));
+      $("glow").setAttribute("cy", sy.toFixed(1));
+      $("glowIn").setAttribute("stop-color", dark ? "#dfe6ff" : "#fff3b0");
+      var groundC = keyAt(GROUND, t, 1);
+      if (dark) groundC = mixArr(hex(rgbToHex(groundC)), [10, 14, 28], 0.45);
+      $("ground").setAttribute("fill", groundC);
+      $("hillMid").setAttribute("fill", mixArr(hex(rgbToHex(groundC)), hex(rgbToHex(bot)), 0.3));
+      $("hillFar").setAttribute("fill", mixArr(hex(rgbToHex(groundC)), hex(rgbToHex(bot)), 0.58));
+      var W = winterness(t);
+      svg.style.setProperty("--snow", W.toFixed(3));
+      svg.style.setProperty("--stars", dark ? (0.35 + 0.5 * W).toFixed(2) : "0");
+      svg.style.setProperty("--carpet", (smooth(0.8, 0.88, t) * (1 - W)).toFixed(3));
+
+      leaves.forEach(function (L) {
+        var a = 0.19 + L.r * 0.12, f = 0.74 + L.r * 0.16;
+        var sc = smooth(a, a + 0.05, t) * (1 - smooth(f, f + 0.012, t));
+        var col;
+        if (t < 0.3) col = mixArr(FRESH, FRESH, 0);
+        else if (t < 0.45) col = mixArr(FRESH, SUMMER, (t - 0.3) / 0.15);
+        else if (t < 0.62 + L.r * 0.04) col = mixArr(SUMMER, SUMMER, 0);
+        else col = mixArr(SUMMER, L.au, clamp((t - 0.62 - L.r * 0.04) / 0.12));
+        var tr = L.base + " scale(" + sc.toFixed(3) + ")";
+        if (tr !== L.last) { L.e.setAttribute("transform", tr); L.last = tr; }
+        L.e.setAttribute("fill", col);
+      });
+      blossoms.forEach(function (B) {
+        var b0 = 0.16 + B.r * 0.06, b1 = 0.31 + B.r * 0.07;
+        var sc = smooth(b0, b0 + 0.03, t) * (1 - smooth(b1, b1 + 0.03, t));
+        if (Math.abs(sc - B.last) > 0.001) { B.e.setAttribute("transform", "translate(0 0) scale(" + sc.toFixed(3) + ")"); B.last = sc; }
+      });
+
+      // 3) text and the slider
+      var m = Math.min(11, Math.floor(t * 12));
+      if (m !== lastMonth) {
+        lastMonth = m;
+        $("month").textContent = MONTHS[m];
+        $("season").textContent = SEASON_OF[m];
+        $("desc").textContent = NOTES[m];
+        slider.setAttribute("aria-valuetext", MONTHS[m] + ", " + SEASON_OF[m].toLowerCase());
+        document.querySelectorAll(".chip").forEach(function (b) { b.classList.toggle("now", b.textContent === SEASON_OF[m]); });
+      }
+    }
+    function rgbToHex(rgb) {
+      var m = rgb.match(/\d+/g);
+      return "#" + m.slice(0, 3).map(function (v) { return (+v).toString(16).padStart(2, "0"); }).join("");
+    }
+
+    /* Blossom circles sit at the branch tip; scale them about that tip */
+    blossoms.forEach(function (B) {
+      var cy = +B.e.getAttribute("cy");
+      B.e.setAttribute("cy", "0");
+      var holder = el("g", { transform: "translate(0 " + cy + ")" }, B.e.parentNode);
+      holder.appendChild(B.e);
+    });
+
+    /* ---------- 5. Particles: snow, petals, leaves, fireflies ---------- */
+    function makePart(type, px, py, colour) {
+      return {
+        type: type, x: px, y: py, vx: 0, vy: type === 3 ? 0 : 10, colour: colour,
+        rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 4, spin: Math.random() * 6.28, vs: 2 + Math.random() * 4,
+        ph: Math.random() * 6.28, amp: type === 0 ? 10 : 18, life: type === 3 ? 4 + Math.random() * 4 : 30, max: 0,
+        r: type === 0 ? 1 + Math.random() * 1.6 : 1, landed: false
+      };
+    }
+    var spawnAcc = [0, 0, 0, 0];
+    function spawnAmbient(dt) {
+      if (reduce.matches) return;
+      var W = winterness(t);
+      var blossomy = smooth(0.17, 0.21, t) * (1 - smooth(0.33, 0.4, t));
+      var summery = clamp(1 - Math.abs(t - 0.55) / 0.12);
+      var autumny = clamp(1 - Math.abs(t - 0.83) / 0.08);
+      var rates = [W * 60, blossomy * 9, autumny * 5 * (1 + gust), summery * 10];
+      for (var i = 0; i < 4; i++) {
+        spawnAcc[i] += rates[i] * dt;
+        while (spawnAcc[i] >= 1 && parts.length < 420) {
+          spawnAcc[i] -= 1;
+          var p;
+          if (i === 0) p = makePart(0, Math.random() * (cw + 60) - 60, -6);
+          else if (i === 3) { p = makePart(3, Math.random() * cw, (230 + Math.random() * 150) * k); p.max = p.life; }
+          else p = makePart(i, (170 + Math.random() * 260) * k, (90 + Math.random() * 150) * k, i === 1 ? "#ffb3cf" : mixArr(AUTUMN[(Math.random() * 4) | 0], [0, 0, 0], 0));
+          parts.push(p);
+        }
+        if (spawnAcc[i] > 1) spawnAcc[i] = 1;
+      }
+    }
+
+    var glowSprite = null;
+    function makeSprite() {
+      glowSprite = document.createElement("canvas");
+      glowSprite.width = glowSprite.height = 32;
+      var g = glowSprite.getContext("2d"), r = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+      r.addColorStop(0, "rgba(255,250,200,1)");
+      r.addColorStop(0.3, "rgba(255,226,110,0.7)");
+      r.addColorStop(1, "rgba(255,226,110,0)");
+      g.fillStyle = r;
+      g.fillRect(0, 0, 32, 32);
+    }
+
+    function stepParts(dt, time) {
+      var wind = 0.8 + gust;
+      for (var i = parts.length - 1; i >= 0; i--) {
+        var p = parts[i];
+        p.life -= dt;
+        if (p.type === 3) {
+          // fireflies and pollen wander, fading in and out
+          p.vx += (Math.random() - 0.5) * 70 * dt + wind * 2 * dt;
+          p.vy += (Math.random() - 0.5) * 70 * dt - 3 * dt;
+          p.vx *= 0.98; p.vy *= 0.98;
+        } else if (!p.landed) {
+          var term = (p.type === 0 ? 34 : p.type === 1 ? 22 : 46) * k;
+          p.vx += (wind * 16 * k - p.vx) * dt * 0.7;
+          p.vy += (term - p.vy) * dt * 1.4;
+          p.rot += p.vr * dt;
+          p.spin += p.vs * dt;
+          p.x += Math.sin(time * 1.8 + p.ph) * p.amp * k * dt;
+          var gy = groundAt(p.x / k) * k;
+          if (p.y >= gy - 1) { p.landed = true; p.vx = p.vy = 0; p.life = Math.min(p.life, p.type === 0 ? 0.6 : 2.5); }
+        }
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if (p.life <= 0 || p.x > cw + 30 || p.x < -80 || p.y > ch + 10) parts.splice(i, 1);
+      }
+    }
+
+    function drawParts() {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cw, ch);
+      var dark = mode === "dark";
+      for (var i = 0; i < parts.length; i++) {
+        var p = parts[i], fade = p.landed ? Math.min(1, p.life / 2.5) : 1;
+        if (p.type === 0) {
+          ctx.globalAlpha = 0.9 * fade;
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.r * k * 1.4, 0, Math.PI * 2); ctx.fill();
+        } else if (p.type === 3) {
+          var a = Math.sin(Math.PI * clamp(1 - p.life / p.max));
+          if (dark) {
+            ctx.globalAlpha = a;
+            var sz = 14 * k;
+            ctx.drawImage(glowSprite, p.x - sz / 2, p.y - sz / 2, sz, sz);
+          } else {
+            ctx.globalAlpha = 0.8 * a;
+            ctx.fillStyle = "#fff6c8";
+            ctx.beginPath(); ctx.arc(p.x, p.y, 1.8 * k, 0, Math.PI * 2); ctx.fill();
+          }
+        } else {
+          // petals and leaves tumble: the squash fakes a 3D flip
+          ctx.globalAlpha = fade;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.scale(1, p.landed ? 0.5 : 0.2 + Math.abs(Math.cos(p.spin)) * 0.8);
+          ctx.fillStyle = p.colour;
+          ctx.beginPath();
+          if (p.type === 1) ctx.ellipse(0, 0, 3.6 * k, 2.4 * k, 0, 0, Math.PI * 2);
+          else ctx.ellipse(0, 0, 6.5 * k, 3.4 * k, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    /* ---------- 6. Wind sway on every branch ---------- */
+    function sway(time) {
+      var calm = reduce.matches, wind = 0.8 + gust;
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i], a = n.angle;
+        if (!calm) {
+          a += wind * (0.25 + n.depth * 0.35) * (Math.sin(time * 1.7 + n.ph) * 0.7 + Math.sin(time * 0.63 + n.depth * 0.9) * 0.5);
+          a += gust * n.depth * 0.45;
+        }
+        var tr = n.depth === 0 ? "translate(300 352) rotate(" + a.toFixed(2) + ")" : "translate(0 " + (-n.parentLen).toFixed(1) + ") rotate(" + a.toFixed(2) + ")";
+        n.g.setAttribute("transform", tr);
+      }
+    }
+
+    /* ---------- 7. Controls ---------- */
+    var playing = false, tween = null, lastInput = 0;
+    function setPlaying(on) {
+      playing = on;
+      playBtn.setAttribute("aria-pressed", String(on));
+      playBtn.textContent = on ? "Pause" : "Play the year";
+    }
+    slider.addEventListener("input", function () {
+      var nt = +slider.value / 1000, now = performance.now();
+      var dv = Math.abs(nt - t), dtime = Math.max(16, now - lastInput);
+      lastInput = now;
+      if (!reduce.matches) gust = Math.min(6, gust + dv * 30 * Math.min(1, 60 / dtime) * 2);
+      tween = null;
+      setPlaying(false);
+      t = nt;
+    });
+    // arrow keys step a whole month (the slider alone would move a few hours)
+    slider.addEventListener("keydown", function (e) {
+      var dir = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
+      if (!dir) return;
+      e.preventDefault();
+      setPlaying(false);
+      var m = Math.min(11, Math.floor(t * 12)), target = (m + dir + 0.5) / 12;
+      if (reduce.matches) { t = wrapYear(target); tween = null; slider.value = String(Math.round(t * 1000)); return; }
+      tween = { from: t, to: target, start: performance.now(), dur: 450 };
+    });
+    document.querySelectorAll(".chip").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var to = +b.getAttribute("data-t");
+        setPlaying(false);
+        live.textContent = "Moving to " + b.textContent.toLowerCase() + ".";
+        if (reduce.matches) { t = to; tween = null; return; }
+        var target = to <= t ? to + 1 : to; // always travel forward through the year
+        tween = { from: t, to: target, start: performance.now(), dur: 500 + (target - t) * 3200 };
+      });
+    });
+    playBtn.addEventListener("click", function () {
+      tween = null;
+      setPlaying(!playing);
+      live.textContent = playing ? "Playing through the year." : "Paused in " + MONTHS[lastMonth] + ".";
+    });
+
+    /* ---------- 8. Loop ---------- */
+    var prev = performance.now();
+    function loop(now) {
+      var dt = Math.min(0.05, (now - prev) / 1000);
+      prev = now;
+      if (tween) {
+        var q = clamp((now - tween.start) / tween.dur), e = q < 0.5 ? 2 * q * q : 1 - Math.pow(-2 * q + 2, 2) / 2;
+        t = wrapYear(tween.from + (tween.to - tween.from) * e);
+        if (q >= 1) tween = null;
+      } else if (playing) {
+        t = (t + dt / (reduce.matches ? 30 : 18)) % 1;
+      }
+      if (tween || playing) slider.value = String(Math.round(t * 1000));
+      gust *= Math.exp(-1.2 * dt);
+      if (t !== applied) { applySeason(applied); applied = t; }
+      sway(now / 1000);
+      spawnAmbient(dt);
+      stepParts(dt, now / 1000);
+      drawParts();
+      requestAnimationFrame(loop);
+    }
+
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readMode);
+    makeSprite();
+    readMode();
+    resize();
+    slider.value = String(Math.round(t * 1000));
+    sway(performance.now() / 1000); // place the branches before the first paint
+    requestAnimationFrame(loop);
+  })();
+</script>
+</body>
+</html>

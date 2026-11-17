@@ -1,0 +1,622 @@
+<!doctype html>
+<!-- Chill and Craft · Keysmith · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keysmith · key cutting code field</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours (blueprint) ---------- */
+  :root {
+    color-scheme: light;
+    --stage: #e8f1fa;
+    --grid: rgba(29, 78, 137, .08);
+    --text: #10243f;
+    --muted: #4b6584;
+    --line: #1d4e89;
+    --fill: rgba(29, 78, 137, .05);
+    --plug: rgba(29, 78, 137, .11);
+    --keyway: rgba(29, 78, 137, .17);
+    --brass: #c99a2e;
+    --brass-2: #9c7420;
+    --steel: #8c99a8;
+    --box: #ffffff;
+    --good: #15803d;
+    --bad: #c62828;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --stage: #0a1a33;
+    --grid: rgba(124, 212, 255, .07);
+    --text: #e6f3ff;
+    --muted: #93b4d6;
+    --line: #7cd4ff;
+    --fill: rgba(124, 212, 255, .05);
+    --plug: rgba(124, 212, 255, .1);
+    --keyway: rgba(0, 0, 0, .35);
+    --brass: #e3b04b;
+    --brass-2: #b8862b;
+    --steel: #c3ccd8;
+    --box: #0f2546;
+    --good: #4ade80;
+    --bad: #ff6b6b;
+  }
+
+  /* ---------- Page ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 22px 16px;
+    color: var(--text);
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 22px 22px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 22px 22px,
+      var(--stage);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .sheet {
+    width: min(100%, 560px);
+    padding: 20px 18px 22px;
+    border: 1.5px solid var(--line);
+    border-radius: 6px;
+    background: var(--fill);
+    text-align: center;
+  }
+  .tag {
+    display: inline-block;
+    margin: 0 0 6px;
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    font: 700 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--line);
+  }
+  h1 { margin: 0 0 4px; font-size: clamp(20px, 5.4vw, 25px); }
+  .sub { margin: 0 auto; max-width: 42ch; font-size: 14px; line-height: 1.5; color: var(--muted); }
+
+  /* ---------- The drawing: key on the left, lock on the right ---------- */
+  .scene { display: block; width: 100%; height: auto; margin: 14px 0 4px; overflow: visible; }
+  .housing { fill: var(--fill); stroke: var(--line); stroke-width: 2; transition: stroke .3s; }
+  .plug { fill: var(--plug); }
+  .keyway { fill: var(--keyway); }
+  .chamber { fill: none; stroke: var(--line); stroke-width: 1.2; opacity: .6; }
+  .shear { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 6 5; transition: stroke .3s, stroke-width .3s; }
+  .spring { fill: none; stroke: var(--steel); stroke-width: 1.6; transform-box: view-box; transform-origin: 0 0; }
+  .pins, .spring { transition: transform .45s cubic-bezier(.3, 1.25, .5, 1); }
+  .driver { fill: var(--steel); }
+  .keypin { fill: var(--brass); }
+  .stack.off .driver, .stack.off .keypin { fill: var(--bad); }
+  .stack.ok .keypin { fill: var(--good); }
+
+  .key { transform: translateX(-215px); transition: transform .7s cubic-bezier(.5, 0, .3, 1); }
+  .scene.inserted .key { transform: none; }
+  .blade { fill: var(--brass); stroke: var(--brass-2); stroke-width: 1.5; stroke-linejoin: round; }
+  .groove { stroke: var(--brass-2); stroke-width: 2; opacity: .6; }
+  .bow { transform-box: fill-box; transform-origin: center; transition: transform .5s ease; }
+  .bow-ring { fill: var(--brass); stroke: var(--brass-2); stroke-width: 2; }
+  .bow-hole { fill: var(--stage); stroke: var(--brass-2); stroke-width: 2; }
+  .scene.turned .bow { transform: scaleX(.22); }                 /* the key turns */
+  .scene.turned .shear { stroke: var(--good); stroke-width: 3; stroke-dasharray: none; }
+  .scene.turned .housing { stroke: var(--good); }
+  .blade { transform-box: fill-box; }
+  .blade.buzz { animation: buzz .28s linear; }
+  @keyframes buzz { 25% { transform: translateY(-1.5px); } 50% { transform: translateY(1.5px); } 75% { transform: translateY(-1px); } }
+  /* Success: pins glow one by one and the shear line pulses */
+  .scene.turned .keypin, .scene.turned .driver { animation: pinGlow .7s ease both; animation-delay: calc(var(--k) * .09s); }
+  @keyframes pinGlow { 40% { filter: drop-shadow(0 0 5px var(--good)) brightness(1.3); } }
+  .scene.turned .shear { animation: shearPulse 1s ease .3s; }
+  @keyframes shearPulse { 40% { stroke-width: 6; } }
+  .scene.jiggle .key { animation: jiggle .4s ease; }
+  @keyframes jiggle {
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(3px); }
+  }
+
+  /* Cutting wheel and sparks */
+  .cutter { transition: transform .3s ease, opacity .3s; }
+  .scene.busy .cutter { opacity: 0; }
+  .saw { transform-box: fill-box; transform-origin: center; animation: spin 1.2s linear infinite; }
+  .saw circle { fill: none; stroke: var(--line); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .burst { opacity: 0; transform-box: fill-box; transform-origin: center; }
+  .burst line { stroke: #ffb347; stroke-width: 2; stroke-linecap: round; }
+  .burst.fire { animation: sparkle .45s ease-out; }
+  @keyframes sparkle {
+    0% { opacity: 1; transform: scale(.3); }
+    100% { opacity: 0; transform: scale(1.5); }
+  }
+
+  .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; margin: 0 0 14px; font-size: 12px; color: var(--muted); }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; background: var(--c); }
+  .legend .dash::before { height: 0; border-top: 2px dashed var(--line); background: none; vertical-align: 3px; }
+
+  /* ---------- Code inputs ---------- */
+  .cuts { display: flex; justify-content: center; gap: clamp(6px, 2vw, 10px); }
+  .cuts input {
+    width: clamp(40px, 11vw, 50px);
+    height: 54px;
+    padding: 0;
+    border: 1.5px solid var(--line);
+    border-radius: 4px;
+    background: var(--box);
+    color: var(--text);
+    -webkit-text-fill-color: var(--text);
+    caret-color: var(--brass);
+    text-align: center;
+    font: 700 24px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .cuts input:focus { outline: 3px solid var(--brass); outline-offset: 2px; }
+  .cuts input.cut { border-color: var(--brass); box-shadow: inset 0 -4px 0 var(--brass); }
+  .cuts input { transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), border-color .2s; }
+  .cuts input:hover:not(:focus):not(:disabled) { transform: translateY(-2px); border-color: var(--brass); }
+  /* Each digit is stamped into its box */
+  .cuts input.pop { animation: stampIn .5s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes stampIn {
+    0% { transform: scale(1.4) rotate(-8deg); }
+    55% { transform: scale(.93) rotate(1deg); }
+    100% { transform: none; }
+  }
+
+  /* Rubber stamp that slams onto the drawing on success */
+  .sheet { position: relative; }
+  .approved {
+    position: absolute;
+    left: 50%;
+    top: 34%;
+    margin: 0;
+    padding: 6px 14px;
+    border: 4px double var(--good);
+    border-radius: 6px;
+    color: var(--good);
+    font: 800 clamp(18px, 5vw, 26px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    background: color-mix(in srgb, var(--stage) 70%, transparent);
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-12deg) scale(2.6);
+    pointer-events: none;
+  }
+  .sheet.win .approved { opacity: 1; transform: translate(-50%, -50%) rotate(-12deg) scale(1); transition: transform .45s cubic-bezier(.34, 1.56, .64, 1), opacity .15s; }
+  .sheet.win { animation: thud .5s ease .12s; }
+  @keyframes thud { 30% { transform: translateY(3px) scale(.995); } }
+  .cuts input:disabled { opacity: .75; }
+
+  /* ---------- Status, hint and buttons ---------- */
+  .status { min-height: 22px; margin: 14px 0 4px; font-size: 15px; font-weight: 600; }
+  .status[data-tone="good"] { color: var(--good); }
+  .status[data-tone="bad"] { color: var(--bad); }
+  .hint { margin: 6px 0 14px; font-size: 14px; color: var(--muted); }
+  .hint b { font: 700 17px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .25em; color: var(--text); margin-left: 4px; }
+  .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  button {
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1.5px solid var(--line);
+    background: transparent;
+    color: var(--line);
+  }
+  .solid { background: var(--brass); border-color: var(--brass-2); color: #231904; }
+  button:focus-visible { outline: 3px solid var(--brass); outline-offset: 3px; }
+  [hidden] { display: none !important; }
+
+  /* ---------- Micro-interactions ---------- */
+  button { transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), background .2s, box-shadow .2s; }
+  button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 3px 3px 0 var(--line); }
+  button:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; transition-duration: .08s; }
+  .status.pop { animation: statusIn .5s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes statusIn { from { opacity: 0; transform: translateY(8px) scale(.94); } }
+
+  /* ---------- Particles: sparks ---------- */
+  .fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+  .fx i { position: absolute; left: 0; top: 0; display: block; width: 3px; height: 12px; border-radius: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+    .saw { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="sheet" id="sheet">
+    <p class="approved" aria-hidden="true">Unlocked</p>
+    <p class="tag">Lock workshop</p>
+    <h1 id="title">Cut your key</h1>
+    <p class="sub">Each digit of the 6-digit code cuts one notch. Get all six right and every pin lines up so the key can turn.</p>
+
+    <svg class="scene" id="scene" viewBox="0 0 520 230" aria-hidden="true">
+      <!-- Lock body (cross-section) -->
+      <rect class="housing" x="290" y="14" width="216" height="200" rx="14"/>
+      <rect class="plug" x="291" y="120" width="214" height="76"/>
+      <rect class="keyway" x="291" y="134" width="212" height="48"/>
+      <g id="chambers"></g>
+
+      <!-- The key: bow, neck and blade -->
+      <g class="key" id="key">
+        <g class="bow">
+          <circle class="bow-ring" cx="254" cy="158" r="28"/>
+          <circle class="bow-hole" cx="246" cy="158" r="8"/>
+        </g>
+        <rect x="280" y="149" width="10" height="20" fill="var(--brass)"/>
+        <path class="blade" id="blade" d=""/>
+        <path class="groove" d="M296 163H478"/>
+      </g>
+
+      <!-- Pin stacks (built by the script) and the shear line -->
+      <g id="stacks"></g>
+      <line class="shear" x1="291" y1="120" x2="505" y2="120"/>
+
+      <!-- Cutting wheel that follows the box you are typing in -->
+      <g class="cutter" id="cutter">
+        <g class="saw">
+          <circle r="12" stroke-width="4" stroke-dasharray="3 3"/>
+          <circle r="8" stroke-width="2"/>
+          <circle r="2.5" stroke-width="2"/>
+        </g>
+      </g>
+      <g id="sparkPos">
+        <g class="burst" id="burst">
+          <line x1="0" y1="0" x2="-12" y2="-10"/>
+          <line x1="0" y1="0" x2="-4" y2="-16"/>
+          <line x1="0" y1="0" x2="6" y2="-15"/>
+          <line x1="0" y1="0" x2="13" y2="-8"/>
+          <line x1="0" y1="0" x2="-15" y2="-2"/>
+        </g>
+      </g>
+    </svg>
+
+    <p class="legend" aria-hidden="true">
+      <span style="--c: var(--brass)">Key pins</span>
+      <span style="--c: var(--steel)">Driver pins</span>
+      <span class="dash">Shear line</span>
+    </p>
+
+    <!-- Six real inputs, one per notch -->
+    <div class="cuts" id="cuts" role="group" aria-labelledby="title" aria-describedby="hint">
+      <input inputmode="numeric" autocomplete="one-time-code" aria-label="Cut 1 of 6">
+      <input inputmode="numeric" autocomplete="off" aria-label="Cut 2 of 6">
+      <input inputmode="numeric" autocomplete="off" aria-label="Cut 3 of 6">
+      <input inputmode="numeric" autocomplete="off" aria-label="Cut 4 of 6">
+      <input inputmode="numeric" autocomplete="off" aria-label="Cut 5 of 6">
+      <input inputmode="numeric" autocomplete="off" aria-label="Cut 6 of 6">
+    </div>
+
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+    <p class="hint" id="hint">Demo code<b id="demo"></b></p>
+    <div class="actions">
+      <button type="button" id="resend">New code</button>
+      <button type="button" class="solid" id="again" hidden>Cut a new key</button>
+    </div>
+  </main>
+  <div class="fx" id="fx" aria-hidden="true"></div>
+
+<script>
+(function () {
+  "use strict";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const wait = (ms) => new Promise((done) => setTimeout(done, reduce ? Math.min(ms, 120) : ms));
+  const NS = "http://www.w3.org/2000/svg";
+
+  // ---- Drawing numbers (SVG units) ----
+  const X = [310, 342, 374, 406, 438, 470];   // centre of each pin
+  const OUT = -215;                           // how far left the key waits
+  const TOP = 140;                            // top edge of an uncut blade
+  const SHEAR = 120;                          // the shear line
+  const REST = 152;                           // where pins hang with no key
+  const DRIVER = 26;                          // driver pin length
+  const SPRING_TOP = 26;                      // spring starts here
+  const SPRING_LEN = 40;                      // spring drawing height
+  const depth = (d) => 4 + Number(d) * 2.4;   // notch depth for a digit
+
+  const scene = document.getElementById("scene");
+  const blade = document.getElementById("blade");
+  const stacksG = document.getElementById("stacks");
+  const chambersG = document.getElementById("chambers");
+  const cutter = document.getElementById("cutter");
+  const sparkPos = document.getElementById("sparkPos");
+  const burst = document.getElementById("burst");
+  const boxes = Array.from(document.querySelectorAll("#cuts input"));
+  const statusEl = document.getElementById("status");
+  const demoEl = document.getElementById("demo");
+  const resendBtn = document.getElementById("resend");
+  const againBtn = document.getElementById("again");
+
+  const LEN = boxes.length;
+  const vals = Array(LEN).fill("");
+  let demo = "";
+  let busy = false;
+  let stacks = [];
+
+  function el(tag, attrs) {
+    const node = document.createElementNS(NS, tag);
+    for (const k in attrs) node.setAttribute(k, attrs[k]);
+    return node;
+  }
+
+  // ---- Build the lock to match the code ----
+  X.forEach((x) => chambersG.append(el("rect", { class: "chamber", x: x - 8, y: 22, width: 16, height: 118, rx: 3 })));
+
+  function zigzag(x) {
+    let d = "M" + x + " 0";
+    for (let i = 1; i < 8; i++) d += " L" + (x + (i % 2 ? 5 : -5)) + " " + i * 5;
+    return d + " L" + x + " 40";
+  }
+
+  function buildStacks() {
+    stacksG.textContent = "";
+    stacks = X.map((x, k) => {
+      // Key pin length is chosen so the right notch puts its top on the shear line
+      const L = TOP + depth(demo[k]) - SHEAR;
+      const g = el("g", { class: "stack", style: "--k:" + k });
+      const spring = el("path", { class: "spring", d: zigzag(x), "vector-effect": "non-scaling-stroke" });
+      const pins = el("g", { class: "pins" });
+      pins.append(el("rect", { class: "driver", x: x - 6, y: -(L + DRIVER), width: 12, height: DRIVER, rx: 2 }));
+      pins.append(el("path", { class: "keypin", d: "M" + (x - 6) + " " + -L + " h12 v" + (L - 5) + " l-6 5 l-6 -5 z" }));
+      g.append(spring, pins);
+      stacksG.append(g);
+      return { g, spring, pins, L };
+    });
+    setPins(Array(LEN).fill(REST));
+  }
+
+  function setPins(bottoms) {
+    stacks.forEach((s, k) => {
+      const b = bottoms[k];
+      const driverTop = b - s.L - DRIVER;
+      s.pins.style.transform = "translateY(" + b + "px)";
+      s.spring.style.transform = "translateY(" + SPRING_TOP + "px) scaleY(" + (driverTop - SPRING_TOP) / SPRING_LEN + ")";
+    });
+  }
+
+  function bladePath() {
+    let d = "M286 140";
+    X.forEach((x, k) => {
+      if (vals[k] === "") return;
+      const y = TOP + depth(vals[k]);
+      d += " L" + (x - 11) + " 140 L" + (x - 3) + " " + y + " L" + (x + 3) + " " + y + " L" + (x + 11) + " 140";
+    });
+    return d + " L486 140 L500 153 L500 165 L486 178 L286 178 Z";
+  }
+
+  function moveCutter(i) {
+    cutter.style.transform = "translate(" + (X[i] + OUT) + "px, 117px)";
+  }
+  function spark(i) {
+    sparkPos.style.transform = "translate(" + (X[i] + OUT) + "px, 140px)";
+    burst.classList.remove("fire");
+    void burst.getBoundingClientRect();     // restart the animation
+    burst.classList.add("fire");
+  }
+
+  // ---- Helpers ----
+  function newCode() {
+    demo = "";
+    for (let i = 0; i < LEN; i++) demo += Math.floor(Math.random() * 10);
+    demoEl.textContent = demo;
+    buildStacks();
+  }
+  function say(msg, tone) {
+    statusEl.textContent = msg;
+    statusEl.dataset.tone = tone || "";
+    restart(statusEl, "pop");
+  }
+  function restart(node, cls) {
+    node.classList.remove(cls);
+    void node.getBoundingClientRect();   // reflow so the animation plays again
+    node.classList.add(cls);
+  }
+  function setDigit(i, d) {
+    vals[i] = d;
+    boxes[i].value = d;
+    boxes[i].classList.toggle("cut", d !== "");
+    blade.setAttribute("d", bladePath());
+    if (d) {
+      spark(i);
+      restart(boxes[i], "pop");          // digit is stamped in
+      restart(blade, "buzz");            // the blade buzzes under the cutter
+      boxes.forEach((b) => b.removeAttribute("aria-invalid"));
+    }
+  }
+
+  // ---- Celebration: a shower of sparks from the lock ----
+  const fx = document.getElementById("fx");
+  const sheet = document.getElementById("sheet");
+  const SPARKS = ["#ffb347", "#ffe08a", "#7cd4ff", "#e3b04b"];
+  function shower() {
+    if (reduce) return;
+    const r = scene.getBoundingClientRect();
+    const x0 = r.left + r.width * 0.77;
+    const y0 = r.top + r.height * 0.52;
+    for (let n = 0; n < 40; n++) {
+      const p = document.createElement("i");
+      p.style.background = SPARKS[n % SPARKS.length];
+      fx.append(p);
+      const angle = Math.random() * Math.PI * 2;
+      const d = 60 + Math.random() * 170;
+      const dx = Math.cos(angle) * d;
+      const dy = Math.sin(angle) * d;
+      const deg = (angle * 180) / Math.PI + 90;     // streak points the way it flies
+      p.animate([
+        { transform: "translate(" + x0 + "px," + y0 + "px) rotate(" + deg + "deg) scaleY(.3)", opacity: 1 },
+        { transform: "translate(" + (x0 + dx) + "px," + (y0 + dy) + "px) rotate(" + deg + "deg) scaleY(1)", opacity: 1, offset: 0.6 },
+        { transform: "translate(" + (x0 + dx * 1.1) + "px," + (y0 + dy + 60) + "px) rotate(" + deg + "deg) scaleY(.2)", opacity: 0 }
+      ], { duration: 900 + Math.random() * 600, easing: "cubic-bezier(.15, .7, .3, 1)" }).onfinish = () => p.remove();
+    }
+  }
+  function clearAll() {
+    for (let i = 0; i < LEN; i++) setDigit(i, "");
+  }
+  function focusBox(i) {
+    const box = boxes[Math.max(0, Math.min(LEN - 1, i))];
+    box.focus();
+    box.select();
+  }
+  function fillFrom(start, digits) {
+    let i = start;
+    for (const d of digits) {
+      if (i >= LEN) break;
+      setDigit(i, d);
+      i++;
+    }
+    focusBox(i);
+    checkFull();
+  }
+  function checkFull() {
+    if (!busy && vals.every((v) => v !== "")) verify();
+  }
+  function setLocked(locked) {
+    boxes.forEach((b) => (b.disabled = locked));
+  }
+
+  // ---- Typing, paste, backspace and arrow keys ----
+  boxes.forEach((box, i) => {
+    box.addEventListener("focus", () => {
+      moveCutter(i);
+      requestAnimationFrame(() => box.select());
+    });
+
+    box.addEventListener("input", (e) => {
+      if (busy) { box.value = vals[i]; return; }
+      const all = box.value.replace(/\D/g, "");
+      if (e.inputType === "insertText") {
+        const typed = (e.data || "").replace(/\D/g, "");
+        if (!typed) { box.value = vals[i]; return; }
+        setDigit(i, typed.slice(-1));
+        focusBox(i + 1);
+        checkFull();
+      } else if (all.length > 1) {
+        fillFrom(all.length >= LEN ? 0 : i, all);
+      } else {
+        setDigit(i, all);
+        if (all) { focusBox(i + 1); checkFull(); }
+      }
+    });
+
+    box.addEventListener("keydown", (e) => {
+      if (busy) return;
+      switch (e.key) {
+        case "Backspace":
+          e.preventDefault();
+          if (vals[i]) setDigit(i, "");
+          else if (i > 0) { setDigit(i - 1, ""); focusBox(i - 1); }
+          break;
+        case "Delete": e.preventDefault(); setDigit(i, ""); break;
+        case "ArrowLeft": e.preventDefault(); focusBox(i - 1); break;
+        case "ArrowRight": e.preventDefault(); focusBox(i + 1); break;
+        case "Home": e.preventDefault(); focusBox(0); break;
+        case "End": e.preventDefault(); focusBox(LEN - 1); break;
+      }
+    });
+
+    box.addEventListener("paste", (e) => {
+      e.preventDefault();
+      if (busy) return;
+      const digits = (e.clipboardData ? e.clipboardData.getData("text") : "").replace(/\D/g, "");
+      if (digits) fillFrom(digits.length >= LEN ? 0 : i, digits);
+      else say("Only numbers can be pasted here.", "bad");
+    });
+  });
+
+  // ---- Insert the key and see if the pins line up ----
+  async function pullKeyOut() {
+    setPins(Array(LEN).fill(TOP));          // pins ride up on the blade
+    await wait(250);
+    scene.classList.remove("inserted");
+    await wait(750);
+    setPins(Array(LEN).fill(REST));         // and drop back down
+    stacks.forEach((s) => s.g.classList.remove("ok", "off"));
+  }
+
+  async function verify() {
+    busy = true;
+    setLocked(true);
+    scene.classList.add("busy");
+    say("Sliding the key into the lock…");
+    setPins(Array(LEN).fill(TOP));          // the key tip pushes the pins up
+    await wait(300);
+    scene.classList.add("inserted");
+    await wait(750);
+    setPins(vals.map((v) => TOP + depth(v)));  // each pin drops into its notch
+    await wait(550);
+
+    const right = vals.map((v, k) => v === demo[k]);
+    stacks.forEach((s, k) => s.g.classList.add(right[k] ? "ok" : "off"));
+
+    if (right.every(Boolean)) {
+      // Stage 1: key slides in. Stage 2: pins settle. Stage 3: pins glow and the key turns.
+      // Stage 4: sparks fly and an "Unlocked" stamp slams down.
+      scene.classList.add("turned");
+      say("All six pins sit on the shear line. The key turns: unlocked!", "good");
+      await wait(500);
+      shower();
+      sheet.classList.add("win");
+      againBtn.hidden = false;
+      againBtn.focus();
+    } else {
+      const off = right.filter((r) => !r).length;
+      boxes.forEach((b) => b.setAttribute("aria-invalid", "true"));
+      say(off + (off === 1 ? " pin is" : " pins are") + " out of line, so the key won't turn. Try again.", "bad");
+      scene.classList.add("jiggle");
+      await wait(450);
+      scene.classList.remove("jiggle");
+      await wait(600);
+      await pullKeyOut();
+      clearAll();
+      scene.classList.remove("busy");
+      busy = false;
+      setLocked(false);
+      focusBox(0);
+    }
+  }
+
+  // ---- Buttons ----
+  againBtn.addEventListener("click", async () => {
+    againBtn.hidden = true;
+    sheet.classList.remove("win");
+    scene.classList.remove("turned");
+    await wait(400);
+    await pullKeyOut();
+    clearAll();
+    newCode();
+    scene.classList.remove("busy");
+    busy = false;
+    setLocked(false);
+    say("Fresh blank key and a new lock. Enter the new demo code.");
+    focusBox(0);
+  });
+
+  resendBtn.addEventListener("click", () => {
+    if (busy) return;
+    clearAll();
+    newCode();
+    say("New code: the lock pins have changed to match it.");
+    focusBox(0);
+  });
+
+  newCode();
+  blade.setAttribute("d", bladePath());
+  moveCutter(0);
+})();
+</script>
+</body>
+</html>

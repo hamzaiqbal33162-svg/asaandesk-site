@@ -1,0 +1,398 @@
+<!doctype html>
+<!-- Chill and Craft · Peacock · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Peacock · Share button that fans out</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg: #f7f2e7;
+    --halo: #e3f1ea;
+    --ink: #10322f;
+    --muted: #5f7471;
+    --hub: #0c4a45;
+    --hub-ink: #f7f2e7;
+    --stem: rgba(12, 74, 69, 0.28);
+    --tip: #10322f;
+    --tip-ink: #f7f2e7;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #05211f;
+    --halo: #0b3b37;
+    --ink: #e8f4ef;
+    --muted: #8fb0aa;
+    --hub: #e9c46a;
+    --hub-ink: #05211f;
+    --stem: rgba(233, 196, 106, 0.35);
+    --tip: #e8f4ef;
+    --tip-ink: #05211f;
+    color-scheme: dark;
+  }
+  *,
+  *::before,
+  *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: radial-gradient(40% 45% at 50% 62%, var(--halo), transparent 75%), var(--bg);
+  }
+  .stage { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; overflow: hidden; }
+  .wrap { display: grid; justify-items: center; text-align: center; gap: 10px; }
+  .wrap h1 { margin: 0; font-size: 1.15rem; }
+  .wrap .sub { margin: 0 0 150px; color: var(--muted); font-size: 0.9rem; }
+
+  /* ---------- Hub: the Share button and its fan ---------- */
+  .hub { position: relative; }
+  .share {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 8.6rem;
+    justify-content: center;
+    padding: 14px 24px 14px 18px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--hub);
+    color: var(--hub-ink);
+    font: inherit;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    box-shadow: 0 14px 30px -14px rgba(0, 0, 0, 0.55);
+    transition: transform 0.45s cubic-bezier(0.3, 1.7, 0.5, 1);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .share:hover { transform: translateY(-2px); }
+  .share:active { transform: scale(0.93) translateY(2px); transition-duration: 0.1s; }
+  .share:focus-visible { outline: 3px solid var(--hub); outline-offset: 4px; }
+  .share .ico { position: relative; width: 20px; height: 20px; flex: none; }
+  .share .ico svg { position: absolute; inset: 0; width: 20px; height: 20px; transition: transform 0.4s cubic-bezier(0.3, 1.7, 0.5, 1), opacity 0.2s; }
+  .share:hover .i-share .arrow { animation: up 0.9s ease-in-out infinite; }
+  @keyframes up { 50% { transform: translateY(-2px); } }
+  .i-x, .i-ok { opacity: 0; transform: scale(0.3) rotate(-90deg); }
+  .hub.open .i-share, .share.done .i-share { opacity: 0; transform: scale(0.3) rotate(90deg); }
+  .hub.open .i-x { opacity: 1; transform: rotate(45deg); }
+  .share.done .i-ok { opacity: 1; transform: none; }
+  /* Spinner ring around the icon while an option runs */
+  .share .ico::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2.5px solid transparent; border-top-color: currentColor; border-right-color: currentColor; opacity: 0; pointer-events: none; }
+  .share.working .ico::after { opacity: 1; animation: spin 0.8s linear infinite; }
+  .share.working .i-share { opacity: 0.35; transform: scale(0.7); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Jewel plume that blooms behind the fan */
+  .plume {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 330px;
+    height: 330px;
+    margin: -165px 0 0 -165px;
+    border-radius: 50%;
+    background: conic-gradient(from 250deg, transparent 0 20deg, #13a37f 40deg, #0fa3b5 70deg, #3657e8 110deg, #c99a06 150deg, #cf2f74 190deg, transparent 220deg 360deg);
+    -webkit-mask: radial-gradient(circle, transparent 0 38px, #000 40px 60%, transparent 71%);
+    mask: radial-gradient(circle, transparent 0 38px, #000 40px 60%, transparent 71%);
+    opacity: 0;
+    transform: scale(0.2) rotate(-40deg);
+    pointer-events: none;
+    transition: transform 0.35s ease-in, opacity 0.25s;
+  }
+  .hub.open .plume { opacity: 0.2; transform: none; transition: transform 0.9s cubic-bezier(0.3, 1.4, 0.4, 1), opacity 0.4s; transition-timing-function: linear(0, 0.099, 0.295, 0.531, 0.76, 0.952, 1.092, 1.175, 1.207, 1.2, 1.166, 1.12, 1.07, 1.026, 0.992, 0.97, 0.959, 0.958, 0.964, 0.974, 0.984, 0.994, 1.001, 1.006, 1.008, 1.006, 1.002, 1), ease; }
+
+  /* Options sit at the hub centre and travel out along their angle */
+  .fan { list-style: none; margin: 0; padding: 0; position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+  .fan li { position: absolute; left: 0; top: 0; }
+  .stem { position: absolute; left: 0; top: -1px; width: var(--r); height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--stem) 30%, var(--c)); transform-origin: 0 50%; transform: rotate(var(--a)) scaleX(0); transition: transform 0.25s ease-in calc((4 - var(--i)) * 30ms); }
+  .opt {
+    position: absolute;
+    left: -25px;
+    top: -25px;
+    width: 50px;
+    height: 50px;
+    border: 0;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    cursor: pointer;
+    background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--c) 70%, #fff) 0 30%, var(--c) 31% 62%, color-mix(in srgb, var(--c) 60%, #000) 63% 100%);
+    box-shadow: 0 8px 18px -8px var(--c);
+    opacity: 0;
+    visibility: hidden;
+    transform: rotate(var(--a)) translateX(0) rotate(calc(-1 * var(--a))) scale(0.3) rotate(-120deg);
+    transition: transform 0.3s ease-in calc((4 - var(--i)) * 30ms), opacity 0.2s ease calc((4 - var(--i)) * 30ms), visibility 0s linear 0.45s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .opt svg { width: 22px; height: 22px; }
+  .opt:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .opt:hover { filter: brightness(1.1); }
+  .tip { position: absolute; left: 0; top: -54px; transform: translate(-50%, 4px) rotate(var(--a)) translateX(var(--r)) rotate(calc(-1 * var(--a))); padding: 4px 9px; border-radius: 8px; background: var(--tip); color: var(--tip-ink); font-size: 0.74rem; font-weight: 700; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
+
+  .hub.open .stem { transform: rotate(var(--a)) scaleX(1); transition: transform 0.4s cubic-bezier(0.3, 1, 0.4, 1) calc(var(--i) * 55ms); }
+  .hub.open .opt {
+    opacity: 1;
+    visibility: visible;
+    transform: rotate(var(--a)) translateX(var(--r)) rotate(calc(-1 * var(--a))) scale(1) rotate(0deg);
+    transition: transform 0.7s cubic-bezier(0.3, 1.5, 0.45, 1) calc(60ms + var(--i) * 55ms), opacity 0.2s ease calc(60ms + var(--i) * 55ms), visibility 0s;
+    transition-timing-function: linear(0, 0.099, 0.295, 0.531, 0.76, 0.952, 1.092, 1.175, 1.207, 1.2, 1.166, 1.12, 1.07, 1.026, 0.992, 0.97, 0.959, 0.958, 0.964, 0.974, 0.984, 0.994, 1.001, 1.006, 1.008, 1.006, 1.002, 1), ease, linear;
+  }
+  /* While open, each feather sways at its own pace */
+  .hub.open .opt svg { animation: sway 2.6s ease-in-out infinite; animation-delay: calc(var(--i) * -0.5s); }
+  @keyframes sway { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+  .hub.open .opt:hover + .tip, .hub.open .opt:focus-visible + .tip { opacity: 1; }
+  .hub.open .opt:active { filter: brightness(0.9); }
+
+  .bit { position: absolute; left: 0; top: 0; width: 8px; height: 8px; border-radius: 50% 0; pointer-events: none; z-index: 6; }
+
+  /* Toast for results */
+  .toast { position: fixed; left: 50%; bottom: 22px; display: inline-flex; align-items: center; gap: 8px; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 999px; background: var(--tip); color: var(--tip-ink); font-size: 0.88rem; font-weight: 600; transform: translate(-50%, 160%); transition: transform 0.6s cubic-bezier(0.3, 1.5, 0.4, 1); }
+  .toast.show { transform: translate(-50%, 0); }
+  .toast svg { width: 18px; height: 18px; flex: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stem, .opt, .hub.open .stem, .hub.open .opt, .share, .share .ico svg, .toast, .tip, .plume, .hub.open .plume { transition: none; }
+    .hub.open .opt svg, .share:hover .i-share .arrow, .share.working .ico::after { animation: none; }
+    .bit { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage" id="stage">
+    <div class="wrap">
+      <h1>Loved this mango lassi recipe?</h1>
+      <p class="sub">Spread it around. The options open in a fan.</p>
+
+      <div class="hub" id="hub">
+        <span class="plume" aria-hidden="true"></span>
+        <ul class="fan" id="fan" aria-label="Share options">
+          <li style="--a:-160deg; --i:0; --r:118px; --c:#13a37f">
+            <span class="stem" aria-hidden="true"></span>
+            <button class="opt" type="button" data-act="copy" aria-label="Copy link">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" /></svg>
+            </button>
+            <span class="tip" aria-hidden="true">Copy link</span>
+          </li>
+          <li style="--a:-125deg; --i:1; --r:118px; --c:#0fa3b5">
+            <span class="stem" aria-hidden="true"></span>
+            <button class="opt" type="button" data-act="email" aria-label="Email">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.2" /><path d="M4 7l8 6 8-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" /></svg>
+            </button>
+            <span class="tip" aria-hidden="true">Email</span>
+          </li>
+          <li style="--a:-90deg; --i:2; --r:118px; --c:#3657e8">
+            <span class="stem" aria-hidden="true"></span>
+            <button class="opt" type="button" data-act="message" aria-label="Text message">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v10H10l-5 4v-4H4z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" /></svg>
+            </button>
+            <span class="tip" aria-hidden="true">Message</span>
+          </li>
+          <li style="--a:-55deg; --i:3; --r:118px; --c:#c99a06">
+            <span class="stem" aria-hidden="true"></span>
+            <button class="opt" type="button" data-act="nearby" aria-label="Send to a nearby device">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="16" r="2" fill="currentColor" /><path d="M8 12.5a5.5 5.5 0 0 1 8 0M5 9.5a9.5 9.5 0 0 1 14 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" /></svg>
+            </button>
+            <span class="tip" aria-hidden="true">Nearby</span>
+          </li>
+          <li style="--a:-20deg; --i:4; --r:118px; --c:#cf2f74">
+            <span class="stem" aria-hidden="true"></span>
+            <button class="opt" type="button" data-act="save" aria-label="Save to collection">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" /></svg>
+            </button>
+            <span class="tip" aria-hidden="true">Save</span>
+          </li>
+        </ul>
+
+        <button class="share" id="share" type="button" aria-expanded="false" aria-controls="fan">
+          <span class="ico" aria-hidden="true">
+            <svg class="i-share" viewBox="0 0 24 24"><path d="M6 12v6.5A1.5 1.5 0 0 0 7.5 20h9a1.5 1.5 0 0 0 1.5-1.5V12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /><path class="arrow" d="M12 15V4m0 0L8 8m4-4l4 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <svg class="i-x" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" /></svg>
+            <svg class="i-ok" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+          <span id="share-label">Share</span>
+        </button>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      <span id="toast-text">Ready</span>
+    </div>
+  </main>
+
+<script>
+  // Peacock: crouch → the plume blooms and five feathers spring out → pick one → it flies into the hub
+  // → the hub spins while it works → tick, feather burst and a toast → back to Share.
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var stage = $("stage"), hub = $("hub"), share = $("share"), shareLabel = $("share-label"), toast = $("toast"), toastText = $("toast-text");
+    var opts = Array.prototype.slice.call(document.querySelectorAll(".opt"));
+    var calm = matchMedia("(prefers-reduced-motion: reduce)");
+    var LINK = "asaandesk.com/craft/peacock/mango-lassi";
+    var COLORS = ["#13a37f", "#0fa3b5", "#3657e8", "#c99a06", "#cf2f74"];
+    var toastTimer = null;
+    var busy = false;
+
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    // Spring helper: samples a damped spring from 0 to 1 (overshoots, then settles)
+    function springCurve(stiffness, damping) {
+      var x = 0, v = 0, out = [0], dt = 1 / 60;
+      for (var i = 0; i < 240; i++) {
+        v += (-stiffness * (x - 1) - damping * v) * dt;
+        x += v * dt;
+        out.push(x);
+        if (Math.abs(v) < 0.01 && Math.abs(x - 1) < 0.002) break;
+      }
+      out[out.length - 1] = 1;
+      return out;
+    }
+    function springTo(el, frame, stiffness, damping) {
+      var c = springCurve(stiffness || 260, damping || 14);
+      return el.animate(c.map(frame), { duration: (c.length * 1000) / 60, easing: "linear" });
+    }
+
+    // Feather-shaped bits in the five jewel colours, flung out of the hub
+    function burst() {
+      var s = stage.getBoundingClientRect(), r = share.getBoundingClientRect();
+      var x = r.left - s.left + r.width / 2, y = r.top - s.top + r.height / 2;
+      for (var i = 0; i < 24; i++) {
+        var p = document.createElement("i");
+        p.className = "bit";
+        p.style.background = COLORS[i % COLORS.length];
+        stage.appendChild(p);
+        var a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.6;
+        var sp = 80 + Math.random() * 70, vx = Math.cos(a) * sp, vy = Math.sin(a) * sp, spin = (Math.random() - 0.5) * 600, frames = [];
+        for (var k = 0; k <= 10; k++) {
+          var t = k / 10, e = 1 - Math.pow(1 - t, 2.2);
+          frames.push({ transform: "translate(" + (x + vx * e).toFixed(1) + "px," + (y + vy * e + 90 * t * t).toFixed(1) + "px) rotate(" + (spin * t).toFixed(0) + "deg) scale(" + (1.2 - t * 0.7).toFixed(2) + ")", opacity: t > 0.7 ? (1 - t) / 0.3 : 1 });
+        }
+        p.animate(frames, { duration: 750 + Math.random() * 450, easing: "linear", fill: "forwards" }).onfinish = (function (el) { return function () { el.remove(); }; })(p);
+      }
+    }
+
+    function say(text) {
+      toastText.textContent = text;
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 2600);
+    }
+
+    async function setOpen(open, focusFirst) {
+      if (open && !calm.matches) {
+        // anticipation: the hub crouches before the fan opens
+        await share.animate([{ transform: "none" }, { transform: "translateY(3px) scale(1.06, 0.88)" }], { duration: 130, easing: "ease-in" }).finished;
+        springTo(share, function (p) { return { transform: "translateY(" + ((1 - p) * 3).toFixed(2) + "px) scale(" + (1.06 - 0.06 * p).toFixed(3) + "," + (0.88 + 0.12 * p).toFixed(3) + ")" }; }, 320, 9);
+      }
+      hub.classList.toggle("open", open);
+      share.setAttribute("aria-expanded", String(open));
+      shareLabel.textContent = open ? "Close" : "Share";
+      if (open && focusFirst) setTimeout(function () { opts[0].focus(); }, 80);
+    }
+
+    share.addEventListener("click", function (e) {
+      if (busy) return;
+      setOpen(!hub.classList.contains("open"), e.detail === 0);
+    });
+
+    // Arrow keys move around the fan, Escape folds it
+    hub.addEventListener("keydown", function (e) {
+      if (!hub.classList.contains("open")) return;
+      var i = opts.indexOf(document.activeElement);
+      if (e.key === "Escape") { setOpen(false); share.focus(); return; }
+      if (i < 0) return;
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); opts[(i + 1) % opts.length].focus(); }
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); opts[(i - 1 + opts.length) % opts.length].focus(); }
+    });
+    document.addEventListener("pointerdown", function (e) {
+      if (hub.classList.contains("open") && !hub.contains(e.target)) setOpen(false);
+    });
+    hub.addEventListener("focusout", function (e) {
+      if (hub.classList.contains("open") && e.relatedTarget && !hub.contains(e.relatedTarget)) setOpen(false);
+    });
+
+    // What each option does (copy is real; the others are simulated)
+    var actions = {
+      copy: { verb: "Copying", run: function () {
+        if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(LINK).then(function () { return "Link copied"; }, function () { return "Copy this link: " + LINK; });
+        return Promise.resolve("Copy this link: " + LINK);
+      } },
+      email: { verb: "Drafting", run: function () { return wait(500).then(function () { return "Email draft ready with the recipe link"; }); } },
+      message: { verb: "Preparing", run: function () { return wait(500).then(function () { return "Message ready to send"; }); } },
+      nearby: { verb: "Searching", run: function () { return wait(1100).then(function () { return "Sent to Ayesha's phone"; }); } },
+      save: { verb: "Saving", run: function () { return wait(400).then(function () { return "Saved to your recipe collection"; }); } }
+    };
+
+    opts.forEach(function (o) {
+      o.addEventListener("click", async function () {
+        if (busy) return;
+        busy = true;
+        var act = actions[o.dataset.act];
+        var li = o.parentElement;
+        var a = li.style.getPropertyValue("--a").trim(), r = li.style.getPropertyValue("--r").trim();
+
+        if (!calm.matches) {
+          // the chosen feather squashes, then flies into the hub while the others fold away
+          var orbit = "rotate(" + a + ") translateX(" + r + ") rotate(calc(-1 * " + a + "))";
+          var home = "rotate(" + a + ") translateX(0px) rotate(calc(-1 * " + a + "))";
+          var fly = o.animate([
+            { transform: orbit + " scale(1)" },
+            { transform: orbit + " scale(1.2, 0.8)", offset: 0.2 },
+            { transform: home + " scale(0.4)", opacity: 0.2 }
+          ], { duration: 460, easing: "cubic-bezier(0.5, 0, 0.3, 1)", fill: "forwards" });
+          hub.classList.remove("open");
+          share.setAttribute("aria-expanded", "false");
+          await fly.finished;
+          fly.cancel();
+          springTo(share, function (p) { return { transform: "scale(" + (1 + Math.sin(p * Math.PI) * 0.1).toFixed(3) + ")" }; }, 260, 10);
+        } else {
+          hub.classList.remove("open");
+          share.setAttribute("aria-expanded", "false");
+        }
+
+        // action: the hub spins while the option runs
+        share.classList.add("working");
+        share.setAttribute("aria-busy", "true");
+        shareLabel.textContent = act.verb + "…";
+        say(act.verb + "…");
+        var message = await act.run();
+
+        // finish: tick, feather burst, toast
+        share.classList.remove("working");
+        share.removeAttribute("aria-busy");
+        share.classList.add("done");
+        shareLabel.textContent = "Done";
+        say(message);
+        if (!calm.matches) {
+          springTo(share, function (p) { return { transform: "scale(" + (0.85 + 0.15 * p).toFixed(3) + ")" }; }, 300, 9);
+          burst();
+        }
+        share.focus();
+
+        // reset: back to Share
+        await wait(1600);
+        share.classList.remove("done");
+        shareLabel.textContent = "Share";
+        if (!calm.matches) springTo(share, function (p) { return { transform: "translateY(" + ((1 - p) * 6).toFixed(1) + "px)" }; }, 260, 13);
+        busy = false;
+      });
+    });
+  })();
+</script>
+</body>
+</html>
