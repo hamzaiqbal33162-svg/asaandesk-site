@@ -1,0 +1,1387 @@
+<!doctype html>
+<!-- Chill & Craft · Altura · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Altura · Investment dashboard</title>
+<script>
+  /* Theme: dark by default (it is a dark dashboard); ?theme=light|dark in the URL wins */
+  (function () {
+    var q = new URLSearchParams(location.search).get("theme");
+    document.documentElement.dataset.theme = q === "light" || q === "dark" ? q : "dark";
+  })();
+</script>
+<style>
+  /* ---------- Theme: graphite + champagne gold (dark), ivory + bronze (light) ---------- */
+  :root {
+    --bg: #f6f2ea; --surface: #fffdf8; --surface-2: #f0ebe1; --panel: #fffdf8;
+    --ink: #1c1a17; --muted: #7b7468; --line: #e6dfd2; --grid: #ece6da;
+    --accent: #a8792c; --accent-ink: #fff; --teal: #2b8a83; --rose: #b4534a;
+    --good: #2b8a83; --bad: #b4534a; --warn: #a8792c;
+    --radius: 20px; --radius-sm: 12px; --tip-bg: #1c1a17; --tip-ink: #f6f2ea;
+    --glow: rgba(168,121,44,.18);
+    color-scheme: light;
+  }
+  [data-theme="dark"] {
+    --bg: #0d0e10; --surface: #15171a; --surface-2: #1d2024; --panel: #17191d;
+    --ink: #f1ece2; --muted: #8e8a82; --line: #26292e; --grid: #1f2226;
+    --accent: #d8b46a; --accent-ink: #15130e; --teal: #5fc9b8; --rose: #e58a7e;
+    --good: #5fc9b8; --bad: #e58a7e; --warn: #d8b46a;
+    --tip-bg: #f1ece2; --tip-ink: #15171a;
+    --glow: rgba(216,180,106,.16);
+    color-scheme: dark;
+  }
+  /* ===== Core component styles (shared helpers). Colours come from the theme variables above. ===== */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  /* no sideways page scroll, whatever a wide header or an entrance animation does */
+  body { margin: 0; overflow-x: clip; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .ic { width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: -0.2em; }
+  :focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: 2px; }
+  .cc-av { --h: 200; display: inline-grid; place-items: center; width: 2.1em; height: 2.1em; border-radius: 50%; font-size: .8em; font-weight: 700; color: hsl(var(--h) 60% 22%); background: hsl(var(--h) 70% 84%); flex: none; letter-spacing: .02em; }
+  [data-theme="dark"] .cc-av { color: hsl(var(--h) 80% 88%); background: hsl(var(--h) 35% 28%); }
+
+  /* Buttons used by dialogs (apps restyle .btn to fit their look) */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .45em; min-height: 38px; padding: 0 16px; border-radius: var(--radius-sm, 10px); border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 600; transition: transform .12s, background .2s, box-shadow .2s, border-color .2s; white-space: nowrap; }
+  .btn:hover { border-color: var(--accent); }
+  .btn:active { transform: translateY(1px) scale(.97); }
+  .btn.primary { background: var(--accent); border-color: transparent; color: var(--accent-ink, #fff); }
+  .btn.primary:hover { filter: brightness(1.06); box-shadow: 0 6px 18px -8px var(--accent); }
+  .btn.danger { background: var(--bad); border-color: transparent; color: #fff; }
+  .btn.ghost { background: transparent; }
+  .btn.sm { min-height: 30px; padding: 0 11px; font-size: .86em; }
+  .btn[disabled] { opacity: .5; pointer-events: none; }
+
+  /* Toasts */
+  .cc-toasts { position: fixed; z-index: 90; right: 16px; bottom: 16px; display: grid; gap: 8px; width: min(340px, calc(100vw - 32px)); pointer-events: none; }
+  .cc-toast { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-radius: var(--radius-sm, 10px); background: var(--tip-bg, #111); color: var(--tip-ink, #fff); box-shadow: 0 12px 30px -10px rgba(0,0,0,.45); font-size: .92rem; animation: ccToast .35s cubic-bezier(.2,.9,.3,1.2) both; pointer-events: auto; }
+  .cc-toast .ic { color: var(--good); }
+  .cc-toast.bad .ic { color: var(--bad); }
+  .cc-toast.warn .ic { color: var(--warn); }
+  .cc-toast.out { animation: ccToastOut .3s ease forwards; }
+  @keyframes ccToast { from { opacity: 0; transform: translateY(14px) scale(.96); } }
+  @keyframes ccToastOut { to { opacity: 0; transform: translateX(30px); } }
+
+  /* Modal + drawer */
+  .cc-overlay { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; }
+  .cc-back { position: absolute; inset: 0; background: var(--overlay, rgba(10,12,20,.5)); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); opacity: 0; transition: opacity .25s; }
+  .cc-dialog { position: relative; width: min(480px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--panel, var(--surface)); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius, 16px); box-shadow: 0 30px 80px -20px rgba(0,0,0,.5); opacity: 0; transform: translateY(18px) scale(.97); transition: opacity .25s, transform .3s cubic-bezier(.2,.9,.3,1.1); }
+  .cc-dialog.wide { width: min(720px, 100%); }
+  .cc-overlay.open .cc-back { opacity: 1; }
+  .cc-overlay.open .cc-dialog { opacity: 1; transform: none; }
+  .cc-overlay.is-drawer { place-items: stretch end; padding: 0; }
+  .cc-overlay.is-drawer .cc-dialog { width: min(440px, 100%); height: 100%; max-height: none; border-radius: var(--radius, 16px) 0 0 var(--radius, 16px); transform: translateX(40px); }
+  .cc-overlay.is-drawer.open .cc-dialog { transform: none; }
+  .cc-dh { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px 6px; position: sticky; top: 0; background: inherit; z-index: 1; }
+  .cc-dh h2 { margin: 0; font-size: 1.12rem; }
+  .cc-x { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: transparent; }
+  .cc-x:hover { background: var(--surface-2); }
+  .cc-db { padding: 8px 20px 20px; }
+  .cc-df { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 18px; flex-wrap: wrap; }
+  .cc-db .cc-df { padding: 14px 0 0; }
+  .cc-confirm { margin: 6px 0 0; color: var(--muted); line-height: 1.5; }
+  .cc-picks { display: grid; gap: 6px; }
+  .cc-pick { display: flex; align-items: center; gap: 10px; padding: 12px 14px; text-align: left; border-radius: var(--radius-sm, 10px); border: 1px solid var(--line); background: var(--surface-2); }
+  .cc-pick:hover, .cc-pick:focus-visible { border-color: var(--accent); }
+  .cc-pick small { margin-left: auto; color: var(--muted); }
+
+  /* Forms */
+  .cc-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+  .cc-field { display: grid; gap: 5px; grid-column: span 2; }
+  .cc-field.half { grid-column: span 1; }
+  .cc-field label { font-size: .84rem; font-weight: 600; color: var(--muted); }
+  .cc-field input, .cc-field select, .cc-field textarea { width: 100%; min-height: 40px; padding: 8px 12px; border-radius: var(--radius-sm, 10px); border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); }
+  .cc-field input:focus, .cc-field select:focus, .cc-field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .cc-field [aria-invalid="true"] { border-color: var(--bad); }
+  .cc-err { color: var(--bad); font-size: .8rem; min-height: 0; }
+  .cc-err:empty { display: none; }
+  .cc-hint { color: var(--muted); font-size: .78rem; }
+  .cc-intro { margin: 0 0 12px; color: var(--muted); }
+  .cc-range { display: flex; gap: 10px; align-items: center; }
+  .cc-range input { padding: 0; min-height: 0; accent-color: var(--accent); border: 0; background: none; }
+  .cc-range output { min-width: 3.5em; text-align: right; font-weight: 700; }
+  .cc-form.shake { animation: ccShake .35s; }
+  @keyframes ccShake { 25% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
+  @media (max-width: 480px) { .cc-field.half { grid-column: span 2; } }
+
+  /* Popover + tooltip */
+  .cc-pop { position: fixed; z-index: 85; max-height: 70vh; overflow: auto; background: var(--panel, var(--surface)); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-sm, 12px); box-shadow: 0 24px 60px -20px rgba(0,0,0,.45); opacity: 0; transform: translateY(-6px); transition: opacity .2s, transform .25s; }
+  .cc-pop.open { opacity: 1; transform: none; }
+  .cc-tip { position: fixed; z-index: 95; pointer-events: none; min-width: 120px; max-width: 260px; padding: 9px 11px; border-radius: 10px; background: var(--tip-bg, #111); color: var(--tip-ink, #fff); font-size: .8rem; line-height: 1.45; box-shadow: 0 12px 30px -10px rgba(0,0,0,.5); opacity: 0; transition: opacity .12s; }
+  .cc-tip.on { opacity: 1; }
+  .cc-tip b { display: block; margin-bottom: 3px; }
+  .cc-tip div { display: flex; align-items: center; gap: 6px; }
+  .cc-tip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  .cc-tip em { margin-left: auto; padding-left: 10px; font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cc-tip-tot { border-top: 1px solid rgba(255,255,255,.18); margin-top: 4px; padding-top: 4px; }
+
+  /* Command search */
+  .cc-cmdk .cc-dialog { align-self: start; margin-top: 10vh; }
+  .cc-cmdk-q { width: 100%; min-height: 46px; padding: 0 14px; border-radius: var(--radius-sm, 10px); border: 1px solid var(--accent); background: var(--surface-2); font-size: 1rem; }
+  .cc-cmdk-q:focus { outline: none; }
+  .cc-cmdk-list { list-style: none; margin: 10px 0 0; padding: 0; max-height: 46vh; overflow: auto; }
+  .cc-cmdk-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; }
+  .cc-cmdk-list li[aria-selected="true"], .cc-cmdk-list li:hover { background: var(--surface-2); color: var(--accent); }
+  .cc-cmdk-list small { margin-left: auto; color: var(--muted); }
+  .cc-cmdk-foot { margin: 10px 0 0; font-size: .76rem; color: var(--muted); }
+  .cc-cmdk-foot kbd { padding: 1px 6px; margin: 0 2px; border-radius: 5px; border: 1px solid var(--line); font-family: inherit; }
+  .cc-empty-li { color: var(--muted); cursor: default !important; }
+
+  /* Data table */
+  .cc-tbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .cc-search { display: flex; align-items: center; gap: 8px; flex: 1 1 200px; max-width: 320px; min-height: 38px; padding: 0 12px; border-radius: var(--radius-sm, 10px); border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); }
+  .cc-search:focus-within { border-color: var(--accent); }
+  .cc-search input { flex: 1; min-width: 0; border: 0; background: none; outline: none; color: var(--ink); }
+  .cc-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .cc-chip { min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: .84rem; font-weight: 600; transition: background .2s, color .2s; }
+  .cc-chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink, #fff); border-color: transparent; }
+  .cc-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .cc-tbl table { width: 100%; border-collapse: collapse; font-size: .9rem; min-width: 560px; }
+  .cc-tbl th { text-align: left; font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .cc-tbl th button { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; }
+  .cc-tbl th svg { width: 9px; height: 9px; fill: none; stroke: currentColor; stroke-width: 1.4; opacity: .5; }
+  .cc-tbl th[aria-sort="ascending"] svg, .cc-tbl th[aria-sort="descending"] svg { opacity: 1; color: var(--accent); }
+  .cc-tbl td { padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .cc-tbl tbody tr { animation: ccRow .35s both; animation-delay: calc(var(--r, 0) * 25ms); transition: background .15s; }
+  .cc-tbl tbody tr[tabindex="0"] { cursor: pointer; }
+  .cc-tbl tbody tr[tabindex="0"]:hover { background: var(--surface-2); }
+  .cc-tbl .r, .cc-tbl th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .cc-tbl th.r button { flex-direction: row-reverse; }
+  @keyframes ccRow { from { opacity: 0; transform: translateY(6px); } }
+  .cc-pager { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: .84rem; color: var(--muted); }
+  .cc-pages { display: flex; gap: 4px; align-items: center; }
+  .cc-pages button { min-width: 32px; height: 32px; padding: 0 6px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
+  .cc-pages button[aria-current="page"] { background: var(--accent); color: var(--accent-ink, #fff); border-color: transparent; }
+  .cc-pages button:disabled { opacity: .4; cursor: default; }
+  .cc-empty { display: grid; place-items: center; align-content: center; gap: 6px; padding: 28px 12px; text-align: center; color: var(--muted); }
+  .cc-empty .ic { width: 30px; height: 30px; opacity: .6; }
+  .cc-empty b { color: var(--ink); }
+
+  /* Charts */
+  .cc-chart { display: block; overflow: visible; }
+  .cc-chart text, .cc-gauge text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .cc-grid line { stroke: var(--grid, var(--line)); stroke-dasharray: 3 4; }
+  .cc-zero { stroke: var(--line); }
+  .cc-line { fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .cc-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: ccDraw 1.3s cubic-bezier(.4,.1,.2,1) forwards; }
+  .cc-fade { animation: ccFade .9s .3s both; }
+  .cc-bar { transform-box: fill-box; transform-origin: 50% 100%; animation: ccGrow .75s cubic-bezier(.2,.9,.25,1.05) both; transition: opacity .2s; }
+  .cc-bar.neg { transform-origin: 50% 0; }
+  .cc-cell { animation: ccPop .5s both; transform-box: fill-box; transform-origin: center; }
+  .cc-static .cc-draw, .cc-static .cc-fade, .cc-static .cc-bar, .cc-static .cc-cell { animation: none; stroke-dashoffset: 0; }
+  .cc-guide { stroke: var(--muted); stroke-dasharray: 3 3; opacity: 0; }
+  .cc-guide.on { opacity: .7; }
+  .cc-dot { opacity: 0; stroke: var(--surface); stroke-width: 2; }
+  .cc-dot.on { opacity: 1; }
+  .cc-hit.on { fill: var(--ink); fill-opacity: .05; }
+  @keyframes ccDraw { to { stroke-dashoffset: 0; } }
+  @keyframes ccFade { from { opacity: 0; } }
+  @keyframes ccGrow { from { transform: scaleY(0); } }
+  @keyframes ccPop { from { opacity: 0; transform: scale(.4); } }
+  .cc-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: .8rem; color: var(--muted); }
+  .cc-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .cc-legend i, .cc-dlegend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+  .cc-donut-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
+  .cc-donut { position: relative; flex: none; }
+  .cc-donut svg { display: block; }
+  .cc-track { fill: none; stroke: var(--track, var(--surface-2)); stroke-linecap: round; }
+  .cc-seg { fill: none; transition: opacity .2s, stroke-width .2s; cursor: pointer; }
+  .cc-seg.dim { opacity: .3; }
+  .cc-donut-c { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+  .cc-donut-c b { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+  .cc-donut-c small { color: var(--muted); font-size: .76rem; }
+  .cc-dlegend { list-style: none; margin: 0; padding: 0; flex: 1 1 160px; display: grid; gap: 4px; font-size: .86rem; }
+  .cc-dlegend li { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 8px; transition: background .2s; }
+  .cc-dlegend li.on { background: var(--surface-2); }
+  .cc-dlegend em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cc-dlegend small { color: var(--muted); min-width: 2.6em; text-align: right; }
+  .cc-gauge { position: relative; display: grid; justify-items: center; }
+  .cc-gfill { fill: none; stroke-linecap: round; }
+  .cc-gauge-c { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; display: grid; }
+  .cc-gauge-c b { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+  .cc-gauge-c small { color: var(--muted); font-size: .78rem; }
+  .cc-spark { display: block; overflow: visible; }
+  .cc-spark .cc-line { stroke-width: 1.8; }
+
+  /* Page entrance (apps can swap the keyframes via --enter) */
+  .cc-in { animation: var(--enter, ccRise) .6s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i, 0) * 55ms); }
+  @keyframes ccRise { from { opacity: 0; transform: translateY(16px) scale(.985); } }
+
+  /* Reduced motion: everything still works, without big movement */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+    .cc-draw { stroke-dashoffset: 0; }
+  }
+
+  /* ---------- Shell: quiet text sidebar with a gold dot ---------- */
+  body { background: var(--bg); color: var(--ink); font: 14.5px/1.5 "Helvetica Neue", "Segoe UI", system-ui, -apple-system, sans-serif; letter-spacing: .005em; }
+  [data-theme="dark"] body { background: radial-gradient(900px 600px at 85% -20%, rgba(216,180,106,.08), transparent 60%), radial-gradient(700px 500px at -10% 110%, rgba(95,201,184,.06), transparent 60%), var(--bg); }
+  .num { font-variant-numeric: tabular-nums; }
+  .app { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; }
+  .side { position: sticky; top: 0; height: 100vh; padding: 28px 22px; display: flex; flex-direction: column; gap: 34px; border-right: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; font-weight: 300; font-size: 1.35rem; letter-spacing: .32em; text-transform: uppercase; }
+  .brand svg { width: 30px; height: 30px; }
+  .nav { position: relative; display: grid; gap: 2px; }
+  .nav a { position: relative; z-index: 1; padding: 10px 0 10px 22px; color: var(--muted); text-decoration: none; font-size: .92rem; letter-spacing: .04em; transition: color .3s, padding .3s; }
+  .nav a:hover { color: var(--ink); padding-left: 26px; }
+  .nav a[aria-current="page"] { color: var(--ink); }
+  .nav .mark { position: absolute; left: 0; top: 0; width: 8px; transition: transform .6s cubic-bezier(.2,.9,.2,1), height .3s; }
+  .nav .mark::before { content: ""; position: absolute; left: 0; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--glow), 0 0 14px var(--accent); }
+  .side-foot { margin-top: auto; display: grid; gap: 14px; font-size: .8rem; color: var(--muted); }
+  .mkt { display: flex; align-items: center; gap: 8px; }
+  .mkt i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px var(--good); }
+  main { min-width: 0; padding: 26px 34px 50px; overflow-x: clip; }
+  .top { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+  .top .grow { flex: 1; min-width: 0; }
+  .top h1 { margin: 0; font-weight: 300; font-size: 1.7rem; letter-spacing: .02em; }
+  .top p { margin: 2px 0 0; color: var(--muted); font-size: .86rem; }
+  .icon-btn { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: transparent; color: var(--ink); transition: border-color .3s, transform .15s; }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .icon-btn:active { transform: scale(.92); }
+  .icon-btn .ic { width: 18px; height: 18px; stroke-width: 1.5; }
+  .badge { position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); font-size: 0; }
+  .badge:empty { display: none; }
+  [data-theme="dark"] .t-sun, [data-theme="light"] .t-moon { display: none; }
+  .menu-btn, .scrim { display: none; }
+  .btn { border-radius: 999px; font-weight: 500; letter-spacing: .03em; background: transparent; }
+  .btn.primary { color: var(--accent-ink); }
+
+  /* ---------- Panels ---------- */
+  .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; }
+  .s3 { grid-column: span 3; } .s4 { grid-column: span 4; } .s5 { grid-column: span 5; } .s6 { grid-column: span 6; } .s7 { grid-column: span 7; } .s8 { grid-column: span 8; } .s9 { grid-column: span 9; } .s12 { grid-column: span 12; }
+  .card { position: relative; background: linear-gradient(160deg, color-mix(in srgb, var(--surface) 92%, var(--accent)), var(--surface) 40%); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; min-width: 0; transition: transform .5s cubic-bezier(.2,.9,.2,1), border-color .4s, box-shadow .4s; }
+  .card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); box-shadow: 0 20px 40px -24px var(--glow); }
+  .card h2 { margin: 0; font-size: .74rem; font-weight: 500; text-transform: uppercase; letter-spacing: .2em; color: var(--muted); }
+  .card-h { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .card-h .grow { flex: 1; }
+  .card-h small, .muted { color: var(--muted); }
+  .kpi .val { font-size: 1.6rem; font-weight: 300; margin-top: 10px; letter-spacing: -.01em; }
+  .up { color: var(--good); } .down { color: var(--bad); }
+  .chg { font-size: .84rem; font-weight: 500; }
+  .seg { display: inline-flex; gap: 2px; }
+  .seg button { border: 0; background: none; padding: 6px 11px; border-radius: 999px; font-size: .78rem; letter-spacing: .06em; color: var(--muted); transition: color .3s, background .3s; }
+  .seg button:hover { color: var(--ink); }
+  .seg button[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); }
+  .rowbtns { display: flex; gap: 4px; justify-content: flex-end; }
+  .rowbtns button { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; border: 1px solid transparent; background: none; color: var(--muted); }
+  .rowbtns button:hover { border-color: var(--accent); color: var(--accent); }
+  .tkr { display: inline-flex; align-items: center; gap: 10px; }
+  .tkr i { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; font-style: normal; font-size: .62rem; font-weight: 700; letter-spacing: .04em; border: 1px solid var(--line); color: var(--accent); background: var(--surface-2); }
+  .tkr small { display: block; color: var(--muted); font-size: .76rem; }
+  .cc-tbl table { font-size: .88rem; }
+  .cc-tbl th { font-weight: 500; letter-spacing: .14em; }
+  .list { list-style: none; margin: 0; padding: 0; }
+  .list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .list li:last-child { border-bottom: 0; }
+  .list .grow { flex: 1; min-width: 0; }
+
+  /* ---------- Hero chart: morphs between ranges, drag to scrub ---------- */
+  .hero { padding: 24px 26px 18px; }
+  .hero-top { display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin-bottom: 8px; }
+  .hero-val { font-size: 3.1rem; font-weight: 200; letter-spacing: -.03em; line-height: 1; }
+  .hero-sub { display: flex; gap: 14px; align-items: baseline; margin-top: 8px; color: var(--muted); font-size: .9rem; }
+  .hero-when { color: var(--muted); font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; }
+  .hero svg { display: block; width: 100%; overflow: visible; touch-action: pan-y; }
+  .hero .hl { fill: none; stroke: url(#heroStroke); stroke-width: 2.4; stroke-linecap: round; filter: drop-shadow(0 6px 10px var(--glow)); }
+  .hero .bl { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 4 5; opacity: .7; }
+  .hero .ha { fill: url(#heroFill); }
+  .hero .scrub line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; }
+  .hero .scrub circle { fill: var(--accent); stroke: var(--surface); stroke-width: 3; }
+  .hero .scrub { opacity: 0; transition: opacity .2s; }
+  .hero .scrub.on { opacity: 1; }
+  .hero .now { fill: var(--accent); }
+  .hero .pulse { fill: none; stroke: var(--accent); stroke-width: 1.5; transform-box: fill-box; transform-origin: center; animation: pulse 2.2s ease-out 4; }
+  @keyframes pulse { from { transform: scale(1); opacity: .9; } to { transform: scale(4); opacity: 0; } }
+  .hero .ax { font-size: 11px; fill: var(--muted); }
+  .bench { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--muted); font-size: .8rem; }
+  .bench .sw { width: 30px; height: 18px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--line); position: relative; transition: background .3s; }
+  .bench .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); transition: transform .35s cubic-bezier(.3,1.4,.5,1), background .3s; }
+  .bench[aria-pressed="true"] .sw { background: var(--glow); border-color: var(--accent); }
+  .bench[aria-pressed="true"] .sw::after { transform: translateX(12px); background: var(--accent); }
+  .alloc-bars { display: grid; gap: 14px; }
+  .ab { display: grid; gap: 6px; }
+  .ab-h { display: flex; justify-content: space-between; font-size: .86rem; }
+  .ab-t { position: relative; height: 10px; border-radius: 6px; background: var(--surface-2); }
+  .ab-t i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; width: 0; transition: width 1.1s cubic-bezier(.2,.9,.2,1); }
+  .ab-t b { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); border-radius: 1px; transition: left 1s cubic-bezier(.2,.9,.2,1); }
+  .trade-legs { display: grid; gap: 8px; }
+  .trade-legs div { display: flex; justify-content: space-between; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: .88rem; }
+  .wl { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
+  .wl .price { font-size: 1.6rem; font-weight: 300; margin: 10px 0 2px; }
+  .set-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .set-row:last-child { border-bottom: 0; }
+  .set-row small { display: block; color: var(--muted); }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 1180px) { .s3 { grid-column: span 6; } .s4, .s5, .s7, .s8, .s9 { grid-column: span 12; } }
+  @media (max-width: 880px) {
+    .app { grid-template-columns: 1fr; }
+    .side { position: fixed; inset: 0 auto 0 0; width: 250px; z-index: 60; background: var(--bg); transform: translateX(-105%); transition: transform .4s cubic-bezier(.2,.9,.2,1); }
+    .nav-open .side { transform: none; }
+    .nav-open .scrim { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.5); backdrop-filter: blur(3px); }
+    .menu-btn { display: grid; }
+    main { padding: 16px 16px 40px; }
+    .hero-val { font-size: 2.3rem; }
+  }
+  @media (max-width: 560px) { .s3, .s6 { grid-column: span 12; } .top p { display: none; } .hero { padding: 18px 14px 12px; } .hero-val { font-size: 2rem; } }
+  @media (prefers-reduced-motion: reduce) { .hero .pulse { animation: none; opacity: 0; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side" aria-label="Main">
+    <a class="brand" href="#/overview" aria-label="Altura home"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26L13 8l6 10 3-5 7 13z" fill="none" stroke="#d8b46a" stroke-width="1.6" stroke-linejoin="round"/><circle cx="24" cy="7" r="2.4" fill="#d8b46a"/></svg>Altura</a>
+    <nav class="nav" id="nav"><span class="mark" data-marker aria-hidden="true"></span></nav>
+    <div class="side-foot"><span class="mkt"><i></i>Markets open · prices live</span><span id="sideMe"></span></div>
+  </aside>
+  <div class="scrim" data-scrim></div>
+  <main id="main">
+    <header class="top">
+      <button class="icon-btn menu-btn" data-menu aria-label="Open menu" aria-expanded="false" aria-controls="side"></button>
+      <div class="grow"><h1 id="title">Overview</h1><p id="sub"></p></div>
+      <button class="icon-btn" data-cmdk aria-label="Search (Ctrl+K)"></button>
+      <button class="icon-btn" id="bell" aria-label="Notifications" aria-expanded="false"></button>
+      <button class="icon-btn" data-theme-toggle aria-pressed="true" aria-label="Switch theme"></button>
+    </header>
+    <div id="view"></div>
+  </main>
+</div>
+<script>
+/* =====================================================================
+   Core helpers (shared by every Chill & Craft dashboard, inlined here)
+   DOM, formatting, seeded data, router, toasts, modals, forms, tables,
+   command search, timers and small SVG charts. No libraries.
+   ===================================================================== */
+const RM = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const sum = (a) => a.reduce((s, v) => s + (+v || 0), 0);
+const uid = () => Math.random().toString(36).slice(2, 9);
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+
+/* ---------- Seeded random: the demo data is the same on every load ---------- */
+function seeded(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s += 0x6d2b79f5;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let R = seeded(11);
+const reseed = (n) => (R = seeded(n));
+const rand = (a, b) => a + R() * (b - a);
+const randi = (a, b) => Math.floor(rand(a, b + 1));
+const pick = (a) => a[Math.floor(R() * a.length)];
+
+/* ---------- Number, money and date formats ---------- */
+const CUR = { sym: "Rs", dp: 0 };
+const num = (v, dp = 0) => (+v || 0).toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+function money(v, o = {}) {
+  const sym = o.sym != null ? o.sym : CUR.sym;
+  const dp = o.dp != null ? o.dp : CUR.dp;
+  const s = num(Math.abs(v), dp);
+  const sign = v < 0 ? "−" : o.plus && v > 0 ? "+" : "";
+  return sign + (sym === "$" ? "$" + s : sym + " " + s);
+}
+function short(v, dp = 1) {
+  const a = Math.abs(v), g = v < 0 ? "−" : "";
+  const f = (x) => x.toFixed(dp).replace(/\.0+$/, "");
+  if (a >= 1e9) return g + f(a / 1e9) + "B";
+  if (a >= 1e6) return g + f(a / 1e6) + "M";
+  if (a >= 1e3) return g + f(a / 1e3) + "K";
+  return g + num(a, a < 10 && a % 1 ? 2 : 0);
+}
+const moneyShort = (v, sym = CUR.sym) => (v < 0 ? "−" : "") + (sym === "$" ? "$" : sym + " ") + short(Math.abs(v));
+const pct = (v, dp = 1) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(dp) + "%";
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const TODAY = new Date(new Date().toDateString());
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const fdate = (d) => { d = new Date(d); return d.getDate() + " " + MON[d.getMonth()]; };
+const fdateY = (d) => { d = new Date(d); return d.getDate() + " " + MON[d.getMonth()] + " " + d.getFullYear(); };
+const iso = (d) => { d = new Date(d); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+const monthLabels = (n) => Array.from({ length: n }, (_, i) => MON[(TODAY.getMonth() - n + 1 + i + 120) % 12]);
+const dayLabels = (n) => Array.from({ length: n }, (_, i) => fdate(addDays(TODAY, i - n + 1)));
+
+/* ---------- Safe storage: works even when the browser blocks it ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked: keep in memory */ } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } },
+};
+
+/* ---------- Timers that pause while the tab is hidden ---------- */
+const timers = [];
+function every(ms, fn) {
+  const t = { ms, fn, id: 0 };
+  timers.push(t);
+  if (!document.hidden) t.id = setInterval(fn, ms);
+  return t;
+}
+document.addEventListener("visibilitychange", () => timers.forEach((t) => { clearInterval(t.id); t.id = document.hidden ? 0 : setInterval(t.fn, t.ms); }));
+
+/* ---------- Tween + count-up numbers ---------- */
+function tween(dur, fn, done) {
+  if (RM || !window.requestAnimationFrame) { fn(1); if (done) done(); return; }
+  const t0 = performance.now();
+  /* progress is clamped to 0..1: the first frame can be stamped before t0 */
+  const step = (now) => { const p = clamp((now - t0) / dur, 0, 1); fn(ease(p)); if (p < 1) requestAnimationFrame(step); else if (done) done(); };
+  requestAnimationFrame(step);
+}
+function countUp(el, to, f = (v) => num(Math.round(v)), dur = 900) {
+  if (!el) return;
+  const from = el.dataset.v != null ? +el.dataset.v : 0;
+  el.dataset.v = to;
+  if (RM || from === to) { el.textContent = f(to); return; }
+  tween(dur, (t) => (el.textContent = f(lerp(from, to, t))));
+}
+
+/* ---------- Icons: simple line icons drawn for this kit ---------- */
+const O = (x, y, r) => `M${x - r} ${y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
+const ICONS = {
+  grid: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
+  home: "M3 11l9-7 9 7M5 9.5V20h5v-6h4v6h5V9.5",
+  wallet: "M4 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zM4 7l11-3v3M16 13.5h1",
+  card: "M3 6h18v12H3zM3 10h18M7 15h4",
+  jar: "M8 3h8M9 3v3M15 3v3M8 6h8a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3zM5 13c2.5-1.5 4.5 1.5 7 0s4.5-1.5 7 0",
+  in: "M12 4v13M6 11l6 6 6-6",
+  out: "M12 20V7M6 13l6-6 6 6",
+  swap: "M7 4L3 8l4 4M3 8h14M17 12l4 4-4 4M21 16H7",
+  list: "M9 6h11M9 12h11M9 18h11M4.5 6h.5M4.5 12h.5M4.5 18h.5",
+  bars: "M4 20h16M7 17v-6M12 17V6M17 17v-9",
+  line: "M3 17l5-5 4 3 8-8M15 7h5v5",
+  pie: "M12 3v9l6.4 6.4A9 9 0 1 1 12 3zM15 3.6A9 9 0 0 1 20.4 9H15z",
+  sliders: "M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" + O(15, 6, 2) + O(9, 12, 2) + O(17, 18, 2),
+  bell: "M6 16v-5a6 6 0 0 1 12 0v5l2 2H4l2-2zM10 20a2 2 0 0 0 4 0",
+  search: O(11, 11, 6) + "M20 20l-4.5-4.5",
+  plus: "M12 5v14M5 12h14",
+  minus: "M5 12h14",
+  x: "M6 6l12 12M18 6L6 18",
+  check: "M5 12.5l4.5 4.5L19 7",
+  sun: O(12, 12, 4) + "M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
+  moon: "M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z",
+  menu: "M4 7h16M4 12h16M4 17h16",
+  chevR: "M9 6l6 6-6 6",
+  chevL: "M15 6l-6 6 6 6",
+  chevD: "M6 9l6 6 6-6",
+  trash: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
+  edit: "M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4",
+  user: O(12, 8, 4) + "M4 21a8 8 0 0 1 16 0",
+  users: O(9, 8, 3.5) + "M2.5 20a6.5 6.5 0 0 1 13 0" + O(17, 9, 2.5) + "M16 14.2a5 5 0 0 1 6 4.8",
+  target: O(12, 12, 9) + O(12, 12, 5) + O(12, 12, 1),
+  calendar: "M4 6h16v15H4zM4 10h16M8 3v4M16 3v4",
+  file: "M6 3h9l5 5v13H6zM14 3v6h6M9 13h7M9 17h5",
+  coin: O(12, 12, 8.5) + "M12 6.5v11M14.6 9.4c-.5-.9-1.5-1.4-2.6-1.4-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.8 2.5 2-1 2-2.5 2c-1.2 0-2.2-.6-2.7-1.6",
+  up: "M3 17l6-6 4 4 8-8M16 7h5v5",
+  down: "M3 7l6 6 4-4 8 8M16 17h5v-5",
+  star: "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z",
+  lock: "M6 11h12v10H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3",
+  shield: "M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z",
+  bolt: "M13 2L4 14h7l-1 8 9-12h-7z",
+  download: "M12 4v11M7 10l5 5 5-5M4 20h16",
+  upload: "M12 16V5M7 10l5-5 5 5M4 20h16",
+  filter: "M4 5h16l-6 7.5V19l-4 2v-8.5z",
+  eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" + O(12, 12, 3),
+  refresh: "M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4",
+  clock: O(12, 12, 9) + "M12 7v5l3 2",
+  gift: "M4 9h16v4H4zM5 13h14v8H5zM12 9v12M12 9C10 5 6 5 6 7.5S12 9 12 9zm0 0c2-4 6-4 6-1.5S12 9 12 9z",
+  flag: "M5 21V4M5 4h12l-2 4 2 4H5",
+  leaf: "M5 19C5 10 11 4 20 4c0 9-6 15-15 15zM5 19l8-8",
+  drop: "M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z",
+  layers: "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5",
+  pin: "M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z" + O(12, 9, 2.5),
+  logout: "M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10",
+  more: O(5, 12, 1) + O(12, 12, 1) + O(19, 12, 1),
+  wave: "M2 9c3-3 5 3 8 0s5-3 8 0 3 0 4 0M2 15c3-3 5 3 8 0s5-3 8 0 3 0 4 0",
+  plane: "M2 13l7-1.5L13 4h2l-1 7.5 5 .8 1.7-2.3h1.3l-1 3.5 1 3.5h-1.3L19 14.7l-5 .8 1 7.5h-2l-4-7.5L2 14z",
+  bank: "M3 9l9-5 9 5M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18",
+  tag: "M3 12V4h8l10 10-8 8z" + O(7.5, 8.5, 1.5),
+  receipt: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3",
+  briefcase: "M3 8h18v12H3zM8 8V5h8v3M3 13h18",
+  globe: O(12, 12, 9) + "M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18",
+  cart: "M3 4h2l2.5 11h10L20 7H6.5" + O(9, 19, 1.5) + O(17, 19, 1.5),
+  heart: "M12 20s-8-4.6-8-10.3A4.7 4.7 0 0 1 12 7a4.7 4.7 0 0 1 8 2.7C20 15.4 12 20 12 20z",
+  copy: "M9 9h11v11H9zM5 15H4V4h11v1",
+  snow: "M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9 4l3 2 3-2M9 20l3-2 3 2",
+  send: "M3 11l18-8-8 18-2-8z",
+  bulb: "M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z",
+  school: "M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5",
+  car: "M4 16v-4l2-5h12l2 5v4zM4 16v2h3v-2M17 16v2h3v-2M7.5 13h.5M16 13h.5",
+  bowl: "M3 11h18a9 9 0 0 1-18 0zM8 7c0-2 2-2 2-4M13 7c0-2 2-2 2-4",
+  film: "M4 5h16v14H4zM8 5v14M16 5v14M4 9h4M4 15h4M16 9h4M16 15h4",
+  shirt: "M8 4l4 2 4-2 5 4-3 3-2-1v10H8V10l-2 1-3-3z",
+  phone: "M7 3h10v18H7zM11 18h2",
+  key: O(8, 15, 4) + "M11 12l9-9M17 6l3 3M15 8l2 2",
+  percent: "M19 5L5 19" + O(7, 7, 2.5) + O(17, 17, 2.5),
+  zap: "M13 2L4 14h7l-1 8 9-12h-7z",
+  repeat: "M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3",
+  pause: "M8 5v14M16 5v14",
+  play: "M7 4l13 8-13 8z",
+  box: "M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10",
+  book: "M4 5a2 2 0 0 1 2-2h13v15H6a2 2 0 0 0-2 2zM4 19a2 2 0 0 0 2 2h13v-4",
+};
+const ic = (n, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${ICONS[n] || ICONS.more}"/></svg>`;
+const initials = (n) => String(n).split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+const hue = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const avatar = (name, cls = "") => `<span class="cc-av ${cls}" style="--h:${hue(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
+
+/* ---------- Toasts (announced politely to screen readers) ---------- */
+function toast(msg, kind = "") {
+  let box = $("#cc-toasts");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "cc-toasts";
+    box.className = "cc-toasts";
+    box.setAttribute("role", "status");
+    box.setAttribute("aria-live", "polite");
+    document.body.appendChild(box);
+  }
+  const t = document.createElement("div");
+  t.className = "cc-toast " + kind;
+  t.innerHTML = ic(kind === "bad" ? "x" : kind === "warn" ? "bell" : "check") + "<span>" + esc(msg) + "</span>";
+  box.appendChild(t);
+  while (box.children.length > 4) box.firstChild.remove();
+  setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 320); }, 2800);
+}
+
+/* ---------- Modal + drawer with focus trap, Esc and backdrop close ---------- */
+const modals = [];
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+function openModal({ title, html = "", drawer = false, wide = false, actions = null, onOpen = null, onClose = null, cls = "" }) {
+  const prev = document.activeElement;
+  const id = "dlg-" + uid();
+  const wrap = document.createElement("div");
+  wrap.className = "cc-overlay" + (drawer ? " is-drawer" : "") + (cls ? " " + cls : "");
+  wrap.innerHTML = `<div class="cc-back" data-close></div>
+    <div class="cc-dialog${wide ? " wide" : ""}" role="dialog" aria-modal="true" aria-labelledby="${id}">
+      <header class="cc-dh"><h2 id="${id}">${esc(title)}</h2><button type="button" class="cc-x" data-close aria-label="Close">${ic("x")}</button></header>
+      <div class="cc-db">${html}</div>
+      ${actions ? '<footer class="cc-df"></footer>' : ""}
+    </div>`;
+  const dlg = $(".cc-dialog", wrap);
+  const api = { el: dlg, body: $(".cc-db", wrap), wrap, close };
+  if (actions) {
+    const f = $(".cc-df", wrap);
+    actions.forEach((a) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn " + (a.kind || "ghost");
+      b.textContent = a.label;
+      b.addEventListener("click", () => { const keep = a.fn ? a.fn(api) === false : false; if (!keep && a.close !== false) close(); });
+      f.appendChild(b);
+    });
+  }
+  let closed = false;
+  function close() {
+    if (closed) return;
+    closed = true;
+    wrap.classList.remove("open");
+    setTimeout(() => wrap.remove(), RM ? 0 : 280);
+    const at = modals.indexOf(api);
+    if (at >= 0) modals.splice(at, 1);
+    if (onClose) onClose();
+    if (prev && prev.focus && document.contains(prev)) prev.focus();
+  }
+  wrap.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) close(); });
+  wrap.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const f = $$(FOCUSABLE, dlg).filter((x) => x.offsetParent !== null || x === document.activeElement);
+    if (!f.length) return;
+    if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+    else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+  });
+  document.body.appendChild(wrap);
+  modals.push(api);
+  requestAnimationFrame(() => wrap.classList.add("open"));
+  if (onOpen) onOpen(api);
+  const first = $("[autofocus]", dlg) || $$(FOCUSABLE, $(".cc-db", wrap))[0] || $(".cc-x", wrap);
+  if (first) setTimeout(() => first.focus(), 30);
+  return api;
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && modals.length) { e.preventDefault(); modals[modals.length - 1].close(); } });
+
+/* Confirm dialog: resolves true when the person confirms */
+function confirmBox(text, ok = "Delete", kind = "danger") {
+  return new Promise((res) => {
+    let done = false;
+    openModal({
+      title: "Please confirm",
+      html: `<p class="cc-confirm">${esc(text)}</p>`,
+      actions: [{ label: "Cancel" }, { label: ok, kind, fn: () => { done = true; res(true); } }],
+      onClose: () => { if (!done) res(false); },
+    });
+  });
+}
+
+/* Pick one option (keyboard friendly "Move to..." menu) */
+function pickBox(title, options) {
+  return new Promise((res) => {
+    let val = null;
+    const m = openModal({
+      title,
+      html: `<div class="cc-picks">${options.map((o, i) => `<button type="button" class="cc-pick" data-i="${i}">${o.icon ? ic(o.icon) : ""}<span>${esc(o.label)}</span>${o.hint ? `<small>${esc(o.hint)}</small>` : ""}</button>`).join("")}</div>`,
+      onClose: () => res(val),
+    });
+    m.body.addEventListener("click", (e) => { const b = e.target.closest(".cc-pick"); if (b) { val = options[+b.dataset.i].value; m.close(); } });
+  });
+}
+
+/* ---------- Form in a modal or drawer, with validation + inline errors ---------- */
+function formModal({ title, fields, values = {}, submit = "Save", drawer = false, onSubmit, intro = "" }) {
+  const fid = uid();
+  const fieldHTML = (f) => {
+    const id = `f-${fid}-${f.name}`, v = values[f.name] != null ? values[f.name] : f.value != null ? f.value : "";
+    const req = f.required ? " required" : "";
+    const err = `aria-describedby="${id}-e"`;
+    let input;
+    if (f.type === "select") input = `<select id="${id}" name="${f.name}"${req} ${err}>${f.options.map((o) => { const [ov, ol] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(ov)}"${String(ov) === String(v) ? " selected" : ""}>${esc(ol)}</option>`; }).join("")}</select>`;
+    else if (f.type === "textarea") input = `<textarea id="${id}" name="${f.name}" rows="3"${req} ${err} placeholder="${esc(f.placeholder || "")}">${esc(v)}</textarea>`;
+    else if (f.type === "range") input = `<div class="cc-range"><input type="range" id="${id}" name="${f.name}" min="${f.min}" max="${f.max}" step="${f.step || 1}" value="${esc(v)}" ${err}><output for="${id}">${esc(v)}${f.unit || ""}</output></div>`;
+    else input = `<input id="${id}" name="${f.name}" type="${f.type || "text"}" value="${esc(v)}"${req} ${err}${f.min != null ? ` min="${f.min}"` : ""}${f.max != null ? ` max="${f.max}"` : ""}${f.step ? ` step="${f.step}"` : f.type === "number" ? ' step="any"' : ""} placeholder="${esc(f.placeholder || "")}" ${f.type === "number" ? 'inputmode="decimal"' : ""}>`;
+    return `<div class="cc-field${f.half ? " half" : ""}"><label for="${id}">${esc(f.label)}${f.required ? ' <span aria-hidden="true">*</span>' : ""}</label>${input}${f.hint ? `<small class="cc-hint">${esc(f.hint)}</small>` : ""}<small class="cc-err" id="${id}-e"></small></div>`;
+  };
+  const m = openModal({
+    title, drawer,
+    html: `<form class="cc-form" novalidate>${intro ? `<p class="cc-intro">${intro}</p>` : ""}<div class="cc-fields">${fields.map(fieldHTML).join("")}</div><p class="cc-err cc-form-err" role="alert"></p><div class="cc-df"><button type="button" class="btn ghost" data-close>Cancel</button><button type="submit" class="btn primary">${esc(submit)}</button></div></form>`,
+  });
+  const form = $("form", m.el);
+  $$('input[type="range"]', form).forEach((r) => r.addEventListener("input", () => { const f = fields.find((x) => x.name === r.name); r.nextElementSibling.textContent = r.value + (f.unit || ""); }));
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const vals = {}, errs = {};
+    /* read every value first, then validate (checks may compare fields) */
+    fields.forEach((f) => {
+      let v = form.elements[f.name].value.trim();
+      if (f.type === "number" || f.type === "range") v = v === "" ? "" : parseFloat(v);
+      vals[f.name] = v;
+    });
+    fields.forEach((f) => {
+      const v = vals[f.name];
+      if (f.required && (v === "" || v == null)) errs[f.name] = "This field is required";
+      else if ((f.type === "number") && v !== "" && isNaN(v)) errs[f.name] = "Enter a number";
+      else if (f.type === "number" && v !== "" && f.min != null && v < f.min) errs[f.name] = "Must be at least " + f.min;
+      else if (f.type === "number" && v !== "" && f.max != null && v > f.max) errs[f.name] = "Must be at most " + num(f.max);
+      else if (f.check) { const c = f.check(v, vals); if (c) errs[f.name] = c; }
+    });
+    fields.forEach((f) => {
+      const el = form.elements[f.name], box = $("#" + CSS.escape(`f-${fid}-${f.name}-e`), form);
+      if (box) box.textContent = errs[f.name] || "";
+      if (el.setAttribute) errs[f.name] ? el.setAttribute("aria-invalid", "true") : el.removeAttribute("aria-invalid");
+    });
+    const bad = fields.find((f) => errs[f.name]);
+    if (bad) { form.elements[bad.name].focus(); form.classList.remove("shake"); void form.offsetWidth; form.classList.add("shake"); return; }
+    const r = onSubmit(vals);
+    if (typeof r === "string") { $(".cc-form-err", form).textContent = r; return; }
+    m.close();
+  });
+  return m;
+}
+if (!window.CSS || !CSS.escape) window.CSS = Object.assign(window.CSS || {}, { escape: (s) => String(s).replace(/[^\w-]/g, "\\$&") });
+
+/* ---------- Popover (bell lists, menus): closes on outside click or Esc ---------- */
+let openPop = null;
+function popover(anchor, html, onOpen) {
+  if (openPop) { const same = openPop.anchor === anchor; openPop.close(); if (same) return; }
+  const p = document.createElement("div");
+  p.className = "cc-pop";
+  p.innerHTML = html;
+  document.body.appendChild(p);
+  const r = anchor.getBoundingClientRect();
+  const w = Math.min(320, innerWidth - 16);
+  p.style.width = w + "px";
+  p.style.left = clamp(r.right - w, 8, innerWidth - w - 8) + "px";
+  p.style.top = r.bottom + 8 + "px";
+  anchor.setAttribute("aria-expanded", "true");
+  const close = () => { p.remove(); anchor.setAttribute("aria-expanded", "false"); document.removeEventListener("pointerdown", out, true); document.removeEventListener("keydown", key); openPop = null; };
+  const out = (e) => { if (!p.contains(e.target) && !anchor.contains(e.target)) close(); };
+  const key = (e) => { if (e.key === "Escape") { close(); anchor.focus(); } };
+  setTimeout(() => { document.addEventListener("pointerdown", out, true); document.addEventListener("keydown", key); });
+  openPop = { anchor, close, el: p };
+  if (onOpen) onOpen(p, close);
+  requestAnimationFrame(() => p.classList.add("open"));
+  return openPop;
+}
+
+/* ---------- Tooltip that follows the pointer ---------- */
+const tip = {
+  el: null,
+  show(e, html) {
+    if (!this.el) { this.el = document.createElement("div"); this.el.className = "cc-tip"; this.el.setAttribute("role", "tooltip"); document.body.appendChild(this.el); }
+    this.el.innerHTML = html;
+    this.el.classList.add("on");
+    const x = e.clientX, y = e.clientY, w = this.el.offsetWidth, h = this.el.offsetHeight;
+    this.el.style.left = clamp(x + 14, 6, innerWidth - w - 6) + "px";
+    this.el.style.top = (y - h - 12 < 6 ? y + 16 : y - h - 12) + "px";
+  },
+  hide() { if (this.el) this.el.classList.remove("on"); },
+};
+
+/* ---------- Hash router + sliding nav marker ---------- */
+function moveMarkers() {
+  $$("[data-marker]").forEach((m) => {
+    const a = m.parentElement.querySelector('[aria-current="page"]');
+    if (!a) { m.style.opacity = 0; return; }
+    m.style.opacity = 1;
+    if (m.dataset.marker === "x") { m.style.width = a.offsetWidth + "px"; m.style.transform = `translateX(${a.offsetLeft}px)`; }
+    else { m.style.height = a.offsetHeight + "px"; m.style.transform = `translateY(${a.offsetTop}px)`; }
+  });
+}
+function startRouter(pages, fallback, render) {
+  const go = () => {
+    const parts = location.hash.replace(/^#\/?/, "").split("/");
+    const name = pages.includes(parts[0]) ? parts[0] : fallback;
+    $$('a[href^="#/"]').forEach((a) => { if (a.getAttribute("href") === "#/" + name) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+    document.documentElement.classList.remove("nav-open");
+    if (tip.el) tip.hide();
+    if (openPop) openPop.close();
+    render(name);
+    requestAnimationFrame(moveMarkers);
+  };
+  addEventListener("hashchange", go);
+  go();
+  return go;
+}
+/* Staggered entrance for the cards of a freshly rendered page */
+function enter(root) {
+  $$(".card, [data-enter]", root).forEach((c, i) => {
+    c.style.setProperty("--i", Math.min(i, 14));
+    c.classList.add("cc-in");
+    /* drop the class when done so hover and drag transforms work again */
+    c.addEventListener("animationend", function done(e) { if (e.target === c) { c.classList.remove("cc-in"); c.removeEventListener("animationend", done); } });
+  });
+}
+
+/* ---------- App shell: theme toggle, mobile menu, Ctrl+K ---------- */
+const APP = { theme: () => document.documentElement.dataset.theme };
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $$("[data-theme-toggle]").forEach((b) => { b.setAttribute("aria-pressed", String(t === "dark")); b.setAttribute("aria-label", t === "dark" ? "Switch to light theme" : "Switch to dark theme"); });
+  redrawCharts();
+}
+function initShell(cmds) {
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-theme-toggle]");
+    if (t) setTheme(APP.theme() === "dark" ? "light" : "dark");
+    const m = e.target.closest("[data-menu]");
+    if (m) { const on = document.documentElement.classList.toggle("nav-open"); m.setAttribute("aria-expanded", String(on)); }
+    if (e.target.closest("[data-scrim]")) document.documentElement.classList.remove("nav-open");
+    if (e.target.closest("[data-cmdk]")) cmdk(cmds);
+  });
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); if (!modals.length) cmdk(cmds); }
+    if (e.key === "Escape" && document.documentElement.classList.contains("nav-open")) document.documentElement.classList.remove("nav-open");
+  });
+  setTheme(APP.theme());
+  let rz;
+  addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { redrawCharts(); moveMarkers(); }, 160); });
+}
+
+/* Command search: type to filter pages and actions, Enter to run */
+function cmdk(items) {
+  const list = typeof items === "function" ? items() : items;
+  let sel = 0, shown = list;
+  const m = openModal({
+    title: "Search and jump",
+    cls: "cc-cmdk",
+    html: `<label class="sr-only" for="cmdk-q">Search pages and actions</label><input id="cmdk-q" class="cc-cmdk-q" placeholder="Type a page or action…" autocomplete="off" autofocus><ul class="cc-cmdk-list" role="listbox" aria-label="Results"></ul><p class="cc-cmdk-foot"><kbd>↑</kbd><kbd>↓</kbd> move <kbd>Enter</kbd> open <kbd>Esc</kbd> close</p>`,
+  });
+  const q = $("#cmdk-q", m.el), ul = $(".cc-cmdk-list", m.el);
+  const draw = () => {
+    shown = list.filter((x) => x.label.toLowerCase().includes(q.value.toLowerCase().trim()));
+    sel = clamp(sel, 0, Math.max(0, shown.length - 1));
+    ul.innerHTML = shown.length ? shown.map((x, i) => `<li role="option" aria-selected="${i === sel}" data-i="${i}">${ic(x.icon || "chevR")}<span>${esc(x.label)}</span><small>${esc(x.hint || "")}</small></li>`).join("") : '<li class="cc-empty-li">No matches</li>';
+  };
+  const run = (i) => { const x = shown[i]; if (!x) return; m.close(); setTimeout(() => x.run(), 10); };
+  q.addEventListener("input", () => { sel = 0; draw(); });
+  q.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { sel++; draw(); e.preventDefault(); }
+    if (e.key === "ArrowUp") { sel--; draw(); e.preventDefault(); }
+    if (e.key === "Enter") run(sel);
+  });
+  ul.addEventListener("click", (e) => { const li = e.target.closest("[data-i]"); if (li) run(+li.dataset.i); });
+  draw();
+}
+const pageCmds = (pages, extra = []) => pages.map(([id, label, icon]) => ({ label: "Go to " + label, icon, run: () => (location.hash = "#/" + id) })).concat(extra);
+
+/* ---------- Data table: search, filter chips, sort, pagination, row click ---------- */
+function dataTable(el, o) {
+  if (!el) return null;
+  const st = { q: "", chip: "All", k: o.sort || null, dir: o.dir || -1, page: 0 };
+  const size = o.size || 8;
+  el.classList.add("cc-tbl");
+  el.innerHTML = `<div class="cc-tbar">${o.search !== false ? `<label class="cc-search">${ic("search")}<span class="sr-only">Search</span><input type="search" placeholder="${esc(o.search || "Search…")}"></label>` : ""}${o.chips ? `<div class="cc-chips" role="group" aria-label="Filter">${o.chips.values.map((v) => `<button type="button" class="cc-chip" aria-pressed="${v === "All"}" data-v="${esc(v)}">${esc(v)}</button>`).join("")}</div>` : ""}${o.tools || ""}</div>
+    <div class="cc-scroll"><table><thead><tr>${o.cols.map((c) => `<th scope="col" class="${c.cls || ""}"${c.sort !== false ? ' aria-sort="none"' : ""}>${c.sort !== false ? `<button type="button" data-k="${c.k}">${esc(c.label)}<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4l3-3 3 3M2 6l3 3 3-3"/></svg></button>` : esc(c.label)}</th>`).join("")}</tr></thead><tbody></tbody></table></div>
+    <div class="cc-pager"><span class="cc-count" aria-live="polite"></span><div class="cc-pages"></div></div>`;
+  const tb = $("tbody", el);
+  const rowsNow = () => {
+    let r = o.rows();
+    if (st.chip !== "All" && o.chips) r = r.filter((x) => (o.chips.test ? o.chips.test(x, st.chip) : String(o.chips.get ? o.chips.get(x) : x[o.chips.k]) === st.chip));
+    if (st.q) { const q = st.q.toLowerCase(); r = r.filter((x) => (o.keys || o.cols.map((c) => c.k)).some((k) => String(x[k] == null ? "" : x[k]).toLowerCase().includes(q))); }
+    if (st.k) r = r.slice().sort((a, b) => { const A = a[st.k], B = b[st.k]; return (typeof A === "number" && typeof B === "number" ? A - B : String(A).localeCompare(String(B))) * st.dir; });
+    return r;
+  };
+  function refresh() {
+    const r = rowsNow();
+    const pages = Math.max(1, Math.ceil(r.length / size));
+    st.page = clamp(st.page, 0, pages - 1);
+    const slice = r.slice(st.page * size, st.page * size + size);
+    tb.innerHTML = slice.length ? slice.map((x, i) => `<tr tabindex="${o.onRow ? 0 : -1}" data-i="${st.page * size + i}" style="--r:${i}">${o.cols.map((c) => `<td class="${c.cls || ""}">${c.f ? c.f(x[c.k], x) : esc(x[c.k])}</td>`).join("")}</tr>`).join("") : `<tr class="cc-empty-row"><td colspan="${o.cols.length}"><div class="cc-empty">${ic(o.emptyIcon || "search")}<b>${esc(o.empty || "Nothing here yet")}</b><span>Try another search or filter.</span></div></td></tr>`;
+    tb._rows = r;
+    $(".cc-count", el).textContent = r.length ? `${st.page * size + 1}–${Math.min(r.length, st.page * size + size)} of ${r.length}` : "0 results";
+    const pg = $(".cc-pages", el);
+    let btns = `<button type="button" data-p="${st.page - 1}" ${st.page === 0 ? "disabled" : ""} aria-label="Previous page">${ic("chevL")}</button>`;
+    for (let i = 0; i < pages; i++) if (pages <= 7 || i === 0 || i === pages - 1 || Math.abs(i - st.page) <= 1) btns += `<button type="button" data-p="${i}" ${i === st.page ? 'aria-current="page"' : ""}>${i + 1}</button>`; else if (Math.abs(i - st.page) === 2) btns += "<span>…</span>";
+    btns += `<button type="button" data-p="${st.page + 1}" ${st.page >= pages - 1 ? "disabled" : ""} aria-label="Next page">${ic("chevR")}</button>`;
+    pg.innerHTML = btns;
+    $$("th", el).forEach((th) => { const b = $("button", th); if (b) th.setAttribute("aria-sort", b.dataset.k === st.k ? (st.dir > 0 ? "ascending" : "descending") : "none"); });
+  }
+  const s = $(".cc-search input", el);
+  if (s) s.addEventListener("input", () => { st.q = s.value; st.page = 0; refresh(); });
+  /* handlers are properties, so calling dataTable() again on the same element never stacks them */
+  el.onclick = (e) => {
+    const chip = e.target.closest(".cc-chip");
+    if (chip) { st.chip = chip.dataset.v; st.page = 0; $$(".cc-chip", el).forEach((c) => c.setAttribute("aria-pressed", String(c === chip))); refresh(); return; }
+    const th = e.target.closest("th button");
+    if (th) { if (st.k === th.dataset.k) st.dir *= -1; else { st.k = th.dataset.k; st.dir = -1; } refresh(); return; }
+    const p = e.target.closest("[data-p]");
+    if (p) { st.page = +p.dataset.p; refresh(); return; }
+    const act = e.target.closest("[data-act]");
+    const tr = e.target.closest("tbody tr[data-i]");
+    if (act && tr && o.onAct) { e.stopPropagation(); o.onAct(act.dataset.act, tb._rows[+tr.dataset.i], act); return; }
+    if (tr && o.onRow) o.onRow(tb._rows[+tr.dataset.i]);
+  };
+  el.onkeydown = (e) => { const tr = e.target.closest("tbody tr[data-i]"); if (tr && e.key === "Enter" && o.onRow && e.target === tr) o.onRow(tb._rows[+tr.dataset.i]); };
+  refresh();
+  return { refresh, state: st };
+}
+
+/* =====================================================================
+   Charts: small SVG charts. Lines draw on, bars grow, donuts sweep.
+   Every chart has a tooltip, axes and a legend for 2+ series, and is
+   redrawn when the data, range, theme or window size changes.
+   ===================================================================== */
+const charts = new Map();
+function chart(el, draw) { if (!el) return; charts.set(el, draw); draw(false); }
+function redrawCharts() { for (const [el, d] of charts) { if (!el.isConnected) charts.delete(el); else d(true); } }
+const SVGNS = "http://www.w3.org/2000/svg";
+function niceStep(raw) { if (!(raw > 0)) return 1; const e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; }
+function ticksFor(lo, hi, n = 4) {
+  if (!isFinite(lo) || !isFinite(hi)) { lo = 0; hi = 1; }
+  if (hi === lo) { hi = lo + (Math.abs(lo) || 1); lo = lo > 0 ? 0 : lo; }
+  const st = niceStep((hi - lo) / n), a = Math.floor(lo / st) * st, b = Math.ceil(hi / st) * st, t = [];
+  for (let v = a; v <= b + st / 2; v += st) t.push(+v.toFixed(8));
+  return { lo: a, hi: b, ticks: t };
+}
+function resample(arr, n) {
+  if (!arr.length) return Array(n).fill(0);
+  if (arr.length === n) return arr.slice();
+  return Array.from({ length: n }, (_, i) => { const x = (i * (arr.length - 1)) / Math.max(1, n - 1), a = Math.floor(x), b = Math.min(arr.length - 1, a + 1); return arr[a] + (arr[b] - arr[a]) * (x - a); });
+}
+function pathD(pts, smooth = true) {
+  if (!pts.length) return "";
+  const f = (v) => v.toFixed(1);
+  if (!smooth || pts.length < 3) return "M" + pts.map((p) => f(p[0]) + "," + f(p[1])).join("L");
+  let d = `M${f(pts[0][0])},${f(pts[0][1])}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2, t = 0.18;
+    d += `C${f(p1[0] + (p2[0] - p0[0]) * t)},${f(p1[1] + (p2[1] - p0[1]) * t)} ${f(p2[0] - (p3[0] - p1[0]) * t)},${f(p2[1] - (p3[1] - p1[1]) * t)} ${f(p2[0])},${f(p2[1])}`;
+  }
+  return d;
+}
+const legendHTML = (series) => (series.length > 1 ? `<div class="cc-legend">${series.map((s) => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join("")}</div>` : "");
+const emptyChart = (el, h, text = "No data for this range yet") => { el.innerHTML = `<div class="cc-empty" style="min-height:${h}px">${ic("bars")}<b>${esc(text)}</b></div>`; };
+
+/* Line / area chart. o = {labels, series:[{name,data,color,dash}], area, height, fmt, zero, smooth}
+   lineChart(el, o, true) morphs from the last drawn values (used by range switches). */
+function lineChart(el, o, morph = false) {
+  if (!el) return;
+  const prev = el._vals;
+  el._o = o;
+  chart(el, (again) => drawLine(el, el._o, again ? "static" : morph && prev ? "morph" : "enter", prev));
+}
+function drawLine(el, o, mode, prev) {
+  const H = o.height || 220, W = Math.max(260, el.clientWidth || 640);
+  const S = o.series.filter((s) => s.data && s.data.length);
+  if (!S.length) { el._vals = null; return emptyChart(el, H); }
+  const n = Math.max(...S.map((s) => s.data.length));
+  const all = S.flatMap((s) => s.data);
+  let lo = Math.min(...all), hi = Math.max(...all);
+  if (o.zero !== false) { lo = Math.min(0, lo); hi = Math.max(0, hi); } else { const pad = (hi - lo) * 0.15 || Math.abs(hi) * 0.1 || 1; lo -= pad; hi += pad; }
+  const sc = ticksFor(lo, hi, o.ticks || 4), f = o.fmt || short;
+  const P = { l: o.padL || 46, r: 14, t: 12, b: 26 };
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const X = (i) => P.l + (n === 1 ? iw / 2 : (i * iw) / (n - 1));
+  const Y = (v) => P.t + ih - ((v - sc.lo) / (sc.hi - sc.lo)) * ih;
+  const ptsOf = (d) => d.map((v, i) => [X(i), Y(v)]);
+  const gid = "g" + uid();
+  const every_ = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(iw / 64))));
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${esc(o.aria || "Line chart")}" class="cc-chart${mode === "enter" ? "" : " cc-static"}">`;
+  s += "<defs>" + S.map((x, i) => `<linearGradient id="${gid}${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${x.color};stop-opacity:${o.areaOpacity || 0.32}"/><stop offset="1" style="stop-color:${x.color};stop-opacity:0"/></linearGradient>`).join("") + "</defs>";
+  s += sc.ticks.map((t) => `<g class="cc-grid"><line x1="${P.l}" x2="${W - P.r}" y1="${Y(t)}" y2="${Y(t)}"/><text x="${P.l - 8}" y="${Y(t) + 4}" text-anchor="end">${esc(f(t))}</text></g>`).join("");
+  const showX = (i) => i === n - 1 || (i % every_ === 0 && n - 1 - i >= every_ * 0.6);
+  s += (o.labels || []).map((l, i) => showX(i) ? `<text class="cc-xl" x="${X(i)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}">${esc(l)}</text>` : "").join("");
+  S.forEach((x, i) => {
+    const pts = ptsOf(x.data);
+    if (o.area) s += `<path class="cc-area cc-fade" data-s="${i}" fill="url(#${gid}${i})" d="${pathD(pts, o.smooth !== false)}L${pts[pts.length - 1][0]},${Y(Math.max(sc.lo, 0))}L${pts[0][0]},${Y(Math.max(sc.lo, 0))}Z"/>`;
+    s += `<path class="cc-line ${x.dash ? "cc-fade" : "cc-draw"}" data-s="${i}" pathLength="1" style="stroke:${x.color};${x.dash ? "stroke-dasharray:5 5" : ""};animation-delay:${i * 120}ms" d="${pathD(pts, o.smooth !== false)}"/>`;
+    if (n === 1) s += `<circle cx="${pts[0][0]}" cy="${pts[0][1]}" r="4" style="fill:${x.color}"/>`;
+  });
+  s += `<line class="cc-guide" y1="${P.t}" y2="${P.t + ih}" x1="0" x2="0"/>` + S.map((x, i) => `<circle class="cc-dot" data-d="${i}" r="4.5" style="fill:${x.color}"/>`).join("");
+  s += `<rect class="cc-hit" x="${P.l}" y="${P.t}" width="${iw}" height="${ih}" fill="transparent"/></svg>`;
+  el.innerHTML = s + legendHTML(S);
+  const svg = $("svg", el), guide = $(".cc-guide", svg), dots = $$(".cc-dot", svg);
+  el._vals = S.map((x) => x.data.slice());
+  if (mode === "morph" && prev && prev.length === S.length && !RM) {
+    const from = prev.map((p, i) => resample(p, S[i].data.length));
+    const lines = $$(".cc-line", svg), areas = $$(".cc-area", svg);
+    const frame = (t) => S.forEach((x, i) => {
+      const pts = ptsOf(x.data.map((v, j) => lerp(from[i][j], v, t)));
+      const d = pathD(pts, o.smooth !== false);
+      lines[i].setAttribute("d", d);
+      if (areas[i]) areas[i].setAttribute("d", `${d}L${pts[pts.length - 1][0]},${Y(Math.max(sc.lo, 0))}L${pts[0][0]},${Y(Math.max(sc.lo, 0))}Z`);
+    });
+    frame(0);
+    tween(650, frame);
+  }
+  const hit = $(".cc-hit", svg);
+  const move = (e) => {
+    const r = svg.getBoundingClientRect(), sx = W / (r.width || W);
+    const i = clamp(Math.round((((e.clientX - r.left) * sx - P.l) / (iw || 1)) * (n - 1)), 0, n - 1);
+    guide.setAttribute("x1", X(i)); guide.setAttribute("x2", X(i)); guide.classList.add("on");
+    dots.forEach((d, k) => { const v = S[k].data[i]; if (v == null) return d.classList.remove("on"); d.setAttribute("cx", X(i)); d.setAttribute("cy", Y(v)); d.classList.add("on"); });
+    tip.show(e, `<b>${esc((o.labels || [])[i] || "")}</b>` + S.map((x) => x.data[i] == null ? "" : `<div><i style="background:${x.color}"></i>${esc(x.name)}<em>${esc((o.tipFmt || f)(x.data[i]))}</em></div>`).join(""));
+  };
+  hit.addEventListener("pointermove", move);
+  hit.addEventListener("pointerdown", move);
+  hit.addEventListener("pointerleave", () => { tip.hide(); guide.classList.remove("on"); dots.forEach((d) => d.classList.remove("on")); });
+}
+
+/* Bar chart (grouped or stacked). o = {labels, series:[{name,data,color}], stacked, height, fmt} */
+function barChart(el, o) {
+  if (!el) return;
+  el._o = o;
+  chart(el, (again) => {
+    const o = el._o, H = o.height || 220, W = Math.max(260, el.clientWidth || 640);
+    const S = o.series, n = (o.labels || []).length;
+    if (!n || !S.length) return emptyChart(el, H);
+    const tot = (i) => sum(S.map((s) => Math.max(0, s.data[i] || 0)));
+    const neg = (i) => sum(S.map((s) => Math.min(0, s.data[i] || 0)));
+    const all = o.stacked ? o.labels.flatMap((_, i) => [tot(i), neg(i)]) : S.flatMap((s) => s.data);
+    const sc = ticksFor(Math.min(0, ...all), Math.max(0, ...all), 4), f = o.fmt || short;
+    const P = { l: o.padL || 46, r: 10, t: 12, b: 26 }, iw = W - P.l - P.r, ih = H - P.t - P.b;
+    const Y = (v) => P.t + ih - ((v - sc.lo) / (sc.hi - sc.lo)) * ih;
+    const band = iw / n, gw = band * (o.gap || 0.62), bw = o.stacked ? gw : gw / S.length;
+    const every_ = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(iw / 46))));
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${esc(o.aria || "Bar chart")}" class="cc-chart${again ? " cc-static" : ""}">`;
+    s += sc.ticks.map((t) => `<g class="cc-grid"><line x1="${P.l}" x2="${W - P.r}" y1="${Y(t)}" y2="${Y(t)}"/><text x="${P.l - 8}" y="${Y(t) + 4}" text-anchor="end">${esc(f(t))}</text></g>`).join("");
+    for (let i = 0; i < n; i++) {
+      const x0 = P.l + band * i + (band - gw) / 2;
+      let up = 0, dn = 0;
+      S.forEach((x, k) => {
+        const v = x.data[i] || 0;
+        let y, h;
+        if (o.stacked) { const base = v >= 0 ? up : dn; y = v >= 0 ? Y(base + v) : Y(base); h = Math.abs(Y(base + v) - Y(base)); if (v >= 0) up += v; else dn += v; }
+        else { y = v >= 0 ? Y(v) : Y(0); h = Math.abs(Y(v) - Y(0)); }
+        const bx = o.stacked ? x0 : x0 + bw * k;
+        const rr = Math.min(o.radius != null ? o.radius : 4, bw / 2, h / 2);
+        s += `<rect class="cc-bar${v < 0 ? " neg" : ""}" x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - (o.stacked ? 0 : 2)).toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" rx="${rr}" style="fill:${x.color};animation-delay:${i * 35 + k * 60}ms"/>`;
+      });
+      if (i % every_ === 0) s += `<text class="cc-xl" x="${(x0 + gw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(o.labels[i])}</text>`;
+      s += `<rect class="cc-hit" data-i="${i}" x="${P.l + band * i}" y="${P.t}" width="${band}" height="${ih}" fill="transparent"/>`;
+    }
+    s += `<line class="cc-zero" x1="${P.l}" x2="${W - P.r}" y1="${Y(0)}" y2="${Y(0)}"/></svg>`;
+    el.innerHTML = s + legendHTML(S);
+    const svg = $("svg", el);
+    svg.addEventListener("pointermove", (e) => {
+      const h = e.target.closest(".cc-hit"); if (!h) return tip.hide();
+      const i = +h.dataset.i;
+      $$(".cc-hit", svg).forEach((x) => x.classList.toggle("on", x === h));
+      tip.show(e, `<b>${esc(o.labels[i])}</b>` + S.map((x) => `<div><i style="background:${x.color}"></i>${esc(x.name)}<em>${esc((o.tipFmt || f)(x.data[i] || 0))}</em></div>`).join("") + (o.stacked && S.length > 1 ? `<div class="cc-tip-tot">Total<em>${esc((o.tipFmt || f)(tot(i) + neg(i)))}</em></div>` : ""));
+    });
+    svg.addEventListener("pointerleave", () => { tip.hide(); $$(".cc-hit", svg).forEach((x) => x.classList.remove("on")); });
+  });
+}
+
+/* Donut that sweeps in. o = {items:[{label,value,color}], size, thick, fmt, center:[big, small], legend} */
+function donut(el, o) {
+  if (!el) return;
+  el._o = o;
+  chart(el, (again) => {
+    const o = el._o, D = o.size || 180, T = o.thick || 22, r = (D - T) / 2 - 4, C = 2 * Math.PI * r;
+    const items = o.items.filter((x) => x.value > 0), tot = sum(items.map((x) => x.value)), f = o.fmt || ((v) => short(v));
+    let acc = 0;
+    const segs = items.map((x) => { const len = tot ? (x.value / tot) * C : 0, s0 = acc; acc += len; return { ...x, len, s0 }; });
+    const gap = items.length > 1 ? Math.min(3, C * 0.006) : 0;
+    let s = `<div class="cc-donut-wrap"><div class="cc-donut" style="width:${D}px;height:${D}px"><svg viewBox="0 0 ${D} ${D}" width="${D}" height="${D}" role="img" aria-label="${esc(o.aria || "Donut chart")}"><circle class="cc-track" cx="${D / 2}" cy="${D / 2}" r="${r}" style="stroke-width:${T}"/>`;
+    s += segs.map((x, i) => `<circle class="cc-seg" data-i="${i}" cx="${D / 2}" cy="${D / 2}" r="${r}" transform="rotate(-90 ${D / 2} ${D / 2})" style="stroke:${x.color};stroke-width:${T}" stroke-dasharray="0 ${C}" stroke-dashoffset="${-x.s0}"/>`).join("");
+    s += `</svg><div class="cc-donut-c">${o.center ? `<b data-count>${esc(o.center[0])}</b><small>${esc(o.center[1] || "")}</small>` : ""}</div></div>`;
+    if (o.legend !== false) s += `<ul class="cc-dlegend">${segs.map((x, i) => `<li data-i="${i}"><i style="background:${x.color}"></i><span>${esc(x.label)}</span><em>${esc(f(x.value))}</em><small>${tot ? Math.round((x.value / tot) * 100) : 0}%</small></li>`).join("")}</ul>`;
+    el.innerHTML = s + "</div>";
+    if (!tot) $(".cc-donut-c", el).innerHTML = "<b>—</b><small>No data</small>";
+    const cs = $$(".cc-seg", el);
+    const setT = (t) => cs.forEach((c, i) => c.setAttribute("stroke-dasharray", `${Math.max(0, segs[i].len * t - gap)} ${C}`));
+    if (again) setT(1); else tween(1000, setT);
+    const hl = (i, e) => {
+      cs.forEach((c, k) => c.classList.toggle("dim", i != null && k !== i));
+      $$(".cc-dlegend li", el).forEach((li, k) => li.classList.toggle("on", k === i));
+      if (i != null && e) tip.show(e, `<b>${esc(segs[i].label)}</b><div><i style="background:${segs[i].color}"></i>${esc(f(segs[i].value))}<em>${Math.round((segs[i].value / tot) * 100)}%</em></div>`);
+    };
+    el.onpointermove = (e) => { const t = e.target.closest("[data-i]"); if (t) hl(+t.dataset.i, e); else { hl(null); tip.hide(); } };
+    el.onpointerleave = () => { hl(null); tip.hide(); };
+  });
+}
+
+/* Half-circle gauge. o = {value, max, color, label, fmt, size} */
+function gauge(el, o) {
+  if (!el) return;
+  el._o = o;
+  chart(el, (again) => {
+    const o = el._o, W = o.size || 200, H = W * 0.62, r = W / 2 - 14, cx = W / 2, cy = W / 2;
+    const p = clamp((o.value || 0) / (o.max || 1), 0, 1);
+    const arc = `M${cx - r},${cy} A${r},${r} 0 0 1 ${cx + r},${cy}`;
+    el.innerHTML = `<div class="cc-gauge"><svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px" role="img" aria-label="${esc((o.label || "Gauge") + ": " + Math.round(p * 100) + "%")}"><path class="cc-track" d="${arc}" style="stroke-width:${o.thick || 14}"/><path class="cc-gfill" d="${arc}" pathLength="100" style="stroke:${o.color};stroke-width:${o.thick || 14}" stroke-dasharray="0 100"/><circle class="cc-gknob" r="5" cx="${cx - r}" cy="${cy}" style="fill:${o.color}"/></svg><div class="cc-gauge-c"><b>${esc((o.fmt || ((v) => Math.round(v * 100) + "%"))(p))}</b><small>${esc(o.label || "")}</small></div></div>`;
+    const fill = $(".cc-gfill", el), knob = $(".cc-gknob", el);
+    const set = (t) => { const q = p * t; fill.setAttribute("stroke-dasharray", `${q * 100} 100`); const a = Math.PI * (1 - q); knob.setAttribute("cx", cx + r * Math.cos(a)); knob.setAttribute("cy", cy - r * Math.sin(a)); };
+    if (again) set(1); else tween(1100, set);
+    el.onpointermove = (e) => tip.show(e, `<b>${esc(o.label || "")}</b><div>${esc(o.tip || Math.round(p * 100) + "% of target")}</div>`);
+    el.onpointerleave = () => tip.hide();
+  });
+}
+
+/* Sparkline as an SVG string (for KPI cards and table rows) */
+function spark(data, color = "currentColor", w = 96, h = 30, area = true) {
+  if (!data || data.length < 2) return "";
+  const lo = Math.min(...data), hi = Math.max(...data), rg = hi - lo || 1;
+  const pts = data.map((v, i) => [(i * (w - 2)) / (data.length - 1) + 1, h - 3 - ((v - lo) / rg) * (h - 6)]);
+  const d = pathD(pts, true), id = "sp" + uid();
+  return `<svg class="cc-spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">${area ? `<defs><linearGradient id="${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:${color};stop-opacity:.35"/><stop offset="1" style="stop-color:${color};stop-opacity:0"/></linearGradient></defs><path class="cc-fade" d="${d}L${w - 1},${h}L1,${h}Z" fill="url(#${id})"/>` : ""}<path class="cc-line cc-draw" pathLength="1" d="${d}" style="stroke:${color}"/></svg>`;
+}
+
+/* Heatmap grid. o = {rows, cols, data:[[v]], color, fmt, cell} */
+function heatmap(el, o) {
+  if (!el) return;
+  el._o = o;
+  chart(el, (again) => {
+    const o = el._o, W = Math.max(260, el.clientWidth || 640), L = o.padL || 40, T = 18;
+    const cw = (W - L) / o.cols.length, ch = o.cell || Math.min(26, cw);
+    const H = T + ch * o.rows.length + 4, all = o.data.flat(), hi = Math.max(...all, 1), f = o.fmt || short;
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${esc(o.aria || "Heatmap")}" class="cc-chart${again ? " cc-static" : ""}">`;
+    const every_ = Math.max(1, Math.ceil(o.cols.length / Math.floor((W - L) / 34)));
+    s += o.cols.map((c, j) => (j % every_ === 0 ? `<text class="cc-xl" x="${L + cw * j + cw / 2}" y="12" text-anchor="middle">${esc(c)}</text>` : "")).join("");
+    o.rows.forEach((rw, i) => {
+      s += `<text class="cc-xl" x="${L - 6}" y="${T + ch * i + ch / 2 + 4}" text-anchor="end">${esc(rw)}</text>`;
+      o.cols.forEach((c, j) => { const v = o.data[i][j] || 0; s += `<rect class="cc-cell" data-r="${i}" data-c="${j}" x="${(L + cw * j + 1.5).toFixed(1)}" y="${T + ch * i + 1.5}" width="${Math.max(1, cw - 3).toFixed(1)}" height="${Math.max(1, ch - 3)}" rx="${Math.max(0, Math.min(5, ch / 4))}" style="fill:${o.color};fill-opacity:${(0.08 + (v / hi) * 0.92).toFixed(2)};animation-delay:${(i + j) * 18}ms"/>`; });
+    });
+    el.innerHTML = s + "</svg>";
+    const svg = $("svg", el);
+    svg.addEventListener("pointermove", (e) => { const c = e.target.closest(".cc-cell"); if (!c) return tip.hide(); tip.show(e, `<b>${esc(o.rows[+c.dataset.r])} · ${esc(o.cols[+c.dataset.c])}</b><div>${esc(f(o.data[+c.dataset.r][+c.dataset.c]))}</div>`); });
+    svg.addEventListener("pointerleave", () => tip.hide());
+  });
+}
+
+/* Pointer drag helper (mouse, touch and pen) */
+function dragify(el, { start, move, end }) {
+  el.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    const s = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, moved: false, e };
+    if (start && start(s, e) === false) return;
+    if (el.setPointerCapture && e.pointerId != null) try { el.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    const mv = (ev) => { s.dx = ev.clientX - s.x; s.dy = ev.clientY - s.y; if (Math.abs(s.dx) + Math.abs(s.dy) > 4) s.moved = true; if (move) move(s, ev); };
+    const up = (ev) => { el.removeEventListener("pointermove", mv); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", up); if (end) end(s, ev); };
+    el.addEventListener("pointermove", mv);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  });
+}
+
+/* Animate a number inside every [data-count] element of a root */
+function countAll(root) { $$("[data-to]", root).forEach((el) => countUp(el, +el.dataset.to, FMT[el.dataset.f || "money"] || FMT.money)); }
+const FMT = { money: (v) => money(v), short: (v) => moneyShort(v), num: (v) => num(Math.round(v)), pct: (v) => v.toFixed(1) + "%", int: (v) => num(Math.round(v)), usd2: (v) => money(v, { sym: "$", dp: 2 }) };
+
+
+/* =====================================================================
+   Altura app: a calm investment dashboard. Companies and the index
+   are invented; prices drift gently while the page is open.
+   ===================================================================== */
+CUR.sym = "$"; CUR.dp = 2;
+const KEY = "dk-altura:v1";
+const PAGES = [["overview", "Overview", "grid"], ["holdings", "Holdings", "list"], ["performance", "Performance", "line"], ["allocation", "Allocation", "pie"], ["watchlist", "Watchlist", "star"], ["settings", "Settings", "sliders"]];
+const SUBS = { overview: "Your wealth, one calm screen", holdings: "Everything you own", performance: "Returns, risk and drawdowns", allocation: "Where the money sits, and where it should", watchlist: "Ideas you are following", settings: "Preferences and data" };
+const CLASSES = { Stocks: "#d8b46a", Funds: "#5fc9b8", Bonds: "#8fa8d8", Gold: "#e0a35a", Cash: "#8e8a82" };
+const RANGES = { "1W": 7, "1M": 30, "3M": 90, "YTD": 0, "1Y": 365, "5Y": 1825 };
+reseed(2718);
+const ASSETS = [["NGE", "Northgate Energy", "Stocks", 84.2], ["SLH", "Silverline Health", "Stocks", 132.6], ["KSR", "Kestrel Robotics", "Stocks", 47.9], ["HBG", "Harbor Bank Group", "Stocks", 61.3], ["MVA", "Meadow Ventures", "Stocks", 22.75], ["ORC", "Orchid Consumer", "Stocks", 98.4], ["GWF", "Global World Fund", "Funds", 312.5], ["EMF", "Emerging Markets Fund", "Funds", 48.6], ["TCF", "Tech Leaders Fund", "Funds", 205.1], ["GOV10", "10-Year Government Bond", "Bonds", 96.8], ["CBF", "Corporate Bond Fund", "Bonds", 52.3], ["AUX", "Gold Trust", "Gold", 186.4]].map(([t, name, cls, price]) => ({ t, name, cls, price, open: price * (1 + rand(-0.018, 0.018)), y: price * rand(0.72, 1.12), vol: cls === "Stocks" ? 0.0011 : cls === "Gold" ? 0.0007 : 0.0004 }));
+const asset = (t) => ASSETS.find((a) => a.t === t);
+
+function seed() {
+  reseed(31415);
+  const hold = [["NGE", 120], ["SLH", 64], ["KSR", 210], ["HBG", 150], ["ORC", 48], ["GWF", 70], ["EMF", 260], ["TCF", 40], ["GOV10", 180], ["CBF", 220], ["AUX", 36]].map(([t, q]) => ({ t, q, cost: asset(t).price * rand(0.68, 1.05) }));
+  const divs = [["NGE", 0.84], ["HBG", 0.62], ["GWF", 2.1], ["CBF", 0.31], ["ORC", 0.48]].map(([t, per], i) => ({ t, per, date: iso(addDays(TODAY, 4 + i * 6)) }));
+  return { v: 1, hold, cash: 18420, divs, targets: { Stocks: 45, Funds: 25, Bonds: 18, Gold: 6, Cash: 6 }, watch: ["MVA", "TCF", "SLH", "AUX"], alerts: [], bench: true, profile: { name: "Sana Rauf", plan: "Long-term growth" }, notes: [{ id: uid(), text: "Silverline Health is up 2.1% today", read: false }, { id: uid(), text: "Dividend from Harbor Bank Group arrives soon", read: false }] };
+}
+let S = store.get(KEY, null);
+if (!S || S.v !== 1 || !S.hold) S = seed();
+const save = () => store.set(KEY, S);
+
+/* ---------- Portfolio maths ---------- */
+const valOf = (h) => h.q * asset(h.t).price;
+const invested = () => sum(S.hold.map(valOf));
+const total = () => invested() + S.cash;
+const dayChg = () => sum(S.hold.map((h) => h.q * (asset(h.t).price - asset(h.t).open)));
+const costBasis = () => sum(S.hold.map((h) => h.q * h.cost));
+const byClass = () => Object.keys(CLASSES).map((c) => ({ c, v: c === "Cash" ? S.cash : sum(S.hold.filter((h) => asset(h.t).cls === c).map(valOf)) }));
+const achg = (a) => ((a.price - a.open) / a.open) * 100;
+const tkr = (a) => `<span class="tkr"><i>${esc(a.t.slice(0, 4))}</i><span><b>${esc(a.name)}</b><small>${esc(a.t)} · ${a.cls}</small></span></span>`;
+
+/* History of the portfolio and the benchmark, ending at today's value */
+reseed(99);
+const HIST = (() => { const n = 1826, port = [], bench = []; let p = 1, b = 1; for (let i = 0; i < n; i++) { p *= 1 + (R() - 0.47) * 0.016; b *= 1 + (R() - 0.475) * 0.013; port.push(p); bench.push(b); } return { port, bench }; })();
+function series(range) {
+  let days = RANGES[range];
+  if (range === "YTD") days = Math.max(2, Math.round((TODAY - new Date(TODAY.getFullYear(), 0, 1)) / 864e5));
+  const n = HIST.port.length, k = total() / HIST.port[n - 1], step = Math.max(1, Math.round(days / 90));
+  const idx = []; for (let i = n - days; i < n; i += step) idx.push(i); if (idx[idx.length - 1] !== n - 1) idx.push(n - 1);
+  const p = idx.map((i) => HIST.port[i] * k), b0 = HIST.bench[idx[0]], bp = idx.map((i) => (HIST.bench[i] / b0) * p[0]);
+  return { p, b: bp, dates: idx.map((i) => addDays(TODAY, i - n + 1)), days };
+}
+
+/* ---------- Shell ---------- */
+$("#nav").insertAdjacentHTML("beforeend", PAGES.map(([id, l]) => `<a href="#/${id}">${l}</a>`).join(""));
+$("[data-menu]").innerHTML = ic("menu");
+$("[data-cmdk]").innerHTML = ic("search");
+$("#bell").innerHTML = ic("bell") + '<span class="badge" id="bellN"></span>';
+$("[data-theme-toggle]").innerHTML = `<span class="t-sun">${ic("sun")}</span><span class="t-moon">${ic("moon")}</span>`;
+const drawMe = () => ($("#sideMe").innerHTML = `${esc(S.profile.name)}<br><span style="color:var(--accent)">${esc(S.profile.plan)}</span>`);
+const drawBell = () => ($("#bellN").textContent = S.notes.filter((n) => !n.read).length || "");
+function note(text) { S.notes.unshift({ id: uid(), text, read: false }); S.notes = S.notes.slice(0, 12); drawBell(); }
+$("#bell").addEventListener("click", (e) => {
+  const draw = (p) => (p.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)"><b style="font-weight:500;letter-spacing:.1em;font-size:.8rem">NOTES</b><button class="btn sm" data-all>Mark read</button></div><ul class="list" style="padding:4px 16px">${S.notes.map((n) => `<li style="opacity:${n.read ? 0.5 : 1}">${ic("bell")}<span class="grow">${esc(n.text)}</span></li>`).join("") || "<li>Nothing new.</li>"}</ul>`);
+  popover(e.currentTarget, "", (p) => { draw(p); p.addEventListener("click", (ev) => { if (ev.target.closest("[data-all]")) { S.notes.forEach((n) => (n.read = true)); save(); drawBell(); draw(p); } }); });
+});
+
+/* ---------- Router ---------- */
+const view = $("#view");
+let current = "overview";
+const PAGE = {};
+function render(name, keep) {
+  current = name;
+  const p = PAGES.find((x) => x[0] === name);
+  $("#title").textContent = p[1]; $("#sub").textContent = SUBS[name];
+  document.title = p[1] + " · Altura";
+  PAGE[name]();
+  if (!keep) { enter(view); window.scrollTo(0, 0); }
+  countAll(view);
+}
+const rerender = () => render(current, true);
+
+/* ---------- Hero chart (custom): gradient line, benchmark, morph, scrub ---------- */
+let range = "1Y", heroPrev = null;
+function hero(el, morph) {
+  const draw = (again) => {
+    const s = series(range), W = Math.max(300, el.clientWidth || 800), H = W < 600 ? 220 : 290, P = { l: 4, r: 54, t: 14, b: 24 };
+    const all = S.bench ? s.p.concat(s.b) : s.p, lo0 = Math.min(...all), hi0 = Math.max(...all), pad = (hi0 - lo0) * 0.12 || 1, lo = lo0 - pad, hi = hi0 + pad;
+    const n = s.p.length, X = (i) => P.l + (i / (n - 1)) * (W - P.l - P.r), Y = (v) => P.t + (1 - (v - lo) / (hi - lo)) * (H - P.t - P.b);
+    const pts = (d) => d.map((v, i) => [X(i), Y(v)]);
+    const ticks = ticksFor(lo, hi, 4).ticks.filter((t) => t >= lo && t <= hi);
+    const xl = [0, Math.round(n / 3), Math.round((2 * n) / 3), n - 1].map((i) => `<text class="ax" x="${X(i)}" y="${H - 4}" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}">${s.days > 400 ? MON[s.dates[i].getMonth()] + " " + String(s.dates[i].getFullYear()).slice(2) : fdate(s.dates[i])}</text>`).join("");
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Portfolio value over ${range}"><defs><linearGradient id="heroStroke" x1="0" x2="1"><stop offset="0" style="stop-color:var(--teal)"/><stop offset="1" style="stop-color:var(--accent)"/></linearGradient><linearGradient id="heroFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:var(--accent);stop-opacity:.28"/><stop offset="1" style="stop-color:var(--accent);stop-opacity:0"/></linearGradient></defs>
+      ${ticks.map((t) => `<g class="cc-grid"><line x1="${P.l}" x2="${W - P.r}" y1="${Y(t)}" y2="${Y(t)}"/><text class="ax" x="${W - P.r + 8}" y="${Y(t) + 4}">${"$" + short(t)}</text></g>`).join("")}${xl}
+      <path class="ha${again || morph ? "" : " cc-fade"}"/>${S.bench ? `<path class="bl${again || morph ? "" : " cc-fade"}"/>` : ""}<path class="hl${again || morph ? "" : " cc-draw"}" pathLength="1"/>
+      <circle class="pulse" r="5"/><circle class="now" r="4.5"/>
+      <g class="scrub"><line y1="${P.t}" y2="${H - P.b}"/><circle r="5.5"/></g><rect class="hit" x="${P.l}" y="0" width="${W - P.l - P.r}" height="${H}" fill="transparent"/></svg>`;
+    const hl = $(".hl", el), ha = $(".ha", el), bl = $(".bl", el), now = $(".now", el), pu = $(".pulse", el);
+    const set = (pp, bb) => { const pt = pts(pp), d = pathD(pt); hl.setAttribute("d", d); ha.setAttribute("d", `${d}L${pt[n - 1][0]},${H - P.b}L${pt[0][0]},${H - P.b}Z`); if (bl) bl.setAttribute("d", pathD(pts(bb))); now.setAttribute("cx", pt[n - 1][0]); now.setAttribute("cy", pt[n - 1][1]); pu.setAttribute("cx", pt[n - 1][0]); pu.setAttribute("cy", pt[n - 1][1]); };
+    if (morph && heroPrev && !again && !RM) { const fp_ = resample(heroPrev.p, n), fb = resample(heroPrev.b, n); const fr = (t) => set(s.p.map((v, i) => lerp(fp_[i], v, t)), s.b.map((v, i) => lerp(fb[i], v, t))); fr(0); tween(750, fr); }
+    else set(s.p, s.b);
+    heroPrev = { p: s.p.slice(), b: s.b.slice() };
+    /* scrub: drag or hover to read any day; the big number follows */
+    const scrub = $(".scrub", el), hit = $(".hit", el), svg = $("svg", el);
+    const at = (e) => { const r = svg.getBoundingClientRect(), x = ((e.clientX - r.left) * W) / (r.width || W); const i = clamp(Math.round(((x - P.l) / (W - P.l - P.r)) * (n - 1)), 0, n - 1); scrub.classList.add("on"); $("line", scrub).setAttribute("x1", X(i)); $("line", scrub).setAttribute("x2", X(i)); $("circle", scrub).setAttribute("cx", X(i)); $("circle", scrub).setAttribute("cy", Y(s.p[i])); heroText(s, i); };
+    hit.onpointermove = at; hit.onpointerdown = at;
+    hit.onpointerleave = () => { scrub.classList.remove("on"); heroText(s, n - 1, true); };
+    heroText(s, n - 1, !again);
+  };
+  chart(el, draw);
+}
+function heroText(s, i, animate) {
+  const v = s.p[i], base = s.p[0], d = v - base, pc = (d / base) * 100, bpc = ((s.b[i] - s.b[0]) / s.b[0]) * 100;
+  const hv = $("#heroVal"); if (!hv) return;
+  if (animate) countUp(hv, v, (x) => usd(x), 900); else { hv.textContent = usd(v); hv.dataset.v = v; }
+  $("#heroChg").innerHTML = `<span class="${d >= 0 ? "up" : "down"}">${money(d, { plus: true })} (${pct(pc, 2)})</span>${S.bench ? `<span>Index ${pct(bpc, 2)}</span>` : ""}`;
+  $("#heroWhen").textContent = i === s.p.length - 1 ? "Today · " + range : fdateY(s.dates[i]);
+}
+const usd = (v) => money(v, { sym: "$", dp: 2 });
+
+/* ---------- Overview (the one-screen dashboard) ---------- */
+PAGE.overview = () => {
+  const cls = byClass(), movers = ASSETS.filter((a) => S.hold.some((h) => h.t === a.t)).sort((a, b) => Math.abs(achg(b)) - Math.abs(achg(a))).slice(0, 4);
+  view.innerHTML = `<div class="grid">
+    <section class="card hero s12"><div class="hero-top"><div><div class="hero-when" id="heroWhen"></div><div class="hero-val num" id="heroVal" aria-live="polite">$0</div><div class="hero-sub num" id="heroChg"></div></div><span style="flex:1"></span>
+      <button class="bench" id="benchBtn" aria-pressed="${S.bench}"><span class="sw"></span>Compare with index</button>
+      <div class="seg" role="group" aria-label="Range">${Object.keys(RANGES).map((r) => `<button type="button" data-r="${r}" aria-pressed="${r === range}">${r}</button>`).join("")}</div></div><div id="hero"></div></section>
+    <div class="card kpi s3"><h2>Today</h2><div class="val num" data-live="day">${money(dayChg(), { plus: true })}</div><span class="chg ${dayChg() >= 0 ? "up" : "down"}" data-live="dayp">${pct((dayChg() / total()) * 100, 2)}</span></div>
+    <div class="card kpi s3"><h2>Total return</h2><div class="val num" data-to="${invested() - costBasis()}" data-f="usd2">$0</div><span class="chg up">${pct(((invested() - costBasis()) / costBasis()) * 100, 1)} on cost</span></div>
+    <div class="card kpi s3"><h2>Dividends ahead</h2><div class="val num" data-to="${sum(S.divs.map((d) => d.per * ((S.hold.find((h) => h.t === d.t) || { q: 0 }).q)))}" data-f="usd2">$0</div><span class="chg muted">next 30 days</span></div>
+    <div class="card kpi s3"><h2>Cash</h2><div class="val num" data-to="${S.cash}" data-f="usd2">$0</div><span class="chg muted">${((S.cash / total()) * 100).toFixed(1)}% of portfolio</span></div>
+    <section class="card s4"><div class="card-h"><h2>Allocation</h2></div><div id="alloc"></div></section>
+    <section class="card s4"><div class="card-h"><h2>Biggest moves today</h2></div><ul class="list">${movers.map((a) => `<li>${tkr(a)}<span class="grow"></span><span class="num" data-live="price" data-t="${a.t}">${usd(a.price)}</span><span class="chg num ${achg(a) >= 0 ? "up" : "down"}" data-live="chg" data-t="${a.t}" style="min-width:64px;text-align:right">${pct(achg(a), 2)}</span></li>`).join("")}</ul></section>
+    <section class="card s4"><div class="card-h"><h2>Upcoming dividends</h2></div><ul class="list">${S.divs.map((d) => { const h = S.hold.find((x) => x.t === d.t); return `<li><span class="tkr"><i>${d.t}</i><span><b>${fdate(d.date)}</b><small>${usd(d.per)} a share</small></span></span><span class="grow"></span><b class="num">${usd(d.per * (h ? h.q : 0))}</b></li>`; }).join("")}</ul></section>
+  </div>`;
+  hero($("#hero"));
+  donut($("#alloc"), { items: cls.map((x) => ({ label: x.c, value: x.v, color: CLASSES[x.c] })), size: 150, thick: 14, center: ["$" + short(total()), "total"], fmt: (v) => usd(v) });
+  $$("[data-r]", view).forEach((b) => b.addEventListener("click", () => { range = b.dataset.r; $$("[data-r]", view).forEach((x) => x.setAttribute("aria-pressed", String(x === b))); hero($("#hero"), true); }));
+  $("#benchBtn").addEventListener("click", (e) => { S.bench = !S.bench; save(); e.currentTarget.setAttribute("aria-pressed", String(S.bench)); heroPrev = null; hero($("#hero"), true); toast(S.bench ? "Showing the World Index for comparison" : "Comparison hidden"); });
+};
+
+/* ---------- Holdings + trade drawer ---------- */
+PAGE.holdings = () => {
+  view.innerHTML = `<div class="grid">
+    <div class="card kpi s4"><h2>Invested</h2><div class="val num" data-to="${invested()}" data-f="usd2">$0</div></div>
+    <div class="card kpi s4"><h2>Paid for it</h2><div class="val num" data-to="${costBasis()}" data-f="usd2">$0</div></div>
+    <div class="card kpi s4"><h2>Gain</h2><div class="val num ${invested() >= costBasis() ? "up" : "down"}" data-to="${invested() - costBasis()}" data-f="usd2">$0</div></div>
+    <section class="card s12"><div class="card-h"><h2>Holdings</h2><small>click a row to see it and trade</small><span class="grow"></span><button class="btn primary" id="buyNew">${ic("plus")}Buy something new</button></div><div id="hTbl"></div></section>
+  </div>`;
+  dataTable($("#hTbl"), {
+    rows: () => S.hold.map((h) => { const a = asset(h.t); return { t: h.t, name: a.name, cls: a.cls, q: h.q, price: a.price, val: valOf(h), gain: valOf(h) - h.q * h.cost, gp: ((a.price - h.cost) / h.cost) * 100, w: (valOf(h) / total()) * 100, _h: h }; }), sort: "val", size: 8, search: "Search holdings…", keys: ["t", "name"],
+    chips: { k: "cls", values: ["All"].concat(Object.keys(CLASSES).filter((c) => c !== "Cash")) },
+    cols: [{ k: "name", label: "Holding", f: (v, r) => tkr(asset(r.t)) }, { k: "q", label: "Units", cls: "r", f: (v) => num(v, v % 1 ? 2 : 0) }, { k: "price", label: "Price", cls: "r", f: (v, r) => `<span class="num" data-live="price" data-t="${r.t}">${usd(v)}</span>` }, { k: "val", label: "Value", cls: "r", f: (v) => `<span class="num">${usd(v)}</span>` }, { k: "gain", label: "Gain", cls: "r", f: (v, r) => `<span class="num ${v >= 0 ? "up" : "down"}">${money(v, { plus: true })}<br><small>${pct(r.gp, 1)}</small></span>` }, { k: "w", label: "Weight", cls: "r", f: (v) => v.toFixed(1) + "%" }],
+    onRow: (r) => tradeDrawer(r.t),
+  });
+  $("#buyNew").addEventListener("click", () => pickBox("Buy", ASSETS.map((a) => ({ value: a.t, label: a.name + " (" + a.t + ")", hint: usd(a.price) }))).then((t) => t && tradeDrawer(t)));
+};
+function tradeDrawer(t) {
+  const a = asset(t), h = S.hold.find((x) => x.t === t);
+  const m = openModal({
+    title: a.name, drawer: true,
+    html: `<p class="muted" style="margin:0 0 6px">${a.t} · ${a.cls}</p><div style="font-size:2rem;font-weight:300" class="num">${usd(a.price)} <span class="chg ${achg(a) >= 0 ? "up" : "down"}">${pct(achg(a), 2)}</span></div><div id="dChart" style="margin:10px 0"></div>
+      ${h ? `<div class="set-row"><span class="muted">You own</span><b class="num">${num(h.q, h.q % 1 ? 2 : 0)} units · ${usd(valOf(h))}</b></div><div class="set-row"><span class="muted">Average cost</span><b class="num">${usd(h.cost)}</b></div>` : '<p class="muted">You do not own this yet.</p>'}
+      <form id="tf" class="cc-form" novalidate style="margin-top:12px"><div class="seg" role="group" aria-label="Side" style="margin-bottom:12px"><button type="button" data-s="buy" aria-pressed="true">Buy</button><button type="button" data-s="sell" aria-pressed="false" ${h ? "" : "disabled"}>Sell</button></div>
+      <div class="cc-field"><label for="tq">Units</label><input id="tq" inputmode="decimal" aria-describedby="tqE" placeholder="0"><small class="cc-err" id="tqE"></small></div><p class="muted" id="tEst" style="margin:8px 0 0">Cash available ${usd(S.cash)}</p>
+      <div class="cc-df"><button class="btn primary" type="submit" id="tGo">Buy</button></div></form>`,
+  });
+  reseed(hue(t));
+  lineChart($("#dChart", m.el), { labels: dayLabels(60), series: [{ name: a.t, data: Array.from({ length: 60 }, (_, i) => a.price * (1 + Math.sin(i / 6 + hue(t)) * 0.05 + (i - 60) * 0.0008 + rand(-0.01, 0.01))).map((v, i, arr) => (i === 59 ? a.price : v)), color: "var(--accent)" }], area: true, zero: false, height: 150, fmt: (v) => "$" + short(v), tipFmt: usd });
+  let side = "buy";
+  const f = $("#tf", m.el), est = () => { const q = parseFloat($("#tq", m.el).value) || 0; $("#tEst", m.el).textContent = q ? `${side === "buy" ? "Costs" : "You get"} about ${usd(q * a.price)} · cash ${usd(S.cash)}` : `Cash available ${usd(S.cash)}`; };
+  f.addEventListener("click", (e) => { const b = e.target.closest("[data-s]"); if (!b) return; side = b.dataset.s; $$("[data-s]", f).forEach((x) => x.setAttribute("aria-pressed", String(x === b))); $("#tGo", m.el).textContent = side === "buy" ? "Buy" : "Sell"; est(); });
+  f.addEventListener("input", est);
+  f.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = parseFloat($("#tq", m.el).value), er = $("#tqE", m.el), inp = $("#tq", m.el);
+    const bad = (msg) => { er.textContent = msg; inp.setAttribute("aria-invalid", "true"); inp.focus(); };
+    if (!(q > 0)) return bad("Enter how many units");
+    if (side === "buy" && q * a.price > S.cash) return bad(`Not enough cash. You have ${usd(S.cash)}`);
+    if (side === "sell" && (!h || q > h.q)) return bad(`You own ${h ? num(h.q) : 0} units`);
+    if (side === "buy") { if (h) { h.cost = (h.cost * h.q + a.price * q) / (h.q + q); h.q += q; } else S.hold.push({ t, q, cost: a.price }); S.cash -= q * a.price; }
+    else { h.q -= q; S.cash += q * a.price; if (h.q <= 1e-9) S.hold = S.hold.filter((x) => x !== h); }
+    save(); m.close(); toast(`${side === "buy" ? "Bought" : "Sold"} ${num(q, q % 1 ? 2 : 0)} ${a.t} for ${usd(q * a.price)}`); note(`${side === "buy" ? "Bought" : "Sold"} ${a.name}`); rerender();
+  });
+}
+
+/* ---------- Performance ---------- */
+PAGE.performance = () => {
+  reseed(808);
+  const years = [TODAY.getFullYear() - 4, TODAY.getFullYear() - 3, TODAY.getFullYear() - 2, TODAY.getFullYear() - 1, TODAY.getFullYear()];
+  const grid = years.map((y, yi) => MON.map((_, m) => (yi === 4 && m > TODAY.getMonth() ? -5 : +rand(-4.5, 5.8).toFixed(1))));
+  const yr = grid.map((r) => +(r.reduce((a, v) => a * (1 + v / 100), 1) * 100 - 100).toFixed(1)), ix = yr.map((v) => +(v * rand(0.55, 0.95) + rand(-2, 2)).toFixed(1));
+  const s = series("1Y"); let peak = s.p[0]; const dd = s.p.map((v) => { peak = Math.max(peak, v); return +(((v - peak) / peak) * 100).toFixed(2); });
+  const vol = 11.8;
+  view.innerHTML = `<div class="grid">
+    <section class="card s8"><div class="card-h"><h2>Yearly return</h2><small>you vs the World Index</small></div><div id="yBars"></div></section>
+    <section class="card s4"><div class="card-h"><h2>Risk level</h2><small>yearly swing</small></div><div id="risk"></div><p class="muted" style="text-align:center;margin:6px 0 0">Moderate. Similar to a balanced fund.</p></section>
+    <section class="card s12"><div class="card-h"><h2>Monthly returns</h2><small>% per month</small></div><div id="heat"></div></section>
+    <section class="card s12"><div class="card-h"><h2>Drawdown</h2><small>how far below the last high, past year</small></div><div id="dd"></div></section>
+  </div>`;
+  barChart($("#yBars"), { labels: years.map(String), height: 240, series: [{ name: "You", data: yr, color: "var(--accent)" }, { name: "World Index", data: ix, color: "var(--teal)" }], fmt: (v) => v + "%", tipFmt: (v) => pct(v, 1), radius: 6 });
+  gauge($("#risk"), { value: vol, max: 30, color: "var(--accent)", label: "volatility", fmt: () => vol + "%", tip: "Typical yearly swing of your portfolio" });
+  heatmap($("#heat"), { rows: years.map(String), cols: MON, data: grid.map((r) => r.map((v) => Math.max(0, v + 5))), color: "var(--accent)", fmt: (v) => (v === 0 ? "No data yet" : pct(v - 5, 1)), padL: 44, cell: 30 });
+  lineChart($("#dd"), { labels: s.dates.map((d) => fdate(d)), series: [{ name: "Drawdown", data: dd, color: "var(--rose)" }], area: true, height: 180, fmt: (v) => v + "%", tipFmt: (v) => v.toFixed(2) + "%" });
+};
+
+/* ---------- Allocation + rebalance ---------- */
+PAGE.allocation = () => {
+  const cls = byClass(), tot = total();
+  const legs = cls.map((x) => ({ c: x.c, now: (x.v / tot) * 100, tgt: S.targets[x.c] || 0, diff: ((S.targets[x.c] || 0) / 100) * tot - x.v }));
+  view.innerHTML = `<div class="grid">
+    <section class="card s7"><div class="card-h"><h2>Now vs target</h2><small>bar = now, line = target</small><span class="grow"></span><button class="btn" id="editT">${ic("edit")}Edit targets</button></div>
+      <div class="alloc-bars">${legs.map((l) => `<div class="ab"><div class="ab-h"><span>${l.c}</span><span class="num">${l.now.toFixed(1)}% <span class="muted">→ ${l.tgt}%</span></span></div><div class="ab-t"><i data-w="${l.now}" style="background:${CLASSES[l.c]}"></i><b style="left:${l.tgt}%"></b></div></div>`).join("")}</div></section>
+    <section class="card s5"><div class="card-h"><h2>Rebalance plan</h2></div><div class="trade-legs">${legs.filter((l) => Math.abs(l.diff) > 50).map((l) => `<div><span>${l.diff > 0 ? "Add to" : "Trim"} ${l.c}</span><b class="num ${l.diff > 0 ? "up" : "down"}">${money(l.diff, { plus: true })}</b></div>`).join("") || '<p class="muted">You are on target. Nothing to do.</p>'}</div><div class="cc-df" style="padding:16px 0 0"><button class="btn primary" id="reb">${ic("refresh")}Rebalance now</button></div></section>
+    <section class="card s12"><div class="card-h"><h2>Value by class</h2></div><div id="clsBars"></div></section>
+  </div>`;
+  requestAnimationFrame(() => $$("[data-w]", view).forEach((i) => (i.style.width = i.dataset.w + "%")));
+  barChart($("#clsBars"), { labels: cls.map((x) => x.c), height: 220, series: [{ name: "Now", data: cls.map((x) => Math.round(x.v)), color: "var(--accent)" }, { name: "Target", data: cls.map((x) => Math.round(((S.targets[x.c] || 0) / 100) * tot)), color: "var(--teal)" }], fmt: (v) => "$" + short(v), tipFmt: usd, radius: 6 });
+  $("#editT").addEventListener("click", () => formModal({ title: "Target mix", intro: "Targets must add up to 100%.", values: S.targets, fields: Object.keys(CLASSES).map((c) => ({ name: c, label: c + " %", type: "number", required: true, min: 0, max: 100, half: true })), submit: "Save targets", onSubmit: (v) => { const t = sum(Object.values(v)); if (Math.abs(t - 100) > 0.01) return `They add up to ${t}%. Make it 100%.`; S.targets = v; save(); toast("Targets saved"); rerender(); } }));
+  $("#reb").addEventListener("click", () => confirmBox("Buy and sell across your holdings so each class matches its target?", "Rebalance", "primary").then((ok) => {
+    if (!ok) return;
+    legs.forEach((l) => {
+      if (l.c === "Cash") return;
+      const hs = S.hold.filter((h) => asset(h.t).cls === l.c), cur = sum(hs.map(valOf));
+      if (!hs.length) return;
+      const k = cur ? (cur + l.diff) / cur : 1;
+      hs.forEach((h) => (h.q = Math.max(0, h.q * k)));
+    });
+    S.cash = (S.targets.Cash / 100) * tot;
+    save(); toast("Rebalanced to your targets"); note("Portfolio rebalanced");
+    const bars = $$(".ab-t i", view); render("allocation", true); $$(".ab-t i", view).forEach((i, k) => { if (bars[k]) i.style.width = bars[k].style.width; requestAnimationFrame(() => requestAnimationFrame(() => (i.style.width = i.dataset.w + "%"))); });
+  }));
+};
+
+/* ---------- Watchlist ---------- */
+PAGE.watchlist = () => {
+  view.innerHTML = `<div class="wl">${S.watch.map((t) => asset(t)).filter(Boolean).map((a) => { reseed(hue(a.t)); const d = Array.from({ length: 30 }, (_, i) => a.price * (1 + Math.sin(i / 4 + hue(a.t)) * 0.04 + rand(-0.01, 0.01))); d[29] = a.price; return `<section class="card"><div class="card-h">${tkr(a)}<span class="grow"></span><button class="icon-btn" style="width:32px;height:32px" data-unw="${a.t}" aria-label="Remove ${a.t}">${ic("x")}</button></div><div class="price num" data-live="price" data-t="${a.t}">${usd(a.price)}</div><span class="chg num ${achg(a) >= 0 ? "up" : "down"}" data-live="chg" data-t="${a.t}">${pct(achg(a), 2)}</span>${spark(d, "var(--accent)", 220, 46)}<div style="display:flex;gap:8px;margin-top:12px"><button class="btn sm" data-buy="${a.t}">Buy</button><button class="btn sm" data-al="${a.t}">${ic("bell")}Alert</button></div></section>`; }).join("")}<section class="card" style="display:grid;place-items:center;min-height:200px"><button class="btn primary" id="addW">${ic("plus")}Add to watchlist</button></section></div>
+    <section class="card" style="margin-top:18px"><div class="card-h"><h2>Price alerts</h2></div><div id="alTbl"></div></section>`;
+  view.querySelector(".wl").addEventListener("click", (e) => {
+    const u = e.target.closest("[data-unw]"), b = e.target.closest("[data-buy]"), al = e.target.closest("[data-al]");
+    if (u) { S.watch = S.watch.filter((x) => x !== u.dataset.unw); save(); toast(u.dataset.unw + " removed"); rerender(); }
+    if (b) tradeDrawer(b.dataset.buy);
+    if (al) { const a = asset(al.dataset.al); formModal({ title: "Alert for " + a.name, values: { op: "above", p: +(a.price * 1.03).toFixed(2) }, fields: [{ name: "op", label: "When the price goes", type: "select", options: ["above", "below"], half: true }, { name: "p", label: "Price ($)", type: "number", required: true, min: 0.01, half: true, check: (v, x) => (x.op === "above" && v <= a.price ? "Pick a price above " + usd(a.price) : x.op === "below" && v >= a.price ? "Pick a price below " + usd(a.price) : "") }], submit: "Create alert", onSubmit: (v) => { S.alerts.push({ id: uid(), t: a.t, ...v, done: false }); save(); toast("Alert created"); rerender(); } }); }
+  });
+  $("#addW").addEventListener("click", () => pickBox("Add to watchlist", ASSETS.filter((a) => !S.watch.includes(a.t)).map((a) => ({ value: a.t, label: a.name, hint: usd(a.price) }))).then((t) => { if (t) { S.watch.push(t); save(); toast(t + " added"); rerender(); } }));
+  dataTable($("#alTbl"), { rows: () => S.alerts, search: false, size: 5, cols: [{ k: "t", label: "Holding", f: (v) => tkr(asset(v)) }, { k: "op", label: "When" }, { k: "p", label: "Price", cls: "r", f: (v) => usd(v) }, { k: "done", label: "Status", f: (v) => (v ? '<span class="up">Triggered</span>' : '<span class="muted">Watching</span>') }, { k: "x", label: "", sort: false, f: () => `<div class="rowbtns"><button data-act="del" aria-label="Delete alert">${ic("trash")}</button></div>` }], onAct: (a, r) => confirmBox("Delete this alert?").then((ok) => { if (ok) { S.alerts = S.alerts.filter((x) => x !== r); save(); rerender(); } }), empty: "No alerts yet", emptyIcon: "bell" });
+};
+
+/* ---------- Settings ---------- */
+PAGE.settings = () => {
+  view.innerHTML = `<div class="grid"><section class="card s12">
+    <div class="set-row"><div><b>Profile</b><small>${esc(S.profile.name)} · ${esc(S.profile.plan)}</small></div><button class="btn" id="prof">${ic("user")}Edit</button></div>
+    <div class="set-row"><div><b>Compare with index</b><small>Show the World Index on the main chart</small></div><button class="bench" id="benchS" aria-pressed="${S.bench}"><span class="sw"></span>${S.bench ? "On" : "Off"}</button></div>
+    <div class="set-row"><div><b>Add cash</b><small>Cash now ${usd(S.cash)}</small></div><button class="btn" id="dep">${ic("plus")}Deposit</button></div>
+    <div class="set-row"><div><b>Theme</b><small>Graphite night or ivory day</small></div><button class="btn" data-theme-toggle>${ic("moon")}Toggle theme</button></div>
+    <div class="set-row"><div><b>Reset demo data</b><small>Holdings, cash, targets and watchlist</small></div><button class="btn danger" id="reset">${ic("refresh")}Reset demo data</button></div></section></div>`;
+  $("#prof").addEventListener("click", () => formModal({ title: "Profile", values: S.profile, fields: [{ name: "name", label: "Name", required: true }, { name: "plan", label: "Goal", type: "select", options: ["Long-term growth", "Steady income", "Keep it safe"] }], onSubmit: (v) => { S.profile = v; save(); drawMe(); toast("Profile saved"); rerender(); } }));
+  $("#benchS").addEventListener("click", () => { S.bench = !S.bench; save(); heroPrev = null; toast(S.bench ? "Index comparison on" : "Index comparison off"); rerender(); });
+  $("#dep").addEventListener("click", () => formModal({ title: "Deposit cash", fields: [{ name: "amt", label: "Amount ($)", type: "number", required: true, min: 1, max: 1000000 }], submit: "Deposit", onSubmit: (v) => { S.cash += v.amt; save(); toast(usd(v.amt) + " added"); rerender(); } }));
+  $("#reset").addEventListener("click", () => confirmBox("Reset all demo data?", "Reset").then((ok) => { if (ok) { store.del(KEY); S = seed(); save(); drawMe(); drawBell(); heroPrev = null; toast("Demo data reset"); rerender(); } }));
+};
+
+/* ---------- Gentle live prices: every 2 seconds, paused while hidden ---------- */
+every(2000, () => {
+  ASSETS.forEach((a) => (a.price = Math.max(0.5, a.price * (1 + (Math.random() - 0.5) * a.vol * 2))));
+  S.alerts.forEach((al) => { if (al.done) return; const p = asset(al.t).price; if ((al.op === "above" && p >= al.p) || (al.op === "below" && p <= al.p)) { al.done = true; note(`${al.t} is ${al.op} ${usd(al.p)}`); toast(`Alert: ${al.t} moved ${al.op} ${usd(al.p)}`, "warn"); save(); } });
+  $$("[data-live]").forEach((el) => {
+    const k = el.dataset.live, a = el.dataset.t && asset(el.dataset.t);
+    if (k === "price" && a) el.textContent = usd(a.price);
+    if (k === "chg" && a) { el.textContent = pct(achg(a), 2); el.classList.toggle("up", achg(a) >= 0); el.classList.toggle("down", achg(a) < 0); }
+    if (k === "day") el.textContent = money(dayChg(), { plus: true });
+    if (k === "dayp") { const v = (dayChg() / total()) * 100; el.textContent = pct(v, 2); el.className = "chg " + (v >= 0 ? "up" : "down"); }
+  });
+});
+
+/* ---------- Start ---------- */
+drawMe();
+drawBell();
+initShell(() => pageCmds(PAGES, ASSETS.map((a) => ({ label: "Trade " + a.name, icon: "line", run: () => tradeDrawer(a.t) })).concat(Object.keys(RANGES).map((r) => ({ label: "Show " + r + " on the main chart", icon: "clock", run: () => { range = r; if (current === "overview") render("overview", true); else location.hash = "#/overview"; } })))));
+startRouter(PAGES.map((p) => p[0]), "overview", render);
+</script>
+</body>
+</html>
