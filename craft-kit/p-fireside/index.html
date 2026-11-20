@@ -1,0 +1,650 @@
+<!doctype html>
+<!-- Chill & Craft · Fireside · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fireside · toast a marshmallow by the campfire</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: light = blue-hour twilight, dark = deep night ---------- */
+  :root {
+    --page: #e8e2f0; --page2: #f5d9c4; --ink: #241c33; --muted: #6a5f7c;
+    --sky1: #33427a; --sky2: #9a6f9e; --sky3: #f0a77a;
+    --mtn: #4b4f7c; --tree1: #2c3358; --tree2: #1b2040; --ground1: #2f3150; --ground2: #1d1e33;
+    --stone: #6d6a80; --stone-hi: #9c98ae; --star-o: 0.45; --moon: #fff4dc;
+    --chip: rgba(255, 255, 255, 0.72); --chip-line: rgba(36, 28, 51, 0.12);
+    --btn: #2a2140; --btn-ink: #fff3e3; --focus: #e8590c;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #07080f; --page2: #1d1426; --ink: #f2ecf7; --muted: #a49bb5;
+      --sky1: #04060f; --sky2: #0d1330; --sky3: #2a1f3d;
+      --mtn: #121735; --tree1: #0b1026; --tree2: #05070f; --ground1: #120f1c; --ground2: #07060c;
+      --stone: #3b3846; --stone-hi: #5d5868; --star-o: 1; --moon: #f3ecd8;
+      --chip: rgba(28, 22, 40, 0.75); --chip-line: rgba(255, 255, 255, 0.1);
+      --btn: #ffb35c; --btn-ink: #2a1407; --focus: #ffc078;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #07080f; --page2: #1d1426; --ink: #f2ecf7; --muted: #a49bb5;
+    --sky1: #04060f; --sky2: #0d1330; --sky3: #2a1f3d;
+    --mtn: #121735; --tree1: #0b1026; --tree2: #05070f; --ground1: #120f1c; --ground2: #07060c;
+    --stone: #3b3846; --stone-hi: #5d5868; --star-o: 1; --moon: #f3ecd8;
+    --chip: rgba(28, 22, 40, 0.75); --chip-line: rgba(255, 255, 255, 0.1);
+    --btn: #ffb35c; --btn-ink: #2a1407; --focus: #ffc078;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; overflow-x: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(90% 60% at 50% 100%, var(--page2), transparent 70%), var(--page);
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .cap, .scene { width: min(500px, 100%, calc((100vh - 210px) * 0.8)); min-width: 280px; }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--muted); padding: 0 4px; }
+  .cap b { font-size: 15px; color: var(--ink); }
+  .scene {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 28px; overflow: hidden; isolation: isolate;
+    touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none;
+    box-shadow: 0 30px 60px -22px rgba(10, 6, 20, 0.6), 0 12px 24px -12px rgba(10, 6, 20, 0.45);
+  }
+  .scene > svg, .scene > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .glow {
+    position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
+    background: radial-gradient(42% 30% at 50% 82%, rgba(255, 150, 60, 0.55), rgba(255, 110, 40, 0.18) 55%, transparent 75%);
+  }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* toast meter and the result badge float over the scene */
+  .meter {
+    position: absolute; left: 50%; top: 5%; width: 64%; transform: translate(-50%, -12px); opacity: 0;
+    padding: 9px 12px 8px; border-radius: 16px; background: rgba(20, 14, 30, 0.55); color: #fff;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    transition: opacity 0.3s ease, transform 0.45s cubic-bezier(.34, 1.56, .64, 1); pointer-events: none;
+    font: 700 12px/1 system-ui, sans-serif; letter-spacing: 0.03em;
+  }
+  .meter.on { opacity: 1; transform: translate(-50%, 0); }
+  .bar { position: relative; height: 10px; border-radius: 6px; margin-bottom: 7px;
+    background: linear-gradient(90deg, #fcf8f0, #f6e4be 25%, #e8b060 46%, #b2682e 66%, #6e3c1e 80%, #1c1410); }
+  .zone { position: absolute; top: -4px; bottom: -4px; left: 51.7%; width: 25%; border: 2px solid #ffe08a; border-radius: 7px; box-shadow: 0 0 10px rgba(255, 220, 120, 0.6); }
+  .mark { position: absolute; top: -6px; width: 6px; height: 22px; margin-left: -3px; border-radius: 3px; background: #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35); left: 0; }
+  .badge {
+    position: absolute; left: 50%; top: 22%; transform: translate(-50%, 10px) scale(0.6); opacity: 0;
+    padding: 10px 18px; border-radius: 999px; font: 800 18px/1 system-ui, sans-serif; white-space: nowrap;
+    color: #2a1407; background: linear-gradient(180deg, #ffe6a8, #ffb35c); box-shadow: 0 10px 24px -8px rgba(255, 140, 40, 0.7);
+    transition: opacity 0.25s ease, transform 0.55s cubic-bezier(.34, 1.7, .5, 1); pointer-events: none;
+  }
+  .badge.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  .badge.sad { background: linear-gradient(180deg, #d8d2e2, #a59bb8); color: #1f1a2b; box-shadow: none; }
+
+  /* ---------- Scene parts ---------- */
+  .sk1 { stop-color: var(--sky1); } .sk2 { stop-color: var(--sky2); } .sk3 { stop-color: var(--sky3); }
+  .gr1 { stop-color: var(--ground1); } .gr2 { stop-color: var(--ground2); }
+  .mtn { fill: var(--mtn); } .tree1 { fill: var(--tree1); } .tree2 { fill: var(--tree2); }
+  .moon { fill: var(--moon); }
+  .star { fill: #fff; opacity: var(--star-o); animation: tw 3s ease-in-out infinite; }
+  @keyframes tw { 50% { opacity: calc(var(--star-o) * 0.25); } }
+  .stone { fill: var(--stone); } .stone-hi { fill: var(--stone-hi); opacity: 0.7; }
+  .log { fill: #6b4128; } .log-end { fill: #c89464; } .log-ring { fill: none; stroke: #8a5a36; stroke-width: 1.2; }
+  .ember { fill: none; stroke: #ff7a2a; stroke-width: 2; stroke-linecap: round; animation: ember 1.6s ease-in-out infinite; }
+  @keyframes ember { 50% { stroke: #ffcf5a; } }
+  .tent { fill: #c7683e; } .tent-dk { fill: #8b3f22; } .lantern { fill: #ffd27a; animation: lan 2.2s ease-in-out infinite; }
+  @keyframes lan { 50% { opacity: 0.75; } }
+  .stick { stroke: #7a4e2c; stroke-width: 4; stroke-linecap: round; fill: none; }
+  .stick-hi { stroke: #b07a4a; stroke-width: 1.3; stroke-linecap: round; fill: none; }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+  .btn {
+    appearance: none; border: 1px solid var(--chip-line); background: var(--chip); color: var(--ink);
+    font: 650 14px/1 system-ui, sans-serif; padding: 11px 16px; border-radius: 999px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px; touch-action: none; user-select: none; -webkit-user-select: none;
+    transition: transform 0.25s cubic-bezier(.34, 1.56, .64, 1), box-shadow 0.25s ease, background 0.2s;
+  }
+  .btn svg { width: 16px; height: 16px; }
+  .btn.main { background: var(--btn); color: var(--btn-ink); border-color: transparent; }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.5); }
+  .btn.held, .btn:active { transform: scale(0.94); }
+  .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .status { margin: 0; min-height: 1.4em; font-size: 14px; font-weight: 600; text-align: center; }
+  .hint { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); text-align: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .star, .ember, .lantern { animation: none; }
+    .meter, .badge { transition: opacity 0.2s ease; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Fireside: a campfire at night where you toast a marshmallow</h1>
+  <div class="cap"><b>Fireside</b><span id="score">Perfect 0 · Toasted 0</span></div>
+  <div class="scene" id="scene" aria-describedby="hint">
+    <!-- far scene: sky, hills, trees, tent, back stones and logs -->
+    <svg viewBox="0 0 400 500" aria-hidden="true">
+      <defs>
+        <linearGradient id="sky" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="340">
+          <stop offset="0" class="sk1"/><stop offset="0.6" class="sk2"/><stop offset="1" class="sk3"/>
+        </linearGradient>
+        <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" class="gr1"/><stop offset="1" class="gr2"/>
+        </linearGradient>
+        <radialGradient id="pool"><stop offset="0" stop-color="#ff9a3c" stop-opacity="0.55"/><stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/></radialGradient>
+        <radialGradient id="lanGlow"><stop offset="0" stop-color="#ffd27a" stop-opacity="0.6"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect width="400" height="500" fill="url(#sky)"/>
+      <g id="stars"></g>
+      <g id="moonG"><circle class="moon" cx="318" cy="78" r="20"/><circle cx="326" cy="72" r="18" fill="url(#sky)"/></g>
+      <path class="mtn" d="M0 330 L60 280 L110 312 L170 252 L236 318 L290 270 L350 306 L400 276 V400 H0Z"/>
+      <g id="far"><path class="tree1" id="farTrees"/></g>
+      <g id="tentG">
+        <circle cx="330" cy="384" r="24" fill="url(#lanGlow)"/>
+        <path class="tent" d="M284 400 L311 352 L338 400Z"/>
+        <path class="tent-dk" d="M311 352 L302 400 L320 400Z"/>
+        <circle class="lantern" cx="330" cy="384" r="3.2"/>
+      </g>
+      <path d="M0 396 C80 386 140 392 200 390 C270 388 330 384 400 392 V500 H0Z" fill="url(#ground)"/>
+      <ellipse id="pool" cx="200" cy="424" rx="170" ry="46" fill="url(#pool)"/>
+      <g id="near"><path class="tree2" id="nearTrees"/></g>
+      <g id="backStones"></g>
+      <!-- crossed logs with glowing cracks -->
+      <g>
+        <rect class="log" x="150" y="402" width="100" height="14" rx="7" transform="rotate(-14 200 409)"/>
+        <rect class="log" x="150" y="402" width="100" height="14" rx="7" transform="rotate(16 200 409)"/>
+        <path class="ember" d="M172 414 l10 -3 l8 2 M212 407 l9 4 l9 -1"/>
+      </g>
+    </svg>
+
+    <!-- flames, sparks and smoke -->
+    <canvas id="cv" aria-hidden="true"></canvas>
+
+    <!-- near scene: front stones, a bench log, the falling log and the toasting stick -->
+    <svg viewBox="0 0 400 500" aria-hidden="true">
+      <defs>
+        <linearGradient id="mmGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop id="mmTop" offset="0" stop-color="#fcf8f0"/><stop id="mmBot" offset="1" stop-color="#f1e9dc"/>
+        </linearGradient>
+        <mask id="biteMask" maskUnits="userSpaceOnUse" x="-40" y="-40" width="80" height="80">
+          <rect x="-40" y="-40" width="80" height="80" fill="#fff"/>
+          <circle id="bite1" cx="26" cy="-7" r="0" fill="#000"/>
+          <circle id="bite2" cx="27" cy="7" r="0" fill="#000"/>
+        </mask>
+      </defs>
+      <g id="frontStones"></g>
+      <g transform="translate(70 470) rotate(-4)">
+        <rect class="log" x="-60" y="-11" width="120" height="22" rx="11"/>
+        <ellipse class="log-end" cx="60" cy="0" rx="7" ry="11"/>
+        <ellipse class="log-ring" cx="60" cy="0" rx="3.5" ry="6"/>
+      </g>
+      <g id="newLog" opacity="0">
+        <rect class="log" x="-34" y="-7" width="68" height="14" rx="7"/>
+        <ellipse class="log-end" cx="34" cy="0" rx="4.5" ry="7"/>
+        <ellipse class="log-ring" cx="34" cy="0" rx="2" ry="3.6"/>
+      </g>
+      <path id="stick" class="stick" d="M430 520 L262 336"/>
+      <path id="stickHi" class="stick-hi" d="M430 520 L262 336"/>
+      <g id="mm">
+        <g id="mmBody" mask="url(#biteMask)">
+          <rect x="-4" y="-13" width="32" height="26" rx="8" fill="url(#mmGrad)"/>
+          <ellipse cx="12" cy="-7" rx="10" ry="2.6" fill="#fff" opacity="0.55"/>
+        </g>
+      </g>
+    </svg>
+    <div class="glow" id="glow"></div>
+    <div class="meter" id="meter" aria-hidden="true">
+      <div class="bar"><i class="zone"></i><b class="mark" id="mark"></b></div>
+      <span id="meterLabel">Toasting…</span>
+    </div>
+    <div class="badge" id="badge" aria-hidden="true"></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn main" id="toast" type="button" aria-describedby="hint">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1 4 5 6 5 11a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-6 1-9.5z" fill="currentColor"/></svg>
+      Hold to toast
+    </button>
+    <button class="btn" id="addLog" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="9" width="18" height="7" rx="3.5" fill="currentColor"/><circle cx="18" cy="12.5" r="2" fill="none" stroke="var(--chip)" stroke-width="1.4"/></svg>
+      Add a log
+    </button>
+  </div>
+  <p id="status" class="status" role="status" aria-live="polite">The fire is crackling. Toast a marshmallow.</p>
+  <p id="hint" class="hint">Hold the button (or the scene, or Space) and let go when it is golden. Tap the fire to poke it.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var NS = "http://www.w3.org/2000/svg", TAU = Math.PI * 2, W = 400, H = 500;
+  var FX = 200, FY = 410; // base of the fire
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; }
+  var scene = $("scene"), cv = $("cv"), ctx = cv.getContext("2d"), statusEl = $("status");
+  function say(m) { statusEl.textContent = m; }
+
+  /* ---------- 1. Build the still scenery: stars, pines and the stone ring ---------- */
+  (function build() {
+    for (var i = 0; i < 70; i++) {
+      var s = el("circle", { "class": "star", cx: rnd(0, 400).toFixed(1), cy: rnd(0, 250).toFixed(1), r: (0.4 + Math.pow(Math.random(), 3) * 1.4).toFixed(2) }, $("stars"));
+      s.style.animationDelay = (-Math.random() * 3).toFixed(2) + "s";
+    }
+    function pine(x, by, h, w) {
+      var pts = [], T = 4, i;
+      for (i = 1; i <= T; i++) {
+        var yy = by - h + h * 0.88 * i / T, ww = w / 2 * (0.35 + 0.65 * i / T);
+        pts.push([ww, yy]);
+        if (i < T) pts.push([ww * 0.42, yy - h * 0.05]);
+      }
+      pts.push([w * 0.07, by - h * 0.12]); pts.push([w * 0.07, by]);
+      var d = "M" + x + " " + (by - h);
+      pts.forEach(function (p) { d += "L" + (x + p[0]).toFixed(1) + " " + p[1].toFixed(1); });
+      for (i = pts.length - 1; i >= 0; i--) d += "L" + (x - pts[i][0]).toFixed(1) + " " + pts[i][1].toFixed(1);
+      return d + "Z";
+    }
+    var d = "";
+    for (var x = -10; x < 420; x += rnd(16, 30)) d += pine(x, 394, rnd(46, 96), rnd(26, 40));
+    $("farTrees").setAttribute("d", d);
+    $("nearTrees").setAttribute("d", pine(18, 430, 250, 92) + pine(62, 410, 170, 64) + pine(394, 440, 280, 100));
+    // stones round an ellipse: the back half behind the fire, the front half in front of it
+    for (var k = 0; k < 14; k++) {
+      var a = k / 14 * TAU + 0.1, sx = FX + Math.cos(a) * 62, sy = 418 + Math.sin(a) * 15;
+      var g = el("g", { transform: "translate(" + sx.toFixed(1) + " " + sy.toFixed(1) + ")" }, Math.sin(a) < 0 ? $("backStones") : $("frontStones"));
+      var rx = rnd(10, 14), ry = rnd(7, 9);
+      el("ellipse", { "class": "stone", rx: rx.toFixed(1), ry: ry.toFixed(1) }, g);
+      el("ellipse", { "class": "stone-hi", cx: (-rx * 0.2).toFixed(1), cy: (-ry * 0.4).toFixed(1), rx: (rx * 0.55).toFixed(1), ry: (ry * 0.35).toFixed(1) }, g);
+    }
+  })();
+
+  /* ---------- 2. Fire particles drawn from pre-made soft sprites ---------- */
+  var COLS = [[255, 250, 225], [255, 214, 110], [255, 150, 50], [235, 80, 25], [140, 34, 12]];
+  var sprites = COLS.map(function (c) {
+    var s = document.createElement("canvas"); s.width = s.height = 64;
+    var g = s.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, "rgba(" + c + ",1)"); gr.addColorStop(0.4, "rgba(" + c + ",0.55)"); gr.addColorStop(1, "rgba(" + c + ",0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return s;
+  });
+  // a soft grey puff for the smoke
+  var smokeSprite = document.createElement("canvas");
+  smokeSprite.width = smokeSprite.height = 64;
+  (function () {
+    var g = smokeSprite.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, "rgba(128,122,138,1)"); gr.addColorStop(0.5, "rgba(128,122,138,0.45)"); gr.addColorStop(1, "rgba(128,122,138,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  })();
+  var flames = [], sparks = [], smoke = [], bits = [];
+  var heat = 0.8, heatV = 0, wind = 0, windT = 0, emitAcc = 0;
+  function emitFlame(x, y, size, up) {
+    if (flames.length > 320) return;
+    var life = rnd(0.55, 1.05);
+    flames.push({ x: x, y: y, vx: rnd(-14, 14), vy: -up * rnd(0.7, 1.1), life: life, max: life, s: size * rnd(0.75, 1.15), cx: x });
+  }
+  function emitSpark(x, y, power) {
+    if (sparks.length > 220) return;
+    var a = -Math.PI / 2 + rnd(-0.9, 0.9) * (power > 1 ? 1.4 : 1), v = rnd(60, 140) * power;
+    sparks.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.8, 1.8), ph: rnd(0, 6), hot: Math.random() < 0.5 });
+  }
+  function burst(x, y, n, power) { if (reduce.matches) n = Math.ceil(n / 4); for (var i = 0; i < n; i++) emitSpark(x + rnd(-10, 10), y, power); }
+  function stepFire(dt, t) {
+    var calm = reduce.matches;
+    // smooth wind: from the pointer if it is over the scene, otherwise a slow sway
+    var wantWind = windT + Math.sin(t * 0.6) * 0.25;
+    wind += (wantWind - wind) * Math.min(1, dt * 2);
+    emitAcc += (calm ? 70 : 130) * heat * dt;
+    while (emitAcc > 1) {
+      emitAcc -= 1;
+      emitFlame(FX + rnd(-28, 28) * (0.8 + heat * 0.2), FY + rnd(-4, 6), rnd(10, 17) * (0.75 + heat * 0.35), (88 + 82 * heat) * (calm ? 0.7 : 1));
+    }
+    if (Math.random() < dt * (calm ? 1 : 6) * heat) emitSpark(FX + rnd(-20, 20), FY - 20, 0.8 + heat * 0.4);
+    if (Math.random() < dt * 5) smoke.push({ x: FX + rnd(-15, 15), y: FY - 70 - heat * 30, vx: rnd(-6, 6), vy: rnd(-26, -16), life: rnd(2.4, 3.6), max: 3.6, s: rnd(10, 16) });
+    var i, p;
+    for (i = flames.length - 1; i >= 0; i--) {
+      p = flames[i]; p.life -= dt;
+      if (p.life <= 0) { flames.splice(i, 1); continue; }
+      var age = 1 - p.life / p.max;
+      p.vx += ((p.cx + (FX - p.cx) * 0.9 - p.x) * 2.4 + wind * 70 + Math.sin(t * 9 + p.y * 0.08) * 30) * dt; // pull into a tongue shape
+      p.vy -= 30 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.age = age;
+    }
+    for (i = sparks.length - 1; i >= 0; i--) {
+      p = sparks[i]; p.life -= dt;
+      if (p.life <= 0 || p.y < -10) { sparks.splice(i, 1); continue; }
+      p.vx += (wind * 60 + Math.sin(t * 4 + p.ph) * 40) * dt; p.vy += (p.vy < -30 ? 10 : -25) * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+    }
+    for (i = smoke.length - 1; i >= 0; i--) {
+      p = smoke[i]; p.life -= dt;
+      if (p.life <= 0) { smoke.splice(i, 1); continue; }
+      p.vx += wind * 20 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.s += 9 * dt;
+    }
+    for (i = bits.length - 1; i >= 0; i--) {
+      p = bits[i]; p.life -= dt;
+      if (p.life <= 0) { bits.splice(i, 1); continue; }
+      p.vy += (p.g || 0) * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+    }
+  }
+  function drawFire(t) {
+    ctx.clearRect(0, 0, W, H);
+    // smoke first, behind the flames
+    smoke.forEach(function (p) {
+      var a = Math.min(1, p.life / p.max) * 0.22;
+      ctx.globalAlpha = a;
+      ctx.drawImage(smokeSprite, p.x - p.s * 1.6, p.y - p.s * 1.6, p.s * 3.2, p.s * 3.2);
+    });
+    ctx.globalCompositeOperation = "lighter";
+    // the glowing ember bed
+    ctx.globalAlpha = 0.5 + 0.15 * Math.sin(t * 5);
+    ctx.drawImage(sprites[2], FX - 70, FY - 26, 140, 52);
+    flames.forEach(function (p) {
+      var c = Math.min(4, Math.floor(p.age * 5.2)), s = p.s * (1 - p.age * 0.55);
+      ctx.globalAlpha = Math.max(0, (1 - p.age) * 0.58);
+      ctx.drawImage(sprites[c], p.x - s, p.y - s, s * 2, s * 2);
+    });
+    sparks.forEach(function (p) {
+      var f = 0.6 + 0.4 * Math.sin(t * 30 + p.ph);
+      ctx.globalAlpha = Math.min(1, p.life) * f;
+      ctx.strokeStyle = p.hot ? "#fff3c0" : "#ffa64a"; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03); ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    bits.forEach(function (p) {
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.globalAlpha = Math.min(1, p.life * 2);
+      ctx.fillStyle = p.c;
+      if (p.star) { ctx.beginPath(); for (var k = 0; k < 10; k++) { var r = k % 2 ? p.s * 0.45 : p.s, a = k * Math.PI / 5; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); } ctx.fill(); }
+      else ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s);
+      ctx.restore();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- 3. The stick and the marshmallow ---------- */
+  var PX = 430, PY = 520, L = 250;
+  var A_UP = Math.atan2(336 - PY, 262 - PX), A_DOWN = Math.atan2(394 - PY, 216 - PX);
+  var ang = A_UP, angV = 0;
+  var stick = $("stick"), stickHi = $("stickHi"), mm = $("mm"), mmTop = $("mmTop"), mmBot = $("mmBot");
+  var TOAST = [[0, [252, 248, 240]], [0.3, [246, 228, 190]], [0.55, [232, 176, 96]], [0.78, [178, 104, 46]], [0.95, [110, 60, 30]], [1.1, [45, 30, 24]], [1.4, [22, 18, 16]]];
+  function toastCol(v) {
+    for (var i = 1; i < TOAST.length; i++) {
+      if (v <= TOAST[i][0]) {
+        var a = TOAST[i - 1], b = TOAST[i], k = (v - a[0]) / (b[0] - a[0]);
+        return "rgb(" + [0, 1, 2].map(function (j) { return Math.round(a[1][j] + (b[1][j] - a[1][j]) * k); }).join(",") + ")";
+      }
+    }
+    return "rgb(22,18,16)";
+  }
+  // m.state: ready → toasting → (burning) → result → eating/tossed → sliding → ready
+  var m = { tl: 0, state: "ready", slide: 0, slideV: 0, puff: 1, puffV: 0, free: null, burning: 0, zoneSaid: false };
+  var holding = false, holdStart = 0, demoHold = false, perfect = 0, toasted = 0;
+  var meter = $("meter"), mark = $("mark"), meterLabel = $("meterLabel"), badge = $("badge");
+  function tip() { return { x: PX + Math.cos(ang) * L, y: PY + Math.sin(ang) * L }; }
+
+  function startHold(byDemo) {
+    if (m.state !== "ready" && m.state !== "toasting") return false;
+    holding = true; demoHold = !!byDemo; holdStart = performance.now();
+    m.state = "toasting"; m.zoneSaid = false;
+    meter.classList.add("on");
+    $("toast").classList.add("held");
+    say("Toasting… let go when it is golden brown.");
+    return true;
+  }
+  function endHold(tap) {
+    if (!holding) return;
+    holding = false; demoHold = false;
+    $("toast").classList.remove("held");
+    if (tap && m.tl < 0.08) { m.state = "ready"; meter.classList.remove("on"); poke(); return; }
+    finish();
+  }
+  function showBadge(text, sad) {
+    badge.textContent = text; badge.classList.toggle("sad", !!sad);
+    badge.classList.remove("on"); void badge.offsetWidth; badge.classList.add("on");
+    setTimeout(function () { badge.classList.remove("on"); }, 1700);
+  }
+  function finish() {
+    var v = m.tl, p = tip();
+    m.state = "result"; toasted++;
+    setTimeout(function () { meter.classList.remove("on"); }, 900);
+    if (m.burning > 0) {
+      showBadge("Burnt to a crisp", true);
+      say("Up in flames! Flicking it into the fire…");
+      setTimeout(toss, 650);
+    } else {
+      var res = v < 0.32 ? ["Still pale", "Still pale and squishy. Give it longer next time.", true]
+        : v < 0.62 ? ["Lightly golden", "Lightly golden. Not bad at all!", false]
+        : v < 0.92 ? ["Perfect toast!", "Perfect! Golden brown outside, gooey inside.", false]
+        : ["Extra toasty", "Extra toasty, right on the edge.", false];
+      if (res[0] === "Perfect toast!") {
+        perfect++;
+        m.puffV = reduce.matches ? 0 : 3.2;
+        for (var i = 0; i < (reduce.matches ? 6 : 22); i++) {
+          var a = rnd(0, TAU), s = rnd(60, 170);
+          bits.push({ x: p.x, y: p.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40, g: 140, life: rnd(0.7, 1.2), rot: 0, vr: rnd(-6, 6), s: rnd(4, 8), c: ["#ffe08a", "#fff6d0", "#ffb35c"][i % 3], star: true });
+        }
+      }
+      showBadge(res[0], res[2]);
+      say(res[1]);
+      setTimeout(eat, 1300);
+    }
+    $("score").textContent = "Perfect " + perfect + " · Toasted " + toasted;
+  }
+  // two bites with crumbs, then a fresh marshmallow slides up the stick
+  function eat() {
+    m.state = "eating";
+    var b1 = $("bite1"), b2 = $("bite2");
+    function grow(c, done) {
+      var t0 = performance.now();
+      (function g(now) {
+        var k = Math.max(0, Math.min(1, (now - t0) / 180));
+        c.setAttribute("r", (13 * (1 - Math.pow(1 - k, 3))).toFixed(1));
+        if (k < 1) requestAnimationFrame(g); else done && done();
+      })(t0);
+      var p = tip();
+      for (var i = 0; i < (reduce.matches ? 2 : 9); i++) bits.push({ x: p.x - 6, y: p.y, vx: rnd(-50, 50), vy: rnd(-90, -20), g: 520, life: rnd(0.6, 1), rot: 0, vr: rnd(-8, 8), s: rnd(2, 3.6), c: toastCol(m.tl) });
+    }
+    grow(b1, function () { setTimeout(function () { grow(b2, function () { setTimeout(fresh, 380); }); }, 260); });
+    say("Mmm. Eating it…");
+  }
+  function toss() {
+    var p = tip();
+    m.state = "tossed";
+    m.free = { x: p.x, y: p.y, vx: -70, vy: -170, rot: ang * 180 / Math.PI, vr: -260 };
+  }
+  function fresh() {
+    $("bite1").setAttribute("r", "0"); $("bite2").setAttribute("r", "0");
+    m.tl = 0; m.burning = 0; m.free = null; m.puff = 1;
+    m.slide = -70; m.slideV = 0; m.state = "sliding";
+    paintMM();
+    say("A fresh marshmallow, ready for the fire.");
+  }
+  function paintMM() {
+    mmTop.setAttribute("stop-color", toastCol(m.tl * 0.82));
+    mmBot.setAttribute("stop-color", toastCol(Math.min(1.4, m.tl * 1.15 + 0.03)));
+  }
+
+  /* ---------- 4. Logs and poking ---------- */
+  var log = null, newLog = $("newLog");
+  function addLog() {
+    if (log) return;
+    log = { x: FX + rnd(-12, 12), y: 250, vy: 0, rot: rnd(-60, 60), vr: rnd(-160, 160), landed: false, burn: 0 };
+    newLog.setAttribute("opacity", "1");
+    say("A new log tumbles in…");
+  }
+  function poke() {
+    burst(FX, FY - 12, 26, 1.3);
+    heatV += reduce.matches ? 0.1 : 0.6;
+    say("Poke! Sparks fly up into the night.");
+  }
+
+  /* ---------- 5. Input: hold the button, the scene or Space ---------- */
+  var toastBtn = $("toast");
+  toastBtn.addEventListener("pointerdown", function (e) { e.preventDefault(); toastBtn.setPointerCapture(e.pointerId); startHold(false); });
+  toastBtn.addEventListener("pointerup", function () { endHold(false); });
+  toastBtn.addEventListener("pointercancel", function () { endHold(false); });
+  var kbActive = false;
+  toastBtn.addEventListener("keydown", function (e) {
+    if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); kbActive = true; startHold(false); }
+  });
+  toastBtn.addEventListener("keyup", function (e) {
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); endHold(false); setTimeout(function () { kbActive = false; }, 0); }
+  });
+  // a screen reader "click" cannot hold: toast for a good while automatically
+  toastBtn.addEventListener("click", function (e) {
+    if (e.detail !== 0 || kbActive) return;
+    if (startHold(false)) setTimeout(function () { endHold(false); }, 2500);
+  });
+  toastBtn.addEventListener("blur", function () { if (holding && !demoHold) endHold(false); });
+  scene.addEventListener("pointerdown", function (e) {
+    scene.setPointerCapture(e.pointerId);
+    if (!startHold(false)) poke();
+  });
+  scene.addEventListener("pointerup", function () { if (holding && !demoHold) endHold(performance.now() - holdStart < 220); });
+  scene.addEventListener("pointercancel", function () { if (holding && !demoHold) endHold(false); });
+  $("addLog").addEventListener("click", addLog);
+  // the pointer works like a breeze: flames lean away from it
+  var par = { x: 0, y: 0 }, parS = { x: 0, y: 0 };
+  window.addEventListener("pointermove", function (e) {
+    var r = scene.getBoundingClientRect();
+    var x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+    par.x = Math.max(-1, Math.min(1, x * 2 - 1)); par.y = Math.max(-1, Math.min(1, y * 2 - 1));
+    windT = x >= 0 && x <= 1 && y >= 0 && y <= 1 ? -par.x * 0.9 : 0;
+  });
+
+  /* ---------- 6. Auto demo until the visitor takes over ---------- */
+  var demoOn = true, demoT = [], demoStep = 0;
+  function later(ms, fn) { demoT.push(setTimeout(fn, ms)); }
+  function demo() {
+    if (!demoOn) return;
+    var k = demoStep++ % 3;
+    if (k === 0) { // a perfect one
+      if (startHold(true)) later(2550, function () { if (demoHold) endHold(false); });
+      later(5600, demo);
+    } else if (k === 1) {
+      addLog(); later(3000, demo);
+    } else { // hold too long: it catches fire
+      if (startHold(true)) later(4300, function () { if (demoHold) endHold(false); });
+      later(6800, demo);
+    }
+  }
+  function stopDemo(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false; demoT.forEach(clearTimeout);
+    if (demoHold) { holding = false; demoHold = false; m.state = "ready"; meter.classList.remove("on"); }
+  }
+  ["pointerdown", "keydown", "wheel"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+
+  /* ---------- 7. Main loop ---------- */
+  var S = 1;
+  function resize() {
+    var r = scene.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    S = Math.max(0.5, r.width / W * dpr);
+    cv.width = Math.round(W * S); cv.height = Math.round(H * S);
+  }
+  window.addEventListener("resize", resize);
+  var glow = $("glow"), pool = $("pool"), far = $("far"), near = $("near"), last = performance.now();
+  function loop(now) {
+    var dt = Math.min(0.05, (now - last) / 1000), t = now / 1000, calm = reduce.matches;
+    last = now;
+
+    // heat settles back toward a steady crackle
+    heat += heatV * dt; heatV *= Math.pow(0.04, dt);
+    heat += (0.8 - heat) * dt * 0.08;
+    heat = Math.max(0.5, Math.min(1.7, heat));
+
+    // stick: spring toward the fire while toasting
+    var want = holding || m.burning > 0 && m.state === "toasting" ? A_DOWN + Math.sin(t * 3) * 0.015 : A_UP + Math.sin(t * 1.3) * 0.01;
+    if (calm) ang += (want - ang) * Math.min(1, dt * 8);
+    else { angV += ((want - ang) * 90 - angV * 11) * dt; ang += angV * dt; }
+
+    var p = tip();
+    stick.setAttribute("d", "M" + PX + " " + PY + " L" + p.x.toFixed(1) + " " + p.y.toFixed(1));
+    stickHi.setAttribute("d", "M" + (PX - 1) + " " + (PY - 2) + " L" + (p.x + 0.5).toFixed(1) + " " + (p.y - 1.5).toFixed(1));
+
+    // toasting: the closer to the flames the faster it browns
+    if (m.state === "toasting" && holding) {
+      var near01 = Math.max(0, 1 - Math.abs(ang - A_DOWN) / Math.abs(A_UP - A_DOWN));
+      m.tl = Math.min(1.4, m.tl + dt * 0.3 * (0.55 + heat * 0.55) * near01);
+      if (!m.zoneSaid && m.tl > 0.64) { m.zoneSaid = true; say("Golden brown now. Let go!"); }
+      if (m.tl > 1.05 && !m.burning) { m.burning = 1; say("Oh no, it caught fire!"); }
+      paintMM();
+    }
+    mark.style.left = Math.min(100, m.tl / 1.2 * 100).toFixed(1) + "%";
+    meterLabel.textContent = m.burning ? "On fire!" : m.tl < 0.32 ? "Pale" : m.tl < 0.62 ? "Getting golden" : m.tl < 0.92 ? "Perfect zone" : "Too much…";
+    if (m.burning > 0 && m.state !== "tossed") {
+      // a small flame dances on the marshmallow
+      if (Math.random() < 0.7) emitFlame(p.x + rnd(-6, 6), p.y - 4, rnd(6, 10), 60);
+    }
+
+    // marshmallow transform: on the stick, sliding up it, puffing, or flying into the fire
+    m.puffV += ((1 - m.puff) * 160 - m.puffV * 9) * dt; m.puff += m.puffV * dt;
+    if (m.state === "sliding") {
+      if (calm) m.slide += (0 - m.slide) * Math.min(1, dt * 8);
+      else { m.slideV += ((0 - m.slide) * 120 - m.slideV * 10) * dt; m.slide += m.slideV * dt; }
+      if (Math.abs(m.slide) < 0.5 && Math.abs(m.slideV) < 2) { m.slide = 0; m.state = "ready"; }
+    }
+    if (m.free) {
+      var f = m.free; f.vy += 600 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt;
+      if (Math.random() < 0.8) emitFlame(f.x, f.y, 8, 40);
+      mm.setAttribute("transform", "translate(" + f.x.toFixed(1) + " " + f.y.toFixed(1) + ") rotate(" + f.rot.toFixed(0) + ")");
+      if (f.y > FY - 6) { m.free = null; burst(f.x, FY - 10, 34, 1.4); heatV += 0.5; mm.setAttribute("transform", "scale(0)"); setTimeout(fresh, 700); }
+    } else if (m.state !== "tossed") {
+      var deg = ang * 180 / Math.PI;
+      mm.setAttribute("transform", "translate(" + p.x.toFixed(1) + " " + p.y.toFixed(1) + ") rotate(" + deg.toFixed(1) + ") translate(" + (m.slide - 10).toFixed(1) + " 0) scale(" + m.puff.toFixed(3) + ")");
+      mm.setAttribute("opacity", Math.max(0, Math.min(1, 1 + m.slide / 50)).toFixed(2));
+    }
+
+    // the falling log
+    if (log) {
+      if (!log.landed) {
+        log.vy += 900 * dt; log.y += log.vy * dt; log.rot += log.vr * dt;
+        if (log.y >= 400) {
+          log.y = 400; log.landed = true; log.rot = rnd(-18, 18);
+          burst(log.x, 396, 46, 1.5); heatV += calm ? 0.25 : 1.1;
+          say("Whoomph! The fire roars up.");
+        }
+      } else {
+        log.burn += dt;
+        if (log.burn > 6) { log = null; newLog.setAttribute("opacity", "0"); }
+      }
+      if (log) {
+        newLog.setAttribute("transform", "translate(" + log.x.toFixed(1) + " " + log.y.toFixed(1) + ") rotate(" + log.rot.toFixed(1) + ")");
+        if (log.landed) newLog.setAttribute("opacity", Math.max(0, 1 - Math.max(0, log.burn - 4) / 2).toFixed(2));
+      }
+    }
+
+    stepFire(dt, t);
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    drawFire(t);
+
+    // light flicker on the ground and in the air, parallax on the trees
+    var flick = 0.85 + 0.15 * Math.sin(t * 13) * Math.sin(t * 7.3);
+    glow.style.opacity = ((0.55 + heat * 0.3) * flick).toFixed(3);
+    pool.setAttribute("opacity", ((0.6 + heat * 0.3) * flick).toFixed(3));
+    parS.x += (par.x - parS.x) * Math.min(1, dt * 3);
+    if (!calm) {
+      far.setAttribute("transform", "translate(" + (-parS.x * 5).toFixed(2) + " 0)");
+      near.setAttribute("transform", "translate(" + (-parS.x * 12).toFixed(2) + " 0)");
+    }
+    requestAnimationFrame(loop);
+  }
+  resize(); paintMM();
+  requestAnimationFrame(loop);
+  demoT.push(setTimeout(demo, 300));
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,627 @@
+<!doctype html>
+<!-- Chill & Craft · Guppy Tank · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guppy Tank · a tiny aquarium you can feed</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    --page: #e7f4f3; --page2: #cdeeea; --ink: #10303a; --muted: #4f6f78;
+    --w1: #93e4e6; --w2: #43b6c4; --w3: #1c7c96;
+    --sand1: #f3dcaa; --sand2: #d6b177; --plant1: #3fa45b; --plant2: #2a7d48; --plant3: #6cc36a;
+    --air: #d9f3f3; --lid: #24363d; --wood: #7a5232;
+    --chip: rgba(255, 255, 255, 0.75); --chip-line: rgba(16, 48, 58, 0.12);
+    --on: #10303a; --on-ink: #e9fbfa; --focus: #d9480f;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #061219; --page2: #0d2a33; --ink: #e2f6f6; --muted: #8fb0b6;
+      --w1: #2c93a6; --w2: #186680; --w3: #0b3852;
+      --sand1: #b99c6c; --sand2: #85704c; --plant1: #2f8a4d; --plant2: #1f603a; --plant3: #4ea45a;
+      --air: #2c4f58; --lid: #0b1418; --wood: #5a3c25;
+      --chip: rgba(12, 34, 42, 0.75); --chip-line: rgba(255, 255, 255, 0.1);
+      --on: #bdf3ee; --on-ink: #062027; --focus: #ffc078;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #061219; --page2: #0d2a33; --ink: #e2f6f6; --muted: #8fb0b6;
+    --w1: #2c93a6; --w2: #186680; --w3: #0b3852;
+    --sand1: #b99c6c; --sand2: #85704c; --plant1: #2f8a4d; --plant2: #1f603a; --plant3: #4ea45a;
+    --air: #2c4f58; --lid: #0b1418; --wood: #5a3c25;
+    --chip: rgba(12, 34, 42, 0.75); --chip-line: rgba(255, 255, 255, 0.1);
+    --on: #bdf3ee; --on-ink: #062027; --focus: #ffc078;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; overflow-x: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(100% 60% at 50% 30%, var(--page2), transparent 70%), var(--page);
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .cap, .scene { width: min(500px, 100%, calc((100vh - 210px) * 0.8)); min-width: 280px; }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--muted); padding: 0 4px; }
+  .cap b { font-size: 15px; color: var(--ink); }
+  .scene {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 26px; overflow: hidden; isolation: isolate;
+    touch-action: manipulation; cursor: pointer;
+    background: linear-gradient(180deg, var(--w1) 8%, var(--w2) 55%, var(--w3));
+    box-shadow: 0 0 0 6px var(--lid), 0 30px 60px -22px rgba(4, 30, 40, 0.6), 0 12px 24px -12px rgba(4, 30, 40, 0.4);
+  }
+  .scene > svg, .scene > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  /* with the lamp off the drawn scenery dims (--dim is set from the script) */
+  .scene > svg { filter: brightness(calc(1 - var(--dim, 0) * 0.55)) saturate(calc(1 - var(--dim, 0) * 0.3)); }
+  .night {
+    position: absolute; inset: 0; opacity: 0; pointer-events: none;
+    background: linear-gradient(180deg, #0f3050 8%, #071c37 55%, #030c1f);
+  }
+  .rays { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: soft-light; }
+  .ray {
+    position: absolute; top: 9%; height: 85%; transform-origin: 50% 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0));
+    clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%);
+    animation: sway 7s ease-in-out infinite;
+  }
+  @keyframes sway { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(5deg); } }
+  .vignette { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 40px rgba(0, 20, 30, 0.35); border-radius: inherit; }
+  .ring {
+    position: absolute; width: 22%; aspect-ratio: 1; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.85);
+    transform: translate(-50%, -50%) scale(0.1); opacity: 0; pointer-events: none;
+  }
+  .ring.go { animation: ring 0.9s cubic-bezier(.2, .7, .3, 1); }
+  .ring.r2.go { animation-delay: 0.12s; }
+  @keyframes ring { 0% { transform: translate(-50%, -50%) scale(0.1); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; } }
+  .hit { position: absolute; border: 0; background: transparent; border-radius: 12px; cursor: pointer; }
+  .hit:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Drawn parts ---------- */
+  .sd1 { stop-color: var(--sand1); } .sd2 { stop-color: var(--sand2); }
+  .p1 { fill: var(--plant1); } .p2 { fill: var(--plant2); } .p3 { fill: var(--plant3); }
+  .air { fill: var(--air); } .lid { fill: var(--lid); } .wood { fill: var(--wood); }
+  .lamp { fill: #fff3c4; transition: opacity 0.2s; }
+  .chest { fill: #8b5a2b; } .chest-dk { fill: #5e3b1b; } .gold { fill: #f2c14e; }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+  .btn {
+    appearance: none; border: 1px solid var(--chip-line); background: var(--chip); color: var(--ink);
+    font: 650 14px/1 system-ui, sans-serif; padding: 11px 16px; border-radius: 999px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: transform 0.25s cubic-bezier(.34, 1.56, .64, 1), box-shadow 0.25s ease, background 0.2s, color 0.2s;
+  }
+  .btn svg { width: 16px; height: 16px; }
+  .btn.main { background: var(--on); color: var(--on-ink); border-color: transparent; }
+  .btn[aria-pressed="false"] { opacity: 0.85; }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.5); }
+  .btn:active { transform: scale(0.95); }
+  .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .status { margin: 0; min-height: 1.4em; font-size: 14px; font-weight: 600; text-align: center; }
+  .hint { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); text-align: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ray { animation: none; }
+    .ring.go { animation-duration: 0.01s; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Guppy Tank: a small aquarium with fish you can feed</h1>
+  <div class="cap"><b>Guppy Tank</b><span id="stats">11 fish · 0 flakes eaten</span></div>
+  <div class="scene" id="scene" aria-describedby="hint">
+    <div class="night" id="night"></div>
+    <div class="rays" id="rays" aria-hidden="true">
+      <i class="ray" style="left:8%;width:22%;animation-duration:8s"></i>
+      <i class="ray" style="left:34%;width:16%;animation-duration:6.5s;animation-delay:-2s;opacity:.7"></i>
+      <i class="ray" style="left:52%;width:26%;animation-duration:9s;animation-delay:-4s"></i>
+      <i class="ray" style="left:76%;width:14%;animation-duration:7.5s;animation-delay:-1s;opacity:.6"></i>
+    </div>
+
+    <!-- back: sand, pebbles, plants, driftwood and the treasure chest -->
+    <svg viewBox="0 0 400 500" aria-hidden="true">
+      <defs>
+        <linearGradient id="sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="sd1"/><stop offset="1" class="sd2"/></linearGradient>
+        <radialGradient id="chestGlow"><stop offset="0" stop-color="#ffe27a" stop-opacity="0.9"/><stop offset="1" stop-color="#ffe27a" stop-opacity="0"/></radialGradient>
+      </defs>
+      <g id="backPlants"></g>
+      <path fill="url(#sand)" d="M0 438 C60 428 110 444 170 436 C240 427 300 446 400 432 V500 H0Z"/>
+      <g id="pebbles"></g>
+      <path class="wood" d="M196 452 C220 436 262 430 300 438 C318 442 330 436 344 426 L350 432 C338 446 322 452 300 450 C262 446 228 452 206 462Z"/>
+      <path class="p3" d="M240 440 c4 -6 12 -6 16 -1 c-6 2 -10 2 -16 1z M280 437 c5 -5 11 -4 14 0 c-5 2 -9 2 -14 0z"/>
+      <!-- treasure chest; its lid opens on a spring -->
+      <g id="chest">
+        <circle id="chestShine" cx="86" cy="436" r="30" fill="url(#chestGlow)" opacity="0"/>
+        <rect class="chest" x="64" y="436" width="46" height="26" rx="3"/>
+        <rect class="gold" x="64" y="446" width="46" height="4"/>
+        <rect class="gold" x="83" y="442" width="8" height="10" rx="1.5"/>
+        <g id="lid">
+          <path class="chest-dk" d="M64 437 C64 424 110 424 110 437Z"/>
+          <rect class="gold" x="64" y="434" width="46" height="3"/>
+        </g>
+      </g>
+    </svg>
+
+    <!-- fish, food, bubbles and dappled light -->
+    <canvas id="cv" aria-hidden="true"></canvas>
+
+    <!-- front: plants, the water surface, the lid and glass shine -->
+    <svg viewBox="0 0 400 500" aria-hidden="true">
+      <defs>
+        <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#fff" stop-opacity="0.16"/><stop offset="0.3" stop-color="#fff" stop-opacity="0"/>
+          <stop offset="0.62" stop-color="#fff" stop-opacity="0"/><stop offset="0.68" stop-color="#fff" stop-opacity="0.08"/>
+          <stop offset="0.74" stop-color="#fff" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <g id="frontPlants"></g>
+      <path id="airPath" class="air" opacity="0.85"/>
+      <path id="surf" fill="none" stroke="#fff" stroke-opacity="0.75" stroke-width="1.6"/>
+      <rect class="lid" x="0" y="0" width="400" height="20"/>
+      <rect id="lamp" class="lamp" x="60" y="18" width="280" height="4" rx="2"/>
+      <rect width="400" height="500" fill="url(#shine)"/>
+    </svg>
+    <div class="vignette"></div>
+    <i class="ring" id="ring1" aria-hidden="true"></i><i class="ring r2" id="ring2" aria-hidden="true"></i>
+    <button class="hit" id="chestBtn" type="button" aria-label="Open the treasure chest" style="left:15%;top:83.5%;width:13.5%;height:10%"></button>
+  </div>
+
+  <div class="controls">
+    <button class="btn main" id="feed" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="8" r="2.4" fill="currentColor"/><circle cx="14" cy="6" r="1.8" fill="currentColor"/><circle cx="11" cy="13" r="2.2" fill="currentColor"/><circle cx="17" cy="12" r="1.6" fill="currentColor"/><circle cx="8" cy="18" r="1.7" fill="currentColor"/></svg>
+      Feed
+    </button>
+    <button class="btn" id="tap" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".5"/></svg>
+      Tap the glass
+    </button>
+    <button class="btn" id="lampBtn" type="button" aria-pressed="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span id="lampLabel">Lamp on</span>
+    </button>
+  </div>
+  <p id="status" class="status" role="status" aria-live="polite">The fish are exploring. Tap the water to drop some food.</p>
+  <p id="hint" class="hint">Tap anywhere in the water to sprinkle flakes there. Fish follow your pointer when they are curious.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var NS = "http://www.w3.org/2000/svg", TAU = Math.PI * 2, W = 400, H = 500, SURF = 50;
+  var X0 = 26, X1 = 374, Y0 = 70, Y1 = 424; // where fish may swim
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; }
+  function sandY(x) { return 438 + Math.sin(x * 0.02) * 5; }
+  var scene = $("scene"), cv = $("cv"), ctx = cv.getContext("2d"), statusEl = $("status");
+  function say(m) { statusEl.textContent = m; }
+
+  /* ---------- 1. Plants (ribbons that sway) and pebbles ---------- */
+  var strands = [];
+  function addStrand(parent, x, h, w, cls, ph) { strands.push({ node: el("path", { "class": cls }, parent), x: x, h: h, w: w, ph: ph }); }
+  [[30, 200, 9, "p2"], [44, 250, 8, "p1"], [58, 170, 7, "p3"], [128, 150, 7, "p2"], [312, 230, 9, "p1"], [328, 280, 8, "p2"], [346, 190, 7, "p3"], [364, 240, 8, "p1"], [214, 110, 7, "p3"]]
+    .forEach(function (s, i) { addStrand($("backPlants"), s[0], s[1], s[2], s[3], i * 1.3); });
+  [[8, 150, 12, "p2"], [20, 110, 10, "p1"], [388, 170, 12, "p2"]].forEach(function (s, i) { addStrand($("frontPlants"), s[0], s[1], s[2], s[3], i * 2 + 0.5); });
+  function drawStrands(t) {
+    var swayK = reduce.matches ? 0.3 : 1;
+    strands.forEach(function (s) {
+      var n = 9, L = [], R = [], by = sandY(s.x) + 6;
+      for (var i = 0; i <= n; i++) {
+        var u = i / n, y = by - s.h * u;
+        var x = s.x + (Math.sin(t * 0.9 + s.ph + u * 2.2) * 14 * u * u + Math.sin(t * 2.1 + s.ph) * 2 * u) * swayK;
+        var w = s.w * (1 - u * 0.85) + 1;
+        L.push([x - w / 2, y]); R.push([x + w / 2, y]);
+      }
+      var d = "M" + L[0][0].toFixed(1) + " " + L[0][1].toFixed(1);
+      for (i = 1; i <= n; i++) d += "L" + L[i][0].toFixed(1) + " " + L[i][1].toFixed(1);
+      d += "Q" + ((L[n][0] + R[n][0]) / 2).toFixed(1) + " " + (L[n][1] - 6).toFixed(1) + " " + R[n][0].toFixed(1) + " " + R[n][1].toFixed(1);
+      for (i = n - 1; i >= 0; i--) d += "L" + R[i][0].toFixed(1) + " " + R[i][1].toFixed(1);
+      s.node.setAttribute("d", d + "Z");
+    });
+  }
+  (function pebbles() {
+    var cols = ["#9aa3a8", "#c9b9a4", "#e6ddd0", "#c27c5a", "#7f8c8d", "#d9c7a8"];
+    for (var i = 0; i < 46; i++) {
+      var x = rnd(0, 400), y = sandY(x) + rnd(4, 60);
+      el("ellipse", { cx: x.toFixed(1), cy: y.toFixed(1), rx: rnd(2.5, 6).toFixed(1), ry: rnd(1.8, 3.6).toFixed(1), fill: cols[i % cols.length], opacity: "0.9" }, $("pebbles"));
+    }
+  })();
+
+  /* ---------- 2. Fish: bendy bodies drawn along a spine ---------- */
+  var SP = {
+    guppy: { L: 34, H: 8.5, top: "#ff8a3d", mid: "#ffc46b", belly: "#fff0d4", tail: ["#ff7a3d", "#e8459b"], tailLen: 0.9, spread: 0.85, fan: true, speed: 44, turn: 2.6, dorsal: true },
+    tetra: { L: 21, H: 4.6, front: "#d5ebff", rear: "#ff3b5c", tail: ["#ff6b80", "#ffb3c0"], tailLen: 0.38, spread: 0.55, neon: true, speed: 52, turn: 3.4 },
+    angel: { L: 40, H: 17, top: "#c7d1de", mid: "#f4f7fb", belly: "#ffffff", tail: ["#e9eef5", "#b8c4d4"], tailLen: 0.42, spread: 0.6, stripes: true, tall: true, speed: 24, turn: 1.5 }
+  };
+  var fish = [];
+  function makeFish(kind, i) {
+    var f = { sp: SP[kind], kind: kind, x: rnd(70, 330), y: rnd(110, 380), a: Math.random() < 0.5 ? 0 : Math.PI, v: 20, ph: rnd(0, 6), beat: 0.5,
+      scale: kind === "guppy" ? rnd(0.9, 1.1) : 1, full: 0, gulp: 0, flee: 0, tx: 0, ty: 0, wt: 0, ox: 0, oy: 0, i: i };
+    newWander(f);
+    if (kind === "tetra") { f.ox = Math.cos(i * 2.4) * (14 + i * 4); f.oy = Math.sin(i * 2.4) * (8 + i * 2); f.x = 200 + f.ox; f.y = 220 + f.oy; f.a = 0; }
+    fish.push(f);
+  }
+  function newWander(f) { f.tx = rnd(X0 + 30, X1 - 30); f.ty = rnd(Y0 + 30, Y1 - 40); f.wt = rnd(3, 7); }
+  makeFish("angel", 0);
+  for (var gi = 0; gi < 3; gi++) makeFish("guppy", gi);
+  for (var ti = 0; ti < 7; ti++) makeFish("tetra", ti);
+  var school = { x: 200, y: 220, tx: 260, ty: 200, wt: 0 };
+
+  function smoothClosed(pts) {
+    var n = pts.length, last = pts[n - 1];
+    ctx.beginPath();
+    ctx.moveTo((last[0] + pts[0][0]) / 2, (last[1] + pts[0][1]) / 2);
+    for (var i = 0; i < n; i++) { var p = pts[i], q = pts[(i + 1) % n]; ctx.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2); }
+    ctx.closePath();
+  }
+  function drawFish(f, glowK) {
+    var sp = f.sp, Lh = sp.L * f.scale, Hh = sp.H * f.scale * (1 + f.full * 0.22), n = 8;
+    var amp = Lh * 0.08 * (0.45 + Math.min(2, f.beat)), sx = [], sy = [], hh = [], i, u;
+    for (i = 0; i < n; i++) {
+      u = i / (n - 1);
+      sx.push(-Lh * u);
+      sy.push(Math.sin(f.ph - u * 2.6) * amp * Math.pow(u, 1.5));
+      hh.push(Hh * Math.pow(Math.sin(Math.PI * Math.min(0.97, u * 0.93 + 0.05)), 0.75) * (1 - u * 0.5));
+    }
+    ctx.save();
+    ctx.translate(f.x, f.y); ctx.rotate(f.a);
+    // squash through zero while turning round so the fish never swims upside down
+    var flip = clamp(Math.cos(f.a) * 5, -1, 1); if (Math.abs(flip) < 0.08) flip = flip < 0 ? -0.08 : 0.08;
+    ctx.scale(1, flip);
+
+    // tail
+    var tx = sx[n - 1], ty = sy[n - 1], dir = Math.atan2(sy[n - 1] - sy[n - 2], sx[n - 1] - sx[n - 2]);
+    var tl = Lh * sp.tailLen, flap = Math.sin(f.ph - 3) * 0.3, a1 = dir + sp.spread + flap, a2 = dir - sp.spread + flap;
+    var tg = ctx.createLinearGradient(tx, ty, tx + Math.cos(dir) * tl, ty + Math.sin(dir) * tl);
+    tg.addColorStop(0, sp.tail[0]); tg.addColorStop(1, sp.tail[1]);
+    ctx.fillStyle = tg; ctx.globalAlpha = sp.fan ? 0.92 : 1;
+    ctx.beginPath(); ctx.moveTo(tx, ty);
+    ctx.quadraticCurveTo(tx + Math.cos(a1) * tl * 0.5, ty + Math.sin(a1) * tl * 0.5, tx + Math.cos(a1) * tl, ty + Math.sin(a1) * tl);
+    var mid = sp.fan ? 1.18 : 0.62;
+    ctx.quadraticCurveTo(tx + Math.cos(dir + flap) * tl * mid, ty + Math.sin(dir + flap) * tl * mid, tx + Math.cos(a2) * tl, ty + Math.sin(a2) * tl);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // fins behind the body
+    if (sp.tall) {
+      // tall, see-through fins swept back, edged in dark like the stripes
+      ctx.fillStyle = "rgba(196,206,222,0.55)"; ctx.strokeStyle = "rgba(40,44,58,0.55)"; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(sx[1], sy[1] - hh[1] * 0.8); ctx.quadraticCurveTo(sx[3], sy[3] - Hh * 1.7, sx[6] - Lh * 0.05, sy[6] - Hh * 1.9 + Math.sin(f.ph) * 2); ctx.lineTo(sx[5], sy[5] - hh[5]); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx[1], sy[1] + hh[1] * 0.8); ctx.quadraticCurveTo(sx[3], sy[3] + Hh * 1.8, sx[6], sy[6] + Hh * 2.1 - Math.sin(f.ph) * 2); ctx.lineTo(sx[5], sy[5] + hh[5]); ctx.fill(); ctx.stroke();
+    } else if (sp.dorsal) {
+      ctx.fillStyle = sp.tail[1]; ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.moveTo(sx[3], sy[3] - hh[3] * 0.9); ctx.quadraticCurveTo(sx[4], sy[4] - Hh * 1.9, sx[6], sy[6] - Hh * 1.3); ctx.lineTo(sx[5], sy[5] - hh[5] * 0.8); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // body
+    var pts = [[Hh * 0.35, 0]];
+    for (i = 0; i < n; i++) pts.push([sx[i], sy[i] - hh[i]]);
+    for (i = n - 1; i >= 0; i--) pts.push([sx[i], sy[i] + hh[i]]);
+    smoothClosed(pts);
+    var bg;
+    if (sp.neon) { bg = ctx.createLinearGradient(0, 0, -Lh, 0); bg.addColorStop(0, sp.front); bg.addColorStop(0.48, sp.front); bg.addColorStop(0.56, sp.rear); bg.addColorStop(1, sp.rear); }
+    else { bg = ctx.createLinearGradient(0, -Hh, 0, Hh); bg.addColorStop(0, sp.top); bg.addColorStop(0.45, sp.mid); bg.addColorStop(1, sp.belly); }
+    ctx.fillStyle = bg; ctx.fill();
+    if (sp.stripes) {
+      ctx.save(); ctx.clip();
+      ctx.fillStyle = "rgba(40,44,58,0.75)";
+      [0.12, 0.42, 0.7].forEach(function (k) { ctx.fillRect(-Lh * k - 2.5, -Hh * 2, 5, Hh * 4); });
+      ctx.restore();
+    }
+    if (sp.neon) { // the glowing stripe, brighter in the dark
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "rgba(60,220,255," + (0.85 + glowK * 0.15).toFixed(2) + ")"; ctx.lineWidth = 1.8 + glowK; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(sx[1], sy[1] - Hh * 0.18);
+      for (i = 2; i < 6; i++) ctx.lineTo(sx[i], sy[i] - Hh * 0.18);
+      ctx.stroke();
+      ctx.globalCompositeOperation = "source-over";
+    }
+    // pectoral fin
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.save(); ctx.translate(sx[2], sy[2] + hh[2] * 0.35); ctx.rotate(0.5 + Math.sin(f.ph * 1.6) * 0.45);
+    ctx.beginPath(); ctx.ellipse(-Lh * 0.06, 0, Lh * 0.09, Hh * 0.22, 0, 0, TAU); ctx.fill(); ctx.restore();
+    // eye and gulping mouth
+    var ex = -Lh * 0.1, ey = -Hh * 0.18, er = Math.max(1.6, Hh * 0.2);
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex, ey, er, 0, TAU); ctx.fill();
+    ctx.fillStyle = "#14161c"; ctx.beginPath(); ctx.arc(ex + er * 0.2, ey, er * 0.62, 0, TAU); ctx.fill();
+    if (f.gulp > 0.05) { ctx.fillStyle = "rgba(40,20,20,0.7)"; ctx.beginPath(); ctx.arc(Hh * 0.3, 0.5, 1.2 + f.gulp * 1.6, 0, TAU); ctx.fill(); }
+    ctx.restore();
+  }
+
+  /* ---------- 3. Food, bubbles, plankton and light spots ---------- */
+  var flakes = [], bubbles = [], sparks = [], eaten = 0, ripples = [];
+  var FLAKE_COLS = ["#e8473a", "#f2a93b", "#7cc85a", "#f6d860"];
+  function sprinkle(x, n) {
+    x = clamp(x, 40, 360);
+    ripples.push({ x: x, t: 0 });
+    for (var i = 0; i < n; i++) flakes.push({ x: x + rnd(-14, 14), y: SURF + rnd(2, 8), vy: rnd(14, 26), rot: rnd(0, 6), vr: rnd(-2, 2), s: rnd(2.6, 4), c: FLAKE_COLS[i % 4], seed: rnd(0, 9), rest: 0 });
+    say("Food! The fish rush up to eat.");
+  }
+  function bubble(x, y, r, vy) { if (bubbles.length < 160) bubbles.push({ x: x, y: y, r: r, vy: vy, ph: rnd(0, 6) }); }
+  var plankton = [];
+  for (var pi = 0; pi < 46; pi++) plankton.push({ x: rnd(0, W), y: rnd(70, 440), ph: rnd(0, 6), s: rnd(0.6, 1.6) });
+  var spots = [];
+  for (var si = 0; si < 14; si++) spots.push({ cx: rnd(0, W), ph: rnd(0, 6), r: rnd(16, 34), sp: rnd(0.3, 0.7) });
+
+  /* ---------- 4. Glass taps, the chest and the lamp ---------- */
+  function tapGlass(x, y) {
+    [$("ring1"), $("ring2")].forEach(function (r) {
+      r.style.left = (x / W * 100) + "%"; r.style.top = (y / H * 100) + "%";
+      r.classList.remove("go"); void r.offsetWidth; r.classList.add("go");
+    });
+    fish.forEach(function (f) {
+      var dx = f.x - x, dy = f.y - y, d = Math.hypot(dx, dy) || 1;
+      f.flee = reduce.matches ? 0.5 : 0.9;
+      f.tx = clamp(f.x + dx / d * 170, X0 + 10, X1 - 10); f.ty = clamp(f.y + dy / d * 120, Y0 + 10, Y1 - 10);
+    });
+    say("Tap tap! Everyone darts away from the glass.");
+  }
+  var chest = { open: 0, v: 0, target: 0, shake: 0, busy: false };
+  function openChest() {
+    if (chest.busy) return;
+    chest.busy = true; chest.shake = 0.45;
+    say("The treasure chest rattles…");
+    setTimeout(function () {
+      chest.target = 1;
+      for (var i = 0; i < (reduce.matches ? 5 : 16); i++) bubble(87 + rnd(-12, 12), 432 - rnd(0, 10), rnd(2, 5), rnd(60, 110));
+      for (var k = 0; k < 8; k++) sparks.push({ x: 87 + rnd(-10, 10), y: 430, vx: rnd(-30, 30), vy: rnd(-70, -30), life: rnd(0.6, 1), c: "#ffe27a" });
+      say("It pops open in a burst of bubbles. Treasure!");
+    }, 450);
+    setTimeout(function () { chest.target = 0; }, 2000);
+    setTimeout(function () { chest.busy = false; }, 2600);
+  }
+  var lampOn = true, nightK = 0, lampFlicker = 0;
+  function setLamp(on) {
+    lampOn = on;
+    $("lampBtn").setAttribute("aria-pressed", String(on));
+    $("lampLabel").textContent = on ? "Lamp on" : "Lamp off";
+    lampFlicker = reduce.matches ? 0 : 0.45;
+    say(on ? "Good morning, fish. The lamp is back on." : "Night time. The tetras glow and the fish doze.");
+  }
+
+  /* ---------- 5. Input ---------- */
+  function toScene(e) { var r = scene.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; }
+  var pointer = null, pointerT = 0;
+  scene.addEventListener("pointerdown", function (e) {
+    if (e.target.closest(".hit")) return;
+    var p = toScene(e);
+    sprinkle(p.x, 6);
+  });
+  scene.addEventListener("pointermove", function (e) { if (e.pointerType === "mouse") { pointer = toScene(e); pointerT = 3; } });
+  scene.addEventListener("pointerleave", function () { pointer = null; });
+  $("feed").addEventListener("click", function () { sprinkle(rnd(80, 320), 7); });
+  $("tap").addEventListener("click", function () { tapGlass(rnd(120, 280), rnd(180, 320)); });
+  $("lampBtn").addEventListener("click", function () { setLamp(!lampOn); });
+  $("chestBtn").addEventListener("click", openChest);
+
+  /* ---------- 6. Auto demo until the visitor takes over ---------- */
+  var demoOn = true, demoT = 0, demoStep = 0;
+  function demo() {
+    if (!demoOn) return;
+    var k = demoStep++ % 6, wait = 4200;
+    if (k === 0 || k === 2) sprinkle(k === 0 ? rnd(140, 260) : rnd(90, 310), 7);
+    else if (k === 1) openChest();
+    else if (k === 3) tapGlass(rnd(140, 260), rnd(200, 300));
+    else if (k === 4) { setLamp(false); wait = 5200; }
+    else setLamp(true);
+    demoT = setTimeout(demo, wait);
+  }
+  function stopDemo(e) { if (!e.isTrusted || !demoOn) return; demoOn = false; clearTimeout(demoT); }
+  ["pointerdown", "keydown", "wheel"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+
+  /* ---------- 7. Simulation ---------- */
+  function stepFish(f, dt, t) {
+    var sp = f.sp, boost = 1, tx, ty, chase = null, sleepy = nightK;
+    f.gulp = Math.max(0, f.gulp - dt * 3); f.full = Math.max(0, f.full - dt * 0.015);
+    if (f.flee > 0) { f.flee -= dt; tx = f.tx; ty = f.ty; boost = 3.2; }
+    else {
+      // nearest falling flake within reach
+      var best = 1e9;
+      for (var i = 0; i < flakes.length; i++) {
+        var fl = flakes[i]; if (fl.taken) continue;
+        var d = Math.hypot(fl.x - f.x, fl.y - f.y);
+        if (d < best && d < 300) { best = d; chase = fl; }
+      }
+      if (chase) { tx = chase.x; ty = chase.y; boost = f.kind === "angel" ? 1.6 : 2.2; }
+      else if (f.kind === "tetra") { tx = school.x + f.ox; ty = school.y + f.oy; }
+      else if (pointer && f.kind === "guppy" && f.i === 0 && pointerT > 0) { tx = pointer.x - 30; ty = pointer.y; boost = 0.9; }
+      else {
+        f.wt -= dt;
+        if (f.wt <= 0 || Math.hypot(f.tx - f.x, f.ty - f.y) < 18) newWander(f);
+        if (sleepy > 0.5 && f.ty < 300) f.ty = rnd(320, 410);
+        tx = f.tx; ty = f.ty;
+      }
+    }
+    var want = Math.atan2(ty - f.y, tx - f.x);
+    var da = ((want - f.a) % TAU + TAU * 1.5) % TAU - Math.PI;
+    var turn = sp.turn * (boost > 1 ? 1.8 : 1);
+    f.a += clamp(da, -turn * dt, turn * dt);
+    var s = Math.sin(f.a), c = Math.cos(f.a);
+    if (Math.abs(s) > 0.8) f.a = Math.atan2(s > 0 ? 0.8 : -0.8, c < 0 ? -0.6 : 0.6);
+    var dist = Math.hypot(tx - f.x, ty - f.y);
+    var vWant = sp.speed * boost * (1 - sleepy * 0.65) * (chase || f.flee > 0 ? 1 : clamp(dist / 60, 0.35, 1));
+    if (reduce.matches) vWant *= 0.6;
+    f.v += (vWant - f.v) * Math.min(1, dt * (boost > 1 ? 5 : 2));
+    f.x = clamp(f.x + Math.cos(f.a) * f.v * dt, X0, X1);
+    f.y = clamp(f.y + Math.sin(f.a) * f.v * dt, Y0, Y1);
+    f.beat = f.v / sp.speed;
+    f.ph += dt * (3 + f.v * 0.25);
+    // eat when the snout reaches the flake
+    if (chase) {
+      var mx = f.x + Math.cos(f.a) * 3, my = f.y + Math.sin(f.a) * 3;
+      if (Math.hypot(chase.x - mx, chase.y - my) < 6 + f.sp.L * 0.12) {
+        chase.taken = true; f.gulp = 1; f.full = Math.min(1, f.full + 0.25); eaten++;
+        bubble(mx, my - 2, 1.6, 40);
+        for (var k = 0; k < 5; k++) sparks.push({ x: mx, y: my, vx: rnd(-40, 40), vy: rnd(-40, 20), life: rnd(0.3, 0.6), c: "#ffffff" });
+        $("stats").textContent = fish.length + " fish · " + eaten + " flake" + (eaten === 1 ? "" : "s") + " eaten";
+        if (!flakes.some(function (q) { return !q.taken; })) say("All gone. " + eaten + " flakes eaten so far, and the fish look happy.");
+      }
+    }
+  }
+  function step(dt, t) {
+    school.wt -= dt;
+    if (school.wt <= 0) { school.tx = rnd(110, 290); school.ty = nightK > 0.5 ? rnd(300, 380) : rnd(120, 340); school.wt = rnd(3, 6); }
+    school.x += (school.tx - school.x) * Math.min(1, dt * 0.5);
+    school.y += (school.ty - school.y) * Math.min(1, dt * 0.5);
+    fish.forEach(function (f) { stepFish(f, dt, t); });
+    pointerT -= dt;
+    flakes.forEach(function (fl) {
+      if (fl.rest > 0) { fl.rest += dt; return; }
+      fl.y += fl.vy * dt * (reduce.matches ? 0.7 : 1); fl.x += Math.sin(t * 2 + fl.seed) * 9 * dt; fl.rot += fl.vr * dt;
+      if (fl.y > sandY(fl.x) + 2) { fl.y = sandY(fl.x) + 2; fl.rest = 0.01; }
+    });
+    flakes = flakes.filter(function (fl) { return !fl.taken && fl.rest < 9; });
+    // the air stone behind the driftwood and the chest stream bubbles
+    if (Math.random() < dt * 9) bubble(338 + rnd(-3, 3), 432, rnd(1.2, 3.4), rnd(50, 80));
+    bubbles.forEach(function (b) { b.y -= b.vy * dt; b.x += Math.sin(t * 5 + b.ph) * 12 * dt; b.vy = Math.min(b.vy + 20 * dt, 130); });
+    bubbles = bubbles.filter(function (b) { if (b.y < SURF + 2) { if (b.r > 2.5) ripples.push({ x: b.x, t: 0, small: true }); return false; } return true; });
+    sparks.forEach(function (s) { s.life -= dt; s.x += s.vx * dt; s.y += s.vy * dt; });
+    sparks = sparks.filter(function (s) { return s.life > 0; });
+    ripples.forEach(function (r) { r.t += dt; });
+    ripples = ripples.filter(function (r) { return r.t < 2.2; });
+    // chest lid: a springy hinge with a little shake first
+    chest.shake = Math.max(0, chest.shake - dt);
+    if (reduce.matches) chest.open += (chest.target - chest.open) * Math.min(1, dt * 8);
+    else { chest.v += ((chest.target - chest.open) * 140 - chest.v * 10) * dt; chest.open += chest.v * dt; }
+    // the lamp: flicker, then fade the water to night (or back)
+    lampFlicker = Math.max(0, lampFlicker - dt);
+    var goal = lampOn ? 0 : 1;
+    if (lampFlicker <= 0) nightK += clamp(goal - nightK, -dt * 1.2, dt * 1.2) * (reduce.matches ? 4 : 1);
+    nightK = clamp(nightK, 0, 1);
+  }
+
+  /* ---------- 8. Drawing ---------- */
+  var S = 1;
+  function resize() {
+    var r = scene.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    S = Math.max(0.5, r.width / W * dpr);
+    cv.width = Math.round(W * S); cv.height = Math.round(H * S);
+  }
+  window.addEventListener("resize", resize);
+  function surfaceY(x, t) {
+    var y = SURF + Math.sin(x * 0.045 + t * 1.6) * 1.6 + Math.sin(x * 0.09 - t * 2.3) * 1.1;
+    for (var i = 0; i < ripples.length; i++) {
+      var r = ripples[i], dx = x - r.x, spread = 20 + r.t * 70, amp = (r.small ? 1.2 : 4) * Math.exp(-r.t * 1.8);
+      y += amp * Math.cos(dx * 0.16 - r.t * 9) * Math.exp(-(dx * dx) / (spread * spread));
+    }
+    return y;
+  }
+  function draw(t) {
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    // dappled light dancing on the sand and plants
+    var dayK = 1 - nightK;
+    if (dayK > 0.02) {
+      ctx.globalCompositeOperation = "lighter";
+      spots.forEach(function (s) {
+        var x = s.cx + Math.sin(t * s.sp + s.ph) * 40, y = 455 + Math.cos(t * s.sp * 1.3 + s.ph) * 22;
+        var g = ctx.createRadialGradient(x, y, 0, x, y, s.r);
+        g.addColorStop(0, "rgba(255,255,230," + (0.16 * dayK).toFixed(3) + ")"); g.addColorStop(1, "rgba(255,255,230,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, s.r * 1.4, s.r * 0.5, 0, 0, TAU); ctx.fill();
+      });
+      ctx.globalCompositeOperation = "source-over";
+    }
+    // food
+    flakes.forEach(function (fl) {
+      ctx.save(); ctx.translate(fl.x, fl.y); ctx.rotate(fl.rot); ctx.globalAlpha = fl.rest > 6 ? Math.max(0, 1 - (fl.rest - 6) / 3) : 1;
+      ctx.fillStyle = fl.c; ctx.beginPath(); ctx.moveTo(-fl.s, -fl.s * 0.4); ctx.lineTo(fl.s * 0.8, -fl.s * 0.6); ctx.lineTo(fl.s, fl.s * 0.5); ctx.lineTo(-fl.s * 0.6, fl.s * 0.6); ctx.fill();
+      ctx.restore();
+    });
+    ctx.globalAlpha = 1;
+    // fish (the angelfish is first, so it swims behind the school)
+    fish.forEach(function (f) { drawFish(f, nightK); });
+    if (nightK > 0.02) {
+      // night: darken everything drawn so far, then let the tetra stripes glow on top
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.fillStyle = "rgba(4,14,34," + (nightK * 0.55).toFixed(3) + ")"; ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.lineCap = "round"; ctx.lineWidth = 2.4;
+      ctx.strokeStyle = "rgba(70,225,255," + (nightK * 0.8).toFixed(3) + ")";
+      fish.forEach(function (f) {
+        if (f.kind !== "tetra") return;
+        var c = Math.cos(f.a), s = Math.sin(f.a), L = f.sp.L;
+        ctx.beginPath(); ctx.moveTo(f.x - c * L * 0.14, f.y - s * L * 0.14 - 0.8); ctx.lineTo(f.x - c * L * 0.66, f.y - s * L * 0.66 - 0.8); ctx.stroke();
+      });
+      ctx.globalCompositeOperation = "source-over";
+    }
+    // bubbles
+    bubbles.forEach(function (b) {
+      ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 0.9;
+      ctx.fillStyle = "rgba(255,255,255,0.12)";
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.beginPath(); ctx.arc(b.x - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.28, 0, TAU); ctx.fill();
+    });
+    // sparkles from eating and from the chest
+    sparks.forEach(function (s) {
+      ctx.globalAlpha = clamp(s.life * 2, 0, 1); ctx.fillStyle = s.c;
+      ctx.beginPath(); ctx.arc(s.x, s.y, 1.4, 0, TAU); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    // glowing plankton when the lamp is off
+    if (nightK > 0.02) {
+      ctx.globalCompositeOperation = "lighter";
+      plankton.forEach(function (p) {
+        var a = nightK * (0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(t * 1.7 + p.ph), 3));
+        var x = p.x + Math.sin(t * 0.3 + p.ph) * 10, y = p.y + Math.cos(t * 0.25 + p.ph) * 8;
+        ctx.fillStyle = "rgba(120,255,230," + a.toFixed(3) + ")";
+        ctx.beginPath(); ctx.arc(x, y, p.s, 0, TAU); ctx.fill();
+      });
+      ctx.globalCompositeOperation = "source-over";
+    }
+  }
+  var airPath = $("airPath"), surf = $("surf"), lid = $("lid"), chestG = $("chest"), shine = $("chestShine"), lastDim = "";
+  function drawSvg(t) {
+    var d = "", top = "M0 0";
+    for (var x = 0; x <= W; x += 10) {
+      var y = surfaceY(x, t).toFixed(1);
+      d += (x ? "L" : "M") + x + " " + y;
+      top += "L" + x + " " + y;
+    }
+    surf.setAttribute("d", d);
+    airPath.setAttribute("d", top + "L400 0Z");
+    drawStrands(t);
+    var ang = -42 * chest.open;
+    lid.setAttribute("transform", "rotate(" + ang.toFixed(1) + " 64 437)");
+    var sh = chest.shake > 0 && !reduce.matches ? Math.sin(t * 60) * 2.2 : 0;
+    chestG.setAttribute("transform", "rotate(" + sh.toFixed(2) + " 87 462)");
+    shine.setAttribute("opacity", clamp(chest.open, 0, 1).toFixed(2));
+    $("night").style.opacity = (nightK * 0.93).toFixed(3);
+    var dim = nightK.toFixed(2);
+    if (dim !== lastDim) { scene.style.setProperty("--dim", dim); lastDim = dim; }
+    $("rays").style.opacity = (1 - nightK).toFixed(3);
+    $("lamp").style.opacity = lampFlicker > 0 ? (Math.sin(t * 50) > 0 ? "1" : "0.2") : lampOn ? "1" : "0.15";
+  }
+
+  var last = performance.now();
+  function loop(now) {
+    var dt = Math.min(0.05, (now - last) / 1000), t = now / 1000;
+    last = now;
+    step(dt, t);
+    draw(t);
+    drawSvg(t);
+    requestAnimationFrame(loop);
+  }
+  resize();
+  requestAnimationFrame(loop);
+  demoT = setTimeout(demo, 350);
+})();
+</script>
+</body>
+</html>

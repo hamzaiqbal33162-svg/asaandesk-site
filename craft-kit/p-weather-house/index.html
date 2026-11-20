@@ -1,0 +1,472 @@
+<!doctype html>
+<!-- Chill & Craft · Weather House · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather House · a wooden toy that tells the weather</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    --page: #f6efe4; --page2: #e6eef6; --ink: #2d2118; --muted: #74624f;
+    --wall: #fbf1dc; --beam: #6d4428; --roof: #c8553d; --roof-dk: #9c3b28; --trim: #4f2f1a; --base: #8a5a36;
+    --chip: rgba(255, 255, 255, 0.8); --chip-line: rgba(45, 33, 24, 0.13);
+    --on: #6d4428; --on-ink: #fff6e8; --focus: #d9480f;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0d0b10; --page2: #161b2a; --ink: #f3ebe0; --muted: #b0a291;
+      --wall: #e8dcc4; --beam: #4a2e1b; --roof: #a6463a; --roof-dk: #7b3026; --trim: #3a2213; --base: #6b4529;
+      --chip: rgba(30, 26, 30, 0.8); --chip-line: rgba(255, 255, 255, 0.1);
+      --on: #f2c98a; --on-ink: #2a1a0c; --focus: #ffc078;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #0d0b10; --page2: #161b2a; --ink: #f3ebe0; --muted: #b0a291;
+    --wall: #e8dcc4; --beam: #4a2e1b; --roof: #a6463a; --roof-dk: #7b3026; --trim: #3a2213; --base: #6b4529;
+    --chip: rgba(30, 26, 30, 0.8); --chip-line: rgba(255, 255, 255, 0.1);
+    --on: #f2c98a; --on-ink: #2a1a0c; --focus: #ffc078;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; overflow-x: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(100% 60% at 50% 0%, var(--page2), transparent 70%), var(--page);
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .cap, .scene, .meter { width: min(500px, 100%, calc((100vh - 250px) * 0.8)); min-width: 280px; }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--muted); padding: 0 4px; }
+  .cap b { font-size: 15px; color: var(--ink); }
+  .scene {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 28px; overflow: hidden; isolation: isolate;
+    background: linear-gradient(180deg, var(--skyA, #5fb4ef), var(--skyB, #d6eefc));
+    box-shadow: 0 30px 60px -22px rgba(40, 30, 20, 0.5), 0 12px 24px -12px rgba(40, 30, 20, 0.35);
+  }
+  .scene > svg, .scene > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .flash { position: absolute; inset: 0; background: #eef2ff; opacity: 0; pointer-events: none; mix-blend-mode: screen; }
+  .houseHit { position: absolute; left: 22%; top: 20%; width: 56%; height: 66%; border: 0; border-radius: 24px; background: transparent; cursor: pointer; }
+  .houseHit:focus-visible { outline: 3px dashed var(--focus); outline-offset: 4px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Drawn parts ---------- */
+  .wall { fill: var(--wall); } .beam { fill: var(--beam); } .beam-s { stroke: var(--beam); }
+  .roof { fill: var(--roof); } .roof-dk { fill: var(--roof-dk); } .trim { stroke: var(--trim); } .trim-f { fill: var(--trim); }
+  .base { fill: var(--base); }
+  .flag { transform-box: fill-box; transform-origin: 50% 0; animation: flag 2.4s ease-in-out infinite; }
+  @keyframes flag { 50% { transform: rotate(var(--sw, 6deg)); } }
+  .note { fill: #5b3a22; stroke: #5b3a22; stroke-width: 1.4; transform-box: fill-box; transform-origin: center; animation: note 1.6s ease-out forwards; }
+  @keyframes note { from { opacity: 0; transform: translate(0, 0) scale(0.6); } 20% { opacity: 1; } to { opacity: 0; transform: translate(var(--nx), -46px) scale(1.1); } }
+
+  /* ---------- Controls ---------- */
+  .meter { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; font: 600 13px/1 system-ui, sans-serif; color: var(--muted); }
+  .meter output { min-width: 112px; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; margin: 0; cursor: pointer; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 8px; border-radius: 6px; background: linear-gradient(90deg, #ffcf4a, #9fc7e6 45%, #4f7fb0 70%, #5b4a86); }
+  input[type="range"]::-moz-range-track { height: 8px; border-radius: 6px; background: linear-gradient(90deg, #ffcf4a, #9fc7e6 45%, #4f7fb0 70%, #5b4a86); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -7px; border-radius: 50%; background: #fff; border: 3px solid var(--on); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); }
+  input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid var(--on); }
+  input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 8px; }
+  .seg { display: inline-flex; flex-wrap: wrap; justify-content: center; padding: 4px; border-radius: 22px; border: 1px solid var(--chip-line); background: var(--chip); }
+  .seg label { position: relative; }
+  .seg input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  .seg span { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; font: 600 14px/1 system-ui, sans-serif; color: var(--muted); transition: background 0.25s, color 0.25s; }
+  .seg svg { width: 15px; height: 15px; }
+  .seg input:checked + span { background: var(--on); color: var(--on-ink); }
+  .seg input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+  @media (max-width: 420px) { .seg span { padding: 8px 8px; gap: 4px; font-size: 13px; } .seg svg { width: 13px; height: 13px; } }
+  .status { margin: 0; min-height: 1.4em; font-size: 14px; font-weight: 600; text-align: center; }
+  .hint { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); text-align: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flag, .note { animation: none; }
+    .note { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Weather House: a wooden toy where a sun lady and a rain man swap places with the humidity</h1>
+  <div class="cap"><b>Weather House</b><span id="cap">Fair</span></div>
+  <div class="scene" id="scene">
+    <!-- weather behind the porch: sun or moon, clouds, rainbow -->
+    <svg viewBox="0 0 400 500" aria-hidden="true">
+      <defs>
+        <radialGradient id="sunG"><stop offset="0" stop-color="#fff6c8" stop-opacity="0.95"/><stop offset="0.4" stop-color="#ffd86a" stop-opacity="0.4"/><stop offset="1" stop-color="#ffc24a" stop-opacity="0"/></radialGradient>
+      </defs>
+      <g id="stars"></g>
+      <g id="sun" transform="translate(320 120)">
+        <circle r="70" fill="url(#sunG)"/>
+        <g id="rays" stroke="#ffd34d" stroke-width="4" stroke-linecap="round"></g>
+        <circle id="sunDisc" r="22" fill="#ffd34d"/>
+      </g>
+      <g id="rainbow" fill="none" stroke-width="8" opacity="0">
+        <circle cx="200" cy="470" r="250" stroke="#ff8a8a"/><circle cx="200" cy="470" r="242" stroke="#ffc46b"/><circle cx="200" cy="470" r="234" stroke="#fff08a"/>
+        <circle cx="200" cy="470" r="226" stroke="#9fe39a"/><circle cx="200" cy="470" r="218" stroke="#8ccfff"/><circle cx="200" cy="470" r="210" stroke="#b9a2ff"/>
+      </g>
+      <g id="clouds"></g>
+    </svg>
+    <!-- rain and lightning -->
+    <canvas id="cv" aria-hidden="true"></canvas>
+
+    <!-- porch beam, bunting, the house and the railing -->
+    <svg viewBox="0 0 400 500" aria-hidden="true">
+      <defs>
+        <pattern id="shingles" width="16" height="10" patternUnits="userSpaceOnUse">
+          <rect width="16" height="10" class="roof"/>
+          <path d="M0 10 A8 8 0 0 1 16 10" class="roof-dk" fill-opacity="0.55"/>
+        </pattern>
+        <linearGradient id="door" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c120b"/><stop offset="1" stop-color="#3b2516"/></linearGradient>
+        <filter id="dimSun"><feComponentTransfer><feFuncR id="ds1" type="linear" slope="1"/><feFuncG id="ds2" type="linear" slope="1"/><feFuncB id="ds3" type="linear" slope="1"/></feComponentTransfer></filter>
+        <filter id="dimRain"><feComponentTransfer><feFuncR id="dr1" type="linear" slope="1"/><feFuncG id="dr2" type="linear" slope="1"/><feFuncB id="dr3" type="linear" slope="1"/></feComponentTransfer></filter>
+        <!-- the sun lady: sun hat, braids, flowers -->
+        <g id="lady">
+          <path d="M-13 0 L-9 -30 L9 -30 L13 0Z" fill="#ffc94a"/>
+          <path d="M-13 0 L-9 -30 L-4 -30 L-6 0Z" fill="#ffb02e"/>
+          <rect x="-10" y="-12" width="20" height="3" fill="#fff" opacity="0.8"/>
+          <rect x="-5" y="2" width="4" height="4" fill="#5b3a22"/><rect x="1" y="2" width="4" height="4" fill="#5b3a22"/>
+          <circle cx="0" cy="-38" r="8.5" fill="#f6cfae"/>
+          <path d="M-8 -38 q-4 8 -2 14 M8 -38 q4 8 2 14" stroke="#e8a83a" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <ellipse cx="0" cy="-44" rx="17" ry="4.5" fill="#f3e2b0"/>
+          <path d="M-8 -44 Q0 -56 8 -44Z" fill="#f3e2b0"/>
+          <rect x="-8" y="-46" width="16" height="2.6" fill="#ff7aa0"/>
+          <circle cx="-3" cy="-38" r="1" fill="#3b2516"/><circle cx="3" cy="-38" r="1" fill="#3b2516"/>
+          <path d="M-2.4 -34.6 q2.4 2 4.8 0" stroke="#c24a4a" stroke-width="1" fill="none"/>
+          <path d="M9 -22 l8 -10" stroke="#4f8f34" stroke-width="1.6"/>
+          <circle cx="17" cy="-33" r="3" fill="#ff6b8a"/><circle cx="20" cy="-29" r="2.6" fill="#ffd84a"/><circle cx="14" cy="-29" r="2.4" fill="#8ccfff"/>
+        </g>
+        <!-- the rain man: sou'wester, raincoat, umbrella -->
+        <g id="man">
+          <path d="M-13 0 L-10 -32 L10 -32 L13 0Z" fill="#3c86b8"/>
+          <path d="M3 -32 L6 0 L13 0 L10 -32Z" fill="#2f6f9a"/>
+          <circle cx="0" cy="-22" r="1.2" fill="#ffd84a"/><circle cx="0" cy="-14" r="1.2" fill="#ffd84a"/>
+          <rect x="-6" y="0" width="5" height="6" rx="1" fill="#ffcc33"/><rect x="1" y="0" width="5" height="6" rx="1" fill="#ffcc33"/>
+          <circle cx="0" cy="-40" r="8.5" fill="#f2c7a0"/>
+          <path d="M-14 -41 Q0 -60 14 -41 Q8 -44 0 -44 Q-8 -44 -14 -41Z" fill="#ffcc33"/>
+          <circle cx="-3" cy="-40" r="1" fill="#3b2516"/><circle cx="3" cy="-40" r="1" fill="#3b2516"/>
+          <path d="M-3 -36 h6" stroke="#8a4a3a" stroke-width="1.2"/>
+          <path d="M-12 -20 L-16 -62" stroke="#3b2516" stroke-width="1.6"/>
+          <path d="M-42 -60 Q-16 -86 10 -60 Q4 -64 -3 -60 Q-10 -64 -16 -60 Q-22 -64 -29 -60 Q-36 -64 -42 -60Z" fill="#e8434f"/>
+          <path d="M-16 -60 Q-16 -76 -16 -80" stroke="#b02f3a" stroke-width="1"/>
+        </g>
+      </defs>
+
+      <!-- porch beam with bunting -->
+      <rect class="beam" x="-10" y="18" width="420" height="22"/>
+      <rect x="-10" y="38" width="420" height="5" fill="#000" opacity="0.18"/>
+      <g id="bunting"></g>
+
+      <!-- the house hangs from a nail and swings -->
+      <g id="house">
+        <line x1="200" y1="44" x2="200" y2="100" stroke="#3b2516" stroke-width="1.6"/>
+        <circle cx="200" cy="103" r="5" fill="none" stroke="#b8925a" stroke-width="2.4"/>
+        <!-- walls and beams -->
+        <rect class="wall" x="124" y="194" width="152" height="178"/>
+        <path class="beam-s" fill="none" stroke-width="5" d="M126 194V372 M274 194V372 M124 290H276 M126 290 L150 372 M274 290 L250 372"/>
+        <!-- small windows with flower boxes -->
+        <g>
+          <rect x="138" y="214" width="22" height="26" rx="3" fill="#a9d4ef" stroke="#6d4428" stroke-width="3"/>
+          <rect x="240" y="214" width="22" height="26" rx="3" fill="#a9d4ef" stroke="#6d4428" stroke-width="3"/>
+          <rect x="134" y="241" width="30" height="7" rx="2" fill="#8a5a36"/><rect x="236" y="241" width="30" height="7" rx="2" fill="#8a5a36"/>
+          <g fill="#ff5d73"><circle cx="140" cy="239" r="3"/><circle cx="149" cy="237" r="3.4"/><circle cx="158" cy="239" r="3"/><circle cx="242" cy="239" r="3"/><circle cx="251" cy="237" r="3.4"/><circle cx="260" cy="239" r="3"/></g>
+          <g fill="#4f8f34"><circle cx="144" cy="240" r="1.8"/><circle cx="154" cy="240" r="1.8"/><circle cx="246" cy="240" r="1.8"/><circle cx="256" cy="240" r="1.8"/></g>
+        </g>
+        <!-- humidity dial -->
+        <g transform="translate(200 238)">
+          <circle r="27" fill="#fffaf0" stroke="#6d4428" stroke-width="4"/>
+          <path d="M-19.1 11 A22 22 0 0 1 -11 -19.1" fill="none" stroke="#ffcf4a" stroke-width="5"/>
+          <path d="M-11 -19.1 A22 22 0 0 1 11 -19.1" fill="none" stroke="#b9cfe0" stroke-width="5"/>
+          <path d="M11 -19.1 A22 22 0 0 1 19.1 11" fill="none" stroke="#4f7fb0" stroke-width="5"/>
+          <text y="12" text-anchor="middle" font-size="5.5" font-weight="700" fill="#6d4428" letter-spacing="0.5">HUMIDITY</text>
+          <g id="needle"><path d="M0 3 L-1.6 0 L0 -21 L1.6 0Z" fill="#c8303a"/></g>
+          <circle r="3" fill="#6d4428"/>
+        </g>
+        <!-- doorways -->
+        <path d="M142 368 V322 A20 20 0 0 1 182 322 V368Z" fill="url(#door)"/>
+        <path d="M218 368 V322 A20 20 0 0 1 258 322 V368Z" fill="url(#door)"/>
+        <path d="M142 368 V322 A20 20 0 0 1 182 322 V368 M218 368 V322 A20 20 0 0 1 258 322 V368" fill="none" class="trim" stroke-width="3"/>
+        <path d="M162 292 c-3 -4 -8 0 0 6 c8 -6 3 -10 0 -6z M238 292 c-3 -4 -8 0 0 6 c8 -6 3 -10 0 -6z" class="trim-f"/>
+        <!-- base and turntable -->
+        <rect class="base" x="116" y="368" width="168" height="16" rx="3"/>
+        <rect x="116" y="380" width="168" height="4" fill="#000" opacity="0.2"/>
+        <path d="M150 384 q50 14 100 0" fill="none" class="beam-s" stroke-width="3"/>
+        <!-- figures stand on the turntable, in front of the doorways -->
+        <g id="figBack"></g>
+        <g id="figFront"></g>
+        <!-- roof with carved trim -->
+        <path d="M98 208 L200 104 L302 208 L286 208 L200 122 L114 208Z" fill="url(#shingles)"/>
+        <path d="M200 112 L104 210 L120 210 L200 128 L280 210 L296 210Z" fill="url(#shingles)"/>
+        <path d="M98 208 L200 104 L302 208" fill="none" class="trim" stroke-width="7" stroke-linejoin="round"/>
+        <path d="M112 212 L200 122 L288 212" fill="none" class="trim" stroke-width="4" stroke-dasharray="0.1 8" stroke-linecap="round"/>
+        <circle cx="200" cy="160" r="9" fill="#a9d4ef" stroke="#6d4428" stroke-width="3"/>
+        <path d="M200 151V169 M191 160H209" stroke="#6d4428" stroke-width="2"/>
+        <!-- a carved bird on the roof that sings in fair weather -->
+        <g id="bird" transform="translate(262 166)">
+          <path d="M-10 0 Q-2 -10 8 -6 L14 -8 L9 -3 Q6 4 -4 3 L-12 6Z" fill="#4f2f1a"/>
+          <circle cx="7" cy="-5.5" r="1" fill="#fff"/>
+        </g>
+      </g>
+      <g id="notes"></g>
+
+      <!-- porch railing in front -->
+      <rect class="beam" x="-10" y="440" width="420" height="12" rx="3"/>
+      <g id="rails"></g>
+      <rect class="beam" x="-10" y="490" width="420" height="10"/>
+    </svg>
+    <div class="flash" id="flash"></div>
+    <button class="houseHit" id="houseHit" type="button" aria-label="Tap the weather house to make it swing"></button>
+  </div>
+
+  <div class="meter">
+    <label for="hum">Humidity</label>
+    <input id="hum" type="range" min="0" max="100" step="1" value="28">
+    <output id="humOut" for="hum">28% · Sunny</output>
+  </div>
+  <div class="seg" role="radiogroup" aria-label="Pick the weather">
+    <label><input type="radio" name="wx" value="25" checked><span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>Sunny</span></label>
+    <label><input type="radio" name="wx" value="52"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 0-8 5 5 0 0 0-9.6-1A4.5 4.5 0 0 0 7 18z" fill="currentColor"/></svg>Cloudy</span></label>
+    <label><input type="radio" name="wx" value="72"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14h10a4 4 0 0 0 0-8 5 5 0 0 0-9.6-1A4.5 4.5 0 0 0 7 14zM8 17l-1 3M12 17l-1 3M16 17l-1 3" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Rainy</span></label>
+    <label><input type="radio" name="wx" value="92"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 13h10a4 4 0 0 0 0-8 5 5 0 0 0-9.6-1A4.5 4.5 0 0 0 7 13zM12 14l-3 5h3l-1 4 4-6h-3l1-3z" fill="currentColor"/></svg>Stormy</span></label>
+  </div>
+  <p id="status" class="status" role="status" aria-live="polite">Fair and dry. The sun lady is out.</p>
+  <p class="hint">Turn the humidity up and the turntable swings the rain man out. Tap the house to make it swing.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var NS = "http://www.w3.org/2000/svg", TAU = Math.PI * 2, W = 400, H = 500;
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  var darkMQ = matchMedia("(prefers-color-scheme: dark)");
+  function isDark() { var t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : darkMQ.matches; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function sstep(a, b, v) { var k = clamp((v - a) / (b - a), 0, 1); return k * k * (3 - 2 * k); }
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; }
+  function hex(c) { return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)]; }
+  function mix(a, b, k) { return [0, 1, 2].map(function (i) { return a[i] + (b[i] - a[i]) * k; }); }
+  function css(c) { return "rgb(" + Math.round(c[0]) + "," + Math.round(c[1]) + "," + Math.round(c[2]) + ")"; }
+  var scene = $("scene"), cv = $("cv"), ctx = cv.getContext("2d"), statusEl = $("status"), hum = $("hum");
+  function say(m) { statusEl.textContent = m; }
+
+  /* ---------- 1. Scenery: rays, stars, clouds, bunting, railing, figures ---------- */
+  (function build() {
+    for (var i = 0; i < 12; i++) { var a = i / 12 * TAU; el("line", { x1: (Math.cos(a) * 30).toFixed(1), y1: (Math.sin(a) * 30).toFixed(1), x2: (Math.cos(a) * 42).toFixed(1), y2: (Math.sin(a) * 42).toFixed(1) }, $("rays")); }
+    for (i = 0; i < 50; i++) el("circle", { cx: rnd(0, 400).toFixed(1), cy: rnd(50, 330).toFixed(1), r: (0.5 + Math.random()).toFixed(2), fill: "#fff", opacity: rnd(0.4, 1).toFixed(2) }, $("stars"));
+    [[60, 110, 1.1], [200, 76, 0.8], [330, 170, 1.3], [110, 240, 1], [300, 300, 0.9]].forEach(function (c) {
+      var g = el("g", { "class": "cl", "data-x": c[0], "data-y": c[1], "data-s": c[2] }, $("clouds"));
+      [[0, 0, 34, 12], [-14, -8, 17, 13], [10, -12, 20, 16], [24, -2, 14, 10]].forEach(function (e) { el("ellipse", { cx: e[0], cy: e[1], rx: e[2], ry: e[3] }, g); });
+    });
+    var cols = ["#ff6b6b", "#ffc94a", "#4fb3ff", "#7ad16b", "#c79bff"], b = $("bunting");
+    for (var x = 6, k = 0; x < 400; x += 26, k++) {
+      var f = el("path", { "class": "flag", d: "M" + x + " 42 h20 l-10 20z", fill: cols[k % 5] }, b);
+      f.style.animationDelay = (-k * 0.3).toFixed(1) + "s";
+    }
+    for (x = 8; x < 400; x += 24) el("rect", { "class": "beam", x: x, y: 452, width: 9, height: 38, rx: 2 }, $("rails"));
+  })();
+  var ladyUse = el("use", { href: "#lady", filter: "url(#dimSun)" }, $("figBack"));
+  var manUse = el("use", { href: "#man", filter: "url(#dimRain)" }, $("figBack"));
+
+  /* ---------- 2. State ---------- */
+  var target = 28, hv = 28, hvV = 0;       // humidity: target, shown value
+  var spin = 0, spinV = 0;                 // turntable: 0 = sun lady out, 1 = rain man out
+  var needle = -100, needleV = 0;
+  var sway = 0, swayV = 0, bird = 0, birdV = 0;
+  var category = "", wasWet = false, rainbowT = 0, flashA = 0, bolt = null, boltT = 0, nextBolt = 2;
+  function weatherOf(h) { return h < 40 ? "Sunny" : h < 62 ? "Cloudy" : h < 82 ? "Rainy" : "Stormy"; }
+  var LINES = {
+    Sunny: "Fair and dry. The sun lady steps out with her flowers.",
+    Cloudy: "Clouds roll in. The turntable creaks half way round.",
+    Rainy: "Rain! The rain man swings out under his umbrella.",
+    Stormy: "Storm warning. The house rattles and thunder rolls."
+  };
+  function setTarget(h, src) {
+    target = clamp(h, 0, 100);
+    if (src !== "slider") hum.value = String(Math.round(target));
+  }
+
+  /* ---------- 3. Rain and lightning (canvas) ---------- */
+  var rain = [];
+  for (var i = 0; i < 260; i++) rain.push({ x: rnd(-60, 420), y: rnd(-20, 500), v: rnd(380, 520), l: rnd(9, 16) });
+  function makeBolt() {
+    var x = rnd(40, 360), y = 40, pts = [[x, y]];
+    while (y < 340) { y += rnd(18, 34); x += rnd(-22, 22); pts.push([x, y]); }
+    bolt = pts; boltT = 0.18;
+  }
+
+  /* ---------- 4. Input ---------- */
+  hum.addEventListener("input", function () { setTarget(+hum.value, "slider"); });
+  document.querySelectorAll('input[name="wx"]').forEach(function (r) { r.addEventListener("change", function () { setTarget(+r.value); }); });
+  function tapHouse(dir) {
+    swayV += (reduce.matches ? 0.4 : 1.6) * dir;
+    birdV += 6;
+    sing(5);
+    say(weatherOf(hv) === "Sunny" ? "Boing! The house swings and the little bird sings." : "Boing! The house swings on its nail.");
+  }
+  $("houseHit").addEventListener("click", function (e) {
+    var r = scene.getBoundingClientRect(), dir = e.detail ? (e.clientX - r.left < r.width / 2 ? 1 : -1) : 1;
+    tapHouse(dir);
+  });
+  var notes = $("notes");
+  function sing(n) {
+    if (reduce.matches) return;
+    for (var k = 0; k < n; k++) (function (j) {
+      setTimeout(function () {
+        var g = el("path", { "class": "note", d: "M0 0 a3.2 2.6 0 1 0 0.1 0 M3 -1 V-14 L9 -11 V-8 L3 -10", transform: "" }, notes);
+        var x = 276 + rnd(-4, 10), y = 172;
+        g.setAttribute("d", "M" + x + " " + y + " m-3 0 a3.2 2.6 0 1 0 6.4 0 a3.2 2.6 0 1 0 -6.4 0 M" + (x + 3) + " " + y + " V" + (y - 13) + " l6 3 v3 l-6 -3");
+        g.style.setProperty("--nx", rnd(6, 30).toFixed(0) + "px");
+        g.addEventListener("animationend", function () { g.remove(); });
+      }, j * 220);
+    })(k);
+  }
+
+  /* ---------- 5. Auto demo ---------- */
+  var demoOn = true, demoT = 0, demoStep = 0, DEMO = [[72, 2600], [92, 3600], [55, 2200], [26, 3800]];
+  function demo() {
+    if (!demoOn) return;
+    var s = DEMO[demoStep++ % DEMO.length];
+    setTarget(s[0]);
+    if (s[0] === 26) setTimeout(function () { if (demoOn) tapHouse(1); }, 1500);
+    demoT = setTimeout(demo, s[1]);
+  }
+  function stopDemo(e) { if (!e.isTrusted || !demoOn) return; demoOn = false; clearTimeout(demoT); }
+  ["pointerdown", "keydown", "wheel"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+
+  /* ---------- 6. Main loop ---------- */
+  var S = 1;
+  function resize() {
+    var r = scene.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    S = Math.max(0.5, r.width / W * dpr);
+    cv.width = Math.round(W * S); cv.height = Math.round(H * S);
+  }
+  window.addEventListener("resize", resize);
+  var SKY_L = [["#5fb4ef", "#d6eefc"], ["#8aa3b8", "#d3dde4"], ["#5d7083", "#a5b2bd"], ["#3a3a52", "#6e6d82"]].map(function (p) { return p.map(hex); });
+  var SKY_D = [["#0f1b3d", "#2b3d6b"], ["#1f2836", "#3a4555"], ["#161e2a", "#2c3646"], ["#0e0d18", "#24223a"]].map(function (p) { return p.map(hex); });
+  var clouds = Array.prototype.slice.call(document.querySelectorAll(".cl"));
+  var dims = [["ds1", "ds2", "ds3"].map($), ["dr1", "dr2", "dr3"].map($)];
+  var last = performance.now();
+  function loop(now) {
+    var dt = Math.min(0.05, (now - last) / 1000), t = now / 1000, calm = reduce.matches, dark = isDark();
+    last = now;
+    // the shown humidity glides to the target; the turntable follows on a springy string
+    hv += clamp(target - hv, -dt * 45, dt * 45);
+    var spinWant = sstep(36, 74, hv);
+    if (calm) spin += (spinWant - spin) * Math.min(1, dt * 6);
+    else { spinV += ((spinWant - spin) * 55 - spinV * 5.5) * dt; spin += spinV * dt; }
+    var needleWant = -110 + hv * 2.2;
+    needleV += ((needleWant - needle) * 90 - needleV * 9) * dt; needle += needleV * dt;
+    if (calm) needle = needleWant;
+
+    var sunK = 1 - sstep(34, 52, hv), cloudK = sstep(28, 60, hv), rainK = sstep(60, 76, hv), stormK = sstep(80, 92, hv);
+    // weather category changes: announce, and a rainbow after rain clears
+    var cat = weatherOf(hv);
+    if (cat !== category) {
+      if (category) say(LINES[cat]);
+      if (cat === "Rainy" || cat === "Stormy") wasWet = true;
+      if (cat === "Sunny" && wasWet) { rainbowT = 6; wasWet = false; say("The rain clears and a rainbow appears. The sun lady is back."); }
+      category = cat;
+      $("cap").textContent = cat === "Sunny" ? (dark ? "Clear night" : "Fair") : cat;
+      document.querySelectorAll('input[name="wx"]').forEach(function (r) { r.checked = weatherOf(+r.value) === cat; });
+    }
+    $("humOut").textContent = Math.round(hv) + "% · " + cat;
+    hum.setAttribute("aria-valuetext", Math.round(target) + "% humidity, " + weatherOf(target));
+
+    // sky colour: blend the four weathers
+    var pal = dark ? SKY_D : SKY_L, w = [sunK * (1 - cloudK) + 0.0001, cloudK * (1 - rainK), rainK * (1 - stormK), stormK], sum = w[0] + w[1] + w[2] + w[3];
+    var A = [0, 0, 0], B = [0, 0, 0];
+    for (var k = 0; k < 4; k++) { for (var j = 0; j < 3; j++) { A[j] += pal[k][0][j] * w[k] / sum; B[j] += pal[k][1][j] * w[k] / sum; } }
+    scene.style.setProperty("--skyA", css(A)); scene.style.setProperty("--skyB", css(B));
+
+    // sun (a moon at night), stars, clouds, rainbow
+    $("sun").setAttribute("opacity", sunK.toFixed(2));
+    $("sunDisc").setAttribute("fill", dark ? "#f2efe2" : "#ffd34d");
+    $("rays").setAttribute("transform", "rotate(" + (calm ? 0 : t * 12).toFixed(1) + ")");
+    $("rays").setAttribute("opacity", dark ? 0 : 1);
+    $("stars").setAttribute("opacity", dark ? (sunK * 0.9).toFixed(2) : 0);
+    var cc = css(mix(mix([255, 255, 255], [150, 160, 175], rainK), [80, 80, 100], stormK));
+    clouds.forEach(function (c, i) {
+      var x = (+c.getAttribute("data-x") + t * (5 + i * 2) * (1 + stormK * 3)) % 520 - 60;
+      c.setAttribute("transform", "translate(" + x.toFixed(1) + " " + c.getAttribute("data-y") + ") scale(" + c.getAttribute("data-s") + ")");
+      c.setAttribute("fill", dark ? css(mix([60, 70, 92], [30, 32, 44], rainK)) : cc);
+      c.setAttribute("opacity", (i < 2 ? 0.5 + cloudK * 0.5 : cloudK).toFixed(2));
+    });
+    rainbowT = Math.max(0, rainbowT - dt);
+    $("rainbow").setAttribute("opacity", (Math.min(1, rainbowT) * 0.55 * Math.min(1, (6 - rainbowT) * 2)).toFixed(2));
+
+    // figures: one steps out while the other turns in; they lean with the spin
+    var sOut = 1 - spin, rOut = spin, lean = clamp(spinV * 6, -18, 18);
+    var lx = 162 - 18 * sOut, ly = 368 + 10 * sOut, rx = 238 + 18 * rOut, ry = 368 + 10 * rOut;
+    ladyUse.setAttribute("transform", "translate(" + lx.toFixed(1) + " " + ly.toFixed(1) + ") rotate(" + (-lean).toFixed(1) + ") scale(" + (0.78 + 0.3 * clamp(sOut, 0, 1.1)).toFixed(3) + ")");
+    manUse.setAttribute("transform", "translate(" + rx.toFixed(1) + " " + ry.toFixed(1) + ") rotate(" + (-lean).toFixed(1) + ") scale(" + (0.78 + 0.3 * clamp(rOut, 0, 1.1)).toFixed(3) + ")");
+    // the one inside is in the dark of its doorway
+    var ls = (0.3 + 0.7 * clamp(sOut, 0, 1)).toFixed(2), rs = (0.3 + 0.7 * clamp(rOut, 0, 1)).toFixed(2);
+    dims[0].forEach(function (f) { f.setAttribute("slope", ls); });
+    dims[1].forEach(function (f) { f.setAttribute("slope", rs); });
+    // whoever is further out is drawn in front
+    var front = $("figFront"), backG = $("figBack");
+    if (sOut > rOut && ladyUse.parentNode !== front) { front.appendChild(ladyUse); backG.appendChild(manUse); }
+    if (rOut >= sOut && manUse.parentNode !== front) { front.appendChild(manUse); backG.appendChild(ladyUse); }
+    $("needle").setAttribute("transform", "rotate(" + needle.toFixed(1) + ")");
+
+    // swinging on the nail: wind in a storm, taps from the visitor
+    var gust = calm ? 0 : stormK * (Math.sin(t * 1.7) * 0.6 + Math.sin(t * 4.3) * 0.3) + rainK * Math.sin(t * 1.1) * 0.15;
+    swayV += (-sway * 26 - swayV * 2.2 + gust * 4) * dt; sway += swayV * dt;
+    $("house").setAttribute("transform", "rotate(" + (sway * 6).toFixed(2) + " 200 44) translate(200 44) scale(1.12) translate(-200 -44)");
+    birdV += (-bird * 140 - birdV * 8) * dt; bird += birdV * dt;
+    $("bird").setAttribute("transform", "translate(262 166) rotate(" + (-bird * 12).toFixed(1) + ")");
+    if (!calm && sunK > 0.9 && Math.random() < dt * 0.25) sing(2);
+
+    // lightning in a storm
+    if (stormK > 0.6) {
+      nextBolt -= dt;
+      if (nextBolt <= 0) { makeBolt(); flashA = calm ? 0.25 : 0.85; nextBolt = rnd(2.2, 4.5); if (!calm) swayV += rnd(-1, 1); }
+    }
+    flashA = Math.max(0, flashA - dt * 2.6);
+    $("flash").style.opacity = flashA.toFixed(3);
+    boltT = Math.max(0, boltT - dt);
+
+    // ---- rain ----
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    var n = Math.round(rainK * 150 + stormK * 110), slant = 0.12 + stormK * 0.35;
+    if (n > 0) {
+      ctx.strokeStyle = dark ? "rgba(190,210,240,0.45)" : "rgba(255,255,255,0.6)"; ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      for (var r = 0; r < n; r++) {
+        var d = rain[r];
+        if (!calm) { d.y += d.v * dt; d.x += d.v * dt * slant; }
+        if (d.y > 500) { d.y = rnd(-40, 0); d.x = rnd(-80, 400); }
+        ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.l * slant, d.y - d.l);
+      }
+      ctx.stroke();
+    }
+    if (boltT > 0 && bolt) {
+      ctx.strokeStyle = "rgba(245,248,255,0.95)"; ctx.lineWidth = 2.4; ctx.lineJoin = "round";
+      ctx.shadowColor = "rgba(190,200,255,0.9)"; ctx.shadowBlur = 12 * S;
+      ctx.beginPath(); ctx.moveTo(bolt[0][0], bolt[0][1]);
+      for (var b = 1; b < bolt.length; b++) ctx.lineTo(bolt[b][0], bolt[b][1]);
+      ctx.stroke(); ctx.shadowBlur = 0;
+    }
+    requestAnimationFrame(loop);
+  }
+  resize();
+  requestAnimationFrame(loop);
+  demoT = setTimeout(demo, 300);
+})();
+</script>
+</body>
+</html>

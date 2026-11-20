@@ -1,0 +1,820 @@
+<!doctype html>
+<!-- Chill & Craft · Rain Pane · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rain Pane · wipe the misted window</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    --page: #dfe5ec; --page2: #c4cfdb; --ink: #1d2733; --muted: #586477;
+    --wall: #eadfce; --wall2: #e0d1bc; --glow: #ffe2b0;
+    --wood: #8d5c3c; --wood-hi: #b98457; --wood-dk: #5d3923;
+    --cat: #3b3540; --cat-rim: #8c8597;
+    --chip: rgba(255, 255, 255, 0.74); --chip-line: rgba(29, 39, 51, 0.12);
+    --on: #1d2733; --on-ink: #f4f1ea; --focus: #d9480f;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0a0f1d; --page2: #18203a; --ink: #e8ecf5; --muted: #9ba7bd;
+      --wall: #2b2330; --wall2: #241d29; --glow: #ffb565;
+      --wood: #5c3b2b; --wood-hi: #7e5238; --wood-dk: #34211a;
+      --cat: #120f17; --cat-rim: #6f7fa8;
+      --chip: rgba(24, 30, 52, 0.72); --chip-line: rgba(255, 255, 255, 0.1);
+      --on: #f1e7d6; --on-ink: #1a1520; --focus: #ffc078;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #0a0f1d; --page2: #18203a; --ink: #e8ecf5; --muted: #9ba7bd;
+    --wall: #2b2330; --wall2: #241d29; --glow: #ffb565;
+    --wood: #5c3b2b; --wood-hi: #7e5238; --wood-dk: #34211a;
+    --cat: #120f17; --cat-rim: #6f7fa8;
+    --chip: rgba(24, 30, 52, 0.72); --chip-line: rgba(255, 255, 255, 0.1);
+    --on: #f1e7d6; --on-ink: #1a1520; --focus: #ffc078;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(120% 70% at 50% 0%, var(--page2), transparent 70%),
+      var(--page);
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .cap {
+    width: min(500px, 100%, calc((100vh - 210px) * 0.8));
+    min-width: 280px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; color: var(--muted); padding: 0 4px;
+  }
+  .cap b { font-size: 15px; color: var(--ink); letter-spacing: 0.01em; }
+  .scene {
+    position: relative;
+    width: min(500px, 100%, calc((100vh - 210px) * 0.8));
+    min-width: 280px;
+    aspect-ratio: 4 / 5;
+    border-radius: 28px;
+    overflow: hidden;
+    isolation: isolate;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 30px 60px -20px rgba(8, 12, 30, 0.55), 0 12px 24px -12px rgba(8, 12, 30, 0.4);
+  }
+  .scene canvas, .scene svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .quake { animation: quake 0.5s cubic-bezier(.36, .07, .19, .97); }
+  @keyframes quake {
+    10%, 90% { transform: translate(-1px, 0); }
+    20%, 80% { transform: translate(2px, 1px); }
+    30%, 50%, 70% { transform: translate(-3px, -1px); }
+    40%, 60% { transform: translate(3px, 1px); }
+  }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* the glass is the interactive surface laid over the drawing */
+  .glass {
+    position: absolute; left: 9.5%; top: 7.2%; width: 81%; height: 72.4%;
+    cursor: crosshair; touch-action: none; border-radius: 2px; outline: none;
+  }
+  .glass:focus-visible { box-shadow: 0 0 0 3px var(--focus) inset; }
+  .finger {
+    position: absolute; width: 6.5%; aspect-ratio: 1; border-radius: 50%;
+    background: radial-gradient(circle at 42% 38%, rgba(255, 255, 255, 0.95), rgba(255, 228, 205, 0.75) 42%, rgba(255, 205, 170, 0) 70%);
+    transform: translate(-50%, -50%) scale(0.4); opacity: 0;
+    transition: opacity 0.25s ease, transform 0.35s cubic-bezier(.34, 1.56, .64, 1);
+    pointer-events: none;
+  }
+  .finger.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .finger.up { opacity: 0.45; transform: translate(-50%, -50%) scale(1.3); }
+  .glint {
+    position: absolute; left: 9.5%; top: 7.2%; width: 81%; height: 72.4%; overflow: hidden; pointer-events: none;
+  }
+  .glint::before {
+    content: ""; position: absolute; top: -20%; bottom: -20%; width: 30%; left: -40%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+    transform: skewX(-18deg); opacity: 0;
+  }
+  .glint.go::before { animation: glint 1.1s cubic-bezier(.3, .7, .3, 1); }
+  @keyframes glint { 0% { left: -40%; opacity: 1; } 100% { left: 120%; opacity: 0.6; } }
+  .count {
+    position: absolute; left: 50%; top: 13%; transform: translate(-50%, -8px) scale(0.8);
+    padding: 7px 16px; border-radius: 999px; font: 800 18px/1 system-ui, sans-serif; letter-spacing: 0.04em;
+    color: #fff; background: rgba(15, 20, 40, 0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.35s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .count.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  .count.boom { font-size: 26px; background: rgba(255, 120, 60, 0.75); }
+
+  /* ---------- Room drawing ---------- */
+  .wall { fill: var(--wall); }
+  .wall2 { fill: var(--wall2); }
+  .lc1 { stop-color: var(--glow); stop-opacity: 0.32; }
+  .lc2 { stop-color: var(--glow); stop-opacity: 0; }
+  .wood { fill: var(--wood); }
+  .wood-hi { fill: var(--wood-hi); }
+  .wood-dk { fill: var(--wood-dk); }
+  .cat { fill: var(--cat); }
+  .cat-rim { fill: none; stroke: var(--cat-rim); stroke-width: 1.6; stroke-linecap: round; opacity: 0.8; }
+  .tail { transform-box: view-box; transform-origin: 116px 402px; animation: tail 3.2s ease-in-out infinite; }
+  @keyframes tail { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-9deg); } }
+  .ear { transform-box: fill-box; transform-origin: 50% 100%; animation: ear 6s ease-in-out infinite; }
+  @keyframes ear { 0%, 92%, 100% { transform: rotate(0); } 95% { transform: rotate(-14deg); } }
+  .steam { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; opacity: 0; animation: steam 3.4s ease-in-out infinite; }
+  .steam.s2 { animation-delay: -1.7s; }
+  @keyframes steam { 0% { transform: translateY(6px); opacity: 0; } 45% { opacity: 0.45; } 100% { transform: translateY(-16px); opacity: 0; } }
+  .cup.rattle { animation: rattle 0.45s linear; transform-box: fill-box; transform-origin: 50% 100%; }
+  @keyframes rattle { 25% { transform: rotate(4deg); } 50% { transform: rotate(-4deg); } 75% { transform: rotate(2deg); } }
+  .bulb { animation: twinkle 2.6s ease-in-out infinite; }
+  @keyframes twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+  .seg {
+    display: inline-flex; padding: 4px; border-radius: 999px; border: 1px solid var(--chip-line);
+    background: var(--chip); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  .seg label { position: relative; }
+  .seg input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  .seg span {
+    display: block; padding: 9px 13px; border-radius: 999px; font: 600 14px/1 system-ui, sans-serif; color: var(--muted);
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+  .seg input:checked + span { background: var(--on); color: var(--on-ink); }
+  .seg input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .btn {
+    appearance: none; border: 1px solid var(--chip-line); background: var(--chip); color: var(--ink);
+    font: 600 14px/1 system-ui, sans-serif; padding: 10px 15px; border-radius: 999px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    transition: transform 0.25s cubic-bezier(.34, 1.56, .64, 1), box-shadow 0.25s ease;
+  }
+  .btn svg { width: 16px; height: 16px; }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.45); }
+  .btn:active { transform: scale(0.95); }
+  .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .status { margin: 0; min-height: 1.4em; font-size: 14px; font-weight: 600; text-align: center; }
+  .hint { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); text-align: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tail, .ear, .steam, .bulb, .cup.rattle, .quake, .glint.go::before { animation: none; }
+    .steam { opacity: 0.3; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Rain Pane: a misted window on a rainy evening that you can wipe and draw on</h1>
+  <div class="cap"><b>Rain Pane</b><span id="clock">rain outside</span></div>
+  <div class="scene" id="scene">
+    <!-- outside street, fog and raindrops are painted on this canvas -->
+    <canvas id="cv" aria-hidden="true"></canvas>
+
+    <!-- the room in front of the glass -->
+    <svg viewBox="0 0 400 500" aria-hidden="true">
+      <defs>
+        <pattern id="paper" width="18" height="18" patternUnits="userSpaceOnUse">
+          <rect class="wall" width="18" height="18"/>
+          <rect class="wall2" x="7" width="4" height="18"/>
+        </pattern>
+        <radialGradient id="roomGlow" cx="0.15" cy="1" r="0.9">
+          <stop offset="0" class="lc1"/><stop offset="1" class="lc2"/>
+        </radialGradient>
+        <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#fff" stop-opacity="0.12"/>
+          <stop offset="0.45" stop-color="#fff" stop-opacity="0"/>
+          <stop offset="0.55" stop-color="#fff" stop-opacity="0.05"/>
+          <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="tea" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#e89a4a"/><stop offset="1" stop-color="#9c4f1d"/>
+        </linearGradient>
+        <linearGradient id="sillShade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#000" stop-opacity="0.35"/><stop offset="1" stop-color="#000" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+
+      <!-- wall with a hole for the glass -->
+      <path fill="url(#paper)" fill-rule="evenodd" d="M0 0H400V500H0Z M38 36H362V398H38Z"/>
+      <path fill="url(#roomGlow)" fill-rule="evenodd" d="M0 0H400V500H0Z M38 36H362V398H38Z"/>
+      <!-- glass sheen -->
+      <rect x="38" y="36" width="324" height="362" fill="url(#sheen)"/>
+
+      <!-- window frame -->
+      <path class="wood" fill-rule="evenodd" d="M24 22H376V404H24Z M38 36H362V404H38Z"/>
+      <path class="wood-hi" d="M24 22H376V25H24Z M24 22H27V404H24Z"/>
+      <path class="wood-dk" d="M38 36H362V39H38Z M38 36H41V404H38Z"/>
+      <rect class="wood" x="196" y="36" width="8" height="368"/>
+      <rect class="wood-hi" x="196" y="36" width="2" height="368"/>
+      <rect class="wood" x="38" y="150" width="324" height="8"/>
+      <rect class="wood-hi" x="38" y="150" width="324" height="2"/>
+
+      <!-- sill and its shadow on the wall -->
+      <rect x="8" y="424" width="384" height="26" fill="url(#sillShade)"/>
+      <path class="wood-hi" d="M30 398H370L392 410H8Z"/>
+      <rect class="wood" x="8" y="410" width="384" height="16" rx="3"/>
+      <rect class="wood-dk" x="8" y="422" width="384" height="4" rx="2"/>
+
+      <!-- fairy lights across the top -->
+      <path d="M14 20 Q107 64 200 34 Q293 64 386 20" fill="none" stroke="#2c2620" stroke-width="1.4" opacity="0.8"/>
+      <g id="bulbs"></g>
+
+      <!-- a cat on the sill watching the rain; its head follows the drops you make -->
+      <g class="tail"><path class="cat" d="M112 401 C134 404 150 398 152 386 C153 379 147 377 145 383 C143 392 132 396 112 395Z"/></g>
+      <path class="cat" d="M76 404 C70 384 76 362 95 360 C114 362 120 384 114 404Z"/>
+      <path class="cat-rim" d="M80 384 C82 370 88 364 95 363"/>
+      <g id="head">
+        <path class="cat ear" d="M81 345 L84 326 L94 338Z"/>
+        <path class="cat ear" d="M109 345 L106 326 L96 338Z" style="animation-delay:-3s"/>
+        <ellipse class="cat" cx="95" cy="348" rx="16" ry="14.5"/>
+        <path class="cat-rim" d="M82 341 C85 335 90 333 96 333"/>
+      </g>
+
+      <!-- a glass of chai with a saucer -->
+      <g class="cup" id="cup">
+        <ellipse cx="312" cy="401" rx="24" ry="4" fill="#d9d4cb"/>
+        <path d="M298 362 L326 362 L322 399 L302 399Z" fill="rgba(255,255,255,0.35)" stroke="rgba(255,255,255,0.6)" stroke-width="1"/>
+        <path d="M299 372 L325 372 L322 399 L302 399Z" fill="url(#tea)"/>
+        <ellipse cx="312" cy="372" rx="13" ry="2.4" fill="#f2c08a"/>
+        <path d="M303 366 L305 395" stroke="#fff" stroke-width="2" opacity="0.5" stroke-linecap="round"/>
+      </g>
+      <path class="steam" d="M306 356 q-5 -8 0 -16 q5 -8 0 -16"/>
+      <path class="steam s2" d="M318 356 q-5 -8 0 -16 q5 -8 0 -16"/>
+    </svg>
+
+    <div class="glint" id="glint"></div>
+    <div class="count" id="count" aria-hidden="true"></div>
+    <div class="finger" id="finger"></div>
+    <div id="glass" class="glass" tabindex="0" role="application" aria-roledescription="misted window"
+         aria-label="Misted window. Drag across the glass to wipe it, or use the arrow keys." aria-describedby="hint"></div>
+  </div>
+
+  <div class="controls">
+    <div class="seg" role="radiogroup" aria-label="How hard it rains">
+      <label><input type="radio" name="rain" value="0"><span>Drizzle</span></label>
+      <label><input type="radio" name="rain" value="1" checked><span>Rain</span></label>
+      <label><input type="radio" name="rain" value="2"><span>Downpour</span></label>
+    </div>
+    <button class="btn" id="draw" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/></svg>
+      <span id="drawLabel">Draw a heart</span>
+    </button>
+    <button class="btn" id="thunder" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z" fill="currentColor"/></svg>
+      Thunder
+    </button>
+  </div>
+  <p id="status" class="status" role="status" aria-live="polite">The window is misted over. Wipe it to see the street.</p>
+  <p id="hint" class="hint">Drag on the glass to wipe it. The mist slowly comes back.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var TAU = Math.PI * 2;
+  // Drawing units: the scene is 400 x 500; the glass is the rectangle below
+  var W = 400, H = 500, GX0 = 38, GY0 = 36, GX1 = 362, GY1 = 398;
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  var darkMQ = matchMedia("(prefers-color-scheme: dark)");
+  function isDark() { var t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : darkMQ.matches; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function rgba(c, a) { return "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + a.toFixed(3) + ")"; }
+
+  var scene = $("scene"), cv = $("cv"), ctx = cv.getContext("2d"), glass = $("glass");
+  var statusEl = $("status"), finger = $("finger"), countEl = $("count");
+  // Offscreen layers: the street (redrawn each frame), the still city, the mist, and mist speckles
+  var outC = document.createElement("canvas"), oc = outC.getContext("2d");
+  var cityC = document.createElement("canvas"), cc = cityC.getContext("2d");
+  var FS = 0.5; // the mist is kept at half resolution
+  var fogC = document.createElement("canvas"), fc = fogC.getContext("2d");
+  var dotC = document.createElement("canvas"), dc = dotC.getContext("2d");
+  var maskC = document.createElement("canvas"), mc = maskC.getContext("2d");
+  fogC.width = dotC.width = maskC.width = W * FS;
+  fogC.height = dotC.height = maskC.height = H * FS;
+  var S = 1, pal = null;
+
+  function say(msg) { statusEl.textContent = msg; }
+
+  /* ---------- 1. Colours for day and night ---------- */
+  function palette() {
+    return isDark() ? {
+      sky: ["#060a17", "#121b35", "#3a2d4d"], far: "#1b2343", near: "#0d1226", winOff: "rgba(40,50,80,0.6)",
+      win: [[255, 196, 120], [255, 228, 170], [150, 205, 255]], winP: 0.36, road: ["#151b2e", "#0a0e1a"],
+      lamp: [255, 186, 104], neon: [[255, 80, 165], [60, 225, 210]], fog: [118, 136, 168], fogA: 0.6,
+      rain: "rgba(190,210,255,0.22)", dot: "rgba(220,232,255,0.55)", flash: [200, 215, 255], night: true
+    } : {
+      sky: ["#73879d", "#a3b3c3", "#cdd5dc"], far: "#8a99aa", near: "#66768a", winOff: "rgba(70,85,100,0.5)",
+      win: [[255, 226, 170], [244, 240, 228]], winP: 0.14, road: ["#5d6976", "#46505b"],
+      lamp: [255, 212, 150], neon: [[255, 120, 170], [70, 196, 186]], fog: [232, 237, 243], fogA: 0.7,
+      rain: "rgba(60,80,100,0.25)", dot: "rgba(255,255,255,0.7)", flash: [255, 255, 255], night: false
+    };
+  }
+
+  /* ---------- 2. The street outside (generated once) ---------- */
+  var far = [], near = [], lamps = [], neons = [], streaks = [];
+  function genCity() {
+    var x = 30, w;
+    while (x < 372) { w = rnd(20, 44); far.push({ x: x, w: w, h: rnd(100, 220) }); x += w + rnd(-4, 4); }
+    x = 24;
+    while (x < 376) {
+      w = rnd(34, 66);
+      var b = { x: x, w: w, h: rnd(70, 165), wins: [] };
+      for (var yy = 330 - b.h + 10; yy < 318; yy += 13) {
+        for (var xx = b.x + 5; xx < b.x + b.w - 8; xx += 10) b.wins.push({ x: xx, y: yy, r: Math.random(), c: Math.floor(Math.random() * 3) });
+      }
+      near.push(b); x += w + rnd(3, 10);
+    }
+    lamps = [{ x: 92, y: 296 }, { x: 228, y: 292 }, { x: 338, y: 298 }];
+    neons = [{ x: 150, y: 246, r: 24, c: 0, ph: 0 }, { x: 286, y: 232, r: 17, c: 1, ph: 2.1 }];
+    for (var i = 0; i < 160; i++) streaks.push({ x: rnd(0, W), y: rnd(0, H), l: rnd(8, 18), v: rnd(380, 520) });
+  }
+
+  // Paint the still part of the street once per size or theme change
+  function renderCity() {
+    cityC.width = outC.width = cv.width; cityC.height = outC.height = cv.height;
+    cc.setTransform(S, 0, 0, S, 0, 0);
+    var g = cc.createLinearGradient(0, 0, 0, 330);
+    g.addColorStop(0, pal.sky[0]); g.addColorStop(0.6, pal.sky[1]); g.addColorStop(1, pal.sky[2]);
+    cc.fillStyle = g; cc.fillRect(0, 0, W, 340);
+    cc.fillStyle = pal.far; cc.globalAlpha = 0.85;
+    far.forEach(function (b) { cc.fillRect(b.x, 330 - b.h, b.w, b.h); });
+    cc.globalAlpha = 1;
+    near.forEach(function (b) {
+      cc.fillStyle = pal.near; cc.fillRect(b.x, 330 - b.h, b.w, b.h);
+      b.wins.forEach(function (wn) {
+        if (wn.r < pal.winP) { cc.fillStyle = rgba(pal.win[wn.c % pal.win.length], 0.95); }
+        else cc.fillStyle = pal.winOff;
+        cc.fillRect(wn.x, wn.y, 5, 7);
+      });
+    });
+    var rg = cc.createLinearGradient(0, 330, 0, 400);
+    rg.addColorStop(0, pal.road[0]); rg.addColorStop(1, pal.road[1]);
+    cc.fillStyle = rg; cc.fillRect(0, 330, W, 170);
+    cc.strokeStyle = pal.near; cc.lineWidth = 2;
+    lamps.forEach(function (l) { cc.beginPath(); cc.moveTo(l.x, l.y + 4); cc.lineTo(l.x, 336); cc.stroke(); });
+    cc.fillStyle = pal.night ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.3)";
+    for (var x = 10; x < W; x += 34) cc.fillRect(x, 361, 16, 1.6);
+  }
+
+  // A soft round blur of light ("bokeh")
+  function bokeh(c, x, y, r, col, a) {
+    var g = c.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, rgba(col, a)); g.addColorStop(0.5, rgba(col, a * 0.45)); g.addColorStop(1, rgba(col, 0));
+    c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+  }
+  // A light's long reflection on the wet road
+  function streak(c, x, y, len, w, col, a) {
+    var g = c.createLinearGradient(0, y, 0, y + len);
+    g.addColorStop(0, rgba(col, a)); g.addColorStop(1, rgba(col, 0));
+    c.fillStyle = g; c.fillRect(x - w / 2, y, w, len);
+  }
+
+  /* ---------- 3. Cars, rickshaws and lightning ---------- */
+  var cars = [], carIn = 0.6, flash = 0, bolt = null;
+  function spawnCar() {
+    var dir = Math.random() < 0.5 ? 1 : -1;
+    cars.push({ dir: dir, x: dir > 0 ? -30 : W + 30, v: rnd(55, 95), rick: Math.random() < 0.35, y: dir > 0 ? 372 : 352 });
+  }
+  function makeBolt() {
+    var x = rnd(90, 310), y = 30, pts = [[x, y]];
+    while (y < 230) { y += rnd(14, 26); x += rnd(-16, 16); pts.push([x, y]); }
+    bolt = pts;
+  }
+  function paintOutside(t, dt) {
+    oc.setTransform(1, 0, 0, 1, 0, 0);
+    oc.drawImage(cityC, 0, 0);
+    oc.setTransform(S, 0, 0, S, 0, 0);
+    // car bodies first, then all the lights on top with additive blending
+    cars.forEach(function (c) {
+      oc.fillStyle = pal.night ? "#05070e" : "#3d4652";
+      if (c.rick) { oc.fillRect(c.x - 12, c.y - 14, 24, 14); oc.fillStyle = pal.night ? "#1f3b22" : "#2f7a3a"; oc.fillRect(c.x - 13, c.y - 18, 26, 6); }
+      else oc.fillRect(c.x - 22, c.y - 11, 44, 11);
+    });
+    oc.globalCompositeOperation = "lighter";
+    lamps.forEach(function (l, i) {
+      var f = 0.92 + 0.08 * Math.sin(t * 7 + i * 3);
+      bokeh(oc, l.x, l.y, 30, pal.lamp, 0.5 * f);
+      bokeh(oc, l.x, l.y, 8, pal.lamp, 0.95);
+      streak(oc, l.x, 340, 64, 7, pal.lamp, 0.35);
+    });
+    neons.forEach(function (n) {
+      var blink = Math.sin(t * 0.7 + n.ph) > 0.93 ? 0.25 : 1;
+      var a = (0.42 + 0.08 * Math.sin(t * 3 + n.ph)) * blink;
+      bokeh(oc, n.x, n.y, n.r, pal.neon[n.c], a);
+      streak(oc, n.x, 340, 50, 10, pal.neon[n.c], a * 0.5);
+    });
+    cars.forEach(function (c) {
+      var fx = c.x + c.dir * (c.rick ? 12 : 22), bx = c.x - c.dir * (c.rick ? 12 : 22);
+      bokeh(oc, fx, c.y - 5, 15, [255, 244, 220], 0.75);
+      bokeh(oc, fx, c.y - 5, 4, [255, 255, 255], 1);
+      streak(oc, fx, c.y, 30, 6, [255, 240, 210], 0.4);
+      if (!c.rick) { bokeh(oc, bx, c.y - 5, 10, [255, 50, 40], 0.7); streak(oc, bx, c.y, 22, 5, [255, 60, 50], 0.35); }
+    });
+    if (flash > 0.01) {
+      oc.fillStyle = rgba(pal.flash, Math.min(0.75, flash * 0.6));
+      oc.fillRect(0, 0, W, 340);
+      if (bolt && flash > 0.3) {
+        oc.strokeStyle = "rgba(235,240,255," + Math.min(1, flash).toFixed(2) + ")";
+        oc.lineWidth = 2.2; oc.lineJoin = "round"; oc.shadowColor = "rgba(180,200,255,0.9)"; oc.shadowBlur = 14 * S;
+        oc.beginPath(); oc.moveTo(bolt[0][0], bolt[0][1]);
+        for (var i = 1; i < bolt.length; i++) oc.lineTo(bolt[i][0], bolt[i][1]);
+        oc.stroke(); oc.shadowBlur = 0;
+      }
+    }
+    oc.globalCompositeOperation = "source-over";
+    // rain falling outside
+    var n = [40, 90, 160][level];
+    if (!reduce.matches) {
+      oc.strokeStyle = pal.rain; oc.lineWidth = 1;
+      oc.beginPath();
+      for (var k = 0; k < n; k++) {
+        var s = streaks[k];
+        s.y += s.v * dt; s.x += s.v * dt * 0.12;
+        if (s.y > 400) { s.y = rnd(-40, 0); s.x = rnd(-40, W); }
+        oc.moveTo(s.x, s.y); oc.lineTo(s.x - s.l * 0.12, s.y - s.l);
+      }
+      oc.stroke();
+    }
+  }
+
+  /* ---------- 4. The mist on the glass ---------- */
+  function fogAdd(a) {
+    fc.globalCompositeOperation = "source-over";
+    var g = fc.createLinearGradient(0, 0, 0, fogC.height);
+    g.addColorStop(0, rgba(pal.fog, a * 0.7)); g.addColorStop(1, rgba(pal.fog, Math.min(1, a * 1.3)));
+    fc.fillStyle = g; fc.fillRect(0, 0, fogC.width, fogC.height);
+  }
+  function tintFog() { // keep where the mist is, change only its colour
+    fc.globalCompositeOperation = "source-in";
+    fc.fillStyle = rgba(pal.fog, 1); fc.fillRect(0, 0, fogC.width, fogC.height);
+    fc.globalCompositeOperation = "source-over";
+  }
+  function makeDots() { // tiny condensation beads inside the mist
+    dc.clearRect(0, 0, dotC.width, dotC.height);
+    for (var i = 0; i < 1100; i++) {
+      var x = Math.random() * dotC.width, y = Math.random() * dotC.height, r = 0.25 + Math.pow(Math.random(), 2) * 0.9;
+      dc.fillStyle = "rgba(0,0,0,0.18)"; dc.beginPath(); dc.arc(x, y + r * 0.4, r, 0, TAU); dc.fill();
+      dc.fillStyle = pal.dot; dc.beginPath(); dc.arc(x, y, r, 0, TAU); dc.fill();
+    }
+  }
+  // Wiping: a soft round eraser (units are scene units)
+  function wipeDot(x, y, r) {
+    fc.globalCompositeOperation = "destination-out";
+    var g = fc.createRadialGradient(x * FS, y * FS, 0, x * FS, y * FS, r * FS);
+    g.addColorStop(0, "rgba(0,0,0,0.95)"); g.addColorStop(0.55, "rgba(0,0,0,0.7)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    fc.fillStyle = g; fc.beginPath(); fc.arc(x * FS, y * FS, r * FS, 0, TAU); fc.fill();
+    fc.globalCompositeOperation = "source-over";
+    // the finger also clears the drops it touches
+    for (var i = drops.length - 1; i >= 0; i--) {
+      var d = drops[i], dx = d.x - x, dy = d.y - y;
+      if (dx * dx + dy * dy < r * r * 0.6) drops.splice(i, 1);
+    }
+  }
+  function wipeLine(a, b, r) {
+    var dist = Math.hypot(b.x - a.x, b.y - a.y), steps = Math.max(1, Math.ceil(dist / (r * 0.35)));
+    for (var i = 1; i <= steps; i++) wipeDot(a.x + (b.x - a.x) * i / steps, a.y + (b.y - a.y) * i / steps, r);
+  }
+  function fogTrail(x0, y0, x1, y1, w) {
+    fc.globalCompositeOperation = "destination-out";
+    fc.strokeStyle = "rgba(0,0,0,0.8)"; fc.lineWidth = w * FS; fc.lineCap = "round";
+    fc.beginPath(); fc.moveTo(x0 * FS, y0 * FS); fc.lineTo(x1 * FS, y1 * FS); fc.stroke();
+    fc.globalCompositeOperation = "source-over";
+  }
+
+  /* ---------- 5. Raindrops on the glass ---------- */
+  var drops = [], spawnAcc = 0, level = 1, RATES = [5, 14, 30];
+  function addDrop(x, y, r, slide) {
+    if (drops.length > 260) return null;
+    var d = { x: x, y: y, r: r, vy: 0, slide: !!slide, hold: 0, seed: Math.random() * 100, dead: false };
+    drops.push(d); return d;
+  }
+  function updateDrops(dt) {
+    spawnAcc += RATES[level] * dt;
+    while (spawnAcc > 1) {
+      spawnAcc -= 1;
+      var nd = addDrop(rnd(GX0 + 2, GX1 - 2), rnd(GY0 + 2, GY1 - 6), 0.7 + Math.pow(Math.random(), 3) * 3.3);
+      // sometimes the new drop lands on an old one and they merge
+      if (nd && Math.random() < 0.25 && drops.length > 2) { var o = drops[Math.floor(Math.random() * (drops.length - 1))]; if (!o.slide) o.r = Math.min(5, o.r + 0.4); }
+    }
+    var slow = reduce.matches ? 0.45 : 1, len = drops.length;
+    for (var i = 0; i < len; i++) {
+      var d = drops[i];
+      if (d.dead) continue;
+      if (!d.slide && d.r > 4.1) d.slide = true;
+      if (!d.slide) continue;
+      if (d.hold > 0) { d.hold -= dt; continue; }
+      d.vy = Math.min(d.vy + (30 + d.r * 18) * dt, (30 + d.r * 22)) * 1;
+      var ny = d.y + d.vy * dt * slow, nx = d.x + Math.sin(d.seed + d.y * 0.09) * 0.3;
+      fogTrail(d.x, d.y, nx, ny, d.r * 1.3);
+      d.x = nx; d.y = ny;
+      if (Math.random() < dt * 8) { addDrop(d.x + rnd(-0.6, 0.6), d.y - d.r - rnd(1, 3), rnd(0.5, 1.1)); d.r -= 0.04; }
+      if (Math.random() < dt * 0.45 && d.r < 5) { d.hold = rnd(0.15, 0.8); d.vy = 0; }
+      if (d.r < 2.4) d.slide = false;
+      for (var j = 0; j < drops.length; j++) {
+        var o = drops[j];
+        if (o === d || o.dead || o.slide) continue;
+        var dx = o.x - d.x, dy = o.y - d.y, rr = (d.r + o.r) * 0.8;
+        if (dy > -d.r && dx * dx + dy * dy < rr * rr) { d.r = Math.min(8.5, Math.sqrt(d.r * d.r + o.r * o.r)); o.dead = true; }
+      }
+      if (d.y - d.r > GY1) d.dead = true;
+    }
+    drops = drops.filter(function (q) { return !q.dead; });
+  }
+  function drawDrops() {
+    for (var i = 0; i < drops.length; i++) {
+      var d = drops[i], ry = d.slide ? d.r * (1 + Math.min(0.45, d.vy / 140)) : d.r;
+      if (d.r < 2.1) {
+        ctx.fillStyle = "rgba(0,0,0,0.1)"; ctx.beginPath(); ctx.arc(d.x, d.y + d.r * 0.35, d.r, 0, TAU); ctx.fill();
+        ctx.fillStyle = pal.night ? "rgba(215,228,255,0.42)" : "rgba(255,255,255,0.62)";
+        ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, TAU); ctx.fill();
+        continue;
+      }
+      // a lens: an upside-down, zoomed-out view of the street inside the drop
+      ctx.save();
+      ctx.beginPath(); ctx.ellipse(d.x, d.y, d.r, ry, 0, 0, TAU); ctx.clip();
+      var span = d.r * 8;
+      ctx.translate(d.x, d.y); ctx.scale(1, -1);
+      ctx.drawImage(outC, (d.x - span) * S, (d.y - span * 0.7) * S, span * 2 * S, span * 2 * S, -d.r, -ry, d.r * 2, ry * 2);
+      ctx.restore();
+      // water catches light: a bright lower crescent, a thin darker upper rim, then the shine
+      var lg = ctx.createLinearGradient(0, d.y - ry, 0, d.y + ry);
+      lg.addColorStop(0, "rgba(255,255,255,0.05)"); lg.addColorStop(0.65, "rgba(255,255,255,0.12)"); lg.addColorStop(1, pal.night ? "rgba(220,232,255,0.55)" : "rgba(255,255,255,0.7)");
+      ctx.fillStyle = lg; ctx.beginPath(); ctx.ellipse(d.x, d.y, d.r, ry, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(d.x, d.y, d.r, ry, 0, Math.PI * 1.05, Math.PI * 1.95);
+      ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = Math.max(0.5, d.r * 0.16); ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.beginPath(); ctx.arc(d.x - d.r * 0.35, d.y - ry * 0.42, Math.max(0.5, d.r * 0.22), 0, TAU); ctx.fill();
+    }
+  }
+
+  /* ---------- 6. A finger that draws in the mist (used by the demo and the Draw button) ---------- */
+  var SHAPES = [
+    { name: "heart", label: "Draw a heart", strokes: function () {
+      var p = [];
+      for (var i = 0; i <= 64; i++) { var t = i / 64 * TAU; p.push({ x: 200 + 4.3 * 16 * Math.pow(Math.sin(t), 3), y: 222 - 4.3 * (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) }); }
+      return [p];
+    } },
+    { name: "smile", label: "Draw a smile", strokes: function () {
+      var face = [], mouth = [], i;
+      for (i = 0; i <= 56; i++) { var a = -Math.PI / 2 + i / 56 * TAU; face.push({ x: 200 + Math.cos(a) * 70, y: 236 + Math.sin(a) * 70 }); }
+      for (i = 0; i <= 20; i++) { var b = 0.55 + i / 20 * 2.04; mouth.push({ x: 200 + Math.cos(b) * 40, y: 240 + Math.sin(b) * 34 }); }
+      return [face, [{ x: 176, y: 208 }, { x: 176, y: 222 }], [{ x: 224, y: 208 }, { x: 224, y: 222 }], mouth];
+    } },
+    { name: "star", label: "Draw a star", strokes: function () {
+      var p = [];
+      for (var i = 0; i <= 10; i++) { var a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 32 : 78; p.push({ x: 200 + Math.cos(a) * r, y: 236 + Math.sin(a) * r }); }
+      return [p];
+    } }
+  ];
+  var shapeIx = 0, job = null, fingerPos = { x: 200, y: 260 };
+  function placeFinger(x, y) {
+    fingerPos.x = x; fingerPos.y = y;
+    finger.style.left = (x / W * 100).toFixed(2) + "%"; finger.style.top = (y / H * 100).toFixed(2) + "%";
+  }
+  // Runs a list of strokes: the finger travels along each one and wipes behind it
+  function startJob(strokes, brush, speed, demo, done) {
+    job = { strokes: strokes, si: 0, pi: 0, brush: brush, speed: speed, demo: demo, done: done, lift: 0.35 };
+    placeFinger(strokes[0][0].x, strokes[0][0].y);
+    finger.classList.add("on"); finger.classList.remove("up");
+  }
+  function runJob(dt) {
+    if (!job) return;
+    if (job.lift > 0) { job.lift -= dt; if (job.lift <= 0) finger.classList.remove("up"); return; }
+    var budget = job.speed * dt;
+    while (budget > 0 && job) {
+      var st = job.strokes[job.si], a = st[job.pi], b = st[job.pi + 1];
+      if (!b) { // stroke done: lift and move to the next one
+        job.si++; job.pi = 0;
+        if (job.si >= job.strokes.length) { var fin = job.done; job = null; finger.classList.remove("on", "up"); if (fin) fin(); return; }
+        var nx = job.strokes[job.si][0];
+        placeFinger(nx.x, nx.y); finger.classList.add("up"); job.lift = 0.22; return;
+      }
+      var seg = Math.hypot(b.x - a.x, b.y - a.y), k = Math.min(1, budget / Math.max(0.001, seg));
+      var p = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+      wipeLine(fingerPos, p, job.brush);
+      placeFinger(p.x, p.y);
+      // a partial step uses up the whole budget (no floating-point leftovers that never reach zero)
+      if (k >= 1) { job.pi++; budget -= seg; } else { st[job.pi] = p; budget = 0; }
+    }
+  }
+  // Drips run down from the lowest points of a drawing
+  function drip(strokes) {
+    var pts = [];
+    strokes.forEach(function (s) { s.forEach(function (p) { pts.push(p); }); });
+    pts.sort(function (a, b) { return b.y - a.y; });
+    var picks = [pts[0], pts[Math.floor(pts.length * 0.3)], pts[Math.floor(pts.length * 0.55)], pts[Math.floor(pts.length * 0.8)]];
+    picks.forEach(function (p, i) {
+      setTimeout(function () { var d = addDrop(p.x + rnd(-2, 2), p.y + 3, 4.4, true); if (d) d.hold = rnd(0.05, 0.4); }, 120 + i * 260);
+    });
+  }
+  function drawShape(demo) {
+    var sh = SHAPES[shapeIx];
+    shapeIx = (shapeIx + 1) % SHAPES.length;
+    $("drawLabel").textContent = SHAPES[shapeIx].label;
+    var strokes = sh.strokes();
+    var copy = strokes.map(function (s) { return s.map(function (p) { return { x: p.x, y: p.y }; }); });
+    say("Drawing a " + sh.name + " in the mist…");
+    startJob(strokes, 8.5, reduce.matches ? 360 : 300, demo, function () {
+      drip(copy); glintNow();
+      say("A " + sh.name + " in the mist. Watch it drip, then fade.");
+    });
+  }
+  function glintNow() {
+    if (reduce.matches) return;
+    var g = $("glint"); g.classList.remove("go"); void g.offsetWidth; g.classList.add("go");
+  }
+
+  /* ---------- 7. Thunder: flash, count the seconds, then the boom ---------- */
+  var thunderT = [], thunderBusy = false;
+  function thunder() {
+    if (thunderBusy) return;
+    thunderBusy = true;
+    thunderT.forEach(clearTimeout); thunderT = [];
+    makeBolt();
+    var calm = reduce.matches;
+    say("Lightning! Count the seconds…");
+    var at = function (ms, fn) { thunderT.push(setTimeout(fn, ms)); };
+    at(60, function () { flash = calm ? 0.45 : 1.2; });
+    at(200, function () { flash = calm ? 0.2 : 0.5; });
+    at(320, function () { flash = calm ? 0.3 : 1; });
+    var secs = 2 + Math.floor(Math.random() * 2);
+    for (var s = 1; s <= secs; s++) (function (n) { at(380 + (n - 1) * 560, function () { countEl.textContent = n + "…"; countEl.classList.remove("boom"); countEl.classList.add("on"); }); })(s);
+    at(380 + secs * 560, function () {
+      countEl.textContent = "BOOM"; countEl.classList.add("boom");
+      if (!calm) { scene.classList.remove("quake"); void scene.offsetWidth; scene.classList.add("quake"); }
+      var cup = $("cup"); cup.classList.remove("rattle"); void cup.getBoundingClientRect(); cup.classList.add("rattle");
+      // the shake knocks the bigger drops loose
+      drops.forEach(function (d) { if (d.r > 2.6 && Math.random() < 0.6) { d.slide = true; d.hold = 0; d.vy = 20; } });
+      say("Boom! " + secs + " seconds, so the storm is about " + (secs / 3).toFixed(1) + " km away.");
+    });
+    at(380 + secs * 560 + 1100, function () { countEl.classList.remove("on"); scene.classList.remove("quake"); thunderBusy = false; });
+  }
+
+  /* ---------- 8. The cat, fairy lights and the clock ---------- */
+  var head = $("head"), catAng = 0, lookX = 200;
+  (function bulbs() {
+    var g = $("bulbs"), cols = ["#ffcf6b", "#ff8f7a", "#9fe0ff", "#c9f27a"];
+    // two sagging curves: sample the quadratic Bezier
+    [[14, 20, 107, 64, 200, 34], [200, 34, 293, 64, 386, 20]].forEach(function (q, k) {
+      for (var i = 1; i <= 6; i++) {
+        var t = i / 7, x = (1 - t) * (1 - t) * q[0] + 2 * (1 - t) * t * q[2] + t * t * q[4], y = (1 - t) * (1 - t) * q[1] + 2 * (1 - t) * t * q[3] + t * t * q[5];
+        var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        c.setAttribute("cx", x.toFixed(1)); c.setAttribute("cy", (y + 4).toFixed(1)); c.setAttribute("r", "3.6");
+        c.setAttribute("fill", cols[(i + k) % 4]); c.setAttribute("class", "bulb");
+        c.style.animationDelay = (-(i * 0.47 + k * 1.3)).toFixed(2) + "s";
+        c.style.filter = "drop-shadow(0 0 4px " + cols[(i + k) % 4] + ")";
+        g.appendChild(c);
+      }
+    });
+  })();
+  function tickClock() {
+    var d = new Date(), h = d.getHours(), m = d.getMinutes();
+    var days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    $("clock").textContent = days[d.getDay()] + " " + ((h % 12) || 12) + ":" + (m < 10 ? "0" : "") + m + (h < 12 ? " am" : " pm") + " · " + ["light drizzle", "steady rain", "heavy downpour"][level];
+  }
+
+  /* ---------- 9. Wiping with a pointer or the keyboard ---------- */
+  var drag = null, wiped = 0;
+  function toScene(e) {
+    var r = scene.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  }
+  glass.addEventListener("pointerdown", function (e) {
+    glass.setPointerCapture(e.pointerId);
+    job = null; finger.classList.remove("on", "up");
+    drag = toScene(e); wiped = 0; lookX = drag.x;
+    wipeDot(drag.x, drag.y, 17);
+  });
+  glass.addEventListener("pointermove", function (e) {
+    var p = toScene(e);
+    lookX = p.x;
+    if (!drag) return;
+    wipeLine(drag, p, 17);
+    wiped += Math.hypot(p.x - drag.x, p.y - drag.y);
+    drag = p;
+  });
+  function endDrag() {
+    if (!drag) return;
+    drag = null;
+    say(wiped > 120 ? "Squeaky clean, for now. The mist is creeping back." : "A little peek outside.");
+  }
+  glass.addEventListener("pointerup", endDrag);
+  glass.addEventListener("pointercancel", endDrag);
+  glass.addEventListener("keydown", function (e) {
+    var k = { ArrowLeft: [-14, 0], ArrowRight: [14, 0], ArrowUp: [0, -14], ArrowDown: [0, 14] }[e.key];
+    if (!k) return;
+    e.preventDefault();
+    var from = { x: fingerPos.x, y: fingerPos.y };
+    var to = { x: Math.max(GX0 + 8, Math.min(GX1 - 8, from.x + k[0])), y: Math.max(GY0 + 8, Math.min(GY1 - 8, from.y + k[1])) };
+    job = null;
+    finger.classList.add("on"); finger.classList.remove("up");
+    wipeLine(from, to, 15); placeFinger(to.x, to.y); lookX = to.x;
+    say("Wiping the glass with the arrow keys.");
+  });
+  glass.addEventListener("blur", function () { if (!job) finger.classList.remove("on"); });
+
+  /* ---------- 10. Controls ---------- */
+  document.querySelectorAll('input[name="rain"]').forEach(function (r) {
+    r.addEventListener("change", function () {
+      level = +r.value; tickClock();
+      say(["A soft drizzle taps the glass.", "Steady rain. The drops gather and race.", "Downpour! The window is streaming."][level]);
+    });
+  });
+  $("draw").addEventListener("click", function () { drawShape(false); });
+  $("thunder").addEventListener("click", thunder);
+
+  /* ---------- 11. Auto demo until the visitor takes over ---------- */
+  var demoOn = true, demoT = 0, demoStep = 0;
+  function demoWipe() {
+    // three broad sweeps across the lower panes, like a sleeve on the glass
+    var s = [], y0 = 300;
+    for (var i = 0; i <= 3; i++) s.push({ x: i % 2 ? 330 : 70, y: y0 + i * 22 });
+    say("Wiping a window to the street…");
+    startJob([s], 20, 420, true, function () { say("There is the street, with a rickshaw going by."); });
+  }
+  function demo() {
+    if (!demoOn) return;
+    var k = demoStep++ % 4;
+    if (k === 0 || k === 3) { drawShape(true); demoT = setTimeout(demo, 5600); }
+    else if (k === 1) { demoWipe(); demoT = setTimeout(demo, 4800); }
+    else { thunder(); demoT = setTimeout(demo, 4600); }
+  }
+  function stopDemo(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false; clearTimeout(demoT);
+    if (job && job.demo) { job = null; finger.classList.remove("on", "up"); }
+  }
+  ["pointerdown", "keydown", "wheel"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+
+  /* ---------- 12. Size, theme and the main loop ---------- */
+  function resize() {
+    var r = scene.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    S = Math.max(0.5, r.width / W * dpr);
+    cv.width = Math.round(W * S); cv.height = Math.round(H * S);
+    renderCity();
+  }
+  function retheme() { pal = palette(); tintFog(); makeDots(); renderCity(); }
+  darkMQ.addEventListener("change", retheme);
+  window.addEventListener("resize", resize);
+
+  var last = performance.now();
+  function loop(now) {
+    var dt = Math.min(0.05, (now - last) / 1000), t = now / 1000;
+    last = now;
+    carIn -= dt;
+    if (carIn <= 0) { spawnCar(); carIn = rnd(1.8, 4.2); }
+    cars.forEach(function (c) { c.x += c.dir * c.v * (c.rick ? 0.6 : 1) * dt; });
+    cars = cars.filter(function (c) { return c.x > -60 && c.x < W + 60; });
+    flash = Math.max(0, flash - dt * 4);
+
+    fogAdd(1 - Math.pow(1 - 0.0028, dt * 60)); // the mist slowly returns
+    runJob(dt);
+    updateDrops(dt);
+    paintOutside(t, dt);
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(outC, 0, 0);
+    ctx.globalAlpha = pal.fogA; ctx.drawImage(fogC, 0, 0, cv.width, cv.height);
+    mc.globalCompositeOperation = "source-over"; mc.clearRect(0, 0, maskC.width, maskC.height); mc.drawImage(dotC, 0, 0);
+    mc.globalCompositeOperation = "destination-in"; mc.drawImage(fogC, 0, 0);
+    ctx.globalAlpha = 0.9; ctx.drawImage(maskC, 0, 0, cv.width, cv.height);
+    ctx.globalAlpha = 1;
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    drawDrops();
+
+    // the cat turns its head toward what is happening on the glass
+    var target = job ? fingerPos.x : lookX;
+    var want = Math.max(-24, Math.min(24, (target - 95) / 7));
+    catAng += (want - catAng) * Math.min(1, dt * (reduce.matches ? 10 : 4));
+    head.setAttribute("transform", "rotate(" + catAng.toFixed(1) + " 95 362)");
+    requestAnimationFrame(loop);
+  }
+
+  pal = palette();
+  genCity();
+  fogAdd(1); fogAdd(1);
+  makeDots();
+  resize();
+  for (var i = 0; i < 120; i++) addDrop(rnd(GX0 + 2, GX1 - 2), rnd(GY0 + 2, GY1 - 6), 0.7 + Math.pow(Math.random(), 3) * 3);
+  tickClock(); setInterval(tickClock, 20000);
+  requestAnimationFrame(loop);
+  demoT = setTimeout(demo, 250);
+})();
+</script>
+</body>
+</html>

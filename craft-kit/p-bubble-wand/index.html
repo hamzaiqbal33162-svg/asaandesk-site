@@ -1,0 +1,511 @@
+<!doctype html>
+<!-- Chill & Craft · Bubble Wand · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bubble Wand · blow soap bubbles in the park</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: light = pastel afternoon, dark = violet dusk ---------- */
+  :root {
+    --page: #f7f0f7; --page2: #e3f3ee; --ink: #2c2238; --muted: #6f6382;
+    --sky1: #c9b8f2; --sky2: #ffe3ec; --hill1: #bfe8cf; --hill2: #9fd8b8; --grass1: #8fd0a4; --grass2: #6fbf8c;
+    --fence: #fff8f2; --fence-dk: #ecdcd6; --cat: #6b5a72; --cat-dk: #54465a; --cloud: #ffffff; --sun-o: 1;
+    --chip: rgba(255, 255, 255, 0.78); --chip-line: rgba(44, 34, 56, 0.12);
+    --on: #3b2d52; --on-ink: #fff2fb; --focus: #d9480f;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0d0a16; --page2: #1a1430; --ink: #f1eaf9; --muted: #a99cc0;
+      --sky1: #1d1640; --sky2: #6a3f78; --hill1: #2c4a4a; --hill2: #223b3d; --grass1: #2a4b3f; --grass2: #1f3b31;
+      --fence: #b9adc8; --fence-dk: #8f84a3; --cat: #2b2433; --cat-dk: #1e1924; --cloud: #8a76b0; --sun-o: 0;
+      --chip: rgba(28, 22, 44, 0.78); --chip-line: rgba(255, 255, 255, 0.1);
+      --on: #ffc7e6; --on-ink: #2a1030; --focus: #ffc078;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #0d0a16; --page2: #1a1430; --ink: #f1eaf9; --muted: #a99cc0;
+    --sky1: #1d1640; --sky2: #6a3f78; --hill1: #2c4a4a; --hill2: #223b3d; --grass1: #2a4b3f; --grass2: #1f3b31;
+    --fence: #b9adc8; --fence-dk: #8f84a3; --cat: #2b2433; --cat-dk: #1e1924; --cloud: #8a76b0; --sun-o: 0;
+    --chip: rgba(28, 22, 44, 0.78); --chip-line: rgba(255, 255, 255, 0.1);
+    --on: #ffc7e6; --on-ink: #2a1030; --focus: #ffc078;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; overflow-x: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(100% 60% at 50% 0%, var(--page2), transparent 70%), var(--page);
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .cap, .scene { width: min(500px, 100%, calc((100vh - 210px) * 0.8)); min-width: 280px; }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--muted); padding: 0 4px; }
+  .cap b { font-size: 15px; color: var(--ink); }
+  .scene {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 28px; overflow: hidden; isolation: isolate;
+    touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none;
+    box-shadow: 0 30px 60px -22px rgba(40, 20, 60, 0.45), 0 12px 24px -12px rgba(40, 20, 60, 0.3);
+  }
+  .scene > svg, .scene > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .size {
+    position: absolute; left: 0; top: 0; transform: translate(-50%, -50%) scale(0.6); opacity: 0;
+    padding: 5px 10px; border-radius: 999px; font: 750 13px/1 system-ui, sans-serif; color: #3b2d52;
+    background: rgba(255, 255, 255, 0.85); box-shadow: 0 6px 14px -6px rgba(40, 20, 60, 0.4);
+    transition: opacity 0.2s ease, transform 0.35s cubic-bezier(.34, 1.56, .64, 1); pointer-events: none; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .size.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .size.warn { background: #ffd2de; color: #8a1838; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Drawn parts ---------- */
+  .sk1 { stop-color: var(--sky1); } .sk2 { stop-color: var(--sky2); }
+  .hill1 { fill: var(--hill1); } .hill2 { fill: var(--hill2); } .grass1 { fill: var(--grass1); } .grass2 { fill: var(--grass2); }
+  .fence { fill: var(--fence); } .fence-dk { fill: var(--fence-dk); }
+  .cat { fill: var(--cat); } .cat-dk { fill: var(--cat-dk); }
+  .cloud { fill: var(--cloud); opacity: 0.8; }
+  .sun { opacity: var(--sun-o); }
+  .moon { opacity: calc(1 - var(--sun-o)); }
+  .tail { transform-box: view-box; transform-origin: 96px 372px; animation: tail 3s ease-in-out infinite; }
+  @keyframes tail { 50% { transform: rotate(14deg); } }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+  .btn {
+    appearance: none; border: 1px solid var(--chip-line); background: var(--chip); color: var(--ink);
+    font: 650 14px/1 system-ui, sans-serif; padding: 11px 16px; border-radius: 999px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px; touch-action: none; user-select: none; -webkit-user-select: none;
+    transition: transform 0.25s cubic-bezier(.34, 1.56, .64, 1), box-shadow 0.25s ease;
+  }
+  .btn svg { width: 16px; height: 16px; }
+  .btn.main { background: var(--on); color: var(--on-ink); border-color: transparent; }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.5); }
+  .btn.held, .btn:active { transform: scale(0.94); }
+  .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .status { margin: 0; min-height: 1.4em; font-size: 14px; font-weight: 600; text-align: center; }
+  .hint { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); text-align: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tail { animation: none; }
+    .size { transition: opacity 0.2s ease; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Bubble Wand: blow soap bubbles in a park while a cat tries to pop them</h1>
+  <div class="cap"><b>Bubble Wand</b><span id="score">Blown 0 · Popped 0 · Record 0 cm</span></div>
+  <div class="scene" id="scene" aria-describedby="hint">
+    <svg viewBox="0 0 400 500" aria-hidden="true">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="sk1"/><stop offset="1" class="sk2"/></linearGradient>
+        <radialGradient id="sunG"><stop offset="0" stop-color="#fff7d6" stop-opacity="0.95"/><stop offset="1" stop-color="#ffd6e6" stop-opacity="0"/></radialGradient>
+        <linearGradient id="sleeve" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb3c9"/><stop offset="1" stop-color="#f58fb0"/></linearGradient>
+      </defs>
+      <rect width="400" height="500" fill="url(#sky)"/>
+      <g class="sun"><circle cx="300" cy="90" r="70" fill="url(#sunG)"/><circle cx="300" cy="90" r="24" fill="#fff4c9"/></g>
+      <g class="moon"><circle cx="300" cy="90" r="46" fill="url(#sunG)" opacity="0.35"/><circle cx="300" cy="90" r="18" fill="#f6ecff"/><circle cx="294" cy="85" r="3.4" fill="#e2d6f2"/><circle cx="306" cy="96" r="2.4" fill="#e2d6f2"/><circle cx="305" cy="83" r="1.6" fill="#e2d6f2"/></g>
+      <g id="clouds">
+        <g class="cloud" id="c1"><ellipse rx="34" ry="11"/><ellipse cx="-12" cy="-8" rx="16" ry="12"/><ellipse cx="10" cy="-11" rx="19" ry="14"/></g>
+        <g class="cloud" id="c2"><ellipse rx="24" ry="8"/><ellipse cx="7" cy="-7" rx="13" ry="10"/></g>
+      </g>
+      <path class="hill2" d="M0 330 C80 290 170 300 250 318 C320 334 360 300 400 306 V500 H0Z"/>
+      <g>
+        <rect x="334" y="262" width="6" height="60" fill="#8a6a5a"/>
+        <circle cx="337" cy="250" r="30" class="grass2"/><circle cx="318" cy="262" r="18" class="grass1"/><circle cx="356" cy="262" r="18" class="grass1"/>
+      </g>
+      <path class="hill1" d="M0 360 C100 336 200 352 280 360 C340 366 380 352 400 356 V500 H0Z"/>
+      <!-- fence with a cat on top -->
+      <g>
+        <rect class="fence-dk" x="0" y="378" width="190" height="6"/><rect class="fence-dk" x="0" y="404" width="190" height="6"/>
+        <g id="pickets"></g>
+      </g>
+      <g id="cat">
+        <g class="tail"><path class="cat" d="M96 372 C112 386 116 404 104 420 C100 426 94 422 98 416 C106 404 104 390 92 380Z"/></g>
+        <path class="cat" d="M58 370 C54 340 64 322 80 320 C96 322 104 340 100 370Z"/>
+        <ellipse class="cat-dk" cx="79" cy="368" rx="22" ry="4"/>
+        <!-- the swiping paw -->
+        <g id="paw"><path class="cat" d="M92 344 C104 340 116 338 124 340 C128 343 126 349 120 349 C110 349 102 352 94 354Z"/><circle cx="124" cy="344" r="5" class="cat"/></g>
+        <g id="catHead">
+          <path class="cat" d="M64 300 L66 280 L78 292Z M96 300 L94 280 L82 292Z"/>
+          <ellipse class="cat" cx="80" cy="304" rx="19" ry="16"/>
+          <path d="M68 286 L70 293 L74 290Z M92 286 L90 293 L86 290Z" fill="#f4a6bd"/>
+          <g id="eyes">
+            <ellipse cx="73" cy="302" rx="4.4" ry="5" fill="#d9f27a"/><ellipse cx="87" cy="302" rx="4.4" ry="5" fill="#d9f27a"/>
+            <g id="pupils"><ellipse cx="73" cy="302" rx="1.6" ry="4" fill="#1b1520"/><ellipse cx="87" cy="302" rx="1.6" ry="4" fill="#1b1520"/></g>
+          </g>
+          <path d="M78 309 l2 2 l2 -2" fill="none" stroke="#f4a6bd" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M66 310 h-10 M66 313 l-9 2 M94 310 h10 M94 313 l9 2" stroke="#e9dff0" stroke-width="0.8" opacity="0.8"/>
+        </g>
+      </g>
+      <path class="grass1" d="M0 430 C70 420 150 434 220 428 C300 420 350 434 400 426 V500 H0Z"/>
+      <g id="flowers"></g>
+      <!-- the hand and wand -->
+      <g id="wand">
+        <path id="stick" d="M352 520 L262 392" stroke="#f2c14e" stroke-width="5" stroke-linecap="round"/>
+        <circle id="ring" cx="250" cy="374" r="24" fill="none" stroke="#ff8fb8" stroke-width="5"/>
+        <circle id="ringHi" cx="250" cy="374" r="24" fill="none" stroke="#fff" stroke-width="1.4" stroke-dasharray="14 60" opacity="0.8"/>
+        <g id="hand">
+          <path d="M366 520 L340 468 C336 458 344 450 354 452 L392 470 L412 520Z" fill="url(#sleeve)"/>
+          <path d="M330 470 C322 458 330 446 342 448 C352 440 364 446 364 456 C370 462 366 474 356 476 L340 480Z" fill="#f6cfae"/>
+          <path d="M334 458 C340 452 348 452 352 456" fill="none" stroke="#e2ad8a" stroke-width="1.6" stroke-linecap="round"/>
+        </g>
+      </g>
+    </svg>
+    <!-- bubbles, the soap film, droplets and fireflies -->
+    <canvas id="cv" aria-hidden="true"></canvas>
+    <div class="size" id="size" aria-hidden="true">0 cm</div>
+  </div>
+
+  <div class="controls">
+    <button class="btn main" id="blow" type="button" aria-describedby="hint">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="14" r="6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17" cy="7" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7" cy="12" r="1.4" fill="currentColor"/></svg>
+      Hold to blow
+    </button>
+    <button class="btn" id="burst" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="13" cy="10" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="19" cy="17" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      Quick puff
+    </button>
+    <button class="btn" id="popAll" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      Pop them all
+    </button>
+  </div>
+  <p id="status" class="status" role="status" aria-live="polite">Hold to blow a bubble. Let go before it gets too big!</p>
+  <p id="hint" class="hint">Press and hold the scene (or the button, or Space) to blow; a quick tap makes a puff of little bubbles. Tap a bubble to pop it.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var NS = "http://www.w3.org/2000/svg", TAU = Math.PI * 2, W = 400, H = 500, GROUND = 432;
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  var darkMQ = matchMedia("(prefers-color-scheme: dark)");
+  function isDark() { var t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : darkMQ.matches; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; }
+  var scene = $("scene"), cv = $("cv"), ctx = cv.getContext("2d"), statusEl = $("status"), sizeEl = $("size");
+  function say(m) { statusEl.textContent = m; }
+
+  /* ---------- 1. Scenery ---------- */
+  (function build() {
+    for (var x = 4; x < 190; x += 18) el("path", { "class": "fence", d: "M" + x + " 430V372l6 -7 6 7V430Z" }, $("pickets"));
+    var cols = ["#ff8fb8", "#ffd36b", "#ffffff", "#b9a2ff", "#8ccfff"];
+    for (var i = 0; i < 34; i++) {
+      var fx = rnd(0, 400), fy = rnd(438, 494), c = cols[i % 5];
+      if (fx > 320 && fy < 470) continue; // keep clear of the hand
+      var g = el("g", { transform: "translate(" + fx.toFixed(1) + " " + fy.toFixed(1) + ")" }, $("flowers"));
+      el("path", { d: "M0 0 V8", stroke: "#4f9a65", "stroke-width": 1.2 }, g);
+      for (var p = 0; p < 5; p++) { var a = p / 5 * TAU; el("circle", { cx: (Math.cos(a) * 2.6).toFixed(1), cy: (Math.sin(a) * 2.6).toFixed(1), r: 2, fill: c }, g); }
+      el("circle", { r: 1.4, fill: "#ffb03a" }, g);
+    }
+  })();
+
+  /* ---------- 2. The wand: the ring follows the pointer a little ---------- */
+  var RING = { x: 250, y: 374, r: 24 }, ringWant = { x: 250, y: 374 };
+  var DIR = { x: -0.42, y: -0.91 }; // the way bubbles grow out of the ring
+  function placeWand() {
+    $("ring").setAttribute("cx", RING.x.toFixed(1)); $("ring").setAttribute("cy", RING.y.toFixed(1));
+    $("ringHi").setAttribute("cx", RING.x.toFixed(1)); $("ringHi").setAttribute("cy", RING.y.toFixed(1));
+    var dx = RING.x - 250, dy = RING.y - 374;
+    $("stick").setAttribute("d", "M" + (352 + dx * 0.4).toFixed(1) + " 520 L" + (RING.x + 12).toFixed(1) + " " + (RING.y + 18).toFixed(1));
+    $("hand").setAttribute("transform", "translate(" + (dx * 0.4).toFixed(1) + " " + (dy * 0.3).toFixed(1) + ")");
+  }
+
+  /* ---------- 3. Bubbles ---------- */
+  var bubbles = [], drops = [], blown = 0, popped = 0, catPops = 0, record = 0;
+  var grow = null; // the bubble being blown, still on the ring
+  var hasConic = typeof ctx.createConicGradient === "function";
+  function newBubble(x, y, r, vx, vy) {
+    if (bubbles.length > 40) pop(bubbles[0], true);
+    var b = { x: x, y: y, r: r, vx: vx, vy: vy, ph: rnd(0, 6), hue: rnd(0, 360), wob: 0.16, life: rnd(7, 13), age: 0, spin: rnd(-0.6, 0.6) };
+    bubbles.push(b);
+    return b;
+  }
+  function pop(b, quiet, byCat) {
+    var i = bubbles.indexOf(b);
+    if (i < 0) return;
+    bubbles.splice(i, 1);
+    var n = reduce.matches ? 5 : Math.round(8 + b.r * 0.25);
+    for (var k = 0; k < n; k++) {
+      var a = k / n * TAU + rnd(-0.2, 0.2), v = rnd(40, 90) + b.r;
+      drops.push({ x: b.x + Math.cos(a) * b.r, y: b.y + Math.sin(a) * b.r, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 20, life: rnd(0.35, 0.6), ring: false });
+    }
+    drops.push({ x: b.x, y: b.y, r: b.r, life: 0.3, ring: true });
+    if (quiet) return;
+    popped++;
+    if (byCat) { catPops++; say(catPops === 1 ? "The cat got one! Swipe." : "Swipe! The cat has popped " + catPops + "."); }
+    updateScore();
+  }
+  function updateScore() { $("score").textContent = "Blown " + blown + " · Popped " + popped + " · Record " + record + " cm"; }
+  function cm(r) { return Math.round(r * 0.9); } // a playful scale: ring of 24 units ≈ 22 cm
+
+  // Blowing: hold to grow one bubble; it pops if it gets too big
+  var holdStart = 0, demoHold = false;
+  function startBlow(byDemo) {
+    if (grow) return false;
+    grow = { t: 0, r: 8, wob: 0 };
+    holdStart = performance.now(); demoHold = !!byDemo;
+    $("blow").classList.add("held");
+    sizeEl.classList.remove("warn"); sizeEl.classList.add("on");
+    say("Blowing… let go to set it free.");
+    return true;
+  }
+  function endBlow(tap) {
+    if (!grow) return;
+    var g = grow; grow = null; demoHold = false;
+    $("blow").classList.remove("held");
+    sizeEl.classList.remove("on");
+    if (tap || g.r < 13) { puff(); return; }
+    var c = growCenter(g.r);
+    var b = newBubble(c.x, c.y, g.r, DIR.x * 40, DIR.y * 40);
+    b.wob = 0.28; // it shivers as it pinches off the ring
+    blown++;
+    var size = cm(g.r);
+    if (size > record) { record = size; say("A " + size + " cm bubble, your biggest yet!"); }
+    else say("Free! A " + size + " cm bubble drifts away.");
+    updateScore();
+  }
+  function puff() {
+    var n = reduce.matches ? 4 : 8;
+    for (var i = 0; i < n; i++) {
+      var s = rnd(-0.5, 0.5), sp = rnd(60, 130), ca = Math.cos(s), sa = Math.sin(s);
+      var dx = DIR.x * ca - DIR.y * sa, dy = DIR.x * sa + DIR.y * ca;
+      newBubble(RING.x + dx * 18, RING.y + dy * 18, rnd(5, 13), dx * sp, dy * sp);
+    }
+    blown += n; updateScore();
+    say("Puff! A cloud of little bubbles.");
+  }
+  function growCenter(r) { var off = Math.max(0, r - RING.r * 0.55); return { x: RING.x + DIR.x * off, y: RING.y + DIR.y * off }; }
+  function popAll() {
+    var list = bubbles.slice();
+    if (!list.length) { say("No bubbles to pop. Blow some first!"); return; }
+    list.forEach(function (b, i) { setTimeout(function () { pop(b); }, i * (reduce.matches ? 30 : 70)); });
+    say("Pop, pop, pop! All " + list.length + " gone.");
+  }
+
+  /* ---------- 4. The cat swipes at bubbles that come close ---------- */
+  var cat = { swipe: 0, cool: 0, look: { x: 200, y: 200 }, target: null };
+  var PAW = { x: 124, y: 344 };
+  function stepCat(dt) {
+    var best = null, bd = 1e9;
+    bubbles.forEach(function (b) { var d = Math.hypot(b.x - PAW.x, b.y - PAW.y) - b.r; if (d < bd) { bd = d; best = b; } });
+    var lookAt = best ? best : grow ? growCenter(grow.r) : { x: RING.x, y: RING.y };
+    cat.look.x += (lookAt.x - cat.look.x) * Math.min(1, dt * 6); cat.look.y += (lookAt.y - cat.look.y) * Math.min(1, dt * 6);
+    cat.cool = Math.max(0, cat.cool - dt);
+    if (best && bd < 34 && cat.cool <= 0 && cat.swipe <= 0) { cat.swipe = 0.001; cat.target = best; cat.cool = 1.3; }
+    if (cat.swipe > 0) {
+      cat.swipe += dt;
+      if (cat.target && cat.swipe > 0.12) { if (bubbles.indexOf(cat.target) >= 0) pop(cat.target, false, true); cat.target = null; }
+      if (cat.swipe > 0.5) cat.swipe = 0;
+    }
+    // draw: head turn, pupils, paw
+    var dx = cat.look.x - 80, dy = cat.look.y - 302, d = Math.hypot(dx, dy) || 1;
+    $("pupils").setAttribute("transform", "translate(" + (dx / d * 2.2).toFixed(2) + " " + (dy / d * 1.6).toFixed(2) + ")");
+    $("catHead").setAttribute("transform", "rotate(" + clamp(dx / 18, -14, 14).toFixed(1) + " 80 318)");
+    var k = cat.swipe > 0 ? (cat.swipe < 0.12 ? cat.swipe / 0.12 : 1 - (cat.swipe - 0.12) / 0.38) : 0;
+    var aim = Math.atan2((cat.target || best || { y: 300 }).y - PAW.y, 30) * 180 / Math.PI;
+    // the paw rests tucked down; a swipe flicks it up toward the bubble and back
+    var rest = 62, aimTo = reduce.matches ? -20 : -35 + clamp(aim, -40, 10);
+    $("paw").setAttribute("transform", "rotate(" + (rest + (aimTo - rest) * k).toFixed(1) + " 94 350)");
+  }
+
+  /* ---------- 5. Drawing a bubble: clear film, a rainbow rim and window highlights ---------- */
+  function drawBubble(x, y, r, sx, sy, hue, alpha, t) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(sx, sy); ctx.globalAlpha = alpha;
+    var body = ctx.createRadialGradient(-r * 0.2, -r * 0.25, r * 0.2, 0, 0, r);
+    body.addColorStop(0, "rgba(255,255,255,0.02)"); body.addColorStop(0.75, "rgba(255,255,255,0.07)"); body.addColorStop(1, "rgba(255,255,255,0.28)");
+    ctx.fillStyle = body; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+    var rim;
+    if (hasConic) {
+      rim = ctx.createConicGradient((hue / 57.3) + t * 0.6, 0, 0);
+      rim.addColorStop(0, "hsla(320,95%,72%,0.75)"); rim.addColorStop(0.25, "hsla(190,95%,70%,0.7)");
+      rim.addColorStop(0.5, "hsla(55,100%,72%,0.7)"); rim.addColorStop(0.75, "hsla(265,95%,75%,0.75)"); rim.addColorStop(1, "hsla(320,95%,72%,0.75)");
+    } else {
+      rim = ctx.createLinearGradient(-r, -r, r, r);
+      rim.addColorStop(0, "rgba(255,140,210,0.7)"); rim.addColorStop(0.5, "rgba(120,220,255,0.7)"); rim.addColorStop(1, "rgba(255,230,120,0.7)");
+    }
+    ctx.strokeStyle = rim; ctx.lineWidth = Math.max(1.2, r * 0.09);
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.95, 0, TAU); ctx.stroke();
+    // a soft swirl of colour inside the film
+    var sw = ctx.createRadialGradient(r * 0.3, r * 0.35, 0, r * 0.3, r * 0.35, r * 0.8);
+    sw.addColorStop(0, "hsla(" + ((hue + t * 40) % 360).toFixed(0) + ",90%,75%,0.18)"); sw.addColorStop(1, "hsla(0,0%,100%,0)");
+    ctx.fillStyle = sw; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+    // highlights: a curved window and a small dot
+    ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = Math.max(1, r * 0.08); ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.68, Math.PI * 1.12, Math.PI * 1.42); ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.beginPath(); ctx.arc(r * 0.42, r * 0.45, Math.max(0.8, r * 0.07), 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  /* ---------- 6. Input ---------- */
+  function toScene(e) { var r = scene.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; }
+  function bubbleAt(p) {
+    for (var i = bubbles.length - 1; i >= 0; i--) { var b = bubbles[i]; if (Math.hypot(b.x - p.x, b.y - p.y) < b.r + 6) return b; }
+    return null;
+  }
+  var wind = 0, windT = 0, lastP = null, sceneHold = false;
+  scene.addEventListener("pointerdown", function (e) {
+    var p = toScene(e), b = bubbleAt(p);
+    if (b) { pop(b); say("Pop!"); return; }
+    scene.setPointerCapture(e.pointerId);
+    if (startBlow(false)) sceneHold = true;
+  });
+  scene.addEventListener("pointermove", function (e) {
+    var p = toScene(e);
+    ringWant.x = clamp(250 + (p.x - 250) * 0.22, 210, 290); ringWant.y = clamp(374 + (p.y - 374) * 0.12, 350, 392);
+    if (lastP) windT = clamp(windT + (p.x - lastP.x) * 0.5, -60, 60);
+    lastP = p;
+  });
+  function sceneUp() { if (sceneHold) { sceneHold = false; endBlow(performance.now() - holdStart < 200); } }
+  scene.addEventListener("pointerup", sceneUp);
+  scene.addEventListener("pointercancel", sceneUp);
+  scene.addEventListener("pointerleave", function () { lastP = null; });
+  var blowBtn = $("blow"), kb = false;
+  blowBtn.addEventListener("pointerdown", function (e) { e.preventDefault(); blowBtn.setPointerCapture(e.pointerId); startBlow(false); });
+  blowBtn.addEventListener("pointerup", function () { if (!demoHold) endBlow(performance.now() - holdStart < 200); });
+  blowBtn.addEventListener("pointercancel", function () { if (!demoHold) endBlow(false); });
+  blowBtn.addEventListener("keydown", function (e) { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); kb = true; startBlow(false); } });
+  blowBtn.addEventListener("keyup", function (e) { if (e.key === " " || e.key === "Enter") { e.preventDefault(); endBlow(false); setTimeout(function () { kb = false; }, 0); } });
+  // a screen reader "click" cannot hold: blow a medium bubble for it
+  blowBtn.addEventListener("click", function (e) { if (e.detail === 0 && !kb && startBlow(false)) setTimeout(function () { endBlow(false); }, 1300); });
+  blowBtn.addEventListener("blur", function () { if (grow && !demoHold && !sceneHold) endBlow(false); });
+  $("burst").addEventListener("click", puff);
+  $("popAll").addEventListener("click", popAll);
+
+  /* ---------- 7. Auto demo until the visitor takes over ---------- */
+  var demoOn = true, demoT = [], demoStep = 0;
+  function later(ms, fn) { demoT.push(setTimeout(fn, ms)); }
+  function demo() {
+    if (!demoOn) return;
+    var k = demoStep++ % 3;
+    if (k === 0) { startBlow(true); later(1300, function () { if (demoHold) endBlow(false); }); later(2300, puff); later(4600, demo); }
+    else if (k === 1) { startBlow(true); later(2100, function () { if (demoHold) endBlow(false); }); later(5000, demo); }
+    else { if (bubbles.length) pop(bubbles[bubbles.length - 1]); later(600, puff); later(3200, demo); }
+  }
+  function stopDemo(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false; demoT.forEach(clearTimeout);
+    if (demoHold) { grow = null; demoHold = false; sizeEl.classList.remove("on"); blowBtn.classList.remove("held"); }
+  }
+  ["pointerdown", "keydown", "wheel"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+
+  /* ---------- 8. Main loop ---------- */
+  var S = 1;
+  function resize() {
+    var r = scene.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    S = Math.max(0.5, r.width / W * dpr);
+    cv.width = Math.round(W * S); cv.height = Math.round(H * S);
+  }
+  window.addEventListener("resize", resize);
+  var flies = [];
+  for (var fi = 0; fi < 14; fi++) flies.push({ x: rnd(20, 380), y: rnd(260, 430), ph: rnd(0, 6) });
+  var last = performance.now();
+  function loop(now) {
+    var dt = Math.min(0.05, (now - last) / 1000), t = now / 1000, calm = reduce.matches, dark = isDark();
+    last = now;
+    RING.x += (ringWant.x - RING.x) * Math.min(1, dt * 5); RING.y += (ringWant.y - RING.y) * Math.min(1, dt * 5);
+    placeWand();
+    windT *= Math.pow(0.3, dt);
+    wind += ((windT + Math.sin(t * 0.4) * 10) - wind) * Math.min(1, dt * 1.5);
+    $("c1").setAttribute("transform", "translate(" + ((t * 6) % 500 - 50).toFixed(1) + " 70)");
+    $("c2").setAttribute("transform", "translate(" + ((t * 4 + 250) % 500 - 50).toFixed(1) + " 150)");
+
+    // the growing bubble swells, wobbles and finally bursts if held too long
+    if (grow) {
+      grow.t += dt;
+      grow.r = 10 + 66 * (1 - Math.exp(-grow.t * 0.85));
+      var c = growCenter(grow.r), size = cm(grow.r);
+      sizeEl.textContent = grow.t > 2.3 ? size + " cm · careful!" : size + " cm";
+      sizeEl.classList.toggle("warn", grow.t > 2.3);
+      sizeEl.style.left = (c.x / W * 100).toFixed(2) + "%"; sizeEl.style.top = ((c.y - grow.r - 14) / H * 100).toFixed(2) + "%";
+      if (grow.t > 2.9) {
+        var tmp = newBubble(c.x, c.y, grow.r, 0, 0);
+        grow = null; demoHold = false; sceneHold = false; blowBtn.classList.remove("held"); sizeEl.classList.remove("on");
+        pop(tmp, true);
+        say("Too big! It burst before it could fly.");
+      }
+    }
+    // free bubbles drift on the breeze, wobble and slowly settle
+    for (var i = bubbles.length - 1; i >= 0; i--) {
+      var b = bubbles[i];
+      b.age += dt;
+      var lift = -10 - 120 / (b.r + 10);
+      b.vx += ((wind - b.vx) * 0.5 + Math.sin(t * 0.9 + b.ph) * 8) * dt;
+      b.vy += ((lift - b.vy) * 0.6 + Math.cos(t * 1.1 + b.ph) * 6) * dt;
+      b.x += b.vx * dt * (calm ? 0.6 : 1); b.y += b.vy * dt * (calm ? 0.6 : 1);
+      b.wob += (0.04 - b.wob) * Math.min(1, dt * 1.2);
+      if (b.x - b.r < 2) { b.x = b.r + 2; b.vx = Math.abs(b.vx) * 0.5; }
+      if (b.x + b.r > W - 2) { b.x = W - 2 - b.r; b.vx = -Math.abs(b.vx) * 0.5; }
+      if (b.y - b.r < 2) { b.y = b.r + 2; b.vy = Math.abs(b.vy) * 0.3; }
+      if (b.age > b.life || b.y + b.r > GROUND + 20) { pop(b, true); continue; }
+    }
+    // bubbles nudge each other apart
+    for (i = 0; i < bubbles.length; i++) for (var j = i + 1; j < bubbles.length; j++) {
+      var p = bubbles[i], q = bubbles[j], dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 1, ov = p.r + q.r - d;
+      if (ov > 0) { var f = ov * 0.5 / d; p.x -= dx * f * 0.5; p.y -= dy * f * 0.5; q.x += dx * f * 0.5; q.y += dy * f * 0.5; p.wob = q.wob = 0.1; }
+    }
+    drops.forEach(function (d) { d.life -= dt; if (!d.ring) { d.vy += 300 * dt; d.x += d.vx * dt; d.y += d.vy * dt; } });
+    drops = drops.filter(function (d) { return d.life > 0; });
+    stepCat(dt);
+
+    // ---- draw ----
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    if (dark) { // fireflies at dusk
+      ctx.globalCompositeOperation = "lighter";
+      flies.forEach(function (f) {
+        var a = 0.25 + 0.75 * Math.pow(0.5 + 0.5 * Math.sin(t * 1.6 + f.ph), 3), x = f.x + Math.sin(t * 0.5 + f.ph) * 14, y = f.y + Math.cos(t * 0.4 + f.ph) * 10;
+        var g = ctx.createRadialGradient(x, y, 0, x, y, 7); g.addColorStop(0, "rgba(220,255,140," + a.toFixed(2) + ")"); g.addColorStop(1, "rgba(220,255,140,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 7, 0, TAU); ctx.fill();
+      });
+      ctx.globalCompositeOperation = "source-over";
+    }
+    // the soap film in the ring
+    var film = ctx.createLinearGradient(RING.x - RING.r, RING.y - RING.r, RING.x + RING.r, RING.y + RING.r);
+    film.addColorStop(0, "rgba(255,170,220,0.22)"); film.addColorStop(0.5, "rgba(170,230,255,0.16)"); film.addColorStop(1, "rgba(255,240,170,0.22)");
+    ctx.fillStyle = film; ctx.beginPath(); ctx.arc(RING.x, RING.y, RING.r - 2, 0, TAU); ctx.fill();
+    bubbles.forEach(function (b) {
+      var w = calm ? 0.02 : b.wob, s1 = 1 + Math.sin(t * 7 + b.ph) * w, s2 = 1 - Math.sin(t * 7 + b.ph) * w;
+      drawBubble(b.x, b.y, b.r, s1, s2, b.hue, Math.min(1, b.age * 4) * Math.min(1, (b.life - b.age) * 2 + 0.3), t);
+    });
+    if (grow) {
+      var gc = growCenter(grow.r), st = calm ? 0 : Math.sin(grow.t * 9) * 0.05;
+      // the neck joining the bubble to the ring
+      ctx.fillStyle = "rgba(255,255,255,0.12)";
+      ctx.beginPath(); ctx.moveTo(RING.x - RING.r * 0.9, RING.y); ctx.quadraticCurveTo(gc.x - grow.r * 0.6, gc.y, gc.x, gc.y); ctx.quadraticCurveTo(gc.x + grow.r * 0.6, gc.y, RING.x + RING.r * 0.9, RING.y); ctx.fill();
+      drawBubble(gc.x, gc.y, grow.r, 1 + st, 1 - st + Math.max(0, 0.1 - grow.t * 0.04), grow.t * 50, 1, t);
+    }
+    drops.forEach(function (d) {
+      if (d.ring) {
+        var k = 1 - d.life / 0.3;
+        ctx.strokeStyle = "rgba(255,255,255," + ((1 - k) * 0.7).toFixed(2) + ")"; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(d.x, d.y, d.r * (1 + k * 0.35), 0, TAU); ctx.stroke();
+      } else {
+        ctx.fillStyle = "rgba(255,255,255," + clamp(d.life * 2, 0, 1).toFixed(2) + ")";
+        ctx.beginPath(); ctx.arc(d.x, d.y, 1.6, 0, TAU); ctx.fill();
+      }
+    });
+    requestAnimationFrame(loop);
+  }
+  resize(); placeWand();
+  requestAnimationFrame(loop);
+  demoT.push(setTimeout(demo, 300));
+})();
+</script>
+</body>
+</html>
