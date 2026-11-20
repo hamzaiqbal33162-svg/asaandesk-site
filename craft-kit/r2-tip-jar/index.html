@@ -1,0 +1,445 @@
+<!doctype html>
+<!-- Chill & Craft · Tip Jar · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tip Jar · order summary with a rider tip slider</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: mint glass, copper coins ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #eaf8f4;
+    --bg2: #bfe3d8;
+    --ink: #133029;
+    --muted: #5d7a72;
+    --panel: #ffffff;
+    --well: #f1f8f5;
+    --line: #dcebe6;
+    --mint: #12a183;
+    --mint-d: #0b7560;
+    --coin: #e3a43b;
+    --coin-d: #a8681a;
+    --glass: rgba(170, 225, 210, .28);
+    --skin: #e8b88a;
+    --focus: #7c3aed;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #123a33;
+    --bg2: #04110e;
+    --ink: #e6f6f1;
+    --muted: #91b3aa;
+    --panel: #0d1d1a;
+    --well: #122723;
+    --line: #1f3833;
+    --mint: #2cc5a2;
+    --mint-d: #138f74;
+    --glass: rgba(120, 220, 195, .12);
+    --focus: #c4b5fd;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: radial-gradient(520px 360px at 50% 55%, rgba(227, 164, 59, .2), transparent 70%), radial-gradient(900px 640px at 50% 0%, var(--bg1), var(--bg2));
+    background-color: var(--bg2);
+  }
+  .stage { min-height: 100vh; display: grid; place-items: center; padding: 16px; overflow: clip; }
+  .card {
+    width: min(392px, 100%);
+    padding: 16px;
+    border-radius: 26px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: 0 30px 60px -30px rgba(10, 60, 50, .45), 0 8px 20px -12px rgba(10, 60, 50, .25);
+    animation: rise .7s var(--spring) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px) scale(.97); } }
+  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .head h1 { margin: 0; font-size: 18px; letter-spacing: -.01em; }
+  .head p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); }
+  .badge { height: 26px; padding: 0 10px; border-radius: 13px; background: var(--well); font-size: 11.5px; font-weight: 750; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: var(--mint-d); }
+  :root[data-theme="dark"] .badge { color: var(--mint); }
+  .badge i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: blink 1.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .3; } }
+
+  .items { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+  .items li { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 8px; }
+  .items .q { height: 20px; border-radius: 6px; background: var(--well); font-size: 11px; font-weight: 800; display: grid; place-items: center; color: var(--muted); }
+  .items b, .rows b, .total b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rows { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); display: grid; gap: 3px; font-size: 13px; }
+  .rows div { display: flex; justify-content: space-between; color: var(--muted); }
+  .rows b { color: var(--ink); font-weight: 650; }
+  .rows .tipRow b { color: var(--coin-d); font-weight: 800; }
+  :root[data-theme="dark"] .rows .tipRow b { color: var(--coin); }
+
+  /* ---------- Tip area ---------- */
+  .tip { margin-top: 10px; padding: 10px 12px 12px; border-radius: 18px; background: linear-gradient(180deg, var(--well), color-mix(in srgb, var(--well) 60%, var(--panel))); }
+  .tip-top { display: grid; grid-template-columns: 112px 1fr; gap: 10px; align-items: end; }
+  .jar svg { display: block; width: 112px; height: 132px; overflow: visible; }
+  #jarAll { transform-origin: 56px 128px; }
+  .coin { transform-box: fill-box; transform-origin: center; }
+  .side { display: grid; gap: 8px; align-content: end; min-width: 0; }
+  .who { display: flex; align-items: flex-end; gap: 8px; }
+  .who svg { flex: none; width: 52px; height: 56px; overflow: visible; }
+  .bubble {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    padding: 7px 10px;
+    border-radius: 14px 14px 14px 4px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    font-size: 12.5px;
+    font-weight: 700;
+    line-height: 1.25;
+    box-shadow: 0 8px 16px -12px rgba(0, 0, 0, .4);
+    transform-origin: 0 100%;
+  }
+  .bubble small { display: block; font-weight: 500; color: var(--muted); font-size: 11px; }
+  .amt { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .amt output { font-size: 22px; letter-spacing: -.02em; text-transform: none; color: var(--ink); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .chip { height: 30px; padding: 0; border: 1.5px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; transition: transform .3s var(--spring), background .2s, color .2s, border-color .2s; }
+  .chip:hover { transform: translateY(-2px); }
+  .chip[aria-pressed="true"] { background: var(--mint); border-color: var(--mint); color: #fff; }
+
+  /* the slider: a copper coin on a mint track */
+  .range { position: relative; margin-top: 10px; height: 30px; }
+  .range input { position: absolute; inset: 0; width: 100%; height: 30px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+  .range input::-webkit-slider-runnable-track { height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--mint) 0 var(--p, 10%), var(--line) var(--p, 10%)); }
+  .range input::-moz-range-track { height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--mint) 0 var(--p, 10%), var(--line) var(--p, 10%)); }
+  .range input::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; margin-top: -9px; border-radius: 50%; border: 3px solid #fff3d6; background: radial-gradient(circle at 35% 30%, #ffe2a3, var(--coin) 55%, var(--coin-d)); box-shadow: 0 4px 10px rgba(120, 70, 0, .45); transition: transform .2s var(--spring); }
+  .range input::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; border: 3px solid #fff3d6; background: radial-gradient(circle at 35% 30%, #ffe2a3, var(--coin) 55%, var(--coin-d)); box-shadow: 0 4px 10px rgba(120, 70, 0, .45); }
+  .range input:active::-webkit-slider-thumb { transform: scale(1.15); }
+  .range input:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 15px; }
+  .ticks { display: flex; justify-content: space-between; padding: 0 12px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; font-size: 14px; font-weight: 700; }
+  .total b { font-size: 21px; letter-spacing: -.02em; }
+  .go {
+    position: relative;
+    width: 100%;
+    height: 50px;
+    margin-top: 8px;
+    border: 0;
+    border-radius: 16px;
+    overflow: hidden;
+    background: linear-gradient(180deg, var(--mint), var(--mint-d));
+    color: #fff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 750;
+    cursor: pointer;
+    box-shadow: 0 12px 22px -12px var(--mint-d);
+    transition: transform .3s var(--spring);
+  }
+  .go::before { content: ""; position: absolute; inset: 0; transform-origin: 0 50%; transform: scaleX(var(--g, 0)); background: rgba(255, 255, 255, .22); }
+  .go span { position: relative; }
+  .go:hover { transform: translateY(-2px); }
+  .go.ok { background: linear-gradient(180deg, #e3a43b, #b97716); }
+  .chip:focus-visible, .go:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .note { margin: 6px 0 0; min-height: 1.3em; text-align: center; font-size: 12px; color: var(--muted); }
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 40; }
+  @media (max-width: 360px) { .tip-top { grid-template-columns: 96px 1fr; } .jar svg { width: 96px; height: 113px; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" aria-labelledby="ttl">
+    <header class="head">
+      <div><h1 id="ttl">Your order</h1><p>Lahori Kitchen · Johar Town</p></div>
+      <span class="badge"><i></i>Rider nearby</span>
+    </header>
+    <ul class="items">
+      <li><span class="q">1×</span><span>Chicken karahi, half</span><b>PKR 1,850</b></li>
+      <li><span class="q">4×</span><span>Garlic naan</span><b>PKR 480</b></li>
+      <li><span class="q">1×</span><span>Mint raita</span><b>PKR 220</b></li>
+    </ul>
+    <div class="rows">
+      <div><span>Subtotal</span><b>PKR 2,550</b></div>
+      <div><span>Delivery</span><b>PKR 120</b></div>
+      <div class="tipRow"><span>Rider tip</span><b id="tipRow">PKR 50</b></div>
+    </div>
+
+    <section class="tip" aria-labelledby="tipTtl">
+      <div class="tip-top">
+        <!-- the tip jar: coins drop in as the tip grows -->
+        <div class="jar" aria-hidden="true">
+          <svg viewBox="0 0 112 132">
+            <defs>
+              <!-- the inside of the glass, plus the open air above the mouth so falling coins show -->
+              <clipPath id="inside"><path d="M24 34h64c4 0 6 3 6 7v76c0 6-4 10-10 10H28c-6 0-10-4-10-10V41c0-4 2-7 6-7z" /><rect x="29" y="-60" width="54" height="96" /></clipPath>
+              <linearGradient id="glassG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".35" /><stop offset=".25" stop-color="#fff" stop-opacity=".05" /><stop offset=".8" stop-color="#fff" stop-opacity=".02" /><stop offset="1" stop-color="#fff" stop-opacity=".3" /></linearGradient>
+            </defs>
+            <g id="jarAll">
+              <ellipse cx="56" cy="128" rx="40" ry="4" fill="#000" opacity=".12" />
+              <path d="M24 34h64c4 0 6 3 6 7v76c0 6-4 10-10 10H28c-6 0-10-4-10-10V41c0-4 2-7 6-7z" fill="var(--glass)" />
+              <g clip-path="url(#inside)" id="coins"></g>
+              <path d="M24 34h64c4 0 6 3 6 7v76c0 6-4 10-10 10H28c-6 0-10-4-10-10V41c0-4 2-7 6-7z" fill="url(#glassG)" stroke="var(--mint)" stroke-opacity=".55" stroke-width="2" />
+              <path d="M26 46v62" stroke="#fff" stroke-opacity=".5" stroke-width="3" stroke-linecap="round" />
+              <rect x="28" y="26" width="56" height="9" rx="3" fill="none" stroke="var(--mint)" stroke-opacity=".55" stroke-width="2" />
+              <!-- label tied round the neck -->
+              <g id="label" style="transform-box: fill-box; transform-origin: center"><rect x="38" y="40" width="36" height="18" rx="4" fill="#fff8e6" stroke="var(--coin-d)" stroke-opacity=".5" /><text id="labelTxt" x="56" y="52.5"text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="800" fill="#8a5212">TIPS</text></g>
+              <!-- the lid, dropped on when the order is placed -->
+              <g id="lid" opacity="0"><rect x="24" y="18" width="64" height="11" rx="4" fill="var(--mint-d)" /><rect x="24" y="18" width="64" height="4" rx="2" fill="#fff" opacity=".25" /></g>
+            </g>
+          </svg>
+        </div>
+        <div class="side">
+          <div class="who">
+            <!-- the rider: his face follows the tip -->
+            <svg viewBox="-26 -28 52 56" aria-hidden="true">
+              <circle cx="0" cy="2" r="18" fill="var(--skin)" />
+              <path d="M-20 -2a20 20 0 0 1 40 0v2h-40z" fill="var(--mint)" /><rect x="-21" y="-1" width="42" height="5" rx="2.5" fill="var(--mint-d)" />
+              <ellipse id="blushL" cx="-10" cy="10" rx="4" ry="2.4" fill="#f07a7a" opacity="0" /><ellipse id="blushR" cx="10" cy="10" rx="4" ry="2.4" fill="#f07a7a" opacity="0" />
+              <g id="eyesO" fill="#2b1d12"><circle cx="-6.5" cy="6" r="2" /><circle cx="6.5" cy="6" r="2" /></g>
+              <g id="eyesH" fill="none" stroke="#2b1d12" stroke-width="2" stroke-linecap="round" opacity="0"><path d="M-9.5 7q3-4 6 0M3.5 7q3-4 6 0" /></g>
+              <path id="mouth" d="M-6 13Q0 13 6 13" fill="none" stroke="#2b1d12" stroke-width="2" stroke-linecap="round" />
+              <path d="M-14 24q14-8 28 0v4h-28z" fill="var(--mint-d)" />
+            </svg>
+            <div class="bubble" id="bubble" aria-hidden="true"><span id="say">Thank you!</span><small>Bilal, your rider</small></div>
+          </div>
+          <div class="amt"><span id="tipTtl">Tip</span><output id="amt" for="range">PKR 50</output></div>
+          <div class="chips" id="chips" role="group" aria-label="Quick tip amounts"></div>
+        </div>
+      </div>
+      <div class="range"><input id="range" type="range" min="0" max="500" step="10" value="50" aria-label="Rider tip in PKR" aria-valuetext="PKR 50"></div>
+      <div class="ticks" aria-hidden="true"><span>0</span><span>100</span><span>200</span><span>300</span><span>400</span><span>500</span></div>
+    </section>
+
+    <div class="total"><span>Total</span><b id="total">PKR 2,720</b></div>
+    <button class="go" id="go" type="button"><span id="goTxt">Place order · PKR 2,720</span></button>
+    <p class="note" id="note" aria-live="polite">100% of the tip goes to Bilal.</p>
+  </section>
+</main>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<script>
+  // ---------- Tip Jar: one coin per PKR 10 drops into the jar, the rider's face follows the tip ----------
+  const $ = (id) => document.getElementById(id);
+  const fmt = (n) => "PKR " + Math.round(n).toLocaleString("en-US");
+  const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => calmQ.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 60) : ms));
+  const play = (el, frames, opts) => (calm() || !el.animate ? Promise.resolve() : el.animate(frames, opts).finished.catch(() => {}));
+  const E = { out: (t) => 1 - Math.pow(1 - t, 3), in: (t) => t * t * t, inOut: (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2), back: (t) => 1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2) };
+  function tween(ms, fn, ease) {
+    return new Promise((res) => {
+      if (calm()) { fn(1); res(); return; }
+      const s = performance.now();
+      requestAnimationFrame(function f(now) { const t = Math.max(0, Math.min(1, (now - s) / ms)); fn((ease || E.out)(t)); t < 1 ? requestAnimationFrame(f) : res(); });
+    });
+  }
+  const note = (t) => { $("note").textContent = t; };
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const BASE = 2550 + 120, PRESETS = [0, 50, 100, 200];
+  // what Bilal says at each tip level
+  const MOODS = [[0, "No worries at all!", 0], [10, "Thank you!", .35], [100, "That's very kind!", .6], [200, "You're a star!", .85], [300, "You made my day!", 1]];
+  const range = $("range");
+  let tip = 50, placing = false;
+
+  // ---------- Coin pile layout: rows of 5 and 4, filled from the bottom ----------
+  const SLOTS = [];
+  for (let r = 0; SLOTS.length < 50; r++) {
+    const n = r % 2 ? 2 : 3;
+    for (let c = 0; c < n && SLOTS.length < 50; c++) SLOTS.push({ x: 34 + (r % 2 ? 11 : 0) + c * 22 + (Math.random() - .5) * 3, y: 121 - r * 4.4 + (Math.random() - .5) * 1, rot: (Math.random() - .5) * 14 });
+  }
+  const coins = [];
+  function coinEl(s) {
+    const g = document.createElementNS(SVGNS, "g");
+    g.setAttribute("class", "coin");
+    g.innerHTML = `<g transform="translate(${s.x.toFixed(1)} ${s.y.toFixed(1)}) rotate(${s.rot.toFixed(1)})"><ellipse cy="1.8" rx="10" ry="4" fill="var(--coin-d)"/><ellipse rx="10" ry="4" fill="var(--coin)"/><ellipse rx="5.8" ry="2" fill="none" stroke="#ffe2a3" stroke-width="1"/></g>`;
+    return g;
+  }
+  // Drop coins in, or flick the top ones out, until the jar holds n coins
+  function setCoins(n) {
+    let k = 0;
+    while (coins.length < n) {
+      const s = SLOTS[coins.length], g = coinEl(s);
+      $("coins").appendChild(g);
+      coins.push(g);
+      const h = s.y - 20;
+      play(g, [{ transform: `translate(${(56 - s.x) * .6}px, ${-h}px) rotate(80deg)`, opacity: 0 }, { transform: `translate(${(56 - s.x) * .3}px, ${-h * .5}px) rotate(40deg)`, opacity: 1, offset: .35 }, { transform: "translate(0, 1.5px) scale(1.1, .8)", offset: .8 }, { transform: "none" }], { duration: 420, delay: k++ * 32, easing: "cubic-bezier(.5,0,.8,.6)", fill: "backwards" });
+    }
+    k = 0;
+    while (coins.length > n) {
+      const g = coins.pop();
+      play(g, [{ transform: "none", opacity: 1 }, { transform: `translate(${(Math.random() - .5) * 30}px, -70px) rotate(120deg)`, opacity: 0 }], { duration: 380, delay: k++ * 22, easing: "cubic-bezier(.2,.7,.4,1)", fill: "forwards" }).then(() => g.remove());
+    }
+  }
+
+  // ---------- The rider's face and words ----------
+  let moodShown = -1, smileNow = 0;
+  function setFace(m) {
+    const [, say, smile] = MOODS[m];
+    const from = smileNow;
+    smileNow = smile;
+    tween(380, (t) => {
+      const s = from + (smile - from) * t;
+      $("mouth").setAttribute("d", `M${(-6 - s * 2).toFixed(2)} ${(13 - s).toFixed(2)}Q0 ${(13 + s * 9).toFixed(2)} ${(6 + s * 2).toFixed(2)} ${(13 - s).toFixed(2)}`);
+      $("blushL").setAttribute("opacity", (s * .6).toFixed(2));
+      $("blushR").setAttribute("opacity", (s * .6).toFixed(2));
+    }, E.back);
+    $("eyesO").setAttribute("opacity", smile >= .85 ? "0" : "1");
+    $("eyesH").setAttribute("opacity", smile >= .85 ? "1" : "0");
+    if (m !== moodShown) {
+      moodShown = m;
+      $("say").textContent = say;
+      play($("bubble"), [{ transform: "scale(.6)", opacity: 0 }, { transform: "scale(1.06)", opacity: 1 }, { transform: "scale(1)" }], { duration: 420, easing: "ease-out" });
+    }
+  }
+  const moodFor = (v) => { let m = 0; MOODS.forEach(([min], i) => { if (v >= min) m = i; }); return m; };
+
+  // ---------- One function sets the tip everywhere ----------
+  let shownTotal = BASE + 50;
+  function setTip(v, rollTotal = true) {
+    tip = v;
+    range.value = v;
+    range.style.setProperty("--p", (v / 5) + "%");
+    range.setAttribute("aria-valuetext", fmt(v));
+    $("amt").textContent = fmt(v);
+    $("tipRow").textContent = fmt(v);
+    [...$("chips").children].forEach((c, i) => c.setAttribute("aria-pressed", String(PRESETS[i] === v)));
+    setCoins(Math.round(v / 10));
+    setFace(moodFor(v));
+    const to = BASE + v, from = shownTotal;
+    shownTotal = to;
+    const upd = (x) => { $("total").textContent = fmt(x); if (!placing) $("goTxt").textContent = `Place order · ${fmt(x)}`; };
+    if (rollTotal) tween(300, (t) => upd(from + (to - from) * t)); else upd(to);
+  }
+  // Glide the slider to a preset so the coins pour in steadily
+  let glideId = 0;
+  async function glide(to) {
+    if (placing) return; // the tip is locked while the order is being placed
+    const id = ++glideId, from = tip, steps = Math.abs(to - from) / 10;
+    if (!steps) { play($("jarAll"), [{ transform: "rotate(0)" }, { transform: "rotate(-4deg)" }, { transform: "rotate(3deg)" }, { transform: "rotate(0)" }], { duration: 420 }); return; }
+    await tween(Math.min(900, 160 + steps * 30), (t) => { if (id === glideId && !placing) { const v = Math.round((from + (to - from) * t) / 10) * 10; if (v !== tip) setTip(v); } }, E.inOut);
+    if (id === glideId && !placing && tip !== to) setTip(to);
+    if (id === glideId && !placing) note(to ? `${fmt(to)} for Bilal. Total ${fmt(BASE + to)}.` : "No tip this time. Total " + fmt(BASE) + ".");
+  }
+
+  PRESETS.forEach((p) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chip";
+    b.textContent = p ? String(p) : "None";
+    b.setAttribute("aria-label", p ? `Tip ${fmt(p)}` : "No tip");
+    b.addEventListener("click", () => { if (!placing) glide(p); });
+    $("chips").appendChild(b);
+  });
+  range.addEventListener("input", () => { glideId++; if (!placing) setTip(+range.value); else range.value = tip; });
+  range.addEventListener("change", () => note(tip ? `${fmt(tip)} for Bilal. Total ${fmt(BASE + tip)}.` : `No tip this time. Total ${fmt(BASE)}.`));
+
+  // ---------- Place order: progress, the lid drops, the jar shakes, coins fly ----------
+  async function place() {
+    const btn = $("go");
+    if (placing) return;
+    placing = true;
+    glideId++; // stop any glide still pouring coins
+    range.disabled = true;
+    const total = BASE + tip;
+    $("goTxt").textContent = "Placing order…";
+    play(btn, [{ transform: "scale(1)" }, { transform: "scale(.96)" }, { transform: "scale(1)" }], { duration: 300 });
+    await tween(900, (t) => btn.style.setProperty("--g", t.toFixed(3)), E.inOut);
+    const lid = $("lid");
+    lid.setAttribute("opacity", "1");
+    await tween(380, (t) => lid.setAttribute("transform", `translate(0 ${(-34 * (1 - t)).toFixed(1)})`), E.in);
+    await play($("jarAll"), [{ transform: "rotate(0)" }, { transform: "rotate(-6deg)" }, { transform: "rotate(5deg)" }, { transform: "rotate(-3deg)" }, { transform: "rotate(1deg)" }, { transform: "rotate(0)" }], { duration: 620, easing: "ease-out" });
+    $("labelTxt").textContent = tip ? "SENT" : "THANKS";
+    play($("label"), [{ transform: "scale(1)" }, { transform: "scale(1.25)" }, { transform: "scale(1)" }], { duration: 420, easing: "ease-out" });
+    const r = $("jarAll").getBoundingClientRect();
+    burst(r.left + r.width / 2, r.top + r.height * .2, tip ? 40 : 18);
+    setFace(4);
+    $("say").textContent = "On my way!";
+    btn.style.setProperty("--g", 0);
+    btn.classList.add("ok");
+    $("goTxt").textContent = `Order placed · ${fmt(total)}`;
+    note(tip ? `Order placed. Bilal gets your ${fmt(tip)} tip in full.` : `Order placed for ${fmt(total)}.`);
+    await wait(2200);
+    await tween(320, (t) => { lid.setAttribute("transform", `translate(0 ${(-34 * t).toFixed(1)})`); lid.setAttribute("opacity", String(1 - t)); });
+    lid.setAttribute("opacity", "0");
+    $("labelTxt").textContent = "TIPS";
+    btn.classList.remove("ok");
+    placing = false;
+    range.disabled = false;
+    moodShown = -1;
+    setTip(tip, false);
+  }
+  $("go").addEventListener("click", place);
+
+  // ---------- Coin confetti on a full-window canvas ----------
+  const fx = $("fx"), ctx = fx.getContext("2d");
+  let parts = [], fxOn = false;
+  function sizeFx() { const r = devicePixelRatio || 1; fx.width = innerWidth * r; fx.height = innerHeight * r; ctx.setTransform(r, 0, 0, r, 0, 0); }
+  sizeFx();
+  addEventListener("resize", sizeFx);
+  function burst(x, y, n) {
+    if (calm()) return;
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - .5) * 2.2, s = 3 + Math.random() * 4;
+      parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: 3 + Math.random() * 2.5, spin: Math.random() * 6, vs: .15 + Math.random() * .2, life: 1, mint: i % 4 === 0 });
+    }
+    if (!fxOn) { fxOn = true; requestAnimationFrame(drawFx); }
+  }
+  function drawFx() {
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    parts = parts.filter((p) => p.life > 0);
+    for (const p of parts) {
+      p.x += p.vx; p.y += p.vy; p.vy += .2; p.vx *= .985; p.life -= .016; p.spin += p.vs;
+      ctx.globalAlpha = Math.max(0, p.life);
+      // a spinning coin is an ellipse whose width follows cos(spin)
+      const w = Math.max(.6, Math.abs(Math.cos(p.spin)) * p.r);
+      ctx.fillStyle = p.mint ? "#2cc5a2" : Math.cos(p.spin) > 0 ? "#e3a43b" : "#a8681a";
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, w, p.r, 0, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (parts.length) requestAnimationFrame(drawFx); else { fxOn = false; ctx.clearRect(0, 0, innerWidth, innerHeight); }
+  }
+
+  // ---------- Idle life: a coin glints in the jar now and then ----------
+  setInterval(() => {
+    if (placing || calm() || document.hidden || !coins.length) return;
+    const g = coins[Math.max(0, coins.length - 1 - Math.floor(Math.random() * Math.min(6, coins.length)))];
+    play(g, [{ filter: "brightness(1)" }, { filter: "brightness(1.7)" }, { filter: "brightness(1)" }], { duration: 600 });
+  }, 1300);
+
+  // ---------- Auto-demo: slides the tip up, places the order, comes back down ----------
+  const demo = { on: true, t: 0 };
+  function stopDemo() { if (demo.on) { demo.on = false; clearTimeout(demo.t); } }
+  addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  const PLAN = [[100, 1100], [200, 1100], [350, 1000], ["go", 800], [50, 1400]];
+  async function demoLoop() {
+    for (const [v, pause] of PLAN) {
+      if (!demo.on) return;
+      if (v === "go") await place(); else await glide(v);
+      if (!demo.on) return;
+      await wait(pause);
+    }
+    if (demo.on) demo.t = setTimeout(demoLoop, 300);
+  }
+
+  // ---------- Start: the first coins pour in ----------
+  setTip(0, false);
+  setTimeout(() => glide(50), 350);
+  demo.t = setTimeout(demoLoop, 1600);
+</script>
+</body>
+</html>

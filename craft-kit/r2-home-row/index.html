@@ -1,0 +1,630 @@
+<!doctype html>
+<!-- Chill & Craft · Home Row · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Row · delivery address with saved addresses</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: a street at golden hour (light) or after dark ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #eef3ff;
+    --bg2: #cdd8f1;
+    --ink: #1a2238;
+    --muted: #65708c;
+    --panel: #ffffff;
+    --well: #f3f5fb;
+    --line: #e1e6f2;
+    --accent: #ef6f3c;
+    --accent-d: #c9501f;
+    --ok: #18a058;
+    --err: #d43c3c;
+    --sky1: #9fd3ff;
+    --sky2: #ffe8c7;
+    --far: #c4d3ea;
+    --road: #4b5163;
+    --walk: #d9dde8;
+    --win: #2f3a55;
+    --stars: 0;
+    --sun: #ffc94d;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #1a2142;
+    --bg2: #070a16;
+    --ink: #eef1fb;
+    --muted: #9aa5c4;
+    --panel: #111628;
+    --well: #181f36;
+    --line: #252d48;
+    --sky1: #0d1433;
+    --sky2: #3b2b61;
+    --far: #222a52;
+    --road: #23262f;
+    --walk: #3a3f52;
+    --win: #1a2036;
+    --stars: 1;
+    --sun: #f2eed2;
+    --focus: #93c5fd;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: radial-gradient(560px 380px at 50% 26%, rgba(239, 111, 60, .16), transparent 70%), radial-gradient(900px 640px at 50% 0%, var(--bg1), var(--bg2));
+    background-color: var(--bg2);
+  }
+  .stage { min-height: 100vh; display: grid; place-items: center; padding: 16px; overflow: clip; }
+  .vh { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .card {
+    width: min(396px, 100%);
+    padding: 14px 14px 12px;
+    border-radius: 26px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: 0 30px 60px -30px rgba(20, 30, 80, .5), 0 8px 20px -12px rgba(20, 30, 80, .25);
+    animation: rise .7s var(--spring) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px) scale(.97); } }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 0 2px; }
+  .head h1 { margin: 0; font-size: 18px; letter-spacing: -.01em; }
+  .head p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); }
+  .head .eta { text-align: right; font-size: 10.5px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+  .head .eta b { display: block; font-size: 13.5px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+
+  /* ---------- Street scene ---------- */
+  .street { margin-top: 10px; border-radius: 18px; overflow: hidden; }
+  .street svg { display: block; width: 100%; height: auto; }
+  .stars { opacity: var(--stars); }
+  .stars circle { animation: tw 2.6s ease-in-out infinite alternate; }
+  .stars circle:nth-child(2n) { animation-delay: 1.1s; }
+  .stars circle:nth-child(3n) { animation-delay: 1.9s; }
+  @keyframes tw { from { opacity: .25; } to { opacity: 1; } }
+  .cloud { animation: drift 16s linear infinite alternate; opacity: calc(1 - var(--stars) * .75); }
+  @keyframes drift { from { transform: translateX(-20px); } to { transform: translateX(26px); } }
+  .win { fill: var(--win); transition: fill .45s, filter .45s; }
+  .lit .win { fill: #ffd27a; filter: drop-shadow(0 0 4px #ffb347); }
+  .door, .brick, .roof, .spark { transform-box: fill-box; }
+  .door { transform-origin: 0 50%; }
+  .brick { transform-origin: 50% 100%; }
+  .bob { animation: bob 1.6s ease-in-out infinite alternate; }
+  @keyframes bob { from { transform: translateY(0); } to { transform: translateY(-4px); } }
+  .idle { animation: idle .18s linear infinite alternate; }
+  @keyframes idle { to { transform: translateY(-.7px); } }
+  .puff { fill: var(--walk); animation: puff 1.4s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+  .puff:nth-of-type(2) { animation-delay: .7s; }
+  @keyframes puff { from { opacity: .8; transform: translate(0, 0) scale(.4); } to { opacity: 0; transform: translate(-12px, -6px) scale(1.4); } }
+  .plot rect { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .plot text { fill: var(--muted); font: 700 9px system-ui, sans-serif; }
+
+  /* ---------- Saved addresses ---------- */
+  .panel { position: relative; margin-top: 10px; }
+  .list { display: grid; gap: 7px; }
+  .addr {
+    position: relative;
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 56px;
+    padding: 8px 12px 8px 10px;
+    border: 1.5px solid var(--line);
+    border-radius: 15px;
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .25s, background .25s, transform .35s var(--spring), box-shadow .3s;
+  }
+  .addr:hover { transform: translateY(-1px); }
+  .addr .ic { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: var(--well); color: var(--muted); transition: background .3s, color .3s; }
+  .addr .ic svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .addr b { display: block; font-size: 13.5px; }
+  .addr .tx { min-width: 0; }
+  .addr span.l { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .addr .fee { font-size: 11.5px; font-weight: 750; color: var(--muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .addr[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); box-shadow: 0 10px 18px -14px var(--accent); }
+  .addr[aria-pressed="true"] .ic { background: var(--accent); color: #fff; }
+  .addr.new { grid-template-columns: 36px 1fr; border-style: dashed; color: var(--muted); }
+  .addr.new .ic { background: none; border: 1.5px dashed var(--line); }
+  .addr:focus-visible, .go:focus-visible, .chip:focus-visible, .f input:focus-visible, .f select:focus-visible, .link:focus-visible, .save:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- New address form ---------- */
+  .form { display: grid; gap: 7px; }
+  .form[hidden], .list[hidden] { display: none; }
+  .fh { display: flex; align-items: center; justify-content: space-between; }
+  .fh b { font-size: 14px; }
+  .link { border: 0; background: none; color: var(--accent-d); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+  :root[data-theme="dark"] .link { color: var(--accent); }
+  .chips { display: flex; gap: 6px; }
+  .chip { height: 30px; padding: 0 12px; border: 1.5px solid var(--line); border-radius: 15px; background: var(--panel); color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .f { display: grid; gap: 3px; font-size: 11px; font-weight: 750; color: var(--muted); letter-spacing: .02em; }
+  .f input, .f select { width: 100%; height: 38px; padding: 0 10px; border: 1.5px solid var(--line); border-radius: 11px; background: var(--well); color: var(--ink); font: inherit; font-size: 14px; font-weight: 500; letter-spacing: 0; transition: border-color .2s, background .2s; }
+  .f input:focus, .f select:focus { border-color: var(--accent); background: var(--panel); }
+  .f [aria-invalid="true"] { border-color: var(--err); }
+  .f em { min-height: 13px; font-style: normal; font-size: 10.5px; font-weight: 650; color: var(--err); }
+  .save { height: 46px; border: 0; border-radius: 14px; background: var(--ink); color: var(--panel); font: inherit; font-size: 14.5px; font-weight: 750; cursor: pointer; }
+
+  /* ---------- Footer ---------- */
+  .foot { margin-top: 10px; }
+  .foot[hidden] { display: none; }
+  .rows { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); padding: 0 4px; }
+  .rows b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .go {
+    position: relative;
+    width: 100%;
+    height: 50px;
+    margin-top: 8px;
+    border: 0;
+    border-radius: 16px;
+    overflow: hidden;
+    background: linear-gradient(180deg, var(--accent), var(--accent-d));
+    color: #fff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 750;
+    cursor: pointer;
+    box-shadow: 0 12px 22px -12px var(--accent-d);
+    transition: transform .3s var(--spring), background .3s;
+  }
+  .go:hover { transform: translateY(-2px); }
+  .go.ok { background: linear-gradient(180deg, #22b968, #13804a); }
+  .note { margin: 6px 0 0; min-height: 1.3em; text-align: center; font-size: 12px; color: var(--muted); }
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 40; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" aria-labelledby="ttl">
+    <header class="head">
+      <div><h1 id="ttl">Where should we deliver?</h1><p>Order #4721 · 3 items</p></div>
+      <div class="eta">Arrives<b id="eta">Today by 9 pm</b></div>
+    </header>
+
+    <!-- The street: one house per saved address, an empty plot for a new one, and the delivery scooter -->
+    <div class="street" aria-hidden="true">
+      <svg viewBox="0 0 320 146" id="svg">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--sky1)" /><stop offset="1" stop-color="var(--sky2)" /></linearGradient>
+        </defs>
+        <rect width="320" height="146" fill="url(#sky)" />
+        <g class="stars" fill="#fff"><circle cx="30" cy="16" r="1" /><circle cx="78" cy="30" r=".8" /><circle cx="122" cy="12" r="1.1" /><circle cx="168" cy="26" r=".8" /><circle cx="210" cy="10" r="1" /><circle cx="244" cy="34" r=".8" /><circle cx="52" cy="40" r=".7" /><circle cx="150" cy="44" r=".7" /></g>
+        <circle cx="282" cy="28" r="13" fill="var(--sun)" />
+        <g class="cloud" fill="#fff" opacity=".85"><ellipse cx="70" cy="24" rx="18" ry="6" /><ellipse cx="80" cy="20" rx="10" ry="7" /><ellipse cx="196" cy="36" rx="14" ry="4.5" /><ellipse cx="204" cy="32" rx="8" ry="5" /></g>
+        <path d="M0 96h14V70h12v14h10V60h16v36h20V78h14v18h30V66h10v30h40V74h18v22h28V64h14v32h22V80h16v16h40v20H0z" fill="var(--far)" />
+        <rect y="108" width="320" height="8" fill="var(--walk)" />
+        <rect y="116" width="320" height="30" fill="var(--road)" />
+        <path d="M0 131h320" stroke="#fff" stroke-opacity=".5" stroke-width="2" stroke-dasharray="12 10" />
+
+        <!-- house 0: home -->
+        <g id="h0">
+          <rect x="58" y="54" width="8" height="16" fill="#7a2e21" />
+          <rect x="22" y="72" width="48" height="36" fill="#e07a5f" />
+          <path d="M16 74L46 50L76 74Z" fill="#9c3d2b" />
+          <rect class="win" x="27" y="79" width="11" height="10" rx="1.5" /><rect class="win" x="54" y="79" width="11" height="10" rx="1.5" />
+          <rect x="40" y="90" width="12" height="18" fill="#3b1a12" /><rect class="door" x="40" y="90" width="12" height="18" fill="#6b2f22" />
+        </g>
+        <!-- house 1: office block -->
+        <g id="h1">
+          <rect x="102" y="38" width="44" height="70" fill="#3d5a80" />
+          <rect x="99" y="34" width="50" height="6" fill="#2b4262" />
+          <g><rect class="win" x="107" y="46" width="8" height="7" /><rect class="win" x="120" y="46" width="8" height="7" /><rect class="win" x="133" y="46" width="8" height="7" />
+            <rect class="win" x="107" y="58" width="8" height="7" /><rect class="win" x="120" y="58" width="8" height="7" /><rect class="win" x="133" y="58" width="8" height="7" />
+            <rect class="win" x="107" y="70" width="8" height="7" /><rect class="win" x="120" y="70" width="8" height="7" /><rect class="win" x="133" y="70" width="8" height="7" />
+            <rect class="win" x="107" y="82" width="8" height="7" /><rect class="win" x="133" y="82" width="8" height="7" /></g>
+          <rect x="117" y="92" width="14" height="16" fill="#1d2c44" /><rect class="door" x="117" y="92" width="14" height="16" fill="#9fc3e8" opacity=".85" />
+        </g>
+        <!-- house 2: parents' house with a flat roof -->
+        <g id="h2">
+          <rect x="180" y="78" width="46" height="30" fill="#81b29a" />
+          <rect x="176" y="72" width="54" height="7" fill="#52796f" />
+          <rect class="win" x="185" y="84" width="10" height="9" rx="1.5" /><rect class="win" x="212" y="84" width="10" height="9" rx="1.5" />
+          <path d="M197 108v-11a6 6 0 0 1 12 0v11z" fill="#2c4a40" /><path class="door" d="M197 108v-11a6 6 0 0 1 6-6v17z" fill="#3f6b5c" />
+          <circle cx="234" cy="96" r="7" fill="#5c946e" /><rect x="233" y="100" width="2" height="8" fill="#5a4030" />
+        </g>
+        <!-- plot 3: empty until a new address is saved -->
+        <g id="plot" class="plot"><rect x="252" y="76" width="50" height="31" rx="3" /><text x="277" y="95" text-anchor="middle">+ NEW</text></g>
+        <g id="h3" opacity="0">
+          <rect class="brick" x="256" y="98" width="44" height="10" fill="#e9b872" />
+          <rect class="brick" x="256" y="88" width="44" height="10" fill="#f2cc8f" />
+          <rect class="brick" x="256" y="78" width="44" height="10" fill="#e9b872" />
+          <path class="roof" d="M251 80L278 58L305 80Z" fill="#c0703e" />
+          <rect class="win" x="261" y="83" width="10" height="9" rx="1.5" />
+          <rect x="281" y="91" width="11" height="17" fill="#5c3a1e" /><rect class="door" x="281" y="91" width="11" height="17" fill="#8a5a2b" />
+        </g>
+        <g id="parcel" opacity="0"><rect x="-6" y="-6" width="12" height="10" rx="1.5" fill="#d79a52" /><path d="M-6-2h12M0-6v10" stroke="#8a5a2b" stroke-width="1.4" /></g>
+
+        <!-- the scooter -->
+        <g id="scoot" transform="translate(46 0)">
+          <g id="scootBody">
+            <g class="idle">
+              <ellipse class="puff" cx="-16" cy="122" rx="3" ry="2.2" /><ellipse class="puff" cx="-16" cy="122" rx="3" ry="2.2" />
+              <path d="M-12 118h20l4-8h4l-3 9" fill="none" stroke="var(--accent-d)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M-14 117q2-7 10-7h8l2 7z" fill="var(--accent)" />
+              <rect x="-16" y="100" width="12" height="10" rx="2" fill="#d79a52" /><path d="M-16 105h12" stroke="#8a5a2b" stroke-width="1.2" />
+              <path d="M-2 110l2-12" stroke="#2f3a55" stroke-width="3.4" stroke-linecap="round" />
+              <circle cx="1" cy="94" r="4.4" fill="var(--accent)" /><path d="M-2 92.5h7" stroke="#fff" stroke-width="1.6" stroke-linecap="round" />
+              <path d="M1 101l7 5" stroke="#2f3a55" stroke-width="2.6" stroke-linecap="round" />
+            </g>
+            <g id="w1" transform="translate(-9 121)"><circle r="4.6" fill="#1b1f2a" /><path d="M-3 0h6M0-3v6" stroke="#9aa3b5" stroke-width="1.2" /></g>
+            <g id="w2" transform="translate(12 121)"><circle r="4.6" fill="#1b1f2a" /><path d="M-3 0h6M0-3v6" stroke="#9aa3b5" stroke-width="1.2" /></g>
+          </g>
+        </g>
+        <!-- the map pin over the chosen house -->
+        <g id="pin" transform="translate(46 14)">
+          <g class="bob">
+            <path id="pinHead" d="M0 0c-7 0-12 5-12 11.5C-12 19 0 30 0 30s12-11 12-18.5C12 5 7 0 0 0z" fill="var(--accent)" />
+            <circle id="pinDot" cx="0" cy="11.5" r="4.5" fill="#fff" />
+            <path id="pinTick" d="M-4.5 11.5l3 3 6-6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity="0" />
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <div class="panel">
+      <div class="list" id="list" role="group" aria-label="Saved addresses"></div>
+
+      <form class="form" id="form" novalidate hidden>
+        <div class="fh"><b id="formTtl">New address</b><button class="link" type="button" id="cancel">Cancel</button></div>
+        <div class="chips" id="chips" role="group" aria-label="Label">
+          <button class="chip" type="button" aria-pressed="true">Home</button><button class="chip" type="button" aria-pressed="false">Work</button><button class="chip" type="button" aria-pressed="false">Family</button><button class="chip" type="button" aria-pressed="false">Other</button>
+        </div>
+        <div class="g2">
+          <label class="f">Full name<input id="fName" autocomplete="name" aria-describedby="eName"><em id="eName"></em></label>
+          <label class="f">Mobile<input id="fPhone" inputmode="numeric" autocomplete="tel" placeholder="03xx xxxxxxx" maxlength="12" aria-describedby="ePhone"><em id="ePhone"></em></label>
+        </div>
+        <label class="f">House and street<input id="fStreet" autocomplete="address-line1" aria-describedby="eStreet"><em id="eStreet"></em></label>
+        <div class="g2">
+          <label class="f">Area<input id="fArea" autocomplete="address-line2" aria-describedby="eArea"><em id="eArea"></em></label>
+          <label class="f">City<select id="fCity" aria-describedby="eCity"><option value="">Choose</option></select><em id="eCity"></em></label>
+        </div>
+        <button class="save" type="submit" id="save">Save and build</button>
+      </form>
+    </div>
+
+    <div class="foot" id="foot">
+      <div class="rows"><span>Items</span><b>PKR 5,480</b></div>
+      <div class="rows"><span id="feeL">Delivery · Lahore</span><b id="fee">PKR 150</b></div>
+      <button class="go" id="go" type="button"><span id="goTxt">Deliver here · PKR 5,630</span></button>
+    </div>
+    <p class="note" id="note" aria-live="polite">Choose a saved address or add a new one.</p>
+  </section>
+</main>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<script>
+  // ---------- Home Row: each saved address is a house on the street; the scooter rides to the one you pick ----------
+  const $ = (id) => document.getElementById(id);
+  const fmt = (n) => "PKR " + Math.round(n).toLocaleString("en-US");
+  const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => calmQ.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 60) : ms));
+  const play = (el, frames, opts) => (calm() || !el.animate ? Promise.resolve() : el.animate(frames, opts).finished.catch(() => {}));
+  const E = { out: (t) => 1 - Math.pow(1 - t, 3), in: (t) => t * t * t, inOut: (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2), back: (t) => 1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2) };
+  function tween(ms, fn, ease) {
+    return new Promise((res) => {
+      if (calm()) { fn(1); res(); return; }
+      const s = performance.now();
+      requestAnimationFrame(function f(now) { const t = Math.max(0, Math.min(1, (now - s) / ms)); fn((ease || E.out)(t)); t < 1 ? requestAnimationFrame(f) : res(); });
+    });
+  }
+  let busy = false, queued = null;
+  function run(fn) {
+    return new Promise((res) => {
+      const go = async () => { busy = true; try { await fn(); } finally { busy = false; res(); if (queued) { const q = queued; queued = null; q(); } } };
+      if (busy) queued = go; else go();
+    });
+  }
+  const note = (t) => { $("note").textContent = t; };
+  // typed addresses go into the cards as text, never as markup
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+  // ---------- Data: saved addresses, delivery fee and time per city (PKR) ----------
+  const SUB = 5480;
+  const CITY = { Lahore: [150, "Today by 9 pm"], Karachi: [200, "Tomorrow"], Islamabad: [220, "Tomorrow"], Rawalpindi: [220, "Tomorrow"], Faisalabad: [180, "Tomorrow"], Multan: [200, "Tomorrow"], Peshawar: [250, "In 2 days"] };
+  const ICON = {
+    Home: '<path d="M4 11l8-6.5 8 6.5M6.5 9.5V19h11V9.5M10 19v-5h4v5"/>',
+    Work: '<rect x="4" y="7.5" width="16" height="11.5" rx="2"/><path d="M9 7.5V5.5h6v2M4 12.5h16"/>',
+    Family: '<circle cx="8.5" cy="8" r="2.6"/><circle cx="16" cy="9" r="2.1"/><path d="M3.8 18.5c.6-3.4 2.4-5.2 4.7-5.2s4.1 1.8 4.7 5.2M13.5 18.5c.4-2.6 1.4-4 2.9-4s2.6 1.4 3 4"/>',
+    Other: '<path d="M12 20s6-5.4 6-10.2A6 6 0 0 0 6 9.8C6 14.6 12 20 12 20z"/><circle cx="12" cy="9.8" r="2.2"/>',
+    Plus: '<path d="M12 6v12M6 12h12"/>',
+  };
+  const BOOK = [
+    { label: "Home", kind: "Home", name: "Ayesha Khan", phone: "0300 1234567", street: "House 14, Street 6", area: "DHA Phase 5", city: "Lahore" },
+    { label: "Office", kind: "Work", name: "Ayesha Khan", phone: "0300 1234567", street: "3rd floor, Arfa Tower", area: "Ferozepur Road", city: "Lahore" },
+    { label: "Parents", kind: "Family", name: "Tariq Khan", phone: "0333 7654321", street: "House 7, Street 3", area: "F-8/2", city: "Islamabad" },
+  ];
+  const DOOR_X = [46, 124, 203, 286]; // where the scooter stops for each house
+  const PIN_Y = [16, 2, 38, 22]; // pin height above each house
+  let sel = 0, scootX = 46, delivering = false;
+
+  // ---------- Address cards ----------
+  function renderList() {
+    const L = $("list");
+    L.innerHTML = "";
+    BOOK.forEach((a, k) => {
+      const [fee] = CITY[a.city];
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "addr";
+      b.setAttribute("aria-pressed", String(k === sel));
+      b.innerHTML = `<span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[a.kind]}</svg></span><span class="tx"><b>${esc(a.label)}</b><span class="l">${esc(`${a.street}, ${a.area}, ${a.city}`)}</span></span><span class="fee">${fmt(fee)}</span>`;
+      b.setAttribute("aria-label", `${a.label}: ${a.street}, ${a.area}, ${a.city}. Delivery ${fmt(fee)}`);
+      b.addEventListener("click", () => run(() => choose(k)));
+      L.appendChild(b);
+    });
+    if (BOOK.length < 4) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "addr new";
+      b.id = "addNew";
+      b.innerHTML = `<span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON.Plus}</svg></span><span class="tx"><b>Add a new address</b><span class="l">It gets its own house on the street</span></span>`;
+      b.addEventListener("click", () => run(openForm));
+      L.appendChild(b);
+    }
+  }
+
+  // ---------- Street helpers ----------
+  const SVG = $("svg");
+  function setScoot(x, dir, lean) { $("scoot").setAttribute("transform", `translate(${x.toFixed(1)} 0)`); $("scootBody").setAttribute("transform", `translate(0 121) scale(${(dir * 1.3).toFixed(2)} 1.3) rotate(${lean.toFixed(2)}) translate(0 -121)`); }
+  let dir = 1, spin = 0;
+  // Ride to x: lean back on the start, wheels turn with the distance, lean forward and settle on the stop
+  async function ride(x) {
+    const from = scootX, d = x - from;
+    if (Math.abs(d) < 1) return;
+    dir = d > 0 ? 1 : -1;
+    await tween(160, (t) => setScoot(from, dir, -6 * t), E.out);
+    const ms = 380 + Math.abs(d) * 3.2;
+    await tween(ms, (t) => {
+      scootX = from + d * t;
+      spin = (scootX - from) * dir * 12;
+      $("w1").setAttribute("transform", `translate(-9 121) rotate(${spin.toFixed(0)})`);
+      $("w2").setAttribute("transform", `translate(12 121) rotate(${spin.toFixed(0)})`);
+      setScoot(scootX, dir, -6 + 6 * Math.min(1, t * 3));
+    }, E.inOut);
+    scootX = x;
+    await tween(420, (t) => setScoot(x, dir, 5 * Math.sin(t * Math.PI) * (1 - t)), E.out);
+  }
+  async function dropPin(k) {
+    const pin = $("pin"), o = +(pin.style.opacity || 1);
+    await tween(140, (t) => { pin.style.opacity = String(o * (1 - t)); }, E.in);
+    const x = DOOR_X[k], y = PIN_Y[k];
+    await tween(520, (t) => { pin.setAttribute("transform", `translate(${x} ${(y - 34 * (1 - t)).toFixed(1)})`); pin.style.opacity = Math.min(1, t * 3); }, E.back);
+  }
+  function light(k) {
+    for (let i = 0; i < 4; i++) { const h = $("h" + i); if (h) h.classList.toggle("lit", i === k); }
+    const door = $("h" + k).querySelector(".door");
+    play(door, [{ transform: "scaleX(1)" }, { transform: "scaleX(.15)", offset: .3 }, { transform: "scaleX(.15)", offset: .7 }, { transform: "scaleX(1)" }], { duration: 1100, easing: "ease-in-out" });
+  }
+  function svgPoint(x, y) { const r = SVG.getBoundingClientRect(); return [r.left + x / 320 * r.width, r.top + y / 146 * r.height]; }
+
+  // Footer and header follow the chosen address
+  let shownFee = 150;
+  function refreshFoot() {
+    const a = BOOK[sel], [fee, eta] = CITY[a.city], from = shownFee;
+    shownFee = fee;
+    $("feeL").textContent = `Delivery · ${a.city}`;
+    $("eta").textContent = eta;
+    tween(420, (t) => { const f = from + (fee - from) * t; $("fee").textContent = fmt(f); if (!$("go").classList.contains("ok")) $("goTxt").textContent = `Deliver here · ${fmt(SUB + f)}`; });
+  }
+
+  // ---------- Choose a saved address ----------
+  async function choose(k) {
+    if (delivering) return;
+    if (k === sel) { await play($("pin"), [{ opacity: 1 }, { opacity: .4 }, { opacity: 1 }], { duration: 300 }); note(`${BOOK[k].label} is already chosen.`); return; }
+    sel = k;
+    [...$("list").querySelectorAll(".addr:not(.new)")].forEach((b, i) => b.setAttribute("aria-pressed", String(i === k)));
+    refreshFoot();
+    note(`Riding to ${BOOK[k].label}…`);
+    await Promise.all([dropPin(k), ride(DOOR_X[k])]);
+    light(k);
+    const a = BOOK[k], [fee, eta] = CITY[a.city];
+    note(`${a.label}: ${a.street}, ${a.area}, ${a.city}. ${eta}, delivery ${fmt(fee)}.`);
+  }
+
+  // ---------- The form ----------
+  const F = { name: $("fName"), phone: $("fPhone"), street: $("fStreet"), area: $("fArea"), city: $("fCity") };
+  Object.keys(CITY).forEach((c) => F.city.insertAdjacentHTML("beforeend", `<option>${c}</option>`));
+  let kind = "Home";
+  [...$("chips").children].forEach((c) => c.addEventListener("click", () => { kind = c.textContent; [...$("chips").children].forEach((x) => x.setAttribute("aria-pressed", String(x === c))); }));
+  // Mobile numbers: digits only, a space after the 4-digit network code
+  F.phone.addEventListener("input", () => { const d = F.phone.value.replace(/\D/g, "").slice(0, 11); F.phone.value = d.length > 4 ? d.slice(0, 4) + " " + d.slice(4) : d; });
+  const RULES = {
+    name: [(v) => v.trim().length >= 3, "Enter the full name"],
+    phone: [(v) => /^03\d{2} \d{7}$/.test(v), "Use 03xx xxxxxxx"],
+    street: [(v) => v.trim().length >= 6, "Add house and street"],
+    area: [(v) => v.trim().length >= 3, "Add the area"],
+    city: [(v) => !!v, "Pick a city"],
+  };
+  const ERR = { name: "eName", phone: "ePhone", street: "eStreet", area: "eArea", city: "eCity" };
+  function check(k) { const ok = RULES[k][0](F[k].value); F[k].setAttribute("aria-invalid", String(!ok)); $(ERR[k]).textContent = ok ? "" : RULES[k][1]; return ok; }
+  Object.keys(F).forEach((k) => F[k].addEventListener("blur", () => { if (F[k].value) check(k); }));
+  let editing = false;
+  async function openForm() {
+    if (delivering) return;
+    editing = BOOK.length > 3;
+    const a = editing ? BOOK[3] : null;
+    $("formTtl").textContent = editing ? "Edit address" : "New address";
+    F.name.value = a ? a.name : ""; F.phone.value = a ? a.phone : ""; F.street.value = a ? a.street : ""; F.area.value = a ? a.area : ""; F.city.value = a ? a.city : "";
+    Object.keys(F).forEach((k) => { F[k].removeAttribute("aria-invalid"); $(ERR[k]).textContent = ""; });
+    await play($("list"), [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(-24px)" }], { duration: 200, easing: "ease-in" });
+    $("list").hidden = true; $("foot").hidden = true; $("form").hidden = false;
+    play($("form"), [{ opacity: 0, transform: "translateX(24px)" }, { opacity: 1, transform: "none" }], { duration: 320, easing: "cubic-bezier(.2,.9,.3,1.1)" });
+    play($("plot"), [{ opacity: 1 }, { opacity: .3 }, { opacity: 1 }], { duration: 700, iterations: 2 });
+    if (!demo.on) F.name.focus({ preventScroll: true }); // the auto-demo never steals focus from the page around it
+    note("Fill in the new address. It gets the empty plot on the street.");
+  }
+  async function closeForm() {
+    await play($("form"), [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(24px)" }], { duration: 180, easing: "ease-in" });
+    $("form").hidden = true; $("list").hidden = false; $("foot").hidden = false;
+    play($("list"), [{ opacity: 0, transform: "translateX(-24px)" }, { opacity: 1, transform: "none" }], { duration: 320, easing: "cubic-bezier(.2,.9,.3,1.1)" });
+  }
+  $("cancel").addEventListener("click", () => run(async () => { await closeForm(); note("No new address saved."); }));
+  $("form").addEventListener("submit", (e) => { e.preventDefault(); run(saveForm); });
+
+  async function saveForm() {
+    const bad = Object.keys(F).filter((k) => !check(k));
+    if (bad.length) {
+      play($("form"), [{ transform: "translateX(0)" }, { transform: "translateX(-8px)" }, { transform: "translateX(6px)" }, { transform: "translateX(-3px)" }, { transform: "translateX(0)" }], { duration: 380 });
+      F[bad[0]].focus({ preventScroll: true });
+      note(`Please fix ${bad.length} field${bad.length > 1 ? "s" : ""}.`);
+      return;
+    }
+    const label = kind === "Other" ? F.area.value.trim().split(/[ ,]/)[0] || "Other" : kind === "Work" ? "Work" : kind;
+    const entry = { label, kind, name: F.name.value.trim(), phone: F.phone.value, street: F.street.value.trim(), area: F.area.value.trim(), city: F.city.value };
+    if (editing) BOOK[3] = entry; else BOOK.push(entry);
+    await closeForm();
+    sel = 3;
+    renderList();
+    refreshFoot();
+    note("Building your new house…");
+    await Promise.all([build(), dropPin(3), ride(DOOR_X[3])]);
+    light(3);
+    note(`Saved ${entry.label}: ${entry.street}, ${entry.area}, ${entry.city}. ${CITY[entry.city][1]}, delivery ${fmt(CITY[entry.city][0])}.`);
+  }
+  // The new house: bricks stack row by row, the roof drops in with a bounce, the window lights up
+  async function build() {
+    const h = $("h3"), bricks = [...h.querySelectorAll(".brick")], roof = h.querySelector(".roof");
+    play($("plot"), [{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: "forwards" });
+    $("plot").setAttribute("opacity", "0");
+    h.setAttribute("opacity", "1");
+    bricks.forEach((b) => (b.style.transform = "scaleY(0)"));
+    roof.style.transform = "translateY(-50px)";
+    for (const b of bricks.reverse()) { await tween(170, (t) => (b.style.transform = `scaleY(${t})`), E.back); }
+    await tween(460, (t) => (roof.style.transform = `translateY(${(-50 * (1 - t)).toFixed(1)}px)`), E.back);
+    const [x, y] = svgPoint(278, 70);
+    burst(x, y, ["#f2cc8f", "#c0703e", "#ffd27a", "#ffffff"], 26, 1.4);
+  }
+
+  // ---------- Deliver here: ride, drop the parcel on the step, tick the pin ----------
+  async function deliver() {
+    const btn = $("go");
+    if (delivering) return;
+    delivering = true;
+    const k = sel, a = BOOK[k], [fee, eta] = CITY[a.city];
+    play(btn, [{ transform: "scale(1)" }, { transform: "scale(.96)" }, { transform: "scale(1)" }], { duration: 300 });
+    $("goTxt").textContent = "Sending the rider…";
+    await ride(DOOR_X[k] - 16);
+    const p = $("parcel"), x0 = scootX - 10 * dir, x1 = DOOR_X[k], y0 = 100, y1 = 104;
+    p.setAttribute("opacity", "1");
+    await tween(520, (t) => { const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t - 22 * Math.sin(t * Math.PI); p.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${(t * 180).toFixed(0)})`); }, E.inOut);
+    p.setAttribute("transform", `translate(${x1} ${y1})`);
+    light(k);
+    $("pinHead").setAttribute("fill", "#18a058");
+    $("pinDot").setAttribute("opacity", "0");
+    $("pinTick").setAttribute("opacity", "1");
+    play($("pin"), [{ transform: `translate(${DOOR_X[k]}px, ${PIN_Y[k]}px) scale(1)` }, { transform: `translate(${DOOR_X[k]}px, ${PIN_Y[k] - 6}px) scale(1.25)` }, { transform: `translate(${DOOR_X[k]}px, ${PIN_Y[k]}px) scale(1)` }], { duration: 520, easing: "ease-out" });
+    const [sx, sy] = svgPoint(DOOR_X[k], PIN_Y[k] + 10);
+    burst(sx, sy, ["#18a058", "#ffd27a", "#ef6f3c", "#ffffff"], 40, 1.8);
+    btn.classList.add("ok");
+    $("goTxt").textContent = `Delivering to ${a.label}`;
+    note(`Delivery set for ${a.name} at ${a.street}, ${a.area}, ${a.city}. ${eta}. Total ${fmt(SUB + fee)}.`);
+    await wait(2000);
+    // reset
+    await play(p, [{ opacity: 1 }, { opacity: 0 }], { duration: 300 });
+    p.setAttribute("opacity", "0");
+    $("pinHead").setAttribute("fill", "var(--accent)");
+    $("pinDot").setAttribute("opacity", "1");
+    $("pinTick").setAttribute("opacity", "0");
+    btn.classList.remove("ok");
+    delivering = false;
+    await ride(DOOR_X[k]);
+    refreshFoot();
+  }
+  $("go").addEventListener("click", () => run(deliver));
+
+  // ---------- Particles ----------
+  const fx = $("fx"), ctx = fx.getContext("2d");
+  let parts = [], fxOn = false;
+  function sizeFx() { const r = devicePixelRatio || 1; fx.width = innerWidth * r; fx.height = innerHeight * r; ctx.setTransform(r, 0, 0, r, 0, 0); }
+  sizeFx();
+  addEventListener("resize", sizeFx);
+  function burst(x, y, colors, n, power) {
+    if (calm()) return;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, s = (1.2 + Math.random() * 2.8) * (power || 1);
+      parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 2, r: 1.5 + Math.random() * 2.2, c: colors[i % colors.length], life: 1, sq: i % 2 === 0, rot: Math.random() * 6, vr: (Math.random() - .5) * .3 });
+    }
+    if (!fxOn) { fxOn = true; requestAnimationFrame(drawFx); }
+  }
+  function drawFx() {
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    parts = parts.filter((p) => p.life > 0);
+    for (const p of parts) {
+      p.x += p.vx; p.y += p.vy; p.vy += .14; p.vx *= .985; p.life -= .022; p.rot += p.vr;
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.c;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      if (p.sq) ctx.fillRect(-p.r * 1.3, -p.r * .5, p.r * 2.6, p.r); else { ctx.beginPath(); ctx.arc(0, 0, p.r, 0, 7); ctx.fill(); }
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    if (parts.length) requestAnimationFrame(drawFx); else { fxOn = false; ctx.clearRect(0, 0, innerWidth, innerHeight); }
+  }
+
+  // ---------- Auto-demo: rides between houses, fills in a new address and builds it ----------
+  const demo = { on: true, t: 0 };
+  function stopDemo() { if (demo.on) { demo.on = false; clearTimeout(demo.t); } }
+  addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  async function type(el, text) {
+    for (const ch of text) { if (!demo.on) return; el.value += ch; el.dispatchEvent(new Event("input")); await wait(45); }
+  }
+  async function demoLoop() {
+    const steps = [
+      () => run(() => choose(1)), 900,
+      () => run(() => choose(2)), 1000,
+      () => run(openForm), 500,
+      async () => { await type(F.name, "Sara Malik"); await wait(150); await type(F.phone, "03214567890"); await wait(150); await type(F.street, "Flat 5, Block C"); await wait(150); await type(F.area, "Bahria Town"); if (demo.on) { F.city.value = "Rawalpindi"; F.city.dispatchEvent(new Event("change")); } }, 500,
+      () => run(saveForm), 1200,
+      () => run(deliver), 600,
+      async () => { // tidy up for the next loop: the demo house is taken down again
+        BOOK.length = 3;
+        play($("h3"), [{ opacity: 1 }, { opacity: 0 }], { duration: 400 }).then(() => { $("h3").setAttribute("opacity", "0"); $("plot").setAttribute("opacity", "1"); });
+        $("plot").getAnimations().forEach((x) => x.cancel());
+        sel = -1;
+        renderList();
+        await run(() => choose(0));
+      }, 1400,
+    ];
+    for (let i = 0; i < steps.length; i += 2) {
+      if (!demo.on) return;
+      await steps[i]();
+      if (!demo.on) return;
+      await wait(steps[i + 1]);
+    }
+    if (demo.on) demo.t = setTimeout(demoLoop, 400);
+  }
+
+  // ---------- Start ----------
+  renderList();
+  light(0);
+  setScoot(-30, 1, 0);
+  scootX = -30;
+  $("pin").style.opacity = 0;
+  setTimeout(() => { Promise.all([ride(46), dropPin(0)]); }, 350);
+  demo.t = setTimeout(demoLoop, 2200);
+</script>
+</body>
+</html>
