@@ -1,0 +1,494 @@
+<!doctype html>
+<!-- Chill & Craft · Ask Price · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask Price · PKR price field with live checks</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: banknote cream with emerald and gold (light), deep forest (dark) ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #ede7d6;
+    --bg2: #f8f4e8;
+    --card: #fffdf6;
+    --ink: #13261d;
+    --muted: #677566;
+    --line: #e6dfcb;
+    --soft: #f5f0e1;
+    --green: #127a52;
+    --green2: #1fa874;
+    --gold: #c7932a;
+    --amber: #e08414;
+    --red: #d23f3f;
+    --shadow: rgba(60, 50, 20, .25);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #06110c;
+    --bg2: #0c1d16;
+    --card: #0d1c15;
+    --ink: #e6f3ea;
+    --muted: #8fa797;
+    --line: #1f3529;
+    --soft: #13271d;
+    --green: #3fd395;
+    --green2: #79e7b8;
+    --gold: #f0c25a;
+    --amber: #ffa63d;
+    --red: #ff6b63;
+    --shadow: rgba(0, 0, 0, .7);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: var(--ff); color: var(--ink); background: var(--bg); }
+  .stage {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 14px;
+    overflow: hidden;
+    background:
+      repeating-radial-gradient(circle at 50% 120%, transparent 0 14px, color-mix(in srgb, var(--green) 5%, transparent) 14px 15px),
+      radial-gradient(80% 70% at 50% 35%, var(--bg2), var(--bg));
+  }
+  .card {
+    position: relative;
+    width: min(100%, 410px);
+    padding: 16px 18px 18px;
+    border-radius: 26px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 40px 80px -48px var(--shadow), 0 10px 24px -16px var(--shadow);
+    animation: rise .8s cubic-bezier(.22, 1.3, .36, 1) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(20px) scale(.97); } }
+  .card.thump { animation: thump .45s ease; }
+  @keyframes thump { 30% { transform: scale(.985) translateY(2px); } }
+
+  /* ---------- Item header ---------- */
+  .item { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 11px; align-items: center; }
+  .thumb { width: 46px; height: 46px; border-radius: 14px; background: linear-gradient(150deg, #f2d9a6, #d9a85c); display: grid; place-items: center; }
+  .thumb svg { width: 32px; height: 32px; }
+  .item h1 { margin: 0; font-size: 16.5px; letter-spacing: -.01em; }
+  .item p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .item p b { color: var(--green); }
+
+  /* ---------- Gauge ---------- */
+  .gauge { display: block; width: min(100%, 300px); margin: 6px auto 0; overflow: visible; }
+  .zone { fill: none; stroke-width: 14; }
+  .zone.low { stroke: color-mix(in srgb, var(--amber) 55%, var(--soft)); }
+  .zone.fair { stroke: var(--green2); stroke-width: 18; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--green2) 60%, transparent)); }
+  .zone.high { stroke: url(#hot); }
+  .h1 { stop-color: var(--amber); }
+  .h2 { stop-color: var(--red); }
+  .tickl { stroke: var(--muted); stroke-width: 1.5; opacity: .5; }
+  .tlbl { fill: var(--muted); font: 700 10px var(--mono); text-anchor: middle; }
+  .zlbl { font: 800 9.5px var(--ff); letter-spacing: .12em; text-anchor: middle; }
+  .needle { stroke: var(--ink); stroke-width: 3.5; stroke-linecap: round; }
+  .hub { fill: var(--ink); }
+  .hub2 { fill: var(--gold); }
+  .median { fill: var(--green); }
+  .glow { fill: none; stroke: var(--gold); stroke-width: 3; stroke-linecap: round; opacity: 0; }
+  .gauge.over .glow { opacity: .9; animation: flash .4s steps(2) infinite; }
+  @keyframes flash { 50% { opacity: .2; } }
+
+  /* ---------- The price field ---------- */
+  .fieldwrap { position: relative; margin-top: 12px; }
+  .lbl { display: flex; justify-content: space-between; margin: 0 2px 6px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .field {
+    position: relative; display: flex; align-items: center; height: 60px; padding: 0 12px 0 8px; border-radius: 18px;
+    background: var(--soft); border: 2px solid var(--line); transition: border-color .25s, box-shadow .25s;
+    background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--gold) 6%, transparent) 6px 7px);
+  }
+  .field:focus-within { border-color: var(--green); box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 18%, transparent); }
+  .field.warn { border-color: var(--amber); }
+  .field.err { border-color: var(--red); box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 16%, transparent); }
+  .field.shake { animation: shake .42s ease; }
+  @keyframes shake { 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+  .cur { flex: none; padding: 8px 10px; margin-right: 8px; border-radius: 12px; background: var(--green); color: var(--card); font: 900 13px/1 var(--ff); letter-spacing: .06em; }
+  .field input {
+    flex: 1; width: 0; min-width: 0; height: 100%; border: 0; outline: none; background: none; color: var(--ink);
+    font: 800 28px/1 var(--ff); letter-spacing: -.01em; font-variant-numeric: tabular-nums;
+  }
+  .field input::placeholder { color: color-mix(in srgb, var(--muted) 60%, transparent); }
+  .step { display: grid; gap: 3px; }
+  .step button { display: grid; place-items: center; width: 28px; height: 22px; border: 0; border-radius: 7px; background: var(--card); color: var(--muted); cursor: pointer; }
+  .step button:hover { color: var(--green); }
+  .step svg { width: 12px; height: 12px; }
+  .reject { position: absolute; top: 14px; font: 900 24px var(--ff); color: var(--red); pointer-events: none; animation: reject .9s cubic-bezier(.3, .6, .6, 1) forwards; }
+  @keyframes reject { 0% { transform: translateY(0) scale(1); opacity: 1; } 30% { transform: translateY(-30px) rotate(-20deg) scale(1.2); } 100% { transform: translate(18px, 46px) rotate(140deg) scale(.6); opacity: 0; } }
+  .words { min-height: 18px; margin: 8px 2px 0; font-size: 13px; font-weight: 600; color: var(--ink); }
+  .words.empty { color: var(--muted); font-weight: 500; }
+  .fee { margin: 2px 2px 0; font-size: 12px; color: var(--muted); }
+  .fee b { color: var(--green); font-variant-numeric: tabular-nums; }
+
+  /* ---------- Verdict + rules ---------- */
+  .verdict {
+    display: flex; align-items: center; gap: 9px; margin-top: 10px; padding: 9px 11px; border-radius: 14px;
+    background: color-mix(in srgb, var(--tone, var(--muted)) 12%, transparent); color: var(--tone, var(--muted)); font-size: 12.5px; font-weight: 700;
+    transition: background .3s, color .3s;
+  }
+  .verdict svg { flex: none; width: 18px; height: 18px; }
+  .verdict.pop { animation: vpop .4s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes vpop { from { transform: scale(.96); } }
+  .rules { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin: 10px 0 0; padding: 0; list-style: none; }
+  .rules li { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+  .rules i { position: relative; flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); transition: background .3s, border-color .3s, transform .4s cubic-bezier(.34, 1.8, .64, 1); }
+  .rules i::after { content: ""; position: absolute; left: 4.5px; top: 1.5px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg) scale(0); transition: transform .3s .05s cubic-bezier(.34, 1.8, .64, 1); }
+  .rules li.ok { color: var(--ink); }
+  .rules li.ok i { background: var(--green); border-color: var(--green); transform: scale(1.1); }
+  .rules li.ok i::after { transform: rotate(45deg) scale(1); }
+  .rules li.no i { border-color: var(--red); }
+  .rules li.soft i { border-color: var(--amber); background: color-mix(in srgb, var(--amber) 20%, transparent); }
+
+  .actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .msg { flex: 1; min-width: 0; margin: 0; font-size: 12.5px; font-weight: 600; color: var(--red); }
+  .msg.info { color: var(--amber); }
+  .set {
+    height: 48px; padding: 0 20px; border: 0; border-radius: 15px; cursor: pointer; white-space: nowrap;
+    background: linear-gradient(180deg, var(--green2), var(--green)); color: #fff; font: 800 14.5px/1 var(--ff);
+    box-shadow: 0 12px 20px -12px var(--green), inset 0 1px 0 rgba(255, 255, 255, .35);
+    transition: transform .25s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  [data-theme="dark"] .set { color: #04140d; }
+  .set:hover { transform: translateY(-2px); }
+  .set:active { transform: scale(.96); }
+
+  /* ---------- Stamp ---------- */
+  .stamp {
+    position: absolute; right: 22px; top: 150px; width: 120px; height: 120px; pointer-events: none; opacity: 0;
+    transform: scale(2.6) rotate(-30deg); color: var(--green);
+  }
+  .stamp.on { animation: stamp .55s cubic-bezier(.5, 0, .7, 1.3) forwards; }
+  @keyframes stamp { 70% { opacity: 1; transform: scale(.92) rotate(-12deg); } 100% { opacity: .92; transform: scale(1) rotate(-12deg); } }
+  .stamp text { fill: currentColor; font: 900 15px var(--ff); letter-spacing: .14em; text-anchor: middle; }
+  .stamp .ring { fill: none; stroke: currentColor; stroke-width: 4; }
+  .stamp .ring2 { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-dasharray: 3 3; }
+  .ink { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--green); pointer-events: none; animation: ink .7s ease-out forwards; }
+  @keyframes ink { from { transform: translate(0, 0) scale(1.3); opacity: .9; } to { transform: translate(var(--x), var(--y)) scale(.3); opacity: 0; } }
+
+  button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 360px) { .rules { grid-template-columns: 1fr; } .field input { font-size: 24px; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" id="card" aria-labelledby="title">
+    <div class="item">
+      <span class="thumb" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="#5a3712" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h24M6 12v14M26 12v14M6 18h20M14 6h10v6H14z"/></svg></span>
+      <div>
+        <h1 id="title">Wooden study table</h1>
+        <p>Used one year · Lahore · similar tables sell for <b>PKR 12,000 to 18,000</b></p>
+      </div>
+    </div>
+
+    <svg class="gauge" id="gauge" viewBox="0 0 300 168" aria-hidden="true">
+      <defs><linearGradient id="hot" x1="0" x2="1"><stop class="h1" offset="0"/><stop class="h2" offset="1"/></linearGradient></defs>
+      <g id="zones"></g>
+      <g id="ticks"></g>
+      <path class="glow" id="glow" d=""/>
+      <line class="needle" id="needle" x1="150" y1="150" x2="40" y2="150"/>
+      <circle class="hub" cx="150" cy="150" r="10"/>
+      <circle class="hub2" cx="150" cy="150" r="4"/>
+    </svg>
+
+    <div class="fieldwrap" id="fieldwrap">
+      <label class="lbl" for="price"><span>Your asking price</span><span id="hintKey">Tip: type 15k for 15,000</span></label>
+      <div class="field" id="field">
+        <span class="cur" aria-hidden="true">PKR</span>
+        <input id="price" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="0" aria-describedby="words verdictText msg" aria-invalid="false">
+        <div class="step">
+          <button type="button" id="up" aria-label="Add 500 rupees"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M2.5 7.5L6 4l3.5 3.5"/></svg></button>
+          <button type="button" id="down" aria-label="Take away 500 rupees"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M2.5 4.5L6 8l3.5-3.5"/></svg></button>
+        </div>
+      </div>
+      <p class="words empty" id="words">Type a price in rupees</p>
+      <p class="fee" id="fee">After the 2.5% listing fee you receive <b id="net">PKR 0</b></p>
+    </div>
+
+    <div class="verdict" id="verdict"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="vIcon" d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9.5"/></svg><span id="verdictText" aria-live="polite">Waiting for a price</span></div>
+
+    <ul class="rules" id="rules" aria-label="Price checks">
+      <li data-r="num"><i aria-hidden="true"></i>A price is entered</li>
+      <li data-r="min"><i aria-hidden="true"></i>PKR 500 or more</li>
+      <li data-r="max"><i aria-hidden="true"></i>PKR 2,000,000 or less</li>
+      <li data-r="band"><i aria-hidden="true"></i>Near similar tables</li>
+    </ul>
+
+    <div class="actions">
+      <p class="msg" id="msg" aria-live="assertive"></p>
+      <button class="set" id="set" type="button">Set price</button>
+    </div>
+
+    <svg class="stamp" id="stamp" viewBox="0 0 120 120" aria-hidden="true">
+      <circle class="ring" cx="60" cy="60" r="52"/><circle class="ring2" cx="60" cy="60" r="43"/>
+      <text x="60" y="56">PRICE</text><text x="60" y="76">SET</text>
+    </svg>
+    <p class="sr" id="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  var MIN = 500, MAX = 2000000, LOW = 12000, HIGH = 18000, SCALE = 30000, FEE = .025;
+  var input = $("#price"), field = $("#field"), words = $("#words"), net = $("#net"), verdict = $("#verdict"), vText = $("#verdictText");
+  var vIcon = $("#vIcon"), msg = $("#msg"), setBtn = $("#set"), stamp = $("#stamp"), card = $("#card"), gauge = $("#gauge"), status = $("#status");
+  var value = 0, confirmSoft = false, locked = false;
+
+  // ---------- Numbers in words (international grouping) ----------
+  var ONES = "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split(" ");
+  var TENS = " ten twenty thirty forty fifty sixty seventy eighty ninety".split(" ");
+  function small(n) {
+    var s = [];
+    if (n >= 100) { s.push(ONES[Math.floor(n / 100)] + " hundred"); n %= 100; }
+    if (n >= 20) s.push(TENS[Math.floor(n / 10)] + (n % 10 ? "-" + ONES[n % 10] : ""));
+    else if (n > 0) s.push(ONES[n]);
+    return s.join(" ");
+  }
+  function inWords(n) {
+    if (!n) return "zero";
+    var out = [];
+    [[1e9, "billion"], [1e6, "million"], [1e3, "thousand"], [1, ""]].forEach(function (u) {
+      var k = Math.floor(n / u[0]);
+      if (k) { out.push(small(k) + (u[1] ? " " + u[1] : "")); n %= u[0]; }
+    });
+    return out.join(" ");
+  }
+  var fmt = function (n) { return n.toLocaleString("en-US"); };
+
+  // ---------- Gauge: zones, ticks and a needle on a spring ----------
+  var CX = 150, CY = 150, R = 118;
+  function ang(v) { return Math.PI * (1 - Math.min(v, SCALE) / SCALE); }
+  function pt(v, r) { var a = ang(v); return (CX + Math.cos(a) * r).toFixed(2) + " " + (CY - Math.sin(a) * r).toFixed(2); }
+  function arc(v1, v2, r) { return "M" + pt(v1, r) + " A" + r + " " + r + " 0 0 1 " + pt(v2, r); }
+  $("#zones").innerHTML =
+    '<path class="zone low" d="' + arc(0, LOW - 300, R) + '"/>' +
+    '<path class="zone high" d="' + arc(HIGH + 300, SCALE, R) + '"/>' +
+    '<path class="zone fair" d="' + arc(LOW, HIGH, R) + '"/>' +
+    '<text class="zlbl" x="' + pt(6200, R - 44).split(" ")[0] + '" y="' + pt(6200, R - 44).split(" ")[1] + '" style="fill:var(--amber)">LOW</text>' +
+    '<text class="zlbl" x="150" y="' + (CY - R + 30) + '" style="fill:var(--green)">FAIR</text>' +
+    '<text class="zlbl" x="' + pt(23800, R - 44).split(" ")[0] + '" y="' + pt(23800, R - 44).split(" ")[1] + '" style="fill:var(--red)">HIGH</text>' +
+    '<path class="median" d="M' + pt(15000, R + 12) + " L" + pt(14600, R + 20) + " L" + pt(15400, R + 20) + 'Z"/>';
+  (function () {
+    var t = "";
+    for (var v = 0; v <= SCALE; v += 2500) {
+      var big = v % 10000 === 0;
+      t += '<line class="tickl" x1="' + pt(v, R - 12).split(" ")[0] + '" y1="' + pt(v, R - 12).split(" ")[1] + '" x2="' + pt(v, R - (big ? 20 : 16)).split(" ")[0] + '" y2="' + pt(v, R - (big ? 20 : 16)).split(" ")[1] + '"/>';
+      if (big) { var p = pt(v, R + 4).split(" "); t += '<text class="tlbl" x="' + (+p[0] + (v === 0 ? -10 : v === SCALE ? 10 : 0)) + '" y="' + (v === 0 || v === SCALE ? CY + 14 : +p[1] - 8) + '">' + (v ? v / 1000 + "k" : "0") + "</text>"; }
+    }
+    $("#ticks").innerHTML = t;
+    $("#glow").setAttribute("d", arc(SCALE - 1500, SCALE, R + 9));
+  })();
+  var needle = $("#needle"), cur = 0, vel = 0, last = performance.now(), t0 = performance.now();
+  function frame(now) {
+    var dt = Math.min(3, (now - last) / 16.7);
+    last = now;
+    var over = value > SCALE;
+    var target = Math.min(value, SCALE) + (over && !reduce.matches ? Math.sin(now / 38) * 500 : 0); // pinned and rattling when off the scale
+    target += reduce.matches ? 0 : Math.sin((now - t0) / 900) * 60; // a tiny idle tremble, like a real gauge
+    if (reduce.matches) { cur = target; vel = 0; }
+    else for (var s = 0; s < dt; s++) { vel = vel * .82 + (target - cur) * .06; cur += vel; }
+    var a = ang(Math.max(0, cur));
+    needle.setAttribute("x2", (CX + Math.cos(a) * (R - 18)).toFixed(2));
+    needle.setAttribute("y2", (CY - Math.sin(a) * (R - 18)).toFixed(2));
+    gauge.classList.toggle("over", over);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Field: digits only, live commas, k for thousand, paste clean-up ----------
+  var meas = document.createElement("canvas").getContext("2d");
+  function rejectGlyph(ch) {
+    var cs = getComputedStyle(input);
+    meas.font = cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
+    var x = input.offsetLeft + meas.measureText(input.value.slice(0, input.selectionStart || input.value.length)).width;
+    var g = document.createElement("span");
+    g.className = "reject"; g.textContent = ch;
+    g.style.left = Math.min(field.clientWidth - 30, x) + "px";
+    field.appendChild(g);
+    setTimeout(g.remove.bind(g), 950);
+    field.classList.remove("shake"); void field.offsetWidth; field.classList.add("shake");
+    $("#hintKey").textContent = "Numbers only, “" + ch + "” was left out";
+    status.textContent = "Only numbers can go in the price.";
+  }
+  function setDigits(digits, caretDigits) {
+    digits = digits.replace(/^0+(?=\d)/, "").slice(0, 10);
+    var n = digits ? +digits : 0, text = digits ? fmt(n) : "";
+    input.value = text;
+    // put the caret back after the same number of digits
+    if (caretDigits != null && document.activeElement === input) {
+      var pos = 0, seen = 0;
+      while (pos < text.length && seen < caretDigits) { if (/\d/.test(text[pos])) seen++; pos++; }
+      input.setSelectionRange(pos, pos);
+    }
+    value = digits ? n : 0;
+    if (confirmSoft) { confirmSoft = false; setBtn.textContent = "Set price"; }
+    unlock();
+    judge(!!digits);
+  }
+  input.addEventListener("beforeinput", function (e) {
+    if (e.inputType !== "insertText" || e.data == null) return;
+    if (/^[kK]$/.test(e.data)) { // k means thousand
+      e.preventDefault();
+      if (value) { setDigits(String(value * 1000), 99); $("#hintKey").textContent = "k turned it into thousands"; }
+      return;
+    }
+    if (/[^\d,\s]/.test(e.data)) { e.preventDefault(); rejectGlyph(e.data.replace(/[\d,\s]/g, "").charAt(0)); }
+  });
+  input.addEventListener("input", function () {
+    var pos = input.selectionStart || 0, before = input.value.slice(0, pos).replace(/\D/g, "").length;
+    setDigits(input.value.replace(/\D/g, ""), before);
+  });
+  input.addEventListener("paste", function (e) {
+    var t = (e.clipboardData || window.clipboardData).getData("text") || "";
+    e.preventDefault();
+    var m = /(\d[\d,\s]*)(\.\d+)?\s*([kK])?/.exec(t);
+    if (!m) { rejectGlyph(t.trim().charAt(0) || "?"); return; }
+    var n = Math.round(parseFloat(m[1].replace(/[,\s]/g, "") + (m[2] || "")) * (m[3] ? 1000 : 1)); // "1.5k" -> 1500
+    setDigits(String(n), 99);
+    $("#hintKey").textContent = t.trim() !== String(n) ? "Cleaned up the pasted price" : "Tip: type 15k for 15,000";
+  });
+  function nudge(step) { setDigits(String(Math.max(0, value + step)), 99); }
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); nudge((e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 100 : 500)); }
+    else if (e.key === "Enter") { e.preventDefault(); submit(setBtn); }
+  });
+  $("#up").addEventListener("click", function () { nudge(500); });
+  $("#down").addEventListener("click", function () { nudge(-500); });
+
+  // ---------- Judge: words, fee, verdict, rules ----------
+  var ICON = { ok: "M7.5 12.5l3 3 6-6.5", warn: "M12 7.5v6M12 16.5v.5", err: "M8.5 8.5l7 7M15.5 8.5l-7 7", idle: "M12 8v5M12 16.5v.5" };
+  var lastTone = "";
+  function rule(r, state) { var li = document.querySelector('[data-r="' + r + '"]'); li.className = state || ""; }
+  function judge(has) {
+    var v = value;
+    words.textContent = has ? inWords(v).replace(/^./, function (c) { return c.toUpperCase(); }) + (v === 1 ? " rupee" : " rupees") : "Type a price in rupees";
+    words.classList.toggle("empty", !has);
+    net.textContent = "PKR " + fmt(Math.round(v * (1 - FEE)));
+    var tone, text, icon;
+    if (!has) { tone = "var(--muted)"; text = "Waiting for a price"; icon = "idle"; }
+    else if (v < MIN) { tone = "var(--red)"; text = "Too low to list: the minimum is PKR 500"; icon = "err"; }
+    else if (v > MAX) { tone = "var(--red)"; text = "Above PKR 2,000,000: check for an extra zero"; icon = "err"; }
+    else if (v < LOW) { tone = "var(--amber)"; text = "Low: " + Math.round((1 - v / 15000) * 100) + "% under similar tables, it will sell in a day"; icon = "warn"; }
+    else if (v > HIGH) { tone = "var(--amber)"; text = "High: " + Math.round((v / 15000 - 1) * 100) + "% over similar tables, buyers may wait"; icon = "warn"; }
+    else { tone = "var(--green)"; text = "Fair price: tables like this sell in about 4 days"; icon = "ok"; }
+    verdict.style.setProperty("--tone", tone);
+    vText.textContent = text;
+    vIcon.setAttribute("d", ICON[icon]);
+    if (icon !== lastTone) { verdict.classList.remove("pop"); void verdict.offsetWidth; verdict.classList.add("pop"); lastTone = icon; }
+    rule("num", has ? "ok" : "");
+    rule("min", !has ? "" : v >= MIN ? "ok" : "no");
+    rule("max", !has ? "" : v <= MAX ? "ok" : "no");
+    rule("band", !has ? "" : v >= LOW && v <= HIGH ? "ok" : "soft");
+    var hard = has && (v < MIN || v > MAX);
+    field.classList.toggle("err", hard);
+    field.classList.toggle("warn", has && !hard && (v < LOW || v > HIGH));
+    input.setAttribute("aria-invalid", String(hard));
+    msg.textContent = ""; msg.className = "msg";
+  }
+
+  // ---------- Set price: hard errors block, a soft warning asks once, then the stamp ----------
+  function unlock() {
+    if (!locked) return;
+    locked = false;
+    stamp.classList.remove("on");
+    setBtn.textContent = "Set price";
+  }
+  function inkSplash() {
+    if (reduce.matches) return;
+    var r = stamp.getBoundingClientRect(), c = card.getBoundingClientRect(), x = r.left - c.left + r.width / 2, y = r.top - c.top + r.height / 2;
+    for (var i = 0; i < 10; i++) {
+      var d = document.createElement("i"), a = Math.random() * Math.PI * 2, s = 50 + Math.random() * 30;
+      d.className = "ink";
+      d.style.cssText = "left:" + x + "px;top:" + y + "px;--x:" + (Math.cos(a) * s).toFixed(0) + "px;--y:" + (Math.sin(a) * s).toFixed(0) + "px";
+      card.appendChild(d);
+      setTimeout(d.remove.bind(d), 750);
+    }
+  }
+  function submit(btn) {
+    if (locked) { unlock(); input.focus(); input.select(); return; }
+    var v = value, has = input.value !== "";
+    var fail = !has ? "Enter a price to continue" : v < MIN ? "The lowest price you can list is PKR 500" : v > MAX ? "PKR 2,000,000 is the highest price you can list" : "";
+    if (fail) {
+      msg.className = "msg"; msg.textContent = fail;
+      field.classList.remove("shake"); void field.offsetWidth; field.classList.add("shake");
+      field.classList.add("err");
+      return;
+    }
+    if ((v < LOW || v > HIGH) && !confirmSoft) {
+      confirmSoft = true;
+      msg.className = "msg info";
+      msg.textContent = (v < LOW ? "That is under" : "That is over") + " similar tables. Press again to keep it.";
+      btn.textContent = "Keep PKR " + fmt(v);
+      return;
+    }
+    locked = true;
+    confirmSoft = false;
+    msg.textContent = "";
+    btn.textContent = "Edit price";
+    stamp.classList.remove("on"); void stamp.getBoundingClientRect(); stamp.classList.add("on");
+    setTimeout(function () { card.classList.remove("thump"); void card.offsetWidth; card.classList.add("thump"); inkSplash(); }, reduce.matches ? 0 : 380);
+    status.textContent = "Price set: PKR " + fmt(v) + ". You receive PKR " + fmt(Math.round(v * (1 - FEE))) + ".";
+  }
+  setBtn.addEventListener("click", function (e) { var btn = e.currentTarget; submit(btn); });
+
+  // ---------- Start ----------
+  judge(false);
+  requestAnimationFrame(frame);
+
+  // ---------- Auto demo: low, fair with the stamp, a rejected letter, too high, loop ----------
+  var demoOn = true;
+  function stopDemo(e) { if (e.isTrusted) demoOn = false; }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  async function type(s) {
+    for (var i = 0; i < s.length; i++) {
+      await pause(150);
+      if (s[i] === "k") setDigits(String(value * 1000));
+      else if (/\d/.test(s[i])) setDigits(String(value || "") + s[i]);
+      else rejectGlyph(s[i]);
+    }
+  }
+  async function clear() { while (value) { await pause(70); setDigits(String(value).slice(0, -1)); } setDigits(""); }
+  async function demo() {
+    try {
+      await pause(800);
+      while (demoOn) {
+        await type("8500"); await pause(1500);
+        await clear(); await type("15k"); await pause(1000);
+        submit(setBtn); await pause(2300);
+        unlock(); await type("x"); await pause(900);
+        await clear(); await type("250000"); await pause(1900);
+        submit(setBtn); await pause(1600);
+        await clear(); await pause(900);
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,617 @@
+<!doctype html>
+<!-- Chill & Craft · Couchlink · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Couchlink · pair a TV with a code shown on two screens</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: a warm living room, coral and aqua ---------- */
+  :root {
+    color-scheme: light;
+    --wall: #f5eadb;
+    --wall-2: #efdfca;
+    --floor: #d7b48a;
+    --floor-2: #c49a6c;
+    --wood: #a8744a;
+    --wood-2: #8a5c37;
+    --ink: #1e2240;
+    --muted: #6b6f8f;
+    --coral: #ff6b5b;
+    --aqua: #20c9b4;
+    --ok: #18b27c;
+    --bad: #f0465a;
+    --phone: #fdfcff;
+    --field: #f1f2fb;
+    --line: rgba(30, 34, 64, .12);
+    --glow: rgba(255, 196, 120, .55);
+    --shadow: rgba(80, 50, 20, .3);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --wall: #151a33;
+    --wall-2: #1b2140;
+    --floor: #2a2443;
+    --floor-2: #221d38;
+    --wood: #5b4058;
+    --wood-2: #463046;
+    --ink: #eef0ff;
+    --muted: #a7abd0;
+    --phone: #191d3a;
+    --field: #232850;
+    --line: rgba(238, 240, 255, .14);
+    --glow: rgba(255, 170, 90, .28);
+    --shadow: rgba(0, 0, 0, .6);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 20px 16px;
+    overflow-x: hidden;
+    color: var(--ink);
+    background:
+      radial-gradient(ellipse 40% 50% at 14% 30%, var(--glow), transparent 70%),
+      repeating-linear-gradient(90deg, var(--wall) 0 46px, var(--wall-2) 46px 48px);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  button, input { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+
+  /* ---------- Room layout ---------- */
+  .room {
+    position: relative;
+    width: min(100%, 900px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 264px;
+    align-items: end;
+    padding: 10px 8px 14px;
+  }
+  /* The floor starts where the furniture stands. border-image-outset paints it out to the window edges
+     without making the page any wider (outset paint never adds scroll width). */
+  .room::before {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 34px; z-index: -1;
+    border-image: linear-gradient(var(--floor), var(--floor-2)) fill 0 / 0 / 0 100vw 100vh 100vw;
+  }
+
+  /* TV on its cabinet, with a lamp and a plant */
+  .tvset { position: relative; padding: 0 10px; animation: slideIn .8s cubic-bezier(.3, 1.3, .5, 1) both; }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(16px); } }
+  .tv { position: relative; z-index: 1; aspect-ratio: 16 / 10; padding: 9px; border-radius: 16px; background: linear-gradient(160deg, #262a3c, #0b0d16); box-shadow: 0 30px 50px -26px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .12); }
+  .tv::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 6px; height: 3px; margin-left: -3px; border-radius: 2px; background: #ff4d4d; box-shadow: 0 0 6px #ff4d4d; opacity: .7; }
+  .screen {
+    position: relative; height: 100%; overflow: hidden; border-radius: 7px; color: #f3f4ff;
+    background: radial-gradient(circle at 20% 15%, rgba(255, 107, 91, .35), transparent 50%), radial-gradient(circle at 85% 90%, rgba(32, 201, 180, .3), transparent 55%), linear-gradient(160deg, #1d1950, #0c0e2a);
+    background-size: 160% 160%, 160% 160%, 100% 100%;
+    animation: ambient 12s ease-in-out infinite alternate;
+  }
+  @keyframes ambient { to { background-position: 60% 40%, 30% 70%, 0 0; } }
+  .screen::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px); }
+  .screen.crt { animation: crt .56s cubic-bezier(.6, 0, .4, 1), ambient 12s ease-in-out infinite alternate; }
+  @keyframes crt { 0% { transform: scale(1, 1); filter: brightness(1); } 42%, 58% { transform: scale(1, .012); filter: brightness(3); } 100% { transform: scale(1, 1); filter: brightness(1); } }
+  .view { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6% 7%; text-align: center; opacity: 0; visibility: hidden; transition: opacity .35s, visibility 0s .35s; }
+  .screen[data-view="code"] .v-code, .screen[data-view="pair"] .v-pair, .screen[data-view="home"] .v-home { opacity: 1; visibility: visible; transition: opacity .35s, visibility 0s; }
+  .kicker { font-size: clamp(10px, 1.5vw, 12px); letter-spacing: .14em; text-transform: uppercase; color: rgba(243, 244, 255, .6); }
+  .v-code h2 { margin: 4px 0 0; font-size: clamp(15px, 2.6vw, 22px); }
+  .tiles { display: flex; gap: clamp(4px, 1vw, 8px); margin: clamp(8px, 2vw, 16px) 0 clamp(6px, 1.4vw, 10px); perspective: 400px; }
+  .tiles .gap { width: clamp(6px, 1.6vw, 14px); }
+  .tile {
+    width: clamp(30px, 5.6vw, 50px); height: clamp(40px, 7.4vw, 64px); display: grid; place-items: center; border-radius: 10px;
+    font: 800 clamp(20px, 3.8vw, 34px)/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .05)); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16), 0 10px 18px -10px rgba(0, 0, 0, .6);
+    transition: box-shadow .25s, transform .3s cubic-bezier(.34, 1.8, .5, 1);
+  }
+  .tile.lit { box-shadow: inset 0 0 0 2px var(--coral), 0 0 18px -2px rgba(255, 107, 91, .7); transform: translateY(-3px); }
+  .tile.flip { animation: tflip .5s ease; }
+  @keyframes tflip { 50% { transform: rotateX(90deg); } }
+  .hint { font-size: clamp(10.5px, 1.6vw, 13px); color: rgba(243, 244, 255, .72); }
+  .expiry { display: flex; align-items: center; gap: 8px; width: min(78%, 300px); margin-top: clamp(6px, 1.6vw, 12px); font-size: clamp(10px, 1.4vw, 12px); color: rgba(243, 244, 255, .65); }
+  .bar { flex: 1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .14); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--coral), var(--aqua)); transform-origin: left; transition: transform 1s linear; }
+  .tvbtn { margin-left: 4px; padding: 4px 10px; border: 0; border-radius: 999px; cursor: pointer; font-size: clamp(10px, 1.4vw, 12px); font-weight: 700; color: #fff; background: rgba(255, 255, 255, .14); }
+  .tvbtn:hover { background: rgba(255, 255, 255, .24); }
+  .tvbtn:focus-visible { outline: 2px solid var(--aqua); outline-offset: 2px; }
+  .radar { position: relative; width: clamp(60px, 11vw, 92px); height: clamp(60px, 11vw, 92px); margin-bottom: 12px; }
+  .radar i { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--aqua); opacity: 0; animation: ping 1.6s ease-out infinite; }
+  .radar i:nth-child(2) { animation-delay: .53s; }
+  .radar i:nth-child(3) { animation-delay: 1.06s; }
+  .radar b { position: absolute; inset: 32%; border-radius: 50%; background: linear-gradient(135deg, var(--coral), var(--aqua)); box-shadow: 0 0 24px rgba(32, 201, 180, .7); }
+  @keyframes ping { from { transform: scale(.3); opacity: .9; } to { transform: scale(1.2); opacity: 0; } }
+  .v-pair p { margin: 0; font-size: clamp(12px, 2vw, 16px); font-weight: 650; }
+  .v-home { align-items: stretch; justify-content: flex-start; text-align: left; }
+  .hello { display: flex; align-items: center; gap: 10px; }
+  .hello .av { width: clamp(26px, 4.4vw, 38px); height: clamp(26px, 4.4vw, 38px); border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: clamp(11px, 1.8vw, 15px); background: linear-gradient(135deg, var(--coral), var(--aqua)); }
+  .hello b { display: block; font-size: clamp(13px, 2.4vw, 20px); }
+  .hello span { font-size: clamp(10px, 1.4vw, 12px); color: rgba(243, 244, 255, .65); }
+  .row-title { margin: clamp(8px, 2vw, 16px) 0 6px; font-size: clamp(10px, 1.5vw, 12.5px); color: rgba(243, 244, 255, .7); font-weight: 650; }
+  .posters { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(6px, 1.4vw, 12px); flex: 1; min-height: 0; }
+  .poster { position: relative; overflow: hidden; border-radius: 8px; min-height: 0; box-shadow: 0 10px 18px -10px rgba(0, 0, 0, .7); }
+  .poster svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .poster span { position: absolute; left: 7px; right: 7px; bottom: 6px; font-size: clamp(9px, 1.3vw, 11.5px); font-weight: 750; text-shadow: 0 1px 4px rgba(0, 0, 0, .6); }
+  .poster .prog { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--coral); }
+  .screen[data-view="home"] .hello { animation: up .55s cubic-bezier(.3, 1.4, .5, 1) both .15s; }
+  .screen[data-view="home"] .row-title { animation: up .55s cubic-bezier(.3, 1.4, .5, 1) both .25s; }
+  .screen[data-view="home"] .poster { animation: up .6s cubic-bezier(.3, 1.4, .5, 1) both; animation-delay: calc(.32s + var(--i) * .09s); }
+  @keyframes up { from { opacity: 0; transform: translateY(18px) scale(.94); } }
+
+  .cabinet { position: relative; height: 34px; margin: 12px 7% 0; border-radius: 8px; background: linear-gradient(180deg, var(--wood), var(--wood-2)); box-shadow: 0 18px 24px -16px var(--shadow); }
+  .cabinet::before, .cabinet::after { content: ""; position: absolute; top: 8px; width: 28%; height: 18px; border-radius: 4px; background: rgba(0, 0, 0, .12); }
+  .cabinet::before { left: 8%; }
+  .cabinet::after { right: 8%; }
+  .legs { display: flex; justify-content: space-between; margin: 0 10%; }
+  .legs i { width: 6px; height: 12px; border-radius: 0 0 3px 3px; background: var(--wood-2); }
+  .plant { position: absolute; left: 2%; bottom: 46px; width: 54px; height: 80px; z-index: 2; }
+  .plant .leaf { transform-origin: 27px 70px; animation: sway 5s ease-in-out infinite; }
+  .plant .leaf:nth-of-type(2) { animation-delay: -1.6s; animation-duration: 6s; }
+  .plant .leaf:nth-of-type(3) { animation-delay: -3s; animation-duration: 5.5s; }
+  @keyframes sway { 50% { transform: rotate(5deg); } }
+
+  /* ---------- The phone ---------- */
+  .phone {
+    position: relative; z-index: 3; width: 264px; margin: 0 0 -6px -18px;
+    padding: 9px; border-radius: 38px; background: linear-gradient(160deg, #2b2f45, #0e1020);
+    box-shadow: 0 40px 60px -30px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .15);
+    transform: rotate(-3deg); animation: hold 6s ease-in-out infinite, phoneIn .9s cubic-bezier(.3, 1.3, .5, 1);
+  }
+  @keyframes hold { 50% { transform: rotate(-2deg) translateY(-5px); } }
+  @keyframes phoneIn { from { opacity: 0; transform: rotate(4deg) translateY(40px); } }
+  .ps { position: relative; overflow: hidden; border-radius: 30px; padding: 14px 15px 16px; background: var(--phone); min-height: 400px; display: flex; flex-direction: column; }
+  .notch { width: 70px; height: 18px; margin: -6px auto 6px; border-radius: 0 0 12px 12px; background: #0e1020; }
+  .sbar { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; margin: -22px 6px 12px; }
+  .sbar .bat { width: 20px; height: 9px; border-radius: 3px; border: 1.5px solid currentColor; position: relative; }
+  .sbar .bat::after { content: ""; position: absolute; inset: 1.5px 5px 1.5px 1.5px; background: var(--ok); border-radius: 1px; }
+  .apphead { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; }
+  .apphead i { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; background: linear-gradient(135deg, var(--coral), var(--aqua)); }
+  .ps p { margin: 10px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+  .ps p b { color: var(--ink); }
+  .pboxes { display: flex; justify-content: center; align-items: center; gap: 5px; margin: 18px 0 4px; }
+  .pboxes .gap { width: 7px; height: 2px; border-radius: 1px; background: var(--line); }
+  .pcell { flex: 0 1 31px; height: 42px; }
+  .pcell input {
+    width: 100%; height: 100%; padding: 0; border: 0; border-radius: 10px; outline: none; text-align: center; text-transform: uppercase;
+    background: var(--field); color: var(--ink); caret-color: var(--coral);
+    font: 800 18px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; box-shadow: inset 0 0 0 1.5px var(--line);
+    transition: box-shadow .2s, transform .3s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .pcell input:focus, .pcell.cur input { box-shadow: inset 0 0 0 2px var(--coral), 0 0 0 4px rgba(255, 107, 91, .16); transform: translateY(-2px); }
+  .pcell.filled input { box-shadow: inset 0 0 0 2px var(--aqua); }
+  .pcell.land input { animation: land .4s cubic-bezier(.34, 1.8, .5, 1); }
+  @keyframes land { 0% { transform: scale(.8); } 55% { transform: scale(1.12); } }
+  .pboxes.squeeze .pcell input { transform: scale(.88); opacity: .6; }
+  .pboxes.bad { animation: shake .45s ease; }
+  .pboxes.bad .pcell input { box-shadow: inset 0 0 0 2px var(--bad); }
+  @keyframes shake { 20%, 60% { transform: translateX(-7px); } 40%, 80% { transform: translateX(7px); } }
+  .pcell input:disabled { opacity: .5; }
+  .near { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding: 10px 12px; border-radius: 14px; background: var(--field); font-size: 12px; line-height: 1.35; color: var(--muted); text-align: left; }
+  .near b { display: block; color: var(--ink); font-size: 13px; }
+  .ping { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--aqua); animation: near 1.6s ease-out infinite; }
+  @keyframes near { from { box-shadow: 0 0 0 0 rgba(32, 201, 180, .6); } to { box-shadow: 0 0 0 10px rgba(32, 201, 180, 0); } }
+  .pstatus { min-height: 36px; margin: 10px 0 0; font-size: 12.5px; font-weight: 650; text-align: center; line-height: 1.4; }
+  .pstatus[data-tone="good"] { color: var(--ok); }
+  .pstatus[data-tone="bad"] { color: var(--bad); }
+  .pbtn {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: auto; padding: 12px; border: 0; border-radius: 14px; cursor: pointer;
+    font-weight: 800; font-size: 14px; color: #fff; background: linear-gradient(135deg, var(--coral), #ff8f6b);
+    box-shadow: 0 10px 18px -10px rgba(255, 107, 91, .9); transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), opacity .2s, background .3s;
+  }
+  .pbtn:disabled { opacity: .5; cursor: default; }
+  .pbtn[aria-busy="true"]:disabled { opacity: 1; }  /* still working: keep it bright */
+  .pbtn:active:not(:disabled), .pbtn.press { transform: scale(.95); }
+  .pbtn.ghost { color: var(--ink); background: var(--field); box-shadow: inset 0 0 0 1.5px var(--line); }
+  .pbtn:focus-visible { outline: 2.5px solid var(--aqua); outline-offset: 3px; }
+  .spin { display: inline-block; vertical-align: -3px; flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, .4); border-top-color: #fff; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .paired { display: grid; place-items: center; margin: 22px 0 4px; }
+  .paired svg { width: 70px; height: 70px; }
+  .paired circle { fill: none; stroke: var(--ok); stroke-width: 4; stroke-dasharray: 190; stroke-dashoffset: 190; transition: stroke-dashoffset .7s ease; }
+  .paired path { fill: none; stroke: var(--ok); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 50; stroke-dashoffset: 50; transition: stroke-dashoffset .4s ease .5s; }
+  .ps.ok .paired circle, .ps.ok .paired path { stroke-dashoffset: 0; }
+  .ps.ok .paired svg { animation: bump .7s cubic-bezier(.34, 1.8, .5, 1) .4s; }
+  @keyframes bump { 50% { transform: scale(1.14); } }
+
+  .fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+  .fx i { position: absolute; left: 0; top: 0; display: block; border-radius: 50%; }
+
+  @media (max-width: 640px) {
+    .room { grid-template-columns: minmax(0, 1fr); justify-items: center; max-width: 420px; }
+    .tvset { width: 100%; padding: 0; }
+    .plant { display: none; }
+    .phone { margin: -18px 0 0; width: 236px; }
+    .ps { min-height: 330px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="room" id="room">
+    <div class="tvset">
+      <div class="tv">
+        <div class="screen" id="screen" data-view="code">
+          <section class="view v-code" aria-label="TV screen">
+            <span class="kicker">Living room TV</span>
+            <h2>Link your phone</h2>
+            <div class="tiles" id="tiles" aria-live="polite" aria-label="Pairing code"></div>
+            <span class="hint">Open the app on your phone and enter this code</span>
+            <div class="expiry"><span id="exp">4:59</span><span class="bar"><i id="bar"></i></span><button type="button" class="tvbtn" id="newCode">New code</button></div>
+          </section>
+          <section class="view v-pair">
+            <div class="radar"><i></i><i></i><i></i><b></b></div>
+            <p>Pairing with Hira's phone…</p>
+          </section>
+          <section class="view v-home">
+            <div class="hello"><span class="av">H</span><span><b>Welcome, Hira</b><span>Your phone is now the remote</span></span></div>
+            <div class="row-title">Continue watching</div>
+            <div class="posters">
+              <div class="poster" style="--i:0">
+                <svg viewBox="0 0 60 90" preserveAspectRatio="xMidYMid slice"><rect width="60" height="90" fill="#2b1f5c"/><circle cx="42" cy="22" r="9" fill="#ffd38a"/><path d="M0 90V58h8V48h7v10h6V40h9v18h6V50h8v8h6V44h10v46z" fill="#120d33"/><path d="M0 70h60" stroke="#ff6b5b" stroke-opacity=".4"/></svg>
+                <span>Lahore Nights</span><i class="prog" style="width:64%"></i>
+              </div>
+              <div class="poster" style="--i:1">
+                <svg viewBox="0 0 60 90" preserveAspectRatio="xMidYMid slice"><rect width="60" height="90" fill="#f1a66a"/><path d="M0 70L18 40l12 16 10-22 20 36v40H0z" fill="#b5523b"/><path d="M0 78L22 56l14 14 10-8 14 10v18H0z" fill="#7d2f2a"/><circle cx="16" cy="20" r="7" fill="#fff3d6"/></svg>
+                <span>The Salt Range</span><i class="prog" style="width:28%"></i>
+              </div>
+              <div class="poster" style="--i:2">
+                <svg viewBox="0 0 60 90" preserveAspectRatio="xMidYMid slice"><rect width="60" height="90" fill="#0f6b63"/><path d="M14 60h32l-4 14H18z" fill="#2fd6c0"/><path d="M10 60h40" stroke="#e7fffb" stroke-width="3" stroke-linecap="round"/><path d="M24 52c-3-5 3-7 0-12M32 52c-3-5 3-7 0-12M40 52c-3-5 3-7 0-12" fill="none" stroke="#e7fffb" stroke-opacity=".7" stroke-width="1.6" stroke-linecap="round"/><path d="M0 18c10-4 20 4 30 0s20-4 30 0" stroke="#5fe0cf" stroke-opacity=".4" stroke-width="3" fill="none"/></svg>
+                <span>Monsoon Kitchen</span><i class="prog" style="width:82%"></i>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div class="cabinet" aria-hidden="true"></div>
+      <div class="legs" aria-hidden="true"><i></i><i></i></div>
+      <svg class="plant" viewBox="0 0 54 80" aria-hidden="true">
+        <path class="leaf" d="M27 70C10 60 6 40 12 26c10 10 15 26 15 44z" fill="#3e9d6b"/>
+        <path class="leaf" d="M27 70c2-22 10-38 22-44 4 18-6 34-22 44z" fill="#2f8459"/>
+        <path class="leaf" d="M27 70c-4-20-2-40 6-56 8 18 4 38-6 56z" fill="#56b680"/>
+        <path d="M14 62h26l-4 18H18z" fill="#e0794f"/>
+      </svg>
+    </div>
+
+    <div class="phone" aria-label="Phone">
+      <div class="ps" id="ps">
+        <div class="notch" aria-hidden="true"></div>
+        <div class="sbar" aria-hidden="true"><span id="clock">9:41</span><span class="bat"></span></div>
+        <div class="apphead"><i aria-hidden="true"><svg width="16" height="14" viewBox="0 0 16 14"><rect x="1" y="1" width="14" height="9" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M5 13h6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg></i><span id="ptitle">Pair a TV</span></div>
+
+        <div id="enterArea">
+          <p id="plabel">Enter the 6-character code you see on your TV.</p>
+          <div class="pboxes" id="pboxes" role="group" aria-labelledby="plabel">
+            <span class="pcell"><input aria-label="Character 1 of 6" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false"></span>
+            <span class="pcell"><input aria-label="Character 2 of 6" autocomplete="off" autocapitalize="characters" spellcheck="false"></span>
+            <span class="pcell"><input aria-label="Character 3 of 6" autocomplete="off" autocapitalize="characters" spellcheck="false"></span>
+            <span class="gap" aria-hidden="true"></span>
+            <span class="pcell"><input aria-label="Character 4 of 6" autocomplete="off" autocapitalize="characters" spellcheck="false"></span>
+            <span class="pcell"><input aria-label="Character 5 of 6" autocomplete="off" autocapitalize="characters" spellcheck="false"></span>
+            <span class="pcell"><input aria-label="Character 6 of 6" autocomplete="off" autocapitalize="characters" spellcheck="false"></span>
+          </div>
+          <div class="near"><span class="ping" aria-hidden="true"></span><span><b>Living room TV</b>Found on Shah Home Wi-Fi</span></div>
+        </div>
+        <div id="doneArea" hidden>
+          <div class="paired" aria-hidden="true"><svg viewBox="0 0 70 70"><circle cx="35" cy="35" r="30"/><path d="M22 36l9 9 17-19"/></svg></div>
+          <p style="text-align:center">Paired with <b>Living room TV</b>. Use this phone to pause, play and pick shows.</p>
+        </div>
+        <p class="pstatus" id="pstatus" role="status" aria-live="polite"></p>
+        <button type="button" class="pbtn" id="pair" disabled><span id="pairText">Pair TV</span></button>
+      </div>
+    </div>
+  </main>
+  <div class="fx" id="fx" aria-hidden="true"></div>
+
+<script>
+(function () {
+  "use strict";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (id) => document.getElementById(id);
+  const ALPHA = "ACDEFHJKMNPRTVWXY34679";   // letters and digits that are hard to mix up on a TV
+  const LEN = 6, LIFE = 300;               // code length, seconds a TV code stays valid
+
+  const screen = $("screen"), tilesEl = $("tiles"), ps = $("ps");
+  const pboxes = $("pboxes"), pairBtn = $("pair"), pstatus = $("pstatus");
+  const cells = Array.from(pboxes.querySelectorAll(".pcell"));
+  const inputs = cells.map((c) => c.querySelector("input"));
+
+  // ---- Cancellable waits ----
+  const CANCEL = { cancelled: true };
+  let gen = 0;
+  const pause = (ms, g) => new Promise((ok, no) => setTimeout(() => (g === gen ? ok() : no(CANCEL)), ms));
+  const anim = (ms, g) => pause(reduce ? Math.min(ms, 120) : ms, g);
+  const quiet = (p) => p.catch((e) => { if (e !== CANCEL) throw e; });
+  const restart = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
+  function say(msg, tone) { pstatus.textContent = msg; pstatus.dataset.tone = tone || ""; }
+
+  // ---- The phone clock shows the real time ----
+  function tick() { const d = new Date(); $("clock").textContent = (d.getHours() % 12 || 12) + ":" + String(d.getMinutes()).padStart(2, "0"); }
+  tick(); setInterval(tick, 20000);
+
+  // ---- TV code and its expiry bar ----
+  let code = "", left = LIFE, expTimer = 0, busy = false, paired = false, tries = 5;
+  const tiles = [];
+  for (let i = 0; i < LEN; i++) {
+    if (i === 3) { const s = document.createElement("span"); s.className = "gap"; tilesEl.append(s); }
+    const t = document.createElement("span");
+    t.className = "tile";
+    tilesEl.append(t);
+    tiles.push(t);
+  }
+  function makeCode() { let c = ""; for (let i = 0; i < LEN; i++) c += ALPHA[Math.floor(Math.random() * ALPHA.length)]; return c; }
+  function showCode(flip) {
+    code = makeCode();
+    tilesEl.setAttribute("aria-label", "Pairing code " + code.split("").join(" "));
+    tiles.forEach((t, i) => {
+      if (!flip || reduce) { t.textContent = code[i]; return; }
+      setTimeout(() => restart(t, "flip"), i * 70);
+      setTimeout(() => { t.textContent = code[i]; }, i * 70 + 250);
+    });
+    left = LIFE;
+    paintExp();
+  }
+  function paintExp() {
+    $("exp").textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
+    $("bar").style.transform = "scaleX(" + (left / LIFE) + ")";
+  }
+  function startExpiry() {
+    clearInterval(expTimer);
+    expTimer = setInterval(() => {
+      if (paired || busy) return;
+      left--;
+      if (left <= 0) { showCode(true); say("The TV made a new code. Enter the new one.", ""); }
+      paintExp();
+    }, 1000);
+  }
+  // As the phone fills in characters, the TV lights the same number of tiles
+  function mirror() { const n = vals.filter(Boolean).length; tiles.forEach((t, i) => t.classList.toggle("lit", i < n)); }
+
+  // ---- Phone boxes: typing, paste, backspace, delete, arrows, Home/End ----
+  const vals = Array(LEN).fill("");
+  const keep = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  function setCh(i, ch) {
+    vals[i] = ch;
+    inputs[i].value = ch;
+    cells[i].classList.toggle("filled", !!ch);
+    if (ch) restart(cells[i], "land");
+    mirror();
+    pairBtn.disabled = !vals.every(Boolean) || busy || paired;
+  }
+  function clearBoxes() { for (let i = 0; i < LEN; i++) setCh(i, ""); }
+  function mark(i) { cells.forEach((c, n) => c.classList.toggle("cur", n === i && demoOn)); }
+  function focusBox(i) { i = Math.max(0, Math.min(LEN - 1, i)); if (!demoOn) { inputs[i].focus(); inputs[i].select(); } }
+  function fillFrom(start, text) {
+    let i = start;
+    for (const ch of text) { if (i >= LEN) break; setCh(i++, ch); }
+    focusBox(i);
+    whenFull();
+  }
+  function whenFull() { if (!busy && !paired && vals.every(Boolean)) quiet(pair(gen)); }
+  inputs.forEach((inp, i) => {
+    inp.addEventListener("focus", () => requestAnimationFrame(() => inp.select()));
+    inp.addEventListener("input", (e) => {
+      if (busy || paired) { inp.value = vals[i]; return; }
+      const got = keep(inp.value);
+      if (e.inputType === "insertText" && e.data && e.data.length === 1) {
+        const ch = keep(e.data);
+        if (!ch) { inp.value = vals[i]; return; }
+        setCh(i, ch); focusBox(i + 1); whenFull();
+      } else if (got.length > 1) {
+        fillFrom(got.length >= LEN ? 0 : i, got);
+      } else {
+        setCh(i, got);
+        if (got) { focusBox(i + 1); whenFull(); }
+      }
+    });
+    inp.addEventListener("keydown", (e) => {
+      if (busy || paired) return;
+      if (e.key === "Backspace") { e.preventDefault(); if (vals[i]) setCh(i, ""); else if (i > 0) { setCh(i - 1, ""); focusBox(i - 1); } }
+      else if (e.key === "Delete") { e.preventDefault(); setCh(i, ""); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); focusBox(i - 1); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); focusBox(i + 1); }
+      else if (e.key === "Home") { e.preventDefault(); focusBox(0); }
+      else if (e.key === "End") { e.preventDefault(); focusBox(LEN - 1); }
+      else if (e.key === "Enter" && vals.every(Boolean)) { e.preventDefault(); whenFull(); }
+    });
+    inp.addEventListener("paste", (e) => {
+      e.preventDefault();
+      if (busy || paired) return;
+      const text = keep(e.clipboardData ? e.clipboardData.getData("text") : "");
+      if (text) fillFrom(text.length >= LEN ? 0 : i, text);
+      else say("That paste has no letters or numbers in it.", "bad");
+    });
+  });
+
+  // ---- Beam: glowing dots fly from the phone to the TV ----
+  function beam() {
+    if (reduce) return Promise.resolve();
+    const a = pboxes.getBoundingClientRect(), b = screen.getBoundingClientRect();
+    const x0 = a.left + a.width / 2, y0 = a.top + a.height / 2;
+    const x1 = b.left + b.width / 2, y1 = b.top + b.height / 2;
+    const cx = (x0 + x1) / 2, cy = Math.min(y0, y1) - 90;
+    const COLORS = ["#ff6b5b", "#20c9b4", "#ffd38a"];
+    const runs = [];
+    for (let n = 0; n < 16; n++) {
+      const p = document.createElement("i");
+      const s = 5 + (n % 3) * 3;
+      p.style.width = p.style.height = s + "px";
+      p.style.background = COLORS[n % 3];
+      p.style.boxShadow = "0 0 12px " + COLORS[n % 3];
+      $("fx").append(p);
+      const frames = [];
+      const jitter = (Math.random() - 0.5) * 50;
+      for (let k = 0; k <= 10; k++) {
+        const t = k / 10;
+        const x = (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * (cx + jitter) + t * t * x1;
+        const y = (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * (cy + jitter) + t * t * y1;
+        frames.push({ transform: "translate(" + (x - s / 2) + "px," + (y - s / 2) + "px) scale(" + (k === 10 ? 0.3 : 1) + ")", opacity: k === 0 ? 0 : 1 });
+      }
+      const an = p.animate(frames, { duration: 900, delay: n * 45, easing: "cubic-bezier(.5,0,.3,1)", fill: "both" });
+      runs.push(new Promise((ok) => { an.onfinish = () => { p.remove(); ok(); }; }));
+    }
+    return Promise.all(runs);
+  }
+
+  // ---- Pairing ----
+  async function pair(g) {
+    if (busy || paired || !vals.every(Boolean)) return;
+    busy = true;
+    mark(-1);
+    inputs.forEach((b) => (b.disabled = true));
+    pairBtn.disabled = true;
+    $("pairText").innerHTML = '<span class="spin" aria-hidden="true"></span> Pairing…';
+    pairBtn.setAttribute("aria-busy", "true");
+    pboxes.classList.add("squeeze");
+    say("Talking to your TV…");
+    await anim(300, g);
+    const right = vals.join("") === code;
+    if (right) {
+      const flight = beam();
+      await anim(500, g);
+      screen.dataset.view = "pair";
+      await flight;
+      await anim(700, g);
+      // the TV switches like an old set: squash to a line, then open on the home screen
+      restart(screen, "crt");
+      await anim(260, g);
+      screen.dataset.view = "home";
+      await anim(300, g);
+      paired = true;
+      busy = false;
+      pboxes.classList.remove("squeeze");
+      $("enterArea").hidden = true;
+      $("doneArea").hidden = false;
+      ps.classList.add("ok");
+      $("ptitle").textContent = "Connected";
+      say("Paired. Enjoy the show, Hira.", "good");
+      pairBtn.disabled = false;
+      pairBtn.classList.add("ghost");
+      $("pairText").textContent = "Unpair TV"; pairBtn.removeAttribute("aria-busy");
+      sparkle();
+      if (!demoOn) pairBtn.focus();
+      return;
+    }
+    await anim(700, g);
+    tries--;
+    pboxes.classList.remove("squeeze");
+    restart(pboxes, "bad");
+    $("pairText").textContent = "Pair TV"; pairBtn.removeAttribute("aria-busy");
+    say(tries > 0 ? "That code is not on your TV. Check it and try again (" + tries + " left)." : "Too many tries. The TV made a new code for you.", "bad");
+    await anim(500, g);
+    pboxes.classList.remove("bad");
+    if (tries <= 0) { tries = 5; showCode(true); }
+    inputs.forEach((b) => (b.disabled = false));
+    busy = false;
+    clearBoxes();
+    focusBox(0);
+  }
+
+  function unpair() {
+    paired = false;
+    busy = false;
+    tries = 5;
+    ps.classList.remove("ok");
+    $("enterArea").hidden = false;
+    $("doneArea").hidden = true;
+    $("ptitle").textContent = "Pair a TV";
+    pairBtn.classList.remove("ghost");
+    $("pairText").textContent = "Pair TV"; pairBtn.removeAttribute("aria-busy");
+    pboxes.classList.remove("squeeze", "bad");
+    inputs.forEach((b) => (b.disabled = false));
+    screen.dataset.view = "code";
+    clearBoxes();
+    showCode(true);
+    say("");
+  }
+  pairBtn.addEventListener("click", () => {
+    if (paired) { unpair(); focusBox(0); return; }
+    quiet(pair(gen));
+  });
+  $("newCode").addEventListener("click", () => {
+    if (busy || paired) return;
+    showCode(true);
+    clearBoxes();
+    say("The TV made a new code. The old one stops working.", "");
+  });
+
+  // ---- Little sparkles around the phone ----
+  function sparkle() {
+    if (reduce) return;
+    const r = ps.getBoundingClientRect();
+    const x0 = r.left + r.width / 2, y0 = r.top + r.height * 0.3;
+    const COLORS = ["#ff6b5b", "#20c9b4", "#ffd38a", "#18b27c"];
+    for (let n = 0; n < 26; n++) {
+      const p = document.createElement("i");
+      const s = 5 + Math.random() * 6;
+      p.style.width = p.style.height = s + "px";
+      p.style.background = COLORS[n % COLORS.length];
+      p.style.borderRadius = n % 2 ? "50%" : "2px";
+      $("fx").append(p);
+      const a = (n / 26) * Math.PI * 2, d = 70 + Math.random() * 60;
+      p.animate([
+        { transform: "translate(" + x0 + "px," + y0 + "px) scale(.2)", opacity: 1 },
+        { transform: "translate(" + (x0 + Math.cos(a) * d) + "px," + (y0 + Math.sin(a) * d) + "px) rotate(180deg) scale(1)", opacity: 1, offset: 0.6 },
+        { transform: "translate(" + (x0 + Math.cos(a) * d * 1.2) + "px," + (y0 + Math.sin(a) * d * 1.2 + 40) + "px) rotate(300deg) scale(.4)", opacity: 0 }
+      ], { duration: 1200 + Math.random() * 400, easing: "cubic-bezier(.2,.8,.3,1)" }).onfinish = () => p.remove();
+    }
+  }
+
+  // ---- Auto-demo: the phone types the TV code (with one typo every other round) and pairs ----
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() {
+    if (!demoOn) return;
+    demoOn = false;
+    clearTimeout(demoTimer);
+    gen++;
+    mark(-1);
+    unpair();
+  }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) =>
+    window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  async function typeIn(text, g) {
+    for (let i = 0; i < LEN; i++) { mark(i); await pause(150, g); setCh(i, text[i]); await pause(90, g); }
+    mark(-1);
+  }
+  async function runDemo() {
+    const g = gen;
+    round++;
+    await pause(900, g);
+    if (round % 2 === 0) {
+      const wrong = code.slice(0, 5) + ALPHA[(ALPHA.indexOf(code[5]) + 3) % ALPHA.length];
+      await typeIn(wrong, g);
+      await pause(250, g);
+      await pair(g);
+      await pause(500, g);
+    }
+    await typeIn(code, g);
+    await pause(250, g);
+    pairBtn.classList.add("press");
+    await pause(170, g);
+    pairBtn.classList.remove("press");
+    await pair(g);
+    await pause(3000, g);
+    unpair();
+    demoTimer = setTimeout(() => quiet(runDemo()), 500);
+  }
+
+  showCode(false);
+  startExpiry();
+  demoTimer = setTimeout(() => quiet(runDemo()), 200);
+})();
+</script>
+</body>
+</html>

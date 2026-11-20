@@ -1,0 +1,530 @@
+<!doctype html>
+<!-- Chill & Craft · Honeycomb · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Honeycomb · app switcher</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and keep following it)
+  (function () {
+    var q = new URLSearchParams(location.search).get("theme");
+    var m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { document.documentElement.setAttribute("data-theme", q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"); }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colours: warm honey, beeswax cream and charcoal ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #f8eed6;
+    --bg2: #f1dfb4;
+    --win: #fffaf0;
+    --bar: rgba(255, 252, 245, .9);
+    --panel: #fffdf8;
+    --tile: #fff6e3;
+    --line: #eedcb1;
+    --ink: #2a2116;
+    --ink2: #7a6a55;
+    --soft: #b09d7d;
+    --honey: #f5a524;
+    --honey2: #ffd36b;
+    --comb: #f3e2b7;
+    --shadow: rgba(110, 70, 10, .28);
+    --accent: #f5a524;
+    --focus: #d7860b;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #15110b;
+    --bg2: #241b0e;
+    --win: #1d1810;
+    --bar: rgba(36, 30, 20, .92);
+    --panel: #282015;
+    --tile: #2e2518;
+    --line: #3d3222;
+    --ink: #f8edd7;
+    --ink2: #c0ae8d;
+    --soft: #85755b;
+    --honey: #f7b23b;
+    --honey2: #ffd77a;
+    --comb: #33291a;
+    --shadow: rgba(0, 0, 0, .6);
+    --focus: #ffc14d;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; font-family: var(--sans); color: var(--ink); background: radial-gradient(80% 60% at 50% 0%, var(--bg2), var(--bg)); }
+  .stage { position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 16px 12px; overflow: hidden; }
+  .bgcomb { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; pointer-events: none; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- App window ---------- */
+  .win {
+    position: relative;
+    width: min(900px, 100%);
+    height: min(640px, calc(100vh - 32px));
+    min-height: 540px;
+    border-radius: 26px;
+    background: var(--win);
+    box-shadow: 0 50px 90px -50px var(--shadow), 0 0 0 1px var(--line);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .bar { position: relative; z-index: 4; display: flex; align-items: center; gap: 10px; height: 64px; padding: 0 12px 0 14px; background: var(--bar); border-bottom: 1px solid var(--line); backdrop-filter: blur(8px); }
+  .app { display: flex; align-items: center; gap: 10px; min-width: 0; margin-right: auto; }
+  .ico { position: relative; flex: none; width: 38px; height: 42px; display: grid; place-items: center; color: #fff; }
+  .ico::before { content: ""; position: absolute; inset: 0; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: var(--accent); transition: background .5s; }
+  .ico svg { position: relative; width: 19px; height: 19px; }
+  .ico.glow { animation: glow .8s var(--spring); }
+  @keyframes glow { 40% { transform: scale(1.2) rotate(30deg); } }
+  .nm { display: grid; min-width: 0; }
+  .nm small { font-size: 11px; font-weight: 700; color: var(--ink2); letter-spacing: .08em; text-transform: uppercase; }
+  .roll { position: relative; display: block; width: 130px; height: 22px; overflow: hidden; font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
+  .roll span { position: absolute; left: 0; top: 0; white-space: nowrap; }
+  .search { flex: 0 1 260px; display: none; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: 13px; background: var(--tile); box-shadow: 0 0 0 1px var(--line); }
+  .search svg { flex: none; width: 17px; height: 17px; stroke: var(--soft); fill: none; stroke-width: 2; stroke-linecap: round; }
+  .search input { width: 100%; border: 0; background: none; outline: none; font-size: 14px; }
+  .search:focus-within { box-shadow: 0 0 0 2px var(--focus); }
+  @media (min-width: 620px) { .search { display: flex; } }
+  .switch { position: relative; width: 46px; height: 46px; border: 0; border-radius: 15px; background: var(--tile); box-shadow: 0 0 0 1px var(--line); display: grid; place-items: center; transition: transform .3s var(--spring), background .3s; }
+  .switch:hover { background: var(--comb); }
+  .switch:active { transform: scale(.9); }
+  .switch svg { width: 28px; height: 28px; overflow: visible; }
+  .switch .dot { fill: var(--ink2); transition: transform .5s var(--spring), fill .3s; transform-box: fill-box; transform-origin: center; }
+  .switch .dot.c { fill: var(--honey); }
+  .switch:hover .dot:not(.c) { fill: var(--honey); }
+  .switch[aria-expanded="true"] { background: var(--honey); }
+  .switch[aria-expanded="true"] .dot { fill: #3a2600; }
+  .switch.puff .dot { animation: puff .45s var(--spring); }
+  @keyframes puff { 50% { transform: translate(var(--px), var(--py)) scale(1.3); } }
+  .me { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(140deg, #f7c46a, #d9822b); color: #fff; font-size: 13px; font-weight: 800; }
+
+  /* ---------- App pages ---------- */
+  .view { position: relative; flex: 1; overflow: auto; padding: 20px 18px 18px; }
+  .page > * { animation: up .6s var(--spring) backwards; }
+  .page > :nth-child(2) { animation-delay: .06s; } .page > :nth-child(3) { animation-delay: .12s; } .page > :nth-child(4) { animation-delay: .18s; }
+  @keyframes up { from { opacity: 0; transform: translateY(18px); } }
+  .page h1 { margin: 0; font-size: clamp(23px, 5vw, 30px); letter-spacing: -.03em; }
+  .page .lead { margin: 4px 0 16px; color: var(--ink2); font-size: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .tile { position: relative; overflow: hidden; padding: 12px; border-radius: 18px; background: var(--tile); box-shadow: 0 0 0 1px var(--line); }
+  .tile::after { content: ""; position: absolute; right: -14px; bottom: -16px; width: 52px; height: 58px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: var(--accent); opacity: .16; }
+  .tile small { display: block; color: var(--ink2); font-size: 12px; font-weight: 650; }
+  .tile b { display: block; margin-top: 4px; font-size: clamp(17px, 4.4vw, 22px); letter-spacing: -.02em; }
+  .rows { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
+  .rows li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; background: var(--tile); box-shadow: 0 0 0 1px var(--line); }
+  .rows i { flex: none; width: 34px; height: 38px; display: grid; place-items: center; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); font-style: normal; font-weight: 800; font-size: 12px; }
+  .rows b { display: block; font-size: 14px; }
+  .rows small { color: var(--ink2); font-size: 12.5px; }
+  .rows em { margin-left: auto; font-style: normal; font-weight: 750; font-size: 13px; white-space: nowrap; }
+  .rows .none { justify-content: center; color: var(--ink2); font-size: 13.5px; }
+  .week { margin-top: 14px; padding: 12px 14px 10px; border-radius: 18px; background: var(--tile); box-shadow: 0 0 0 1px var(--line); }
+  .week-h { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 750; color: var(--ink2); }
+  .bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; height: 84px; margin-top: 10px; }
+  .bars i { display: block; height: var(--h); border-radius: 8px 8px 4px 4px; background: color-mix(in srgb, var(--accent) 32%, transparent); transform-origin: 50% 100%; animation: bar .7s var(--spring) backwards; animation-delay: calc(var(--d) * 55ms + 250ms); }
+  .bars i.today { background: var(--accent); box-shadow: 0 6px 14px -6px var(--accent); }
+  @keyframes bar { from { transform: scaleY(0); } }
+  .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-top: 6px; text-align: center; font-size: 11px; font-weight: 700; color: var(--soft); }
+
+  /* ---------- The hive: seven hex apps that bloom from the button ---------- */
+  .hive {
+    position: absolute; z-index: 6; top: 70px; right: 10px;
+    width: min(320px, calc(100% - 20px));
+    padding: 14px 16px 12px; border-radius: 26px;
+    background: var(--panel); box-shadow: 0 34px 70px -30px var(--shadow), 0 0 0 1px var(--line);
+    transform-origin: calc(100% - 58px) -10px;
+  }
+  .hive.open { animation: hiveIn .5s var(--spring); }
+  .hive.closing { animation: hiveOut .32s ease-in forwards; }
+  @keyframes hiveIn { from { opacity: 0; transform: scale(.4); } }
+  @keyframes hiveOut { to { opacity: 0; transform: scale(.5); } }
+  .hv-top { display: flex; justify-content: space-between; align-items: baseline; }
+  .hv-top b { font-size: 15px; }
+  .hv-top small { color: var(--ink2); font-size: 12px; }
+  .comb { position: relative; list-style: none; margin: 6px 0 0; padding: 0; height: 236px; }
+  .cell { position: absolute; left: 0; top: 0; }
+  .cell:focus-within { filter: drop-shadow(0 0 1.5px var(--focus)) drop-shadow(0 0 1.5px var(--focus)) drop-shadow(0 0 1px var(--focus)); }
+  .hex {
+    --c: var(--honey);
+    position: relative; display: grid; place-items: center; align-content: center; gap: 3px;
+    width: 100%; height: 100%; padding: 0; border: 0;
+    clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--c) 22%, var(--tile)), var(--tile));
+    color: var(--ink);
+    transform: translate(var(--px, 0px), var(--py, 0px)) scale(var(--sc, 1));
+    transition: transform .45s var(--spring), opacity .3s, filter .3s;
+  }
+  .hex:focus-visible { outline: none; }
+  .hex .ic { position: relative; z-index: 1; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px; background: var(--c); color: #fff; box-shadow: 0 6px 12px -6px var(--c); transition: transform .45s var(--spring); }
+  .hex .ic svg { width: 17px; height: 17px; }
+  .hex .lb { position: relative; z-index: 1; font-size: 11.5px; font-weight: 750; }
+  .hex .here { position: absolute; z-index: 1; bottom: 13px; width: 5px; height: 5px; border-radius: 50%; background: var(--c); }
+  .cell.hot .hex { --sc: 1.08; }
+  .cell.hot .ic { transform: translateY(-2px) rotate(-8deg) scale(1.08); }
+  .cell.dim .hex { opacity: .35; --sc: .9; filter: saturate(.5); }
+  .honey { position: absolute; left: -10%; right: -10%; bottom: 0; height: 110%; background: var(--c); transform: translateY(calc(100% + 12px)); transition: transform .55s cubic-bezier(.3, .8, .4, 1); }
+  .honey svg { position: absolute; left: 0; top: -9px; width: 200%; height: 10px; fill: var(--c); animation: wave 1s linear infinite; }
+  @keyframes wave { to { transform: translateX(-50%); } }
+  .cell.fill .honey { transform: translateY(0); }
+  .cell.fill .lb { color: #fff; }
+  .hint { margin: 2px 0 0; min-height: 36px; text-align: center; font-size: 13px; color: var(--ink2); }
+  .hint b { display: block; color: var(--ink); font-size: 14px; }
+
+  .wipe { position: absolute; left: 0; top: 0; z-index: 7; width: 100px; height: 115px; transform-origin: 50px 57.5px; pointer-events: none; opacity: 0; }
+  .bee { position: absolute; left: 0; top: 0; z-index: 8; width: 34px; height: 28px; margin: -14px 0 0 -17px; pointer-events: none; overflow: visible; }
+  .bee .wing { fill: #fff; fill-opacity: .82; stroke: #7a6a55; stroke-opacity: .35; transform-box: fill-box; transform-origin: 50% 100%; animation: flap .09s ease-in-out infinite alternate; }
+  .bee .wing.b { animation-delay: .045s; }
+  @keyframes flap { to { transform: scaleY(.35); } }
+  .bee .body { fill: #ffc531; }
+  .bee .stripe { fill: #2a2116; }
+  .drip { position: absolute; z-index: 5; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50% 50% 50% 0; background: var(--honey); pointer-events: none; }
+
+  @media (max-width: 380px) { .tiles { gap: 6px; } .tile { padding: 10px 8px; } .view { padding: 16px 12px; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    .bee .wing { animation: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <svg class="bgcomb" aria-hidden="true"><defs><pattern id="hp" width="56" height="97" patternUnits="userSpaceOnUse" patternTransform="scale(.9)"><path d="M28 0 56 16v32L28 64 0 48V16Zm0 64v33M0 97h0" style="fill:none;stroke:var(--comb);stroke-width:2"/></pattern></defs><rect width="100%" height="100%" fill="url(#hp)"/></svg>
+  <section class="win" id="win" aria-label="Hive Works suite">
+    <header class="bar">
+      <div class="app">
+        <span class="ico" id="appIco" aria-hidden="true"></span>
+        <span class="nm"><small>Hive Works</small><span class="roll" id="appName"><span>Home</span></span></span>
+      </div>
+      <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input id="search" type="search" placeholder="Search Home" aria-label="Search this app"></label>
+      <button class="switch" id="switch" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="hive" aria-label="Switch app">
+        <svg viewBox="-14 -14 28 28" aria-hidden="true" id="dots"></svg>
+      </button>
+      <span class="me" aria-hidden="true">SM</span>
+    </header>
+    <div class="view" id="view"></div>
+    <div class="hive" id="hive" role="dialog" aria-labelledby="hvTitle" hidden>
+      <div class="hv-top"><b id="hvTitle">Switch app</b><small>Arrows to move · Esc to close</small></div>
+      <ul class="comb" id="comb"></ul>
+      <p class="hint" id="hint"></p>
+    </div>
+    <svg class="wipe" id="wipe" viewBox="0 0 100 115" aria-hidden="true"><path d="M50 0 100 28.75V86.25L50 115 0 86.25V28.75Z"/></svg>
+    <svg class="bee" id="bee" viewBox="-17 -14 34 28" aria-hidden="true">
+      <g id="beeFlip">
+        <ellipse class="wing" cx="-2" cy="-8" rx="5" ry="7"/>
+        <ellipse class="wing b" cx="4" cy="-7" rx="4" ry="6"/>
+        <ellipse class="body" cx="0" cy="2" rx="11" ry="7.5"/>
+        <path class="stripe" d="M-3 -5.2q2 7.2 0 14.4h-3q2-7.2 0-14.4ZM3.5 -5q2 7 0 14h-3q2-7 0-14Z"/>
+        <path d="M-11 2-15 3.5-11 4.5Z" fill="#2a2116"/>
+        <circle cx="8" cy="0" r="1.6" fill="#2a2116"/>
+        <path d="M9 -5q2-4 5-4" stroke="#2a2116" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+      </g>
+    </svg>
+  </section>
+  <p class="sr-only" aria-live="polite" id="live"></p>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const sleep = (ms) => new Promise((r) => setTimeout(r, reduce ? Math.min(ms, 60) : ms));
+  const live = $("#live");
+  const say = (t) => { live.textContent = ""; setTimeout(() => { live.textContent = t; }, 30); };
+  const SPRING = "cubic-bezier(.34,1.56,.64,1)";
+
+  // ---------- Icons ----------
+  const I = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const ICON = {
+    home: I('<path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/>'),
+    mail: I('<rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="m4 7 8 6 8-6"/>'),
+    cal: I('<rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M9 3.5v4M15 3.5v4"/>'),
+    sales: I('<path d="M4 19V5"/><path d="M4 19h16"/><path d="m7 15 4-4 3 3 5-6"/>'),
+    stock: I('<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>'),
+    team: I('<circle cx="9" cy="9" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="10" r="2.5"/><path d="M15.5 14.6A4.5 4.5 0 0 1 21 19"/>'),
+    files: I('<path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2h6.5a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/>')
+  };
+
+  // ---------- The seven apps (centre first, then the ring clockwise from the top right) ----------
+  const APPS = [
+    { id: "home", name: "Home", c: "#f5a524", note: "Your day at a glance", h: "Good morning, Sana", lead: "Friday 20 November · the shop opens at 10:00", tiles: [["Unread", "12"], ["Meetings", "3"], ["Sales today", "PKR 84k"]], rows: [["SA", "Sales hit the weekly goal", "Sales · 9:12", "+18%"], ["BI", "Bilal sent the October invoice", "Mail · 8:40", "New"], ["ST", "Cotton lawn is running low", "Stock · 8:05", "12 m"]] },
+    { id: "mail", name: "Mail", c: "#e0603f", note: "12 unread messages", h: "Inbox", lead: "12 unread · 3 flagged for today", tiles: [["Unread", "12"], ["Flagged", "3"], ["Sent today", "9"]], rows: [["BA", "Bilal Ahmed", "Invoice for October", "9:40"], ["HT", "Hira Textiles", "New sample photos", "8:55"], ["CR", "City Riders", "Parcel delivered in DHA", "8:10"]] },
+    { id: "cal", name: "Calendar", c: "#1f9c88", note: "3 meetings today", h: "Today", lead: "Friday 20 November · 4 free hours", tiles: [["Meetings", "3"], ["Free hours", "4"], ["Reminders", "2"]], rows: [["10", "Supplier call", "Hira Textiles · 30 min", "10:00"], ["13", "Team lunch", "Gulberg branch", "13:30"], ["16", "Stock review", "With Usman", "16:00"]] },
+    { id: "sales", name: "Sales", c: "#6b9a1f", note: "Up 18% this week", h: "Sales this week", lead: "146 orders · best day Thursday", tiles: [["Orders", "146"], ["Revenue", "PKR 612k"], ["Avg order", "PKR 4.2k"]], rows: [["1", "Linen kurta, olive", "38 sold", "PKR 152k"], ["2", "Block print cushion", "51 sold", "PKR 122k"], ["3", "Brass table lamp", "14 sold", "PKR 95k"]] },
+    { id: "stock", name: "Stock", c: "#c27a12", note: "7 items running low", h: "Stock", lead: "318 items · 2 deliveries on the way", tiles: [["Items", "318"], ["Low", "7"], ["Incoming", "2"]], rows: [["CL", "Cotton lawn, indigo", "Reorder soon", "12 m"], ["BL", "Brass lamp shades", "Shelf B4", "9 left"], ["CU", "Cushion covers", "Arriving Monday", "+60"]] },
+    { id: "team", name: "Team", c: "#b04677", note: "6 people on shift", h: "Team", lead: "6 on shift · 1 on leave", tiles: [["On shift", "6"], ["On leave", "1"], ["Open tasks", "14"]], rows: [["SM", "Sana Malik", "Manager · Gulberg", "On"], ["UT", "Usman Tariq", "Sales floor", "On"], ["HA", "Hira Aslam", "Stock room · back Monday", "Leave"]] },
+    { id: "files", name: "Files", c: "#4467a8", note: "86 shared files", h: "Files", lead: "1,204 files · 62% of space used", tiles: [["Files", "1,204"], ["Shared", "86"], ["Space", "62%"]], rows: [["PDF", "Price list November", "Shared with team", "2 MB"], ["XLS", "Stock count Q4", "Edited by Usman", "640 KB"], ["JPG", "Eid window display", "Photos", "8 MB"]] }
+  ];
+  let current = 0;
+
+  // ---------- Header and page ----------
+  const view = $("#view"), appIco = $("#appIco"), appName = $("#appName"), search = $("#search");
+  const UNIT = { home: "things done", mail: "emails", cal: "meetings", sales: "orders", stock: "items moved", team: "hours worked", files: "uploads" };
+  const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  function rowsHtml(filter = "") {
+    const a = APPS[current], q = filter.trim().toLowerCase();
+    const rows = a.rows.filter((r) => !q || (r[1] + " " + r[2]).toLowerCase().includes(q));
+    return rows.length ? rows.map(([t, b, s, e]) => `<li><i>${t}</i><span><b>${b}</b><small>${s}</small></span><em>${e}</em></li>`).join("") : `<li class="none">Nothing matches “${filter.replace(/[<>&]/g, "")}”</li>`;
+  }
+  function renderPage() {
+    const a = APPS[current];
+    // a small week chart: made-up numbers that differ per app, today (Friday) in full colour
+    const vals = DAYS.map((_, i) => 30 + ((i * 37 + current * 23 + (i % 3) * 11) % 66));
+    view.innerHTML = `<div class="page">
+      <h1>${a.h}</h1><p class="lead">${a.lead}</p>
+      <div class="tiles">${a.tiles.map(([k, v]) => `<div class="tile"><small>${k}</small><b>${v}</b></div>`).join("")}</div>
+      <ul class="rows" id="rows">${rowsHtml()}</ul>
+      <div class="week" role="img" aria-label="This week, ${UNIT[a.id]} per day"><div class="week-h"><span>This week</span><span>${UNIT[a.id]}</span></div>
+        <div class="bars">${vals.map((v, i) => `<i class="${i === 4 ? "today" : ""}" style="--h:${v}%;--d:${i}"></i>`).join("")}</div>
+        <div class="days">${DAYS.map((d) => `<span>${d}</span>`).join("")}</div></div></div>`;
+  }
+  function setHeader(animate) {
+    const a = APPS[current];
+    document.documentElement.style.setProperty("--accent", a.c);
+    appIco.innerHTML = ICON[a.id];
+    search.placeholder = "Search " + a.name;
+    const old = appName.querySelector("span"), nu = document.createElement("span");
+    nu.textContent = a.name;
+    appName.setAttribute("aria-label", a.name);
+    if (!animate || reduce || !old) { appName.innerHTML = ""; appName.appendChild(nu); return; }
+    appName.appendChild(nu);
+    old.animate([{ transform: "none", opacity: 1 }, { transform: "translateY(-22px)", opacity: 0 }], { duration: 300, easing: "ease-in", fill: "forwards" }).onfinish = () => old.remove();
+    nu.animate([{ transform: "translateY(24px)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 520, delay: 80, easing: SPRING, fill: "backwards" });
+    appIco.classList.remove("glow"); void appIco.offsetWidth; appIco.classList.add("glow");
+  }
+  search.addEventListener("input", () => { const r = document.getElementById("rows"); if (r) r.innerHTML = rowsHtml(search.value); });
+
+  // ---------- Switcher button: seven tiny hex dots ----------
+  const dotsSvg = $("#dots");
+  const ring = (r) => [[0, 0], ...[-60, 0, 60, 120, 180, 240].map((a) => [Math.cos(a * Math.PI / 180) * r, Math.sin(a * Math.PI / 180) * r])];
+  dotsSvg.innerHTML = ring(8.6).map(([x, y], i) => `<path class="dot${i === 0 ? " c" : ""}" style="--px:${x * .35}px;--py:${y * .35}px" d="M${x} ${y - 4}l3.46 2v4L${x} ${y + 4}l-3.46-2v-4Z"/>`).join("");
+
+  // ---------- Build the comb ----------
+  const comb = $("#comb"), hive = $("#hive"), sw = $("#switch"), hint = $("#hint"), win = $("#win");
+  const R = 44, GAP = 6, HW = Math.sqrt(3) * R; // hex radius, gap, hex width
+  const SLOTS = [[0, 0], [.5, -1], [1, 0], [.5, 1], [-.5, 1], [-1, 0], [-.5, -1]];
+  comb.innerHTML = APPS.map((a, i) => `<li class="cell" data-i="${i}" style="width:${HW}px;height:${2 * R}px"><button class="hex" type="button" style="--c:${a.c}" aria-label="${a.name}: ${a.note}"><span class="honey"><svg viewBox="0 0 40 10" preserveAspectRatio="none"><path d="M0 5Q5 0 10 5T20 5 30 5 40 5V10H0Z"/></svg></span><span class="ic">${ICON[a.id]}</span><span class="lb">${a.name}</span></button></li>`).join("");
+  const cells = $$(".cell", comb);
+  let C = []; // centre of each cell inside the comb
+  function placeCells() {
+    const w = comb.clientWidth || 288, h = comb.clientHeight, cx = w / 2, cy = h / 2;
+    const dx = HW + GAP, dy = 1.5 * R + GAP * .87;
+    C = SLOTS.map(([u, v]) => [cx + u * dx, cy + v * dy]);
+    cells.forEach((c, i) => { c.style.left = C[i][0] - HW / 2 + "px"; c.style.top = C[i][1] - R + "px"; });
+    markCurrent();
+  }
+  function markCurrent() {
+    cells.forEach((c, i) => {
+      const hx = c.querySelector(".hex");
+      let here = hx.querySelector(".here");
+      if (i === current && !here) { here = document.createElement("span"); here.className = "here"; hx.appendChild(here); }
+      if (i !== current && here) here.remove();
+      hx.setAttribute("aria-current", i === current ? "page" : "false");
+    });
+  }
+
+  // neighbours lean away from the hex you point at
+  let hot = -1;
+  function setHot(i) {
+    hot = i;
+    cells.forEach((c, k) => {
+      const hx = c.querySelector(".hex");
+      c.classList.toggle("hot", k === i);
+      if (i < 0 || k === i) { hx.style.setProperty("--px", "0px"); hx.style.setProperty("--py", "0px"); return; }
+      const vx = C[k][0] - C[i][0], vy = C[k][1] - C[i][1], d = Math.hypot(vx, vy);
+      const push = d < 100 ? 6 : 2;
+      hx.style.setProperty("--px", (vx / d * push).toFixed(1) + "px");
+      hx.style.setProperty("--py", (vy / d * push).toFixed(1) + "px");
+    });
+    const a = APPS[i < 0 ? current : i];
+    hint.innerHTML = `<b>${a.name}${(i < 0 ? current : i) === current ? " · open now" : ""}</b>${a.note}`;
+  }
+
+  // ---------- Open and close ----------
+  let open = false, busy = false;
+  const btnCentre = () => {
+    const b = sw.getBoundingClientRect(), r = comb.getBoundingClientRect();
+    return [b.left + b.width / 2 - r.left, b.top + b.height / 2 - r.top];
+  };
+  function stopAnims() { cells.forEach((c) => c.getAnimations().forEach((a) => a.cancel())); hive.getAnimations().forEach((a) => a.cancel()); }
+  function openHive(focus) {
+    if (open) return;
+    open = true; stopAnims();
+    hive.hidden = false; hive.classList.remove("closing"); hive.classList.remove("open"); void hive.offsetWidth; hive.classList.add("open");
+    sw.setAttribute("aria-expanded", "true");
+    sw.classList.remove("puff"); void sw.offsetWidth; sw.classList.add("puff");
+    placeCells(); setHot(-1);
+    const [bx, by] = btnCentre();
+    const order = [0, 6, 1, 2, 3, 4, 5];
+    if (!reduce) order.forEach((i, k) => {
+      const [x, y] = C[i];
+      cells[i].animate([
+        { transform: `translate(${bx - x}px, ${by - y}px) scale(.12) rotate(-120deg)`, opacity: 0 },
+        { opacity: 1, offset: .35 },
+        { transform: "none", opacity: 1 }
+      ], { duration: 640, delay: 60 + k * 45, easing: SPRING, fill: "backwards" });
+    });
+    say("App switcher open. " + APPS.length + " apps.");
+    if (focus) setTimeout(() => cells[current].querySelector(".hex").focus({ preventScroll: true }), reduce ? 0 : 200);
+  }
+  function closeHive(focusBack) {
+    if (!open) return;
+    open = false; stopAnims();
+    sw.setAttribute("aria-expanded", "false");
+    setHot(-1);
+    if (reduce) { hive.hidden = true; }
+    else {
+      const [bx, by] = btnCentre();
+      cells.forEach((c, i) => c.animate([{ transform: "none", opacity: 1 }, { transform: `translate(${bx - C[i][0]}px, ${by - C[i][1]}px) scale(.1) rotate(90deg)`, opacity: 0 }], { duration: 300, delay: (6 - i) * 18, easing: "cubic-bezier(.5,0,.8,.4)", fill: "forwards" }));
+      hive.classList.add("closing");
+      setTimeout(() => { if (!open) { hive.hidden = true; hive.classList.remove("closing"); stopAnims(); } }, 420);
+    }
+    if (focusBack) sw.focus({ preventScroll: true });
+  }
+
+  // ---------- Choose an app: honey fills the hex, floods the window, the new app appears ----------
+  const wipe = $("#wipe");
+  async function choose(i, user) {
+    if (busy) return;
+    if (i === current) { closeHive(user); return; }
+    busy = true;
+    const cell = cells[i], a = APPS[i];
+    setHot(i);
+    cells.forEach((c) => c.classList.toggle("dim", c !== cell));
+    bee.mode = "land"; bee.target = i;
+    if (!reduce) cell.querySelector(".hex").animate([{ transform: "scale(1)" }, { transform: "scale(.88)" }, { transform: "scale(1.1)" }, { transform: "scale(1)" }], { duration: 520, easing: "ease-out" });
+    await sleep(150);
+    cell.classList.add("fill");
+    await sleep(560);
+    // the flood: a hexagon in the new colour grows from the cell until it covers the window
+    const wr = win.getBoundingClientRect(), cr = cell.getBoundingClientRect();
+    const x = cr.left + cr.width / 2 - wr.left, y = cr.top + cr.height / 2 - wr.top;
+    const far = Math.max(Math.hypot(x, y), Math.hypot(wr.width - x, y), Math.hypot(x, wr.height - y), Math.hypot(wr.width - x, wr.height - y));
+    const s0 = cr.width / 100, s1 = far / 43 * 1.08;
+    wipe.style.fill = a.c;
+    const pos = `translate(${x - 50}px, ${y - 57.5}px)`;
+    if (!reduce) await wipe.animate([{ transform: `${pos} scale(${s0})`, opacity: 1 }, { transform: `${pos} scale(${s1}) rotate(30deg)`, opacity: 1 }], { duration: 560, easing: "cubic-bezier(.6,0,.4,1)", fill: "forwards" }).finished;
+    // swap behind the honey
+    current = i;
+    open = false; hive.hidden = true; hive.classList.remove("open", "closing"); stopAnims();
+    sw.setAttribute("aria-expanded", "false");
+    cells.forEach((c) => c.classList.remove("dim", "fill"));
+    search.value = "";
+    setHeader(true); renderPage(); markCurrent();
+    say(`${a.name} open. ${a.note}.`);
+    bee.mode = "home";
+    if (!reduce) {
+      await wipe.animate([{ transform: `${pos} scale(${s1}) rotate(30deg)`, opacity: 1 }, { transform: `${pos} scale(${s1 * 1.15}) rotate(40deg)`, opacity: 0 }], { duration: 420, easing: "ease-out", fill: "forwards" }).finished;
+      drips();
+    }
+    wipe.getAnimations().forEach((an) => an.cancel());
+    if (user) sw.focus({ preventScroll: true });
+    busy = false;
+  }
+  function drips() {
+    const wr = win.getBoundingClientRect(), r = appIco.getBoundingClientRect();
+    const x = r.left + r.width / 2 - wr.left, y = r.top + r.height / 2 - wr.top;
+    for (let k = 0; k < 8; k++) {
+      const d = document.createElement("i");
+      d.className = "drip"; win.appendChild(d);
+      const a = (k / 8) * Math.PI * 2, dist = 26 + Math.random() * 14;
+      d.animate([{ transform: `translate(${x}px,${y}px) scale(.4) rotate(${a}rad)`, opacity: 1 }, { transform: `translate(${x + Math.cos(a) * dist}px,${y + Math.sin(a) * dist}px) scale(1) rotate(${a}rad)`, opacity: 0 }], { duration: 700, easing: "cubic-bezier(.2,.8,.3,1)" }).onfinish = () => d.remove();
+    }
+  }
+
+  // ---------- Events ----------
+  sw.addEventListener("click", (e) => { if (busy) return; open ? closeHive(false) : openHive(e.detail === 0 && e.isTrusted); });
+  cells.forEach((c, i) => {
+    const hx = c.querySelector(".hex");
+    hx.addEventListener("click", (e) => choose(i, e.isTrusted));
+    hx.addEventListener("pointerenter", () => { if (open && !busy) { setHot(i); bee.mode = "visit"; bee.target = i; } });
+    hx.addEventListener("focus", () => { if (open && !busy) { setHot(i); bee.mode = "visit"; bee.target = i; } });
+    hx.addEventListener("keydown", (e) => {
+      const dirs = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      const d = dirs[e.key];
+      if (!d) return;
+      e.preventDefault();
+      // the nearest hex in roughly that direction
+      let best = -1, bestScore = Infinity;
+      C.forEach((p, k) => {
+        if (k === i) return;
+        const vx = p[0] - C[i][0], vy = p[1] - C[i][1], dist = Math.hypot(vx, vy);
+        const cos = (vx * d[0] + vy * d[1]) / dist;
+        if (cos < .3) return;
+        const score = dist * (2 - cos);
+        if (score < bestScore) { bestScore = score; best = k; }
+      });
+      if (best >= 0) cells[best].querySelector(".hex").focus();
+    });
+  });
+  comb.addEventListener("pointerleave", () => { if (open && !busy) { setHot(-1); bee.mode = "visit"; bee.target = current; } });
+  addEventListener("keydown", (e) => { if (e.key === "Escape" && open && !busy) closeHive(true); });
+  addEventListener("pointerdown", (e) => { if (open && !busy && !hive.contains(e.target) && !sw.contains(e.target)) closeHive(false); });
+  hive.addEventListener("focusout", (e) => { if (open && !busy && e.relatedTarget && !hive.contains(e.relatedTarget) && e.relatedTarget !== sw) closeHive(false); });
+
+  // ---------- The bee: idles round the button, visits the hex you point at, lands on the one you choose ----------
+  const beeEl = $("#bee"), beeFlip = $("#beeFlip");
+  const bee = { x: -40, y: 120, vx: 0, vy: 0, mode: "home", target: 0, face: 1 };
+  let lastT = performance.now();
+  function beeFrame(now) {
+    const dt = Math.min(.033, (now - lastT) / 1000); lastT = now;
+    const t = now / 1000, wr = win.getBoundingClientRect();
+    let tx, ty;
+    if (bee.mode === "home" || !open && bee.mode !== "land") {
+      const b = sw.getBoundingClientRect();
+      tx = b.left + b.width / 2 - wr.left - 34 + Math.cos(t * 1.3) * 26;
+      ty = b.top + b.height / 2 - wr.top + 40 + Math.sin(t * 2.1) * 12;
+    } else {
+      const r = cells[bee.target].getBoundingClientRect();
+      tx = r.left + r.width / 2 - wr.left + (bee.mode === "land" ? 14 : Math.cos(t * 2.4) * 10);
+      ty = r.top - wr.top + (bee.mode === "land" ? 18 : 6 + Math.sin(t * 3.1) * 5);
+    }
+    const k = bee.mode === "land" ? 60 : 26, d = bee.mode === "land" ? 11 : 6;
+    bee.vx += (-k * (bee.x - tx) - d * bee.vx) * dt; bee.vy += (-k * (bee.y - ty) - d * bee.vy) * dt;
+    bee.x += bee.vx * dt; bee.y += bee.vy * dt;
+    if (Math.abs(bee.vx) > 12) bee.face = bee.vx > 0 ? 1 : -1;
+    const tilt = Math.max(-25, Math.min(25, bee.vx * .08));
+    beeEl.style.transform = `translate(${bee.x}px, ${bee.y + (reduce ? 0 : Math.sin(t * 9) * 1.2)}px) rotate(${tilt}deg)`;
+    beeFlip.setAttribute("transform", `scale(${bee.face} 1)`);
+    requestAnimationFrame(beeFrame);
+  }
+
+  // ---------- Start ----------
+  setHeader(false); renderPage(); placeCells(); setHot(-1);
+  if (reduce) { const b = sw.getBoundingClientRect(), wr = win.getBoundingClientRect(); bee.x = b.left - wr.left - 30; bee.y = b.bottom - wr.top + 30; }
+  requestAnimationFrame(beeFrame);
+  addEventListener("resize", () => { if (open) placeCells(); });
+
+  // ---------- Auto demo: open the hive, let the bee visit two apps, pick one, repeat ----------
+  let demo = !reduce;
+  const stop = (e) => { if (e.isTrusted) demo = false; };
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach((t) => addEventListener(t, stop, { capture: true, passive: true }));
+  (async () => {
+    await sleep(1200);
+    const plan = [[2, 3, 3], [5, 1, 1], [4, 6, 6], [6, 0, 0], [3, 5, 5], [1, 2, 2]];
+    let k = 0;
+    while (demo) {
+      const [a, b, pick] = plan[k++ % plan.length];
+      if (busy) { await sleep(400); continue; }
+      openHive(false); await sleep(900); if (!demo) break;
+      setHot(a); bee.mode = "visit"; bee.target = a; await sleep(800); if (!demo) break;
+      setHot(b); bee.target = b; await sleep(800); if (!demo) break;
+      await choose(pick, false); if (!demo) break;
+      await sleep(2200);
+    }
+  })();
+})();
+</script>
+</body>
+</html>

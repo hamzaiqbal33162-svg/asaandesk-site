@@ -1,0 +1,707 @@
+<!doctype html>
+<!-- Chill & Craft · Stitchway · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stitchway · checkout stepper</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and keep following it)
+  (function () {
+    var q = new URLSearchParams(location.search).get("theme");
+    var m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { document.documentElement.setAttribute("data-theme", q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"); }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colours: denim indigo, cream calico and a mustard thread ---------- */
+  :root {
+    color-scheme: light;
+    --denim: #3a4d8f;
+    --denim2: #2a3a73;
+    --card: #fbf6ea;
+    --card2: #f4ecda;
+    --field: #fffdf7;
+    --line: #e3d8bf;
+    --ink: #23263b;
+    --ink2: #63657a;
+    --soft: #9a9584;
+    --thread: #d99a1e;
+    --thread2: #f2c35b;
+    --chalk: #c8bb9c;
+    --brass: #c9952c;
+    --needle: #8e97a8;
+    --bad: #c2412d;
+    --good: #2f8f5b;
+    --shadow: rgba(10, 18, 50, .45);
+    --focus: #d99a1e;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --denim: #18204a;
+    --denim2: #0d1230;
+    --card: #1e2340;
+    --card2: #191d36;
+    --field: #252b4d;
+    --line: #353c63;
+    --ink: #f3eedf;
+    --ink2: #b8b5c8;
+    --soft: #7d7f99;
+    --thread: #f2b73a;
+    --thread2: #ffd46e;
+    --chalk: #4f5679;
+    --brass: #e0ad44;
+    --needle: #b9c1d2;
+    --bad: #ff7a63;
+    --good: #5fd394;
+    --shadow: rgba(0, 0, 0, .6);
+  }
+
+  /* ---------- Stage: a denim table ---------- */
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    font-family: var(--sans);
+    color: var(--ink);
+    background:
+      repeating-linear-gradient(135deg, rgba(255, 255, 255, .045) 0 2px, transparent 2px 5px),
+      radial-gradient(70% 55% at 50% 0%, color-mix(in srgb, var(--denim) 70%, #fff 10%), transparent),
+      linear-gradient(180deg, var(--denim), var(--denim2));
+  }
+  .stage { position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 18px 12px; overflow: hidden; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- The order card, with its own stitched hem ---------- */
+  .card {
+    position: relative;
+    width: min(560px, 100%);
+    padding: 20px 20px 18px;
+    border-radius: 28px;
+    background: linear-gradient(180deg, var(--card), var(--card2));
+    box-shadow: 0 50px 90px -40px var(--shadow), 0 2px 0 rgba(255, 255, 255, .5) inset;
+  }
+  .card::before { content: ""; position: absolute; inset: 8px; border: 1.5px dashed color-mix(in srgb, var(--thread) 55%, transparent); border-radius: 21px; pointer-events: none; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 2px 6px 0; }
+  .head b { font-size: 17px; letter-spacing: -.01em; }
+  .head small { color: var(--ink2); font-size: 12.5px; white-space: nowrap; }
+
+  /* ---------- Stepper: four sewing buttons on a chalk line ---------- */
+  .stepper { position: relative; height: 92px; margin: 16px 0 2px; }
+  .stepper svg.seam { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .chalk { fill: none; stroke: var(--chalk); stroke-width: 2; stroke-dasharray: 2 6; stroke-linecap: round; }
+  .stitch { fill: none; stroke: var(--thread); stroke-width: 3; stroke-dasharray: 8 6; stroke-linecap: round; }
+  .loose { fill: none; stroke: var(--thread); stroke-width: 1.6; stroke-linecap: round; }
+  .nd-body { fill: var(--needle); }
+  .nd-eye { fill: var(--card); }
+  .nd-shine { stroke: #fff; stroke-opacity: .7; stroke-width: .9; }
+  .knot { fill: none; stroke: var(--thread); stroke-width: 2.4; stroke-linecap: round; }
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .steps li { position: absolute; top: 20px; width: 76px; margin-left: -38px; display: grid; justify-items: center; }
+  .sb {
+    position: relative;
+    display: grid; justify-items: center; gap: 6px;
+    width: 76px; padding: 0; border: 0; background: none;
+    font-size: 12.5px; font-weight: 700; color: var(--soft);
+  }
+  .sb:focus-visible { outline-offset: 4px; border-radius: 12px; }
+  .bt { width: 36px; height: 36px; display: block; transition: transform .5s var(--spring); }
+  .bt .disc { fill: var(--card); stroke: var(--chalk); stroke-width: 1.6; stroke-dasharray: 3 3; transition: fill .3s, stroke .3s; }
+  .bt .rim { fill: none; stroke: transparent; stroke-width: 1.4; }
+  .bt .hole { fill: var(--chalk); transition: fill .3s; }
+  .bt .x { fill: none; stroke: var(--card); stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset .45s ease .05s; }
+  .sb[aria-current="step"] { color: var(--ink); }
+  .sb[aria-current="step"] .disc { stroke: var(--thread); stroke-dasharray: none; stroke-width: 2.2; }
+  .sb[aria-current="step"] .bt { animation: beat 2.4s ease-in-out infinite; }
+  @keyframes beat { 50% { transform: scale(1.07); } }
+  .sb.done { color: var(--ink); }
+  .sb.done .disc { fill: var(--brass); stroke: color-mix(in srgb, var(--brass) 60%, #000); stroke-dasharray: none; }
+  .sb.done .rim { stroke: rgba(255, 255, 255, .35); }
+  .sb.done .hole { fill: color-mix(in srgb, var(--brass) 45%, #000); }
+  .sb.done .x { stroke-dashoffset: 0; stroke: var(--thread2); }
+  .sb.pop .bt { animation: popb .7s var(--spring); }
+  @keyframes popb { 0% { transform: scale(.8); } 45% { transform: scale(1.28) rotate(-12deg); } 100% { transform: none; } }
+  .sb.prick { animation: prick .4s; }
+  @keyframes prick { 25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
+  .sb[aria-disabled="true"] { cursor: not-allowed; }
+
+  /* ---------- Panels ---------- */
+  .stack { position: relative; min-height: 320px; overflow-x: clip; }
+  .panel { padding: 4px 4px 2px; }
+  .panel h2 { margin: 2px 0 2px; font-size: 21px; letter-spacing: -.02em; outline: none; }
+  .panel .lead { margin: 0 0 12px; color: var(--ink2); font-size: 13.5px; }
+  .in > * { animation: rise .55s var(--spring) backwards; }
+  .in > *:nth-child(2) { animation-delay: .05s; } .in > *:nth-child(3) { animation-delay: .1s; } .in > *:nth-child(4) { animation-delay: .15s; } .in > *:nth-child(5) { animation-delay: .2s; } .in > *:nth-child(6) { animation-delay: .25s; }
+  @keyframes rise { from { opacity: 0; transform: translateX(calc(var(--dir, 1) * 26px)); } }
+  .lbl { display: block; margin: 12px 0 6px; font-size: 12.5px; font-weight: 750; color: var(--ink2); letter-spacing: .02em; }
+
+  .fabrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .opt { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 9px; align-items: center; padding: 9px 10px; border-radius: 16px; background: var(--field); box-shadow: 0 0 0 1.5px var(--line); cursor: pointer; transition: box-shadow .25s, transform .3s var(--spring); }
+  .opt:hover { transform: translateY(-2px); }
+  .opt input, .col input, .pay input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .opt:has(input:checked), .pay label:has(input:checked) { box-shadow: 0 0 0 2.5px var(--thread); }
+  .opt:has(input:focus-visible), .col:has(input:focus-visible), .pay label:has(input:focus-visible) { outline: 2.5px solid var(--focus); outline-offset: 2px; }
+  .sw { grid-row: span 2; width: 34px; height: 34px; border-radius: 10px; background-color: var(--col, #3d4f9f); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .15); }
+  .sw.lawn { background-image: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .55) 0 1.6px, transparent 2.2px); background-size: 8px 8px; }
+  .sw.linen { background-image: repeating-linear-gradient(0deg, rgba(255, 255, 255, .16) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgba(0, 0, 0, .16) 0 1px, transparent 1px 3px); }
+  .sw.silk { background-image: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, .55) 45%, transparent 70%); }
+  .sw.wash { background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, .14) 0 1px, transparent 1px 4px); }
+  .opt b { font-size: 13.5px; line-height: 1.2; }
+  .opt small { font-size: 12px; color: var(--ink2); }
+  .opt .pr { font-weight: 750; color: var(--ink); }
+  .cols { display: flex; flex-wrap: wrap; gap: 8px; }
+  .col { position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px 6px 6px; border-radius: 999px; background: var(--field); box-shadow: 0 0 0 1.5px var(--line); font-size: 13px; font-weight: 650; cursor: pointer; }
+  .col span { width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .18); transition: transform .4s var(--spring); }
+  .col:has(input:checked) { box-shadow: 0 0 0 2.5px var(--thread); }
+  .col:has(input:checked) span { transform: scale(1.15) rotate(20deg); }
+
+  .sizes { display: flex; gap: 8px; }
+  .sizes button { flex: 1; height: 38px; border-radius: 12px; border: 0; background: var(--field); box-shadow: 0 0 0 1.5px var(--line); font-weight: 750; transition: transform .3s var(--spring); }
+  .sizes button:active { transform: scale(.92); }
+  .sizes button.on { box-shadow: 0 0 0 2.5px var(--thread); }
+  .fit { display: grid; grid-template-columns: minmax(0, 1fr) 116px; gap: 12px; align-items: start; }
+  .kurta { width: 116px; height: 160px; margin-top: 12px; border-radius: 18px; background: var(--field); box-shadow: 0 0 0 1.5px var(--line); }
+  .kurta path.body { transition: d .6s var(--spring), fill .4s; stroke: rgba(0, 0, 0, .25); stroke-width: 1; }
+  .kurta .trim { fill: none; stroke: var(--thread2); stroke-width: 1.3; stroke-dasharray: 3 2.5; transition: d .6s var(--spring); }
+  .field { display: grid; gap: 4px; margin-top: 10px; }
+  .field label { font-size: 12.5px; font-weight: 750; color: var(--ink2); }
+  .field input, .field select { width: 100%; height: 42px; padding: 0 12px; border-radius: 12px; border: 0; background: var(--field); box-shadow: 0 0 0 1.5px var(--line); font-size: 15px; }
+  .field input:focus, .field select:focus { outline: none; box-shadow: 0 0 0 2.5px var(--thread); }
+  .field input[aria-invalid="true"] { box-shadow: 0 0 0 2.5px var(--bad); animation: prick .4s; }
+  .unit { position: relative; }
+  .unit input { padding-right: 34px; }
+  .unit::after { content: "in"; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--soft); font-size: 13px; pointer-events: none; }
+  .err { margin: 2px 0 0; min-height: 0; color: var(--bad); font-size: 12.5px; font-weight: 650; }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-top: 12px; padding: 10px 12px; border: 0; border-radius: 14px; background: var(--field); box-shadow: 0 0 0 1.5px var(--line); text-align: left; }
+  .switch b { display: block; font-size: 14px; }
+  .switch small { color: var(--ink2); font-size: 12.5px; }
+  .knobs { flex: none; position: relative; width: 48px; height: 28px; border-radius: 14px; background: var(--chalk); transition: background .3s; }
+  .knobs::after { content: ""; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, .25); transition: transform .45s var(--spring); }
+  .switch[aria-checked="true"] .knobs { background: var(--thread); }
+  .switch[aria-checked="true"] .knobs::after { transform: translateX(20px); }
+
+  .sum { list-style: none; margin: 0; padding: 10px 12px; border-radius: 16px; background: var(--field); box-shadow: 0 0 0 1.5px var(--line); display: grid; gap: 6px; font-size: 13.5px; }
+  .sum li { display: flex; justify-content: space-between; gap: 10px; }
+  .sum li span { color: var(--ink2); }
+  .sum li.t { padding-top: 7px; border-top: 1.5px dashed var(--line); font-weight: 800; font-size: 15px; }
+  .sum li.t span { color: var(--ink); }
+  .pay { display: grid; gap: 8px; }
+  .pay label { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--field); box-shadow: 0 0 0 1.5px var(--line); cursor: pointer; font-size: 14px; font-weight: 650; }
+  .pay label i { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--chalk); transition: box-shadow .3s var(--spring); }
+  .pay label:has(input:checked) i { box-shadow: inset 0 0 0 6px var(--thread); }
+  .pay small { margin-left: auto; color: var(--ink2); font-weight: 600; font-size: 12px; }
+
+  /* the finished order: a swing tag on a thread */
+  .done-wrap { display: grid; justify-items: center; text-align: center; padding-top: 4px; }
+  .tag { position: relative; width: min(260px, 100%); margin-top: 26px; padding: 26px 18px 18px; border-radius: 10px 10px 18px 18px; background: var(--field); box-shadow: 0 0 0 1.5px var(--line), 0 24px 30px -24px var(--shadow); transform-origin: 50% -26px; animation: swing 1.6s var(--spring); }
+  .tag::before { content: ""; position: absolute; left: 50%; top: 10px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--chalk); }
+  .tag::after { content: ""; position: absolute; left: 50%; top: -26px; width: 2px; height: 37px; margin-left: -1px; background: var(--thread); }
+  @keyframes swing { 0% { transform: rotate(-38deg) translateY(-30px); opacity: 0; } 30% { opacity: 1; } 50% { transform: rotate(12deg); } 72% { transform: rotate(-5deg); } 100% { transform: none; } }
+  .tag b { display: block; font-size: 19px; letter-spacing: -.01em; }
+  .tag p { margin: 6px 0 0; color: var(--ink2); font-size: 13.5px; }
+  .tag .no { display: inline-block; margin-top: 10px; padding: 4px 10px; border-radius: 8px; background: var(--card2); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; font-weight: 700; }
+  .again { margin-top: 16px; height: 42px; padding: 0 18px; border-radius: 14px; border: 0; background: var(--ink); color: var(--card); font-weight: 750; }
+  .confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 28px; }
+  .confetti svg { position: absolute; left: 0; top: 0; width: 16px; height: 16px; }
+
+  /* ---------- Footer: total and the two buttons ---------- */
+  .foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 12px 4px 0; border-top: 1.5px dashed var(--line); }
+  .total { margin-right: auto; min-width: 0; }
+  .total small { display: block; color: var(--ink2); font-size: 12px; font-weight: 650; }
+  .total b { font-size: 19px; white-space: nowrap; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .back, .next { height: 46px; border-radius: 15px; border: 0; font-weight: 800; font-size: 14.5px; }
+  .back { padding: 0 14px; background: transparent; box-shadow: 0 0 0 1.5px var(--line); }
+  .back:disabled { opacity: .4; cursor: default; }
+  .next { position: relative; min-width: 128px; padding: 0 18px; background: var(--ink); color: var(--card); box-shadow: 0 12px 22px -14px var(--shadow); transition: transform .3s var(--spring); }
+  .next:active { transform: scale(.94); }
+  .next .spin { display: none; width: 18px; height: 18px; margin: 0 auto; border-radius: 50%; border: 2.5px solid color-mix(in srgb, var(--card) 35%, transparent); border-top-color: var(--card); animation: spin .7s linear infinite; }
+  .next.busy .t { display: none; }
+  .next.busy .spin { display: block; }
+  @keyframes spin { to { transform: rotate(1turn); } }
+  @media (max-width: 420px) { .head small { display: none; } .back { padding: 0 12px; } .next { min-width: 108px; } .total b { font-size: 17px; } }
+  @media (max-width: 380px) { .card { padding: 16px 14px; } .fit { grid-template-columns: minmax(0, 1fr) 96px; } .kurta { width: 96px; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" aria-labelledby="orderTitle">
+    <div class="head"><b id="orderTitle">Tailored kurta order</b><small>Fine Seams · Lahore</small></div>
+
+    <nav class="stepper" id="stepper" aria-label="Checkout steps">
+      <svg class="seam" id="seam" aria-hidden="true">
+        <defs><clipPath id="sewn"><rect id="sewnRect" x="0" y="-20" width="0" height="120"/></clipPath></defs>
+        <path class="chalk" id="chalk"/>
+        <path class="stitch" id="stitch" clip-path="url(#sewn)"/>
+        <path class="knot" id="knot" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+        <g id="lint"></g>
+      </svg>
+      <ol class="steps" id="steps"></ol>
+      <svg class="seam" aria-hidden="true" style="z-index:2">
+        <path class="loose" id="loose"/>
+        <g id="needle"><path class="nd-body" d="M0 0 L1.6 -6 L1.9 -36 Q0 -40 -1.9 -36 L-1.6 -6 Z"/><ellipse class="nd-eye" cx="0" cy="-32" rx=".8" ry="2.6"/><path class="nd-shine" d="M.6 -9 V-27"/></g>
+      </svg>
+    </nav>
+
+    <div class="stack" id="stack">
+      <!-- Step 1 -->
+      <section class="panel" data-step="0" aria-labelledby="h0">
+        <div class="in">
+          <h2 id="h0" tabindex="-1">Pick your fabric</h2>
+          <p class="lead">Three metres, cut and stitched to your size.</p>
+          <div class="fabrics" role="radiogroup" aria-label="Fabric">
+            <label class="opt"><input type="radio" name="fabric" value="lawn" data-price="2800" data-name="Cotton lawn"><span class="sw lawn"></span><b>Cotton lawn</b><small class="pr">PKR 2,800</small></label>
+            <label class="opt"><input type="radio" name="fabric" value="linen" data-price="3600" data-name="Linen"><span class="sw linen"></span><b>Linen</b><small class="pr">PKR 3,600</small></label>
+            <label class="opt"><input type="radio" name="fabric" value="silk" data-price="5200" data-name="Silk blend"><span class="sw silk"></span><b>Silk blend</b><small class="pr">PKR 5,200</small></label>
+            <label class="opt"><input type="radio" name="fabric" value="wash" data-price="2400" data-name="Wash and wear"><span class="sw wash"></span><b>Wash and wear</b><small class="pr">PKR 2,400</small></label>
+          </div>
+          <span class="lbl" id="colLbl">Colour</span>
+          <div class="cols" role="radiogroup" aria-labelledby="colLbl">
+            <label class="col"><input type="radio" name="colour" value="#3d4f9f" data-name="Indigo"><span style="--c:#3d4f9f"></span>Indigo</label>
+            <label class="col"><input type="radio" name="colour" value="#8a2635" data-name="Maroon"><span style="--c:#8a2635"></span>Maroon</label>
+            <label class="col"><input type="radio" name="colour" value="#6b7a3a" data-name="Olive"><span style="--c:#6b7a3a"></span>Olive</label>
+            <label class="col"><input type="radio" name="colour" value="#c9ae7c" data-name="Sand"><span style="--c:#c9ae7c"></span>Sand</label>
+          </div>
+          <p class="err" id="e0" aria-live="polite"></p>
+        </div>
+      </section>
+      <!-- Step 2 -->
+      <section class="panel" data-step="1" aria-labelledby="h1" hidden>
+        <div class="in">
+          <h2 id="h1" tabindex="-1">Your fit</h2>
+          <p class="lead">Tap a size to start, then fine-tune in inches.</p>
+          <div class="sizes" id="sizes"><button type="button" data-s="S">S</button><button type="button" data-s="M">M</button><button type="button" data-s="L">L</button><button type="button" data-s="XL">XL</button></div>
+          <div class="fit">
+            <div>
+              <div class="field"><label for="chest">Chest</label><div class="unit"><input id="chest" type="number" inputmode="decimal" min="30" max="56" step="0.5" placeholder="30 to 56" aria-describedby="e1"></div></div>
+              <div class="field"><label for="length">Length</label><div class="unit"><input id="length" type="number" inputmode="decimal" min="30" max="48" step="0.5" placeholder="30 to 48" aria-describedby="e1"></div></div>
+              <div class="field"><label for="sleeve">Sleeve</label><div class="unit"><input id="sleeve" type="number" inputmode="decimal" min="18" max="28" step="0.5" placeholder="18 to 28" aria-describedby="e1"></div></div>
+            </div>
+            <svg class="kurta" viewBox="0 0 120 160" role="img" aria-label="Kurta preview that follows your measurements"><path class="body" id="kBody"/><path class="trim" id="kTrim"/></svg>
+          </div>
+          <p class="err" id="e1" aria-live="polite"></p>
+        </div>
+      </section>
+      <!-- Step 3 -->
+      <section class="panel" data-step="2" aria-labelledby="h2" hidden>
+        <div class="in">
+          <h2 id="h2" tabindex="-1">Delivery</h2>
+          <p class="lead">Free delivery in Lahore, PKR 250 to other cities.</p>
+          <div class="field"><label for="name">Full name</label><input id="name" autocomplete="name" placeholder="Ayesha Khan" aria-describedby="e2"></div>
+          <div class="row2">
+            <div class="field"><label for="phone">Mobile</label><input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0300 1234567" aria-describedby="e2"></div>
+            <div class="field"><label for="city">City</label><select id="city"><option>Lahore</option><option>Karachi</option><option>Islamabad</option><option>Faisalabad</option><option>Multan</option><option>Peshawar</option></select></div>
+          </div>
+          <button class="switch" id="express" type="button" role="switch" aria-checked="false"><span><b>Express stitching</b><small>Ready in 3 days, not 6 · PKR 350</small></span><span class="knobs" aria-hidden="true"></span></button>
+          <p class="err" id="e2" aria-live="polite"></p>
+        </div>
+      </section>
+      <!-- Step 4 -->
+      <section class="panel" data-step="3" aria-labelledby="h3" hidden>
+        <div class="in">
+          <h2 id="h3" tabindex="-1">Review and pay</h2>
+          <p class="lead" id="payLead">Check your order, then choose how to pay.</p>
+          <ul class="sum" id="sum"></ul>
+          <span class="lbl" id="payLbl">Payment</span>
+          <div class="pay" role="radiogroup" aria-labelledby="payLbl">
+            <label><input type="radio" name="pay" value="Cash on delivery" checked><i></i>Cash on delivery<small>Most popular</small></label>
+            <label><input type="radio" name="pay" value="Card on delivery"><i></i>Card on delivery</label>
+            <label><input type="radio" name="pay" value="Bank transfer"><i></i>Bank transfer<small>Details by SMS</small></label>
+          </div>
+        </div>
+      </section>
+      <!-- Done -->
+      <section class="panel" data-step="4" aria-labelledby="h4" hidden>
+        <div class="in done-wrap">
+          <div class="tag"><b id="h4" tabindex="-1">Order placed</b><p id="doneText">Your kurta is being cut.</p><span class="no" id="orderNo">ST-00000</span></div>
+          <button class="again" id="again" type="button">Start a new order</button>
+        </div>
+      </section>
+      <div class="confetti" id="confetti" aria-hidden="true"></div>
+    </div>
+
+    <div class="foot" id="foot">
+      <div class="total"><small>Total</small><b id="total">PKR 1,500</b></div>
+      <button class="back" id="back" type="button" disabled>Back</button>
+      <button class="next" id="next" type="button"><span class="t">Next</span><span class="spin" aria-hidden="true"></span></button>
+    </div>
+    <p class="sr-only" aria-live="polite" id="live"></p>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const pkr = (n) => "PKR " + Math.round(n).toLocaleString("en-US");
+  const live = $("#live");
+  const say = (t) => { live.textContent = ""; setTimeout(() => { live.textContent = t; }, 30); };
+  const ease = (t) => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const outBack = (t) => 1 + 2.4 * Math.pow(t - 1, 3) + 1.4 * Math.pow(t - 1, 2);
+
+  const STEPS = ["Fabric", "Fit", "Delivery", "Pay"];
+  const STITCHING = 1500, EXPRESS = 350;
+  let step = 0, reached = 0, sewnSteps = 0, finished = false;
+
+  // ---------- Stepper buttons (a little four-hole sewing button each) ----------
+  const btnSvg = `<svg class="bt" viewBox="0 0 36 36" aria-hidden="true"><circle class="disc" cx="18" cy="18" r="15"/><circle class="rim" cx="18" cy="18" r="11.5"/><circle class="hole" cx="14" cy="14" r="1.9"/><circle class="hole" cx="22" cy="14" r="1.9"/><circle class="hole" cx="14" cy="22" r="1.9"/><circle class="hole" cx="22" cy="22" r="1.9"/><path class="x" pathLength="1" d="M14 14 22 22M22 14 14 22"/></svg>`;
+  const stepsEl = $("#steps");
+  stepsEl.innerHTML = STEPS.map((s, i) => `<li><button class="sb" type="button" data-i="${i}" aria-label="Step ${i + 1}: ${s}">${btnSvg}<span>${s}</span></button></li>`).join("");
+  const sbs = $$(".sb", stepsEl);
+
+  // ---------- Seam geometry: node x positions and a gently sagging seam between them ----------
+  const SY = 38, SAG = 5;
+  let W = 400, X = [];
+  function layout() {
+    W = $("#stepper").clientWidth;
+    const pad = Math.max(40, Math.min(70, W * .11));
+    X = STEPS.map((_, i) => pad + i * (W - 2 * pad) / (STEPS.length - 1));
+    stepsEl.querySelectorAll("li").forEach((li, i) => { li.style.left = X[i] + "px"; });
+    let d = `M${X[0]} ${SY}`;
+    for (let i = 1; i < X.length; i++) d += ` Q${(X[i - 1] + X[i]) / 2} ${SY + SAG * 2} ${X[i]} ${SY}`;
+    d += ` L${W - 6} ${SY}`;
+    $("#chalk").setAttribute("d", d);
+    $("#stitch").setAttribute("d", d);
+  }
+  const seamY = (x) => {
+    for (let i = 1; i < X.length; i++) if (x <= X[i]) { const t = Math.max(0, (x - X[i - 1]) / (X[i] - X[i - 1])); return SY + 2 * t * (1 - t) * SAG * 2; }
+    return SY;
+  };
+
+  // ---------- Needle state, drawn every frame it moves ----------
+  const REST = -24; // resting tilt: tip down on the button, eye up and back
+  const N = { x: 0, y: 0, rot: REST }; // tip position and tilt
+  let sewnX = 0; // stitches are shown up to here
+  const needle = $("#needle"), loose = $("#loose"), sewnRect = $("#sewnRect");
+  function draw(wiggle = 0) {
+    needle.setAttribute("transform", `translate(${N.x} ${N.y}) rotate(${N.rot})`);
+    const shown = sewnX > X[0] ? X[0] + Math.floor((sewnX - X[0]) / 14) * 14 + 8 : 0; // whole stitches only
+    sewnRect.setAttribute("width", Math.max(0, shown));
+    const r = N.rot * Math.PI / 180, ex = N.x + Math.sin(r) * 32, ey = N.y - Math.cos(r) * 32;
+    const sx = Math.max(X[0], sewnX), sy = seamY(sx);
+    const mx = (sx + ex) / 2, my = Math.max(sy, ey) + 14 + wiggle;
+    loose.setAttribute("d", `M${sx} ${sy} Q${mx} ${my} ${ex} ${ey}`);
+  }
+  const restAt = (i) => { N.x = X[i] + 8; N.y = SY - 12; N.rot = REST; };
+
+  // tweens that stop quietly when a newer move starts
+  let tok = 0;
+  const tween = (ms, fn, my) => new Promise((res) => {
+    if (reduce) ms = 1;
+    const t0 = performance.now();
+    const f = (now) => { if (my !== tok) return res(false); const t = Math.min(1, (now - t0) / ms); fn(t); if (t < 1) requestAnimationFrame(f); else res(true); };
+    requestAnimationFrame(f);
+  });
+
+  // fluffy bits of thread fly off a freshly sewn button
+  function lint(x) {
+    if (reduce) return;
+    const g = $("#lint");
+    for (let k = 0; k < 7; k++) {
+      const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      p.setAttribute("d", "M0 0q2-3 4 0t4 0");
+      p.setAttribute("class", "loose");
+      g.appendChild(p);
+      const a = -Math.PI / 2 + (Math.random() - .5) * 2.6, d = 22 + Math.random() * 22;
+      p.animate([{ transform: `translate(${x}px,${SY}px) rotate(0deg) scale(.6)`, opacity: 1 }, { transform: `translate(${x + Math.cos(a) * d}px,${SY + Math.sin(a) * d + 10}px) rotate(${Math.random() * 360}deg) scale(1)`, opacity: 0 }], { duration: 700 + Math.random() * 300, easing: "cubic-bezier(.2,.7,.4,1)" }).onfinish = () => p.remove();
+    }
+  }
+
+  // ---------- The sewing move: lift, run along the seam stitching, dive into the next button ----------
+  async function sewTo(target, sew) {
+    const my = ++tok;
+    const x0 = N.x, y0 = N.y, r0 = N.rot;
+    const x1 = target === "end" ? W - 14 : X[target] + 8;
+    const fwd = x1 >= x0;
+    // anticipation: the needle lifts and leans back
+    let ok = await tween(200, (t) => { const e = ease(t); N.y = y0 - 10 * e; N.rot = r0 + (fwd ? 30 : -30) * e; draw(); }, my);
+    if (!ok) return false;
+    const ya = N.y, ra = N.rot, dist = Math.abs(x1 - x0);
+    const dur = Math.max(420, Math.min(900, dist * 2.4));
+    const bobs = Math.max(2, Math.round(dist / 34));
+    const lead = fwd ? -48 : 48; // the tip leads the way along the seam
+    ok = await tween(dur, (t) => {
+      const e = ease(t);
+      N.x = x0 + (x1 - x0) * e;
+      const bob = Math.abs(Math.sin(t * Math.PI * bobs));
+      const b = Math.min(1, t * 5); // blend from the lifted pose into the stitching bob
+      N.y = ya * (1 - b) + (seamY(N.x) - 3 - bob * 12) * b;
+      N.rot = ra * (1 - b) + lead * (1 - bob * .45) * b;
+      if (sew && N.x > sewnX) sewnX = N.x;
+      draw(Math.sin(t * 20) * 3);
+    }, my);
+    if (!ok) return false;
+    // settle above the new button with a springy tilt
+    const xs = N.x, ys = N.y, rs = N.rot;
+    ok = await tween(520, (t) => {
+      const o = outBack(t);
+      N.x = xs + (x1 - xs) * o;
+      N.y = ys + ((SY - 12) - ys) * o;
+      N.rot = rs + (REST - rs) * o;
+      draw(Math.sin(t * 12) * 4 * (1 - t));
+    }, my);
+    return ok;
+  }
+
+  // ---------- Prices ----------
+  const val = (name) => { const el = document.querySelector(`input[name="${name}"]:checked`); return el; };
+  function sums() {
+    const f = val("fabric"), city = $("#city").value, ex = $("#express").getAttribute("aria-checked") === "true";
+    const fabric = f ? +f.dataset.price : 0, delivery = city === "Lahore" ? 0 : 250;
+    return { fabric, delivery, ex: ex ? EXPRESS : 0, total: fabric + STITCHING + (reached >= 2 || step >= 2 ? delivery : 0) + (ex ? EXPRESS : 0), f, city };
+  }
+  let shownTotal = STITCHING;
+  let totalTok = 0;
+  function renderTotal() {
+    const to = sums().total, from = shownTotal, my = ++totalTok;
+    if (to === from) return;
+    const t0 = performance.now();
+    const f = (now) => {
+      if (my !== totalTok) return;
+      const t = reduce ? 1 : Math.min(1, (now - t0) / 500);
+      shownTotal = from + (to - from) * (1 - Math.pow(1 - t, 3));
+      $("#total").textContent = pkr(shownTotal);
+      if (t < 1) requestAnimationFrame(f); else shownTotal = to;
+    };
+    requestAnimationFrame(f);
+  }
+  function renderSummary() {
+    const s = sums(), c = val("colour");
+    $("#sum").innerHTML = `
+      <li><span>${s.f ? s.f.dataset.name : "Fabric"}${c ? ", " + c.dataset.name.toLowerCase() : ""}</span><b>${pkr(s.fabric)}</b></li>
+      <li><span>Stitching to your size</span><b>${pkr(STITCHING)}</b></li>
+      <li><span>Delivery to ${s.city}</span><b>${s.delivery ? pkr(s.delivery) : "Free"}</b></li>
+      ${s.ex ? `<li><span>Express stitching</span><b>${pkr(EXPRESS)}</b></li>` : ""}
+      <li class="t"><span>Total</span><b>${pkr(s.total)}</b></li>`;
+    $("#payLead").textContent = `For ${$("#name").value.trim() || "you"}, delivered to ${s.city}.`;
+  }
+
+  // ---------- Kurta preview that follows the measurements ----------
+  function kurta() {
+    const num = (id, lo, hi, d) => { const v = parseFloat($("#" + id).value); return isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; };
+    const ch = num("chest", 30, 56, 40), ln = num("length", 30, 48, 40), sl = num("sleeve", 18, 28, 23);
+    const hw = 10 + ch * .38, hem = 22 + ln * 2.6, sx = sl * .75, sy = sl * 1.75, c = 60;
+    const f = (n) => n.toFixed(1);
+    const d = `M${f(c - 8)} 16 Q${c} 25 ${f(c + 8)} 16 L${f(c + hw + 4)} 20 L${f(c + hw + 4 + sx)} ${f(20 + sy)} L${f(c + hw - 6 + sx)} ${f(26 + sy)} L${f(c + hw)} 46 L${f(c + hw + 6)} ${f(hem)} L${f(c - hw - 6)} ${f(hem)} L${f(c - hw)} 46 L${f(c - hw + 6 - sx)} ${f(26 + sy)} L${f(c - hw - 4 - sx)} ${f(20 + sy)} L${f(c - hw - 4)} 20 Z`;
+    const trim = `M${f(c - 6)} 19 Q${c} 27 ${f(c + 6)} 19 M${c} 25 L${c} 56 M${f(c + hw + 3)} ${f(hem - 2)} L${f(c + hw + 1)} ${f(hem - 20)} M${f(c - hw - 3)} ${f(hem - 2)} L${f(c - hw - 1)} ${f(hem - 20)}`;
+    const col = val("colour");
+    const body = $("#kBody");
+    body.style.d = `path("${d}")`;
+    body.style.fill = col ? col.value : "#9aa3c4";
+    $("#kTrim").style.d = `path("${trim}")`;
+  }
+  const SIZES = { S: [36, 38, 22], M: [40, 40, 23], L: [44, 42, 24], XL: [48, 43, 25] };
+
+  // ---------- Validation ----------
+  function err(i, msg, el) {
+    $("#e" + i).textContent = msg;
+    if (el) { el.setAttribute("aria-invalid", "true"); el.focus({ preventScroll: true }); }
+    sbs[i].classList.remove("prick"); void sbs[i].offsetWidth; sbs[i].classList.add("prick");
+    // the needle pricks the button
+    if (!reduce) { const my = ++tok, y0 = SY - 12; tween(360, (t) => { N.y = y0 + Math.sin(t * Math.PI * 3) * 5; draw(); }, my).then(() => { if (my === tok) { N.y = y0; draw(); } }); }
+    return false;
+  }
+  function validate(i) {
+    $$("[aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
+    $("#e" + Math.min(i, 2)).textContent = "";
+    if (i === 0) {
+      if (!val("fabric")) return err(0, "Pick a fabric first.", null);
+      if (!val("colour")) return err(0, "Pick a colour too.", null);
+    }
+    if (i === 1) {
+      const rules = [["chest", 30, 56], ["length", 30, 48], ["sleeve", 18, 28]];
+      for (const [id, lo, hi] of rules) {
+        const el = $("#" + id), v = parseFloat(el.value);
+        if (!isFinite(v) || v < lo || v > hi) return err(1, `${id[0].toUpperCase() + id.slice(1)} should be ${lo} to ${hi} inches.`, el);
+      }
+    }
+    if (i === 2) {
+      if ($("#name").value.trim().length < 2) return err(2, "Please add your name.", $("#name"));
+      const digits = $("#phone").value.replace(/\D/g, "");
+      if (!/^03\d{9}$/.test(digits)) return err(2, "Mobile should be 11 digits starting with 03.", $("#phone"));
+    }
+    return true;
+  }
+
+  // ---------- Moving between steps ----------
+  const panels = $$(".panel", $("#stack"));
+  function showPanel(i, dir, focus) {
+    panels.forEach((p) => {
+      const on = +p.dataset.step === i;
+      p.hidden = !on;
+      if (on) { const inner = p.querySelector(".in"); inner.style.setProperty("--dir", dir); inner.classList.remove("in"); void inner.offsetWidth; inner.classList.add("in"); }
+    });
+    if (focus) { const h = panels[i].querySelector("h2, b[tabindex]"); if (h) h.focus({ preventScroll: true }); }
+  }
+  function paintSteps() {
+    sbs.forEach((b, i) => {
+      b.classList.toggle("done", i < sewnSteps);
+      if (i === step && !finished) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
+      b.setAttribute("aria-disabled", String(i > reached || finished));
+      b.setAttribute("aria-label", `Step ${i + 1}: ${STEPS[i]}${i < sewnSteps ? ", done" : i > reached ? ", locked" : ""}`);
+    });
+    $("#back").disabled = step === 0 || finished;
+    $("#foot").hidden = finished;
+    $("#next").querySelector(".t").textContent = step === 3 ? "Place order" : "Next";
+  }
+
+  async function goTo(i, user) {
+    if (i === step || finished) return;
+    const dir = i > step ? 1 : -1;
+    const from = step;
+    if (dir > 0 && from >= sewnSteps) {
+      sewnSteps = from + 1;
+      sbs[from].classList.add("done");
+      sbs[from].classList.remove("pop"); void sbs[from].offsetWidth; sbs[from].classList.add("pop");
+      lint(X[from]);
+    }
+    step = i; reached = Math.max(reached, i);
+    paintSteps();
+    showPanel(i, dir, user);
+    if (i === 3) renderSummary();
+    renderTotal();
+    say(`Step ${i + 1} of 4: ${STEPS[i]}`);
+    await sewTo(i, dir > 0);
+  }
+
+  async function placeOrder(btn) {
+    btn.classList.add("busy");
+    say("Placing your order");
+    await sleep(reduce ? 200 : 1100);
+    btn.classList.remove("busy");
+    sewnSteps = 4; finished = true;
+    sbs[3].classList.add("done", "pop"); lint(X[3]);
+    paintSteps();
+    const s = sums(), no = "ST-" + String(10000 + Math.floor(Math.random() * 89999));
+    $("#orderNo").textContent = no;
+    $("#doneText").textContent = `${pkr(s.total)}, ${$("input[name=pay]:checked").value.toLowerCase()}. Ready in ${s.ex ? 3 : 6} days, then delivered to ${s.city}.`;
+    showPanel(4, 1, true);
+    say(`Order ${no} placed. ${pkr(s.total)}.`);
+    confetti();
+    // run the thread to the end of the seam and tie a knot
+    const ok = await sewTo("end", true);
+    if (ok) $("#knot").animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: reduce ? 1 : 500, fill: "forwards" });
+  }
+
+  function confetti() {
+    if (reduce) return;
+    const box = $("#confetti"), w = box.clientWidth;
+    const cols = ["#d99a1e", "#3d4f9f", "#8a2635", "#6b7a3a", "#c9ae7c"];
+    for (let k = 0; k < 22; k++) {
+      const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      s.setAttribute("viewBox", "0 0 16 16");
+      s.innerHTML = `<circle cx="8" cy="8" r="7" fill="${cols[k % cols.length]}"/><circle cx="6" cy="6" r="1.2" fill="#0003"/><circle cx="10" cy="6" r="1.2" fill="#0003"/><circle cx="6" cy="10" r="1.2" fill="#0003"/><circle cx="10" cy="10" r="1.2" fill="#0003"/>`;
+      box.appendChild(s);
+      const x = Math.random() * w, drift = (Math.random() - .5) * 80, sc = .6 + Math.random() * .7;
+      s.animate([{ transform: `translate(${x}px,-20px) rotate(0) scale(${sc})` }, { transform: `translate(${x + drift}px,${330 + Math.random() * 60}px) rotate(${Math.random() * 720}deg) scale(${sc})` }], { duration: 1500 + Math.random() * 900, delay: Math.random() * 300, easing: "cubic-bezier(.3,.1,.6,1)" }).onfinish = () => s.remove();
+    }
+  }
+
+  async function resetOrder(user) {
+    finished = false; step = 0; reached = 0; sewnSteps = 0;
+    $$("input[type=radio]").forEach((r) => { if (r.name !== "pay") r.checked = false; });
+    $("input[name=pay]").checked = true;
+    ["chest", "length", "sleeve", "name", "phone"].forEach((id) => { $("#" + id).value = ""; });
+    $("#city").value = "Lahore";
+    $("#express").setAttribute("aria-checked", "false");
+    $$(".sizes button").forEach((b) => b.classList.remove("on"));
+    $("#knot").getAnimations().forEach((a) => a.cancel());
+    sbs.forEach((b) => b.classList.remove("pop"));
+    paintSteps(); showPanel(0, -1, user); kurta(); renderTotal();
+    say("New order started");
+    // pull the thread back out, stitch by stitch
+    const my = ++tok, s0 = sewnX, x0 = N.x;
+    await tween(800, (t) => { const e = ease(t); sewnX = s0 + (X[0] - s0) * e; N.x = x0 + (X[0] + 8 - x0) * e; N.y = SY - 12 - Math.sin(t * Math.PI) * 14; N.rot = REST + Math.sin(t * Math.PI) * 60; draw(); }, my);
+    if (my === tok) { sewnX = 0; restAt(0); draw(); }
+  }
+
+  // ---------- Wiring ----------
+  $("#next").addEventListener("click", (e) => {
+    const btn = e.currentTarget;
+    if (btn.classList.contains("busy") || finished) return;
+    if (!validate(step)) return;
+    if (step === 3) placeOrder(btn);
+    else goTo(step + 1, e.isTrusted);
+  });
+  $("#back").addEventListener("click", (e) => { if (step > 0) goTo(step - 1, e.isTrusted); });
+  sbs.forEach((b, i) => b.addEventListener("click", (e) => {
+    if (finished) return;
+    if (i > reached) { say(`Finish ${STEPS[step]} first`); b.classList.remove("prick"); void b.offsetWidth; b.classList.add("prick"); return; }
+    if (i > step && !validate(step)) return;
+    goTo(i, e.isTrusted);
+  }));
+  $("#again").addEventListener("click", (e) => resetOrder(e.isTrusted));
+  $$("input[name=fabric], input[name=colour]").forEach((r) => r.addEventListener("change", () => { $("#e0").textContent = ""; kurta(); renderTotal(); }));
+  ["chest", "length", "sleeve"].forEach((id) => $("#" + id).addEventListener("input", () => { $("#" + id).removeAttribute("aria-invalid"); $$(".sizes button").forEach((b) => b.classList.remove("on")); kurta(); }));
+  $("#sizes").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const [c, l, s] = SIZES[b.dataset.s];
+    $("#chest").value = c; $("#length").value = l; $("#sleeve").value = s;
+    $$(".sizes button").forEach((x) => x.classList.toggle("on", x === b));
+    $$("#chest, #length, #sleeve").forEach((el) => el.removeAttribute("aria-invalid"));
+    $("#e1").textContent = "";
+    kurta();
+    say(`Size ${b.dataset.s}: chest ${c}, length ${l}, sleeve ${s} inches`);
+  });
+  $("#express").addEventListener("click", (e) => {
+    const sw = e.currentTarget, on = sw.getAttribute("aria-checked") !== "true";
+    sw.setAttribute("aria-checked", String(on));
+    renderTotal();
+  });
+  $("#city").addEventListener("change", renderTotal);
+  ["name", "phone"].forEach((id) => $("#" + id).addEventListener("input", () => $("#" + id).removeAttribute("aria-invalid")));
+  addEventListener("resize", () => { layout(); if (finished) { N.x = W - 14; sewnX = W; } else { restAt(step); sewnX = sewnSteps ? X[Math.min(sewnSteps, 3)] + 8 : 0; } draw(); });
+
+  // ---------- Start: the needle drops in from above and settles on step 1 ----------
+  layout(); paintSteps(); kurta();
+  restAt(0); draw();
+  if (!reduce) {
+    const my = ++tok, yEnd = N.y;
+    tween(800, (t) => { N.y = -30 + (yEnd + 30) * outBack(t); N.rot = REST - (1 - t) * 40; draw(Math.sin(t * 9) * 6 * (1 - t)); }, my);
+  }
+
+  // ---------- Auto demo: a full order, sewn step by step, then a fresh start ----------
+  let demo = !reduce;
+  const stop = (e) => { if (e.isTrusted) demo = false; };
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach((t) => addEventListener(t, stop, { capture: true, passive: true }));
+  const click = (el) => el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  const pick = (sel) => { const el = $(sel); el.checked = true; el.dispatchEvent(new Event("change", { bubbles: true })); };
+  async function type(el, text) {
+    el.value = "";
+    for (const ch of text) { if (!demo) return; el.value += ch; el.dispatchEvent(new Event("input", { bubbles: true })); await sleep(55); }
+  }
+  (async () => {
+    await sleep(1300);
+    while (demo) {
+      pick('input[value="linen"]'); await sleep(500); if (!demo) break;
+      pick('input[data-name="Olive"]'); await sleep(700); if (!demo) break;
+      click($("#next")); await sleep(1500); if (!demo) break;
+      click($('#sizes [data-s="M"]')); await sleep(900); if (!demo) break;
+      click($("#next")); await sleep(1300); if (!demo) break;
+      await type($("#name"), "Ayesha Khan"); if (!demo) break;
+      await type($("#phone"), "0300 1234567"); if (!demo) break;
+      $("#city").value = "Karachi"; $("#city").dispatchEvent(new Event("change")); await sleep(500); if (!demo) break;
+      click($("#next")); await sleep(1600); if (!demo) break;
+      click($("#next")); await sleep(4200); if (!demo) break;
+      click($("#again")); await sleep(1600);
+    }
+  })();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,433 @@
+<!doctype html>
+<!-- Chill & Craft · Woofer · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Woofer · Mute button with sound waves</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg-a: #f7efe4;
+    --bg-b: #e6d9c7;
+    --cab: #efe7da;
+    --cab-b: #e2d6c4;
+    --ink: #24201b;
+    --muted: #77705f;
+    --line: rgba(36, 32, 27, 0.12);
+    --track: rgba(36, 32, 27, 0.14);
+    --accent: #ff6a2a;
+    --accent-rgb: 255, 106, 42;
+    --led-on: #2fd36e;
+    --led-off: #ff4848;
+    --focus: #ff6a2a;
+    --shadow: rgba(60, 40, 15, 0.45);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #1b1e23;
+    --bg-b: #0a0b0d;
+    --cab: #191b1f;
+    --cab-b: #121417;
+    --ink: #eef2e6;
+    --muted: #9aa190;
+    --line: rgba(238, 242, 230, 0.1);
+    --track: rgba(238, 242, 230, 0.14);
+    --accent: #c6ff3d;
+    --accent-rgb: 198, 255, 61;
+    --led-on: #c6ff3d;
+    --led-off: #ff5252;
+    --focus: #c6ff3d;
+    --shadow: rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg-b);
+  }
+
+  /* ---------- Stage ---------- */
+  .stage { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; overflow: hidden; background: radial-gradient(90% 80% at 50% 30%, var(--bg-a), var(--bg-b)); }
+
+  /* ---------- Speaker cabinet ---------- */
+  .cab { position: relative; width: min(440px, 100%); padding: 16px clamp(16px, 4vw, 24px) 20px; border-radius: 30px; overflow: hidden; background: linear-gradient(180deg, var(--cab), var(--cab-b)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1px 0 var(--line), 0 40px 70px -40px var(--shadow); }
+  .cab canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .head { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .model { margin: 0; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+  .led { display: inline-flex; align-items: center; gap: 7px; font-size: 0.72rem; font-weight: 700; color: var(--muted); }
+  .led i { width: 9px; height: 9px; border-radius: 50%; background: var(--led-on); box-shadow: 0 0 10px var(--led-on); transition: background 0.3s, box-shadow 0.3s; }
+  .cab.is-muted .led i { background: var(--led-off); box-shadow: 0 0 10px var(--led-off); }
+  .tweeter { position: relative; width: 34px; height: 34px; margin: 6px auto 4px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #8b9099, #2b2e33 60%, #121416); box-shadow: 0 0 0 4px #15171a, 0 0 0 5px var(--line); }
+  .woofer { position: relative; display: block; width: min(250px, 66vw); height: auto; margin: 6px auto 12px; overflow: visible; }
+
+  /* ---------- Controls ---------- */
+  .now { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; background: rgba(0, 0, 0, 0.05); }
+  :root[data-theme="dark"] .now { background: rgba(255, 255, 255, 0.04); }
+  .art { flex: none; width: 38px; height: 38px; border-radius: 10px; background: conic-gradient(from 200deg, #ff6a2a, #ffb23f, #ff3d7f, #7a5cff, #ff6a2a); }
+  .meta { min-width: 0; flex: 1; }
+  .song { margin: 0; font-size: 0.86rem; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .artist { margin: 1px 0 5px; font-size: 0.72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prog { height: 3px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .prog i { display: block; height: 100%; width: 30%; background: var(--accent); }
+  .time { flex: none; font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .eq { flex: none; display: flex; align-items: flex-end; gap: 2px; height: 22px; }
+  .eq b { width: 3px; height: 100%; border-radius: 2px; background: var(--accent); transform-origin: 50% 100%; transform: scaleY(0.1); }
+
+  .ctl { position: relative; display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+  .mute {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 48px;
+    padding: 0 16px 0 12px;
+    border: 0;
+    border-radius: 16px;
+    background: var(--ink);
+    color: var(--cab);
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 750;
+    cursor: pointer;
+    box-shadow: 0 10px 18px -12px var(--shadow);
+    transition: transform 0.35s cubic-bezier(0.3, 1.7, 0.5, 1);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mute:hover { transform: translateY(-2px); }
+  .mute:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .mute svg { width: 26px; height: 26px; overflow: visible; }
+  .mute .wv { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; transform-origin: 9px 13px; }
+  .mute .x { fill: none; stroke: var(--led-off); stroke-width: 2.4; stroke-linecap: round; }
+  .mute .lbl { min-width: 4.4em; text-align: left; }
+  .vol { flex: 1; min-width: 0; display: grid; gap: 2px; }
+  .vol label { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); }
+  .vol output { font-weight: 750; color: var(--ink); font-variant-numeric: tabular-nums; }
+  input[type="range"] { --v: 72%; -webkit-appearance: none; appearance: none; width: 100%; height: 26px; margin: 0; background: transparent; cursor: pointer; }
+  input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--accent) var(--v), var(--track) var(--v)); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -7px; border-radius: 50%; background: #fff; border: 0; box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.35), 0 3px 6px rgba(0, 0, 0, 0.3); }
+  input[type="range"]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--track); }
+  input[type="range"]::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--accent); }
+  input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.35), 0 3px 6px rgba(0, 0, 0, 0.3); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* roomy screens (full-screen view): draw the piece larger */
+  @media (min-width: 1100px) and (min-height: 780px) { .cab { scale: 1.15; } }
+  @media (prefers-reduced-motion: reduce) {
+    .mute, .led i { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <section class="cab" id="cab" aria-labelledby="song">
+      <canvas id="waves" aria-hidden="true"></canvas>
+      <div class="head">
+        <p class="model">Studio monitor · W8</p>
+        <span class="led" aria-hidden="true"><i></i><span id="led-text">Live</span></span>
+      </div>
+      <div class="tweeter" id="tweeter" aria-hidden="true"></div>
+      <svg class="woofer" id="woofer" viewBox="0 0 240 240" aria-hidden="true">
+        <defs>
+          <radialGradient id="rim" cx="0.5" cy="0.45" r="0.55"><stop offset="0.82" stop-color="#2a2d32" /><stop offset="0.9" stop-color="#4b5058" /><stop offset="1" stop-color="#16181b" /></radialGradient>
+          <radialGradient id="cone" cx="0.45" cy="0.4" r="0.65"><stop offset="0" stop-color="#4a4f57" /><stop offset="0.6" stop-color="#25282d" /><stop offset="1" stop-color="#121417" /></radialGradient>
+          <radialGradient id="cap" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stop-color="#8b919b" /><stop offset="0.45" stop-color="#3a3e45" /><stop offset="1" stop-color="#15171a" /></radialGradient>
+        </defs>
+        <circle cx="120" cy="120" r="118" fill="#101113" />
+        <circle id="glow" cx="120" cy="120" r="112" fill="none" style="stroke: var(--accent)" stroke-width="3" opacity="0.3" />
+        <g fill="#3d4148"><circle cx="38" cy="38" r="5" /><circle cx="202" cy="38" r="5" /><circle cx="38" cy="202" r="5" /><circle cx="202" cy="202" r="5" /></g>
+        <g fill="#16181b"><path d="M35 38h6M38 35v6M199 38h6M202 35v6M35 202h6M38 199v6M199 202h6M202 199v6" stroke="#16181b" stroke-width="1.4" /></g>
+        <circle cx="120" cy="120" r="106" fill="url(#rim)" />
+        <g id="cone-g">
+          <circle cx="120" cy="120" r="90" fill="url(#cone)" />
+          <g fill="none" stroke="rgba(255,255,255,0.05)"><circle cx="120" cy="120" r="78" /><circle cx="120" cy="120" r="64" /><circle cx="120" cy="120" r="50" /></g>
+        </g>
+        <circle id="cap-g" cx="120" cy="120" r="30" fill="url(#cap)" />
+        <g id="beads"></g>
+      </svg>
+
+      <div class="now">
+        <span class="art" aria-hidden="true"></span>
+        <div class="meta">
+          <p class="song" id="song">Sea View Nights</p>
+          <p class="artist">The Clifton Collective</p>
+          <div class="prog" aria-hidden="true"><i id="prog"></i></div>
+        </div>
+        <span class="eq" id="eq" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b></span>
+        <span class="time" id="time">1:24</span>
+      </div>
+
+      <div class="ctl">
+        <button class="mute" id="mute" type="button" aria-pressed="false" aria-label="Mute">
+          <svg viewBox="0 0 26 26" aria-hidden="true">
+            <path d="M3 9.5h4l5-4.5v16l-5-4.5H3z" fill="currentColor" />
+            <path class="wv" id="w1" d="M15 10a4 4 0 0 1 0 6" />
+            <path class="wv" id="w2" d="M18 7.5a7.5 7.5 0 0 1 0 11" />
+            <path class="wv" id="w3" d="M21 5a11 11 0 0 1 0 16" />
+            <path class="x" id="x1" d="M16 9.5l7 7" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+            <path class="x" id="x2" d="M23 9.5l-7 7" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+          </svg>
+          <span class="lbl" id="mute-lbl" aria-hidden="true">Mute</span>
+        </button>
+        <div class="vol">
+          <label for="vol">Volume <output id="vol-out" for="vol">72%</output></label>
+          <input id="vol" type="range" min="0" max="100" value="72" />
+        </div>
+      </div>
+      <p class="sr" id="status" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+<script>
+  // Woofer: a mute button for a speaker that really moves.
+  // Playing = the cone pumps to a beat, sound rings roll out across the cabinet and loose beads hop on the cone.
+  // Mute = the button squashes and its waves fold in → the rings are sucked back into the speaker, the cone gulps
+  // and stops → the beads drop and settle, the light turns red and a cross draws over the icon.
+  // Unmute = one big thump: a shock ring, the beads leap and the waves pop back out of the icon one by one.
+  (function () {
+    "use strict";
+    var $ = function (id) { return document.getElementById(id); };
+    var calm = matchMedia("(prefers-reduced-motion: reduce)");
+    var NS = "http://www.w3.org/2000/svg";
+    var cab = $("cab"), canvas = $("waves"), ctx = canvas.getContext("2d"), woofer = $("woofer");
+    var coneG = $("cone-g"), capG = $("cap-g"), glow = $("glow"), beadsG = $("beads"), tweeter = $("tweeter");
+    var muteBtn = $("mute"), muteLbl = $("mute-lbl"), vol = $("vol"), volOut = $("vol-out"), status = $("status"), ledText = $("led-text");
+    var eqBars = [].slice.call(document.querySelectorAll("#eq b")), prog = $("prog"), timeEl = $("time");
+    var waves = [$("w1"), $("w2"), $("w3")], cross = [$("x1"), $("x2")];
+    var S = { vol: 0.72, muted: false, gain: 0.72, exc: 0, excV: 0, lastBeat: -1, song: 84 };
+    var rings = [];
+
+    function spring(stiff, damp) {
+      var x = 0, v = 0, out = [0];
+      for (var i = 0; i < 240; i++) { v += (-stiff * (x - 1) - damp * v) / 60; x += v / 60; out.push(x); if (Math.abs(v) < 0.01 && Math.abs(x - 1) < 0.002) break; }
+      out[out.length - 1] = 1;
+      return out;
+    }
+    function springTo(el, frame, stiff, damp, delay) {
+      var c = spring(stiff, damp);
+      return el.animate(c.map(frame), { duration: (c.length * 1000) / 60, easing: "linear", delay: delay || 0, fill: "backwards" });
+    }
+
+    // ---------- Beads resting on the cone ----------
+    var beads = [[-46, -22], [30, -52], [52, 30], [-20, 50], [-62, 26], [8, -26], [64, -14]].map(function (p, i) {
+      var sh = document.createElementNS(NS, "ellipse"), b = document.createElementNS(NS, "circle");
+      sh.setAttribute("fill", "rgba(0,0,0,0.45)");
+      b.setAttribute("fill", i % 2 ? "#e9e2d0" : "#cfd6dd");
+      b.setAttribute("stroke", "rgba(0,0,0,0.25)");
+      b.setAttribute("stroke-width", "0.6");
+      beadsG.appendChild(sh); beadsG.appendChild(b);
+      return { x: 120 + p[0], y: 120 + p[1], z: 0, vz: 0, r: 4.2 + (i % 3) * 0.5, el: b, sh: sh };
+    });
+    function kickBeads(power) {
+      if (calm.matches) return;
+      beads.forEach(function (b) { if (b.z < 3) b.vz += (110 + Math.random() * 90) * power; });
+    }
+
+    // ---------- Canvas sizing ----------
+    var W = 0, H = 0, dpr = 1, cx = 0, cy = 0, k = 1, fadeY = 0, nowPanel = document.querySelector(".now");
+    function size() {
+      W = cab.clientWidth; H = cab.clientHeight; dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+      // woofer centre and scale in the cabinet's own pixels (an <svg> has no offsetLeft, so measure boxes; the
+      // cabinet may be drawn scaled on big screens, so divide that out)
+      var c = cab.getBoundingClientRect(), w = woofer.getBoundingClientRect(), s = c.width / (cab.offsetWidth || 1) || 1;
+      cx = (w.left - c.left + w.width / 2) / s; cy = (w.top - c.top + w.height / 2) / s; k = w.width / s / 240 || 1;
+      fadeY = nowPanel.offsetTop - 4; // rings are gone by the top of the player panel
+    }
+    size();
+    addEventListener("resize", size);
+    if (window.ResizeObserver) new ResizeObserver(size).observe(cab);
+
+    // ---------- Mute and volume ----------
+    function setVol(v, silent) {
+      S.vol = v / 100;
+      vol.value = v;
+      vol.style.setProperty("--v", v + "%");
+      volOut.textContent = Math.round(v) + "%";
+      if (!silent) status.textContent = "Volume " + Math.round(v) + "%.";
+    }
+    function iconMute(on) {
+      if (calm.matches) {
+        waves.forEach(function (w) { w.style.opacity = on ? "0" : ""; });
+        cross.forEach(function (c) { c.style.strokeDashoffset = on ? "0" : "1"; });
+        return;
+      }
+      waves.forEach(function (w, i) {
+        w.getAnimations().forEach(function (a) { a.cancel(); });
+        if (on) w.animate([{ transform: "scale(1)", opacity: 1 }, { transform: "scale(1.15)", opacity: 1, offset: 0.3 }, { transform: "scale(0.2)", opacity: 0 }], { duration: 260, delay: (2 - i) * 60, easing: "ease-in", fill: "forwards" });
+        else springTo(w, function (p) { return { transform: "scale(" + (0.2 + 0.8 * p).toFixed(3) + ")", opacity: Math.min(1, p * 2) }; }, 260, 11, 120 + i * 80);
+      });
+      cross.forEach(function (c, i) {
+        c.getAnimations().forEach(function (a) { a.cancel(); });
+        c.animate([{ strokeDashoffset: on ? 1 : 0 }, { strokeDashoffset: on ? 0 : 1 }], { duration: on ? 220 : 160, delay: on ? 240 + i * 90 : 0, easing: "ease-out", fill: "both" });
+      });
+    }
+    function setMuted(m) {
+      if (m === S.muted) return;
+      S.muted = m;
+      muteBtn.setAttribute("aria-pressed", String(m));
+      muteLbl.textContent = m ? "Unmute" : "Mute";
+      ledText.textContent = m ? "Muted" : "Live";
+      cab.classList.toggle("is-muted", m);
+      status.textContent = m ? "Sound muted. The song keeps playing silently." : "Sound on at " + Math.round(S.vol * 100) + "%.";
+      iconMute(m);
+      if (calm.matches) return;
+      muteBtn.animate([{ transform: "scale(1)" }, { transform: "scale(0.9, 0.94)" }, { transform: "scale(1.04)" }, { transform: "scale(1)" }], { duration: 380, easing: "ease-out" });
+      if (m) {
+        // the rings get sucked back into the cone, which gulps before it stops
+        rings.forEach(function (r) { r.v = -Math.max(260, Math.abs(r.v) * 2); r.suck = true; });
+        S.excV -= 0.9;
+      } else {
+        // one big thump to come back
+        S.excV += 1.7;
+        rings.push({ r: 108, v: 330, a: 0.9, w: 9 });
+        kickBeads(1.8);
+      }
+    }
+    muteBtn.addEventListener("click", function () {
+      if (S.muted && S.vol === 0) setVol(50, true);
+      setMuted(!S.muted);
+    });
+    vol.addEventListener("input", function () {
+      var v = +vol.value;
+      setVol(v, true);
+      if (v === 0) setMuted(true);
+      else if (S.muted) setMuted(false);
+    });
+    vol.addEventListener("change", function () { if (!S.muted) status.textContent = "Volume " + vol.value + "%."; });
+
+    // ---------- Main loop: a 100 bpm beat drives everything ----------
+    var t0 = performance.now(), last = t0;
+    function frame(now) {
+      var dt = Math.min(0.05, Math.max(0, (now - last) / 1000)), t = (now - t0) / 1000;
+      last = now;
+      var beat = 0.6, bi = Math.floor(t / beat), ph = t - bi * beat;
+      var out = S.muted ? 0 : S.vol;
+      S.gain += (out - S.gain) * Math.min(1, dt * (S.muted ? 14 : 8));
+      var kick = Math.exp(-ph / 0.09), snare = bi % 2 ? Math.exp(-ph / 0.13) * 0.55 : 0, hat = Math.exp(-(t % 0.3) / 0.025) * 0.18;
+      var e = (kick + snare + hat) * S.gain;
+      if (bi !== S.lastBeat) {
+        S.lastBeat = bi;
+        if (!S.muted && S.gain > 0.03 && !calm.matches) {
+          rings.push({ r: 108, v: 110 + 170 * S.gain, a: 0.25 + 0.5 * S.gain, w: 1.5 + 4.5 * S.gain });
+          kickBeads(S.gain * (bi % 4 === 0 ? 1.25 : 0.85));
+        }
+      }
+      // cone excursion: a stiff spring chasing the beat, plus the gulp and thump impulses
+      if (calm.matches) { S.exc = 0; S.excV = 0; }
+      else { S.excV = (S.excV + (e - S.exc) * 0.45) * 0.6; S.exc += S.excV; }
+      coneG.setAttribute("transform", "translate(120 120) scale(" + (1 + S.exc * 0.045).toFixed(4) + ") translate(-120 -120)");
+      capG.setAttribute("r", (30 * (1 + S.exc * 0.1)).toFixed(2));
+      glow.setAttribute("opacity", (0.12 + Math.min(1, e) * 0.7).toFixed(3));
+      tweeter.style.transform = "scale(" + (1 + hat * S.gain * 0.25).toFixed(3) + ")";
+      // beads: hop with gravity and come to rest
+      beads.forEach(function (b) {
+        if (b.z > 0 || b.vz > 0) {
+          b.vz -= 900 * dt; b.z += b.vz * dt;
+          if (b.z <= 0) { b.z = 0; b.vz = b.vz < -40 ? -b.vz * 0.35 : 0; }
+        }
+        var s = 1 + b.z / 90;
+        b.el.setAttribute("cx", (b.x + b.z * 0.12).toFixed(2));
+        b.el.setAttribute("cy", (b.y - b.z * 0.4).toFixed(2));
+        b.el.setAttribute("r", (b.r * s).toFixed(2));
+        b.sh.setAttribute("cx", (b.x + 1.5).toFixed(2));
+        b.sh.setAttribute("cy", (b.y + 2.5).toFixed(2));
+        b.sh.setAttribute("rx", (b.r * (1 - Math.min(0.5, b.z / 80))).toFixed(2));
+        b.sh.setAttribute("ry", (b.r * 0.55 * (1 - Math.min(0.5, b.z / 80))).toFixed(2));
+        b.sh.setAttribute("opacity", (1 - Math.min(0.7, b.z / 60)).toFixed(2));
+      });
+      // EQ bars and the song clock (the song keeps playing while muted)
+      eqBars.forEach(function (b, i) {
+        var v = S.gain * (0.25 + 0.75 * Math.abs(Math.sin(t * (3 + i * 1.7) + i)) * (0.5 + kick * 0.5));
+        b.style.transform = "scaleY(" + Math.max(0.08, calm.matches ? S.gain * 0.6 : v).toFixed(3) + ")";
+      });
+      S.song += dt;
+      if (S.song > 220) S.song = 0;
+      var sec = Math.floor(S.song);
+      timeEl.textContent = Math.floor(sec / 60) + ":" + ("0" + (sec % 60)).slice(-2);
+      prog.style.width = ((S.song / 220) * 100).toFixed(2) + "%";
+      drawRings(dt);
+      requestAnimationFrame(frame);
+    }
+
+    // ---------- Sound rings on the cabinet ----------
+    function drawRings(dt) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      var rgb = getComputedStyle(cab).getPropertyValue("--accent-rgb").trim() || "255, 106, 42", maxR = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)) / k;
+      for (var i = rings.length - 1; i >= 0; i--) {
+        var r = rings[i];
+        r.r += r.v * dt;
+        if (r.suck) { if (r.r < 100) { rings.splice(i, 1); continue; } }
+        else { r.a -= dt * 0.42; r.v *= 0.995; }
+        if (r.a <= 0 || r.r > maxR) { rings.splice(i, 1); continue; }
+        ctx.strokeStyle = "rgba(" + rgb + "," + Math.max(0, r.a).toFixed(3) + ")";
+        ctx.lineWidth = r.w * k;
+        ctx.beginPath(); ctx.arc(cx, cy, r.r * k, 0, Math.PI * 2); ctx.stroke();
+        // a softer echo ring just behind each one
+        ctx.strokeStyle = "rgba(" + rgb + "," + (Math.max(0, r.a) * 0.35).toFixed(3) + ")";
+        ctx.lineWidth = r.w * k * 0.5;
+        ctx.beginPath(); ctx.arc(cx, cy, Math.max(1, (r.r - 14) * k), 0, Math.PI * 2); ctx.stroke();
+      }
+      // fade the rings out before they reach the header and the player panel, so text stays clean
+      if (rings.length) {
+        var fade = ctx.createLinearGradient(0, 0, 0, H), top = 34 / H, low = Math.max(top + 0.1, (fadeY - 46) / H), end = Math.max(low, Math.min(1, fadeY / H));
+        fade.addColorStop(0, "rgba(0,0,0,1)"); fade.addColorStop(top, "rgba(0,0,0,0)");
+        fade.addColorStop(low, "rgba(0,0,0,0)"); fade.addColorStop(end, "rgba(0,0,0,1)"); fade.addColorStop(1, "rgba(0,0,0,1)");
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.fillStyle = fade;
+        ctx.fillRect(0, 0, W, H);
+        ctx.globalCompositeOperation = "source-over";
+      }
+    }
+    requestAnimationFrame(frame);
+
+    // ---------- Auto demo: mute, unmute, ride the volume, repeat ----------
+    var demoOn = !calm.matches, timer = 0;
+    function stopDemo(e) { if (e.isTrusted && demoOn) { demoOn = false; clearTimeout(timer); } }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, stopDemo, { capture: true, passive: true }); });
+    function slide(to, ms) {
+      return new Promise(function (res) {
+        var from = S.vol * 100, s = performance.now();
+        (function tick(n) {
+          if (!demoOn) { res(); return; }
+          var p = Math.min(1, (n - s) / ms), e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+          setVol(Math.round(from + (to - from) * e), true);
+          if (p < 1) requestAnimationFrame(tick); else res();
+        })(s);
+      });
+    }
+    function later(ms) { return new Promise(function (r) { timer = setTimeout(r, ms); }); }
+    async function demo() {
+      var first = true;
+      while (demoOn) {
+        // the first mute waits a while, so the preview opens on the speaker pumping
+        await later(first ? 3200 : 1000); if (!demoOn) return;
+        first = false;
+        setMuted(true);
+        await later(1700); if (!demoOn) return;
+        setMuted(false);
+        await later(1300); if (!demoOn) return;
+        await slide(26, 900); await later(700); if (!demoOn) return;
+        await slide(92, 1000); await later(1300); if (!demoOn) return;
+        await slide(72, 600);
+      }
+    }
+    if (demoOn) demo();
+  })();
+</script>
+</body>
+</html>

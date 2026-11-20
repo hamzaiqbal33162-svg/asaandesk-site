@@ -1,0 +1,580 @@
+<!doctype html>
+<!-- Chill & Craft · Remit · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remit · confirm a money transfer with a one-time code</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: royal blue, peach and cream ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #eef0ff;
+    --bg-2: #ffe5d6;
+    --card: #fffcf8;
+    --ink: #161b44;
+    --muted: #686d97;
+    --line: rgba(22, 27, 68, .12);
+    --blue: #2f4cff;
+    --blue-2: #6f84ff;
+    --peach: #ff9f6e;
+    --peach-2: #ffc7a6;
+    --ok: #14a874;
+    --bad: #e3405a;
+    --field: #f3f1fb;
+    --note: #2e9e6a;
+    --shadow: rgba(40, 50, 160, .26);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0c1030;
+    --bg-2: #2a1626;
+    --card: #151a44;
+    --ink: #eef0ff;
+    --muted: #a5aad6;
+    --line: rgba(238, 240, 255, .13);
+    --blue: #7d90ff;
+    --blue-2: #a7b4ff;
+    --peach: #ffad80;
+    --peach-2: #ffcfb2;
+    --ok: #3cd69b;
+    --bad: #ff7189;
+    --field: #1e2456;
+    --shadow: rgba(0, 0, 0, .6);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 20px 16px;
+    overflow-x: hidden;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 85% 15%, var(--bg-2), transparent 45%),
+      radial-gradient(circle at 10% 85%, rgba(47, 76, 255, .16), transparent 50%),
+      var(--bg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  button, input { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+
+  .card { position: relative; width: min(100%, 430px); padding: 20px 20px 18px; border-radius: 28px; overflow: hidden; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 40px 70px -40px var(--shadow); animation: rise .7s cubic-bezier(.3, 1.4, .5, 1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(16px); } }
+  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .kicker { font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); }
+  .bal { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .bal b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .bal b.tick { animation: tick .3s ease; }
+  @keyframes tick { 50% { color: var(--bad); } }
+
+  /* ---------- From and to, with the money path between ---------- */
+  .flow { position: relative; display: grid; grid-template-columns: 76px 1fr 76px; align-items: center; margin: 14px 0 6px; }
+  .flow svg.path { position: absolute; left: 38px; right: 38px; top: -6px; width: calc(100% - 76px); height: 60px; overflow: visible; }
+  .flow .arc { fill: none; vector-effect: non-scaling-stroke; stroke: var(--blue-2); stroke-width: 2; stroke-dasharray: 3 6; stroke-linecap: round; opacity: .6; animation: march 1.2s linear infinite; }
+  @keyframes march { to { stroke-dashoffset: -18; } }
+  .who { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); text-align: center; }
+  .who b { display: block; color: var(--ink); font-size: 12.5px; }
+  .av { position: relative; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 17px; }
+  .av.me { background: linear-gradient(135deg, var(--blue), var(--blue-2)); }
+  .av.them { background: linear-gradient(135deg, var(--peach), #ff6f91); }
+  .av.bump { animation: bump .32s cubic-bezier(.34, 1.8, .5, 1); }
+  @keyframes bump { 50% { transform: scale(1.12); } }
+  .av svg.ring { position: absolute; inset: -6px; width: 68px; height: 68px; transform: rotate(-90deg); }
+  .av .ring circle { fill: none; stroke-width: 3.5; }
+  .av .ring .bg { stroke: var(--line); }
+  .av .ring .fg { stroke: var(--ok); stroke-linecap: round; stroke-dasharray: 201; stroke-dashoffset: 201; transition: stroke-dashoffset .25s; }
+  .av .got { position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--ok); box-shadow: 0 0 0 3px var(--card); transform: scale(0); transition: transform .45s cubic-bezier(.34, 1.9, .5, 1); }
+  .card.sent .av .got { transform: scale(1); }
+  .amount { position: relative; z-index: 1; justify-self: center; margin-top: 34px; padding: 6px 12px; border-radius: 999px; background: var(--card); box-shadow: 0 0 0 1.5px var(--line); font-weight: 850; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .amount.swap { animation: swap .35s cubic-bezier(.34, 1.7, .5, 1); }
+  @keyframes swap { 0% { transform: translateY(6px) scale(.9); opacity: .4; } }
+
+  /* Amount choices */
+  .amts { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; margin: 10px 0 2px; padding: 0; border: 0; }
+  .amts legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .amt { position: relative; }
+  .amt input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .amt span { display: block; padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 750; background: var(--field); box-shadow: inset 0 0 0 1.5px var(--line); transition: background .2s, color .2s, transform .25s cubic-bezier(.34, 1.56, .64, 1); }
+  .amt input:checked + span { color: #fff; background: var(--blue); box-shadow: none; transform: translateY(-1px); }
+  .amt input:focus-visible + span { outline: 2.5px solid var(--peach); outline-offset: 2px; }
+  .amt input:disabled + span { opacity: .4; text-decoration: line-through; }
+
+  .details { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 12px 0 0; padding: 11px 14px; border-radius: 16px; background: var(--field); font-size: 13px; }
+  .details dt { color: var(--muted); }
+  .details dd { margin: 0; text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .details .total { font-weight: 850; }
+
+  /* Code boxes */
+  .otp-label { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 14px 0 8px; font-size: 13px; font-weight: 700; }
+  .exp { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 650; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .exp svg { width: 16px; height: 16px; transform: rotate(-90deg); }
+  .exp circle { fill: none; stroke-width: 3; }
+  .exp .bg { stroke: var(--line); }
+  .exp .fg { stroke: var(--peach); stroke-linecap: round; stroke-dasharray: 37.7; transition: stroke-dashoffset 1s linear; }
+  .boxes { display: flex; justify-content: center; gap: clamp(5px, 1.8vw, 8px); }
+  .cell { flex: 0 1 auto; width: clamp(36px, 11vw, 50px); height: 52px; }
+  .cell input {
+    width: 100%; height: 100%; padding: 0; border: 0; border-radius: 13px; outline: none; text-align: center;
+    background: var(--field); color: var(--ink); caret-color: var(--peach);
+    font: 800 22px/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; box-shadow: inset 0 0 0 1.5px var(--line);
+    transition: box-shadow .2s, transform .3s cubic-bezier(.34, 1.56, .64, 1), background .3s;
+  }
+  .cell input:focus, .cell.cur input { box-shadow: inset 0 0 0 2px var(--blue), 0 0 0 5px rgba(47, 76, 255, .13); transform: translateY(-3px); }
+  .cell.filled input { box-shadow: inset 0 0 0 2px var(--blue-2); }
+  .cell.land input { animation: land .4s cubic-bezier(.34, 1.8, .5, 1); }
+  @keyframes land { 0% { transform: scale(.82); } 55% { transform: scale(1.12); } }
+  .boxes.good .cell input { background: var(--ok); color: #fff; box-shadow: none; }
+  .boxes.bad { animation: shake .45s ease; }
+  .boxes.bad .cell input { box-shadow: inset 0 0 0 2px var(--bad); }
+  @keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+  .cell input:disabled { opacity: .5; }
+  .sms { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  .chip { padding: 5px 10px; border: 0; border-radius: 999px; cursor: pointer; font-weight: 750; font-size: 12.5px; color: var(--blue); background: rgba(47, 76, 255, .1); transition: transform .25s cubic-bezier(.34, 1.56, .64, 1); }
+  .chip:hover { transform: translateY(-2px); }
+  .chip b { letter-spacing: .08em; }
+
+  /* The send button morphs into a spinner and then a check */
+  .send {
+    position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 50px; margin: 14px auto 0; padding: 0 16px;
+    border: 0; border-radius: 16px; cursor: pointer; overflow: hidden; color: #fff; font-weight: 800; font-size: 15px;
+    background: linear-gradient(135deg, var(--blue), #5b3cff); box-shadow: 0 14px 24px -14px var(--shadow);
+    transition: width .45s cubic-bezier(.6, 0, .3, 1.2), border-radius .45s, background .35s, transform .3s cubic-bezier(.34, 1.56, .64, 1), opacity .2s;
+  }
+  .send:disabled { opacity: .5; cursor: default; }
+  .send.press, .send:active:not(:disabled) { transform: scale(.97); }
+  .send.busy { width: 50px; border-radius: 25px; opacity: 1; }
+  .send.done { width: 50px; border-radius: 25px; background: var(--ok); opacity: 1; }
+  .send .spin { display: none; width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, .35); border-top-color: #fff; animation: spin .7s linear infinite; }
+  .send.busy .spin { display: block; }
+  .send.busy .lbl, .send.done .lbl { display: none; }
+  .send .chk { display: none; }
+  .send.done .chk { display: block; }
+  .send.done .chk path { stroke-dasharray: 30; stroke-dashoffset: 30; animation: draw .4s ease .1s forwards; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .send:focus-visible, .chip:focus-visible, .link:focus-visible, .rbtn:focus-visible { outline: 2.5px solid var(--peach); outline-offset: 3px; }
+  .status { min-height: 20px; margin: 10px 0 0; font-size: 13px; font-weight: 650; text-align: center; }
+  .status[data-tone="good"] { color: var(--ok); }
+  .status[data-tone="bad"] { color: var(--bad); }
+  .link { padding: 0; border: 0; background: none; color: var(--blue); font-weight: 750; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ---------- Receipt that slides up over the card ---------- */
+  .receipt {
+    position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 3; padding: 22px 18px 16px; border-radius: 4px 4px 20px 20px; text-align: center;
+    background: var(--card); box-shadow: 0 -20px 40px -18px var(--shadow), 0 0 0 1px var(--line);
+    transform: translateY(calc(100% + 30px)); visibility: hidden; transition: transform .7s cubic-bezier(.3, 1.3, .5, 1), visibility 0s .7s;
+  }
+  .receipt::before { content: ""; position: absolute; left: 0; right: 0; top: -9px; height: 10px; background: linear-gradient(-45deg, var(--card) 5px, transparent 0) 0 0 / 12px 10px repeat-x, linear-gradient(45deg, var(--card) 5px, transparent 0) 0 0 / 12px 10px repeat-x; }
+  .receipt.in { transform: none; visibility: visible; transition: transform .7s cubic-bezier(.3, 1.3, .5, 1), visibility 0s; }
+  .receipt .big { margin: 6px 0 2px; font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; }
+  .receipt p { margin: 0; font-size: 13px; color: var(--muted); }
+  .receipt dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 14px 0 0; padding-top: 12px; border-top: 1.5px dashed var(--line); font-size: 12.5px; text-align: left; }
+  .receipt dt { color: var(--muted); }
+  .receipt dd { margin: 0; text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .rrow { display: flex; gap: 8px; margin-top: 14px; }
+  .rbtn { flex: 1; padding: 11px; border: 0; border-radius: 13px; cursor: pointer; font-weight: 750; font-size: 14px; background: var(--field); box-shadow: inset 0 0 0 1.5px var(--line); }
+  .rbtn.solid { color: #fff; background: var(--blue); box-shadow: none; }
+  .seal { width: 46px; height: 46px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center; background: var(--ok); box-shadow: 0 10px 20px -10px var(--ok); }
+
+  .fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+  .fx .bill { position: absolute; left: 0; top: 0; width: 34px; height: 20px; border-radius: 4px; display: grid; place-items: center; font: 800 9px/1 system-ui, sans-serif; color: #e9fff3; background: linear-gradient(135deg, #3fbf85, #23875a); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .45), 0 4px 8px -3px rgba(0, 0, 0, .35); }
+  .fx i { position: absolute; left: 0; top: 0; display: block; }
+
+  @media (max-width: 380px) { .card { padding: 18px 14px 16px; } .flow { grid-template-columns: 66px 1fr 66px; } .flow svg.path { left: 33px; width: calc(100% - 66px); } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="card" id="card">
+    <div class="top"><span class="kicker">Confirm transfer</span><span class="bal">Balance <b id="bal">PKR 84,250</b></span></div>
+
+    <div class="flow" aria-hidden="true">
+      <svg class="path" viewBox="0 0 200 60" preserveAspectRatio="none"><path class="arc" d="M0 34 Q 100 -14 200 34"/></svg>
+      <div class="who"><span class="av me" id="me">BK</span><span><b>You</b>Bilal Khan</span></div>
+      <div class="amount" id="amountPill">PKR 25,000</div>
+      <div class="who"><span class="av them" id="them">AS<svg class="ring" viewBox="0 0 68 68"><circle class="bg" cx="34" cy="34" r="32"/><circle class="fg" id="ringFg" cx="34" cy="34" r="32"/></svg><span class="got"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M2.5 6.5l2.3 2.3 4.7-5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span><b>Ayesha</b>Siddiqui</span></div>
+    </div>
+
+    <fieldset class="amts" id="amts">
+      <legend>Amount to send</legend>
+    </fieldset>
+
+    <dl class="details">
+      <dt>To</dt><dd>Ayesha Siddiqui</dd>
+      <dt>Account</dt><dd>•••• 2741</dd>
+      <dt>Fee</dt><dd>PKR 0</dd>
+      <dt class="total">Total</dt><dd class="total" id="total">PKR 25,000</dd>
+    </dl>
+
+    <div class="otp-label"><span id="otpLabel">Code sent to +92 3•• ••• 4127</span><span class="exp" id="exp"><svg viewBox="0 0 16 16" aria-hidden="true"><circle class="bg" cx="8" cy="8" r="6"/><circle class="fg" id="expFg" cx="8" cy="8" r="6"/></svg><span id="expText">1:59</span></span></div>
+    <div class="boxes" id="boxes" role="group" aria-labelledby="otpLabel"></div>
+    <div class="sms"><span>Demo SMS:</span><button type="button" class="chip" id="smsChip">Use code <b id="smsCode">000 000</b></button><button type="button" class="link" id="resend" hidden>Send a new code</button></div>
+
+    <button type="button" class="send" id="send" disabled>
+      <span class="lbl" id="sendLbl">Send PKR 25,000</span>
+      <span class="spin" aria-hidden="true"></span>
+      <svg class="chk" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+
+    <section class="receipt" id="receipt" aria-labelledby="rTitle">
+      <div class="seal" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="big" id="rAmount">PKR 25,000</div>
+      <p id="rTitle">sent to Ayesha Siddiqui</p>
+      <dl>
+        <dt>Reference</dt><dd id="rRef">TXN-0000-0000</dd>
+        <dt>Date</dt><dd id="rDate"></dd>
+        <dt>New balance</dt><dd id="rBal"></dd>
+      </dl>
+      <div class="rrow"><button type="button" class="rbtn" id="copyR">Copy receipt</button><button type="button" class="rbtn solid" id="doneR">Done</button></div>
+    </section>
+  </main>
+  <div class="fx" id="fx" aria-hidden="true"></div>
+
+<script>
+(function () {
+  "use strict";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (id) => document.getElementById(id);
+  const LEN = 6, LIFE = 120, START_BAL = 84250;
+  const AMOUNTS = [5000, 25000, 50000, 100000];
+  const pkr = (n) => "PKR " + Math.round(n).toLocaleString("en-US");
+
+  const card = $("card"), boxesEl = $("boxes"), sendBtn = $("send"), statusEl = $("status"), receipt = $("receipt");
+
+  // ---- Cancellable waits ----
+  const CANCEL = { cancelled: true };
+  let gen = 0;
+  const pause = (ms, g) => new Promise((ok, no) => setTimeout(() => (g === gen ? ok() : no(CANCEL)), ms));
+  const anim = (ms, g) => pause(reduce ? Math.min(ms, 120) : ms, g);
+  const quiet = (p) => p.catch((e) => { if (e !== CANCEL) throw e; });
+  const restart = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
+  function tween(ms, g, fn) {
+    if (reduce) { fn(1); return Promise.resolve(); }
+    return new Promise((ok, no) => {
+      const t0 = performance.now();
+      const step = (now) => {
+        if (g !== gen) return no(CANCEL);
+        const t = Math.min(1, (now - t0) / ms);
+        fn(1 - Math.pow(1 - t, 3));
+        if (t < 1) requestAnimationFrame(step); else ok();
+      };
+      requestAnimationFrame(step);
+    });
+  }
+  function say(msg, tone) { statusEl.textContent = msg; statusEl.dataset.tone = tone || ""; }
+
+  // ---- Balance and amount ----
+  let balance = START_BAL, amount = 25000;
+  const amtInputs = AMOUNTS.map((a) => {
+    const lab = document.createElement("label");
+    lab.className = "amt";
+    lab.innerHTML = '<input type="radio" name="amt"><span></span>';
+    const inp = lab.querySelector("input");
+    inp.value = a;
+    lab.querySelector("span").textContent = a.toLocaleString("en-US");
+    inp.setAttribute("aria-label", pkr(a));
+    inp.addEventListener("change", () => { if (inp.checked) setAmount(a); });
+    $("amts").append(lab);
+    return inp;
+  });
+  function setAmount(a) {
+    amount = a;
+    $("amountPill").textContent = pkr(a);
+    restart($("amountPill"), "swap");
+    $("total").textContent = pkr(a);
+    $("sendLbl").textContent = "Send " + pkr(a);
+    amtInputs.forEach((inp) => { inp.checked = Number(inp.value) === a; });
+    refreshSend();
+  }
+  function paintBalance() {
+    $("bal").textContent = pkr(balance);
+    amtInputs.forEach((inp) => { inp.disabled = Number(inp.value) > balance; });
+  }
+
+  // ---- Code, expiry ring and resend ----
+  let code = "", left = LIFE, timer = 0, tries = 3, busy = false, sent = false;
+  function newCode() {
+    code = "";
+    for (let i = 0; i < LEN; i++) code += Math.floor(Math.random() * 10);
+    $("smsCode").textContent = code.slice(0, 3) + " " + code.slice(3);
+    tries = 3;
+    left = LIFE;
+    $("resend").hidden = true;
+    $("smsChip").hidden = false;
+    lockBoxes(false);
+    paintExp();
+    clearInterval(timer);
+    timer = setInterval(() => {
+      if (busy || sent) return;
+      left--;
+      paintExp();
+      if (left <= 0) {
+        clearInterval(timer);
+        code = "";
+        lockBoxes(true);
+        clearBoxes();
+        $("smsChip").hidden = true;
+        $("resend").hidden = false;
+        say("The code ran out. Ask for a new one to send the money.", "bad");
+      }
+    }, 1000);
+  }
+  function paintExp() {
+    $("expText").textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
+    $("expFg").style.strokeDashoffset = String(37.7 * (1 - left / LIFE));
+  }
+  $("resend").addEventListener("click", () => { newCode(); say("New code sent. The old one no longer works."); focusBox(0); });
+
+  // ---- Code boxes: typing, paste, backspace, delete, arrows, Home/End ----
+  const cells = [], inputs = [];
+  for (let i = 0; i < LEN; i++) {
+    const c = document.createElement("span");
+    c.className = "cell";
+    const inp = document.createElement("input");
+    inp.inputMode = "numeric";
+    inp.autocomplete = i ? "off" : "one-time-code";
+    inp.setAttribute("aria-label", "Digit " + (i + 1) + " of " + LEN);
+    c.append(inp);
+    boxesEl.append(c);
+    cells.push(c); inputs.push(inp);
+  }
+  const vals = Array(LEN).fill("");
+  function setCh(i, d) { vals[i] = d; inputs[i].value = d; cells[i].classList.toggle("filled", !!d); if (d) restart(cells[i], "land"); refreshSend(); }
+  function clearBoxes() { for (let i = 0; i < LEN; i++) setCh(i, ""); boxesEl.classList.remove("good", "bad"); }
+  function lockBoxes(on) { inputs.forEach((b) => (b.disabled = on)); }
+  function mark(i) { cells.forEach((c, n) => c.classList.toggle("cur", n === i && demoOn)); }
+  function focusBox(i) { i = Math.max(0, Math.min(LEN - 1, i)); if (!demoOn) { inputs[i].focus(); inputs[i].select(); } }
+  function refreshSend() { sendBtn.disabled = busy || sent || !vals.every(Boolean) || amount > balance || !code; }
+  function fillFrom(start, text) { let i = start; for (const d of text) { if (i >= LEN) break; setCh(i++, d); } focusBox(i); }
+  inputs.forEach((inp, i) => {
+    inp.addEventListener("focus", () => requestAnimationFrame(() => inp.select()));
+    inp.addEventListener("input", (e) => {
+      if (busy || sent) { inp.value = vals[i]; return; }
+      const got = inp.value.replace(/\D/g, "");
+      if (e.inputType === "insertText" && e.data && e.data.length === 1) {
+        const d = e.data.replace(/\D/g, "");
+        if (!d) { inp.value = vals[i]; return; }
+        setCh(i, d); focusBox(i + 1);
+      } else if (got.length > 1) fillFrom(got.length >= LEN ? 0 : i, got);
+      else { setCh(i, got); if (got) focusBox(i + 1); }
+      if (vals.every(Boolean) && !demoOn) sendBtn.focus();
+    });
+    inp.addEventListener("keydown", (e) => {
+      if (busy || sent) return;
+      if (e.key === "Backspace") { e.preventDefault(); if (vals[i]) setCh(i, ""); else if (i > 0) { setCh(i - 1, ""); focusBox(i - 1); } }
+      else if (e.key === "Delete") { e.preventDefault(); setCh(i, ""); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); focusBox(i - 1); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); focusBox(i + 1); }
+      else if (e.key === "Home") { e.preventDefault(); focusBox(0); }
+      else if (e.key === "End") { e.preventDefault(); focusBox(LEN - 1); }
+      else if (e.key === "Enter" && !sendBtn.disabled) { e.preventDefault(); quiet(approve(gen)); }
+    });
+    inp.addEventListener("paste", (e) => {
+      e.preventDefault();
+      if (busy || sent) return;
+      const d = (e.clipboardData ? e.clipboardData.getData("text") : "").replace(/\D/g, "");
+      if (d) fillFrom(d.length >= LEN ? 0 : i, d); else say("Only numbers can be pasted here.", "bad");
+    });
+  });
+  $("smsChip").addEventListener("click", () => { if (busy || sent || !code) return; clearBoxes(); fillFrom(0, code); say("Code filled in from the message."); if (!demoOn) sendBtn.focus(); });
+
+  // ---- Banknotes fly along the arc from you to Ayesha ----
+  function flyBills(g, n) {
+    const a = $("me").getBoundingClientRect(), b = $("them").getBoundingClientRect();
+    const x0 = a.left + a.width / 2 - 17, y0 = a.top + a.height / 2 - 10;
+    const x1 = b.left + b.width / 2 - 17, y1 = b.top + b.height / 2 - 10;
+    const cx = (x0 + x1) / 2, cy = Math.min(y0, y1) - 70;
+    const runs = [];
+    for (let k = 0; k < n; k++) {
+      runs.push(new Promise((ok) => {
+        setTimeout(() => {
+          if (g !== gen) return ok();
+          const el = document.createElement("span");
+          el.className = "bill";
+          el.textContent = "Rs";
+          $("fx").append(el);
+          const frames = [];
+          const wob = (k % 2 ? 1 : -1) * (8 + Math.random() * 10);
+          for (let s = 0; s <= 12; s++) {
+            const t = s / 12;
+            const x = (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * cx + t * t * x1;
+            const y = (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * (cy + wob) + t * t * y1;
+            frames.push({ transform: "translate(" + x + "px," + y + "px) rotate(" + (Math.sin(t * Math.PI * 2) * 22 + wob) + "deg) scale(" + (s === 0 ? 0.4 : s === 12 ? 0.5 : 1) + ")", opacity: s === 12 ? 0.2 : 1 });
+          }
+          const an = el.animate(frames, { duration: 820, easing: "cubic-bezier(.45,0,.3,1)", fill: "forwards" });
+          an.onfinish = () => {
+            el.remove();
+            if (g === gen) { restart($("them"), "bump"); $("ringFg").style.strokeDashoffset = String(201 * (1 - (k + 1) / n)); }
+            ok();
+          };
+        }, k * 110);
+      }));
+    }
+    return Promise.all(runs);
+  }
+
+  // ---- Approve: check the code, move the money, show the receipt ----
+  async function approve(g) {
+    if (busy || sent || sendBtn.disabled) return;
+    busy = true;
+    mark(-1);
+    lockBoxes(true);
+    sendBtn.classList.add("busy");
+    sendBtn.disabled = true;
+    say("Checking the code with your bank…");
+    await anim(900, g);
+    if (vals.join("") !== code) {
+      tries--;
+      sendBtn.classList.remove("busy");
+      restart(boxesEl, "bad");
+      busy = false;
+      clearBoxes();
+      if (tries > 0) {
+        say("Wrong code. " + tries + (tries === 1 ? " try" : " tries") + " left. Nothing was sent.", "bad");
+        lockBoxes(false);
+        focusBox(0);
+      } else {
+        code = "";
+        clearInterval(timer);
+        $("smsChip").hidden = true;
+        $("resend").hidden = false;
+        say("Too many wrong codes, so this transfer was stopped. Ask for a new code.", "bad");
+      }
+      return;
+    }
+    boxesEl.classList.add("good");
+    say("Sending " + pkr(amount) + " to Ayesha…");
+    const from = balance, to = balance - amount;
+    const notes = Math.max(4, Math.min(10, Math.round(amount / 10000) + 3));
+    $("ringFg").style.strokeDashoffset = "201";
+    const flight = flyBills(g, reduce ? 0 : notes);
+    await tween(notes * 110 + 820, g, (t) => { $("bal").textContent = pkr(from + (to - from) * t); });
+    await flight;
+    balance = to;
+    paintBalance();
+    $("ringFg").style.strokeDashoffset = "0";
+    sendBtn.classList.remove("busy");
+    sendBtn.classList.add("done");
+    card.classList.add("sent");
+    sent = true;
+    busy = false;
+    clearInterval(timer);
+    say("Sent. Ayesha has the money now.", "good");
+    burst();
+    await anim(650, g);
+    $("rAmount").textContent = pkr(amount);
+    $("rRef").textContent = "TXN-" + Math.random().toString(36).slice(2, 6).toUpperCase() + "-" + String(Math.floor(1000 + Math.random() * 9000));
+    $("rDate").textContent = new Date().toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    $("rBal").textContent = pkr(balance);
+    receipt.classList.add("in");
+    if (!demoOn) $("doneR").focus();
+  }
+  sendBtn.addEventListener("click", () => quiet(approve(gen)));
+
+  // ---- Receipt buttons ----
+  $("copyR").addEventListener("click", async () => {
+    const btn = $("copyR");                     // keep the element before any await
+    const text = "Sent " + $("rAmount").textContent + " to Ayesha Siddiqui (account •••• 2741)\nReference " + $("rRef").textContent + "\n" + $("rDate").textContent;
+    let ok = false;
+    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; } } catch (err) { ok = false; }
+    if (!ok) {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.append(ta); ta.select();
+      try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+      ta.remove();
+    }
+    btn.textContent = ok ? "Copied" : "Copy blocked";
+    setTimeout(() => { btn.textContent = "Copy receipt"; }, 1500);
+  });
+  $("doneR").addEventListener("click", () => { fresh(); focusBox(0); });
+
+  // ---- A small burst of coins at Ayesha ----
+  function burst() {
+    if (reduce) return;
+    const r = $("them").getBoundingClientRect();
+    const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+    const C = ["#ffc94d", "#3fbf85", "#ff9f6e", "#6f84ff"];
+    for (let n = 0; n < 24; n++) {
+      const p = document.createElement("i");
+      const s = 6 + Math.random() * 5;
+      p.style.width = p.style.height = s + "px";
+      p.style.borderRadius = "50%";
+      p.style.background = C[n % 4];
+      $("fx").append(p);
+      const a = (n / 24) * Math.PI * 2, d = 40 + Math.random() * 50;
+      p.animate([
+        { transform: "translate(" + x0 + "px," + y0 + "px) scale(.3)", opacity: 1 },
+        { transform: "translate(" + (x0 + Math.cos(a) * d) + "px," + (y0 + Math.sin(a) * d) + "px) scale(1)", opacity: 1, offset: 0.6 },
+        { transform: "translate(" + (x0 + Math.cos(a) * d * 1.2) + "px," + (y0 + Math.sin(a) * d * 1.2 + 30) + "px) scale(.4)", opacity: 0 }
+      ], { duration: 1000 + Math.random() * 400, easing: "cubic-bezier(.2,.8,.3,1)" }).onfinish = () => p.remove();
+    }
+  }
+
+  // ---- A fresh transfer ----
+  function fresh() {
+    busy = false;
+    sent = false;
+    receipt.classList.remove("in");
+    card.classList.remove("sent");
+    sendBtn.classList.remove("busy", "done");
+    $("ringFg").style.strokeDashoffset = "201";
+    if (balance < AMOUNTS[0]) balance = START_BAL;      // demo money comes back when it runs out
+    paintBalance();
+    if (amount > balance) amount = AMOUNTS.filter((a) => a <= balance).pop();
+    setAmount(amount);
+    clearBoxes();
+    newCode();
+    say("");
+  }
+
+  // ---- Auto-demo: pick an amount, type the code, send ----
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); gen++; mark(-1); balance = START_BAL; amount = 25000; fresh(); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) =>
+    window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  async function runDemo() {
+    const g = gen;
+    round++;
+    balance = START_BAL;
+    fresh();
+    await pause(600, g);
+    if (round % 2 === 0) { setAmount(50000); await pause(500, g); }
+    for (let i = 0; i < LEN; i++) { mark(i); await pause(110, g); setCh(i, code[i]); await pause(70, g); }
+    mark(-1);
+    await pause(250, g);
+    sendBtn.classList.add("press");
+    await pause(160, g);
+    sendBtn.classList.remove("press");
+    await approve(g);
+    await pause(2600, g);
+    amount = 25000;
+    demoTimer = setTimeout(() => quiet(runDemo()), 300);
+  }
+
+  paintBalance();
+  fresh();
+  demoTimer = setTimeout(() => quiet(runDemo()), 250);
+})();
+</script>
+</body>
+</html>

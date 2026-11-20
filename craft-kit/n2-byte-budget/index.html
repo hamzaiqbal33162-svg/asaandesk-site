@@ -1,0 +1,522 @@
+<!doctype html>
+<!-- Chill & Craft · Byte Budget · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Byte Budget · photo size slider with a size gate</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: blueprint paper with cobalt and lemon (light), night blueprint (dark) ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #e8edf7;
+    --grid: rgba(47, 91, 255, .09);
+    --card: #fbfcff;
+    --ink: #121a33;
+    --muted: #5d6888;
+    --line: #dde3f1;
+    --soft: #f0f3fb;
+    --cob: #2f5bff;
+    --cob2: #6f8cff;
+    --lemon: #ffd23a;
+    --ok: #16b36e;
+    --bad: #f04a3e;
+    --shadow: rgba(25, 40, 110, .25);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #080d1d;
+    --grid: rgba(125, 155, 255, .08);
+    --card: #0f1630;
+    --ink: #e7ecff;
+    --muted: #8d98bd;
+    --line: #232d52;
+    --soft: #151e3d;
+    --cob: #7d9bff;
+    --cob2: #a6b9ff;
+    --lemon: #ffd84d;
+    --ok: #3ee08f;
+    --bad: #ff6a5f;
+    --shadow: rgba(0, 0, 0, .7);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: var(--ff); color: var(--ink); background: var(--bg); }
+  .stage {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 14px;
+    overflow: hidden;
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 24px 24px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 24px 24px,
+      radial-gradient(80% 70% at 50% 40%, color-mix(in srgb, var(--cob) 10%, var(--bg)), var(--bg));
+  }
+  .card {
+    position: relative;
+    width: min(100%, 430px);
+    padding: 16px 16px 18px;
+    border-radius: 26px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 40px 80px -48px var(--shadow), 0 10px 24px -16px var(--shadow);
+    animation: rise .8s cubic-bezier(.22, 1.3, .36, 1) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(20px) scale(.97); } }
+  .kicker { margin: 0 0 2px; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--cob); }
+  h1 { margin: 0; font-size: clamp(18px, 5vw, 20px); letter-spacing: -.015em; }
+
+  /* ---------- Preview with a magnifier that shows the real compression ---------- */
+  .preview {
+    position: relative; height: 150px; margin-top: 12px; overflow: hidden; border-radius: 18px; background: var(--soft);
+    border: 1px solid var(--line); transition: box-shadow .2s;
+  }
+  .preview.drag { box-shadow: 0 0 0 3px var(--cob); }
+  .preview > img { width: 100%; height: 100%; object-fit: cover; display: block; transition: filter .3s; }
+  .preview.busy > img { filter: saturate(.6) brightness(.92); }
+  .lens {
+    position: absolute; right: 10px; bottom: 10px; width: 82px; height: 82px; overflow: hidden; border-radius: 50%;
+    border: 3px solid #fff; box-shadow: 0 8px 16px -6px rgba(0, 0, 0, .5); background: #222;
+    animation: lensBob 5s ease-in-out infinite;
+  }
+  @keyframes lensBob { 50% { transform: translate(-3px, -2px); } }
+  .lens img { position: absolute; left: 0; top: 0; width: 400%; max-width: none; image-rendering: pixelated; transform-origin: 0 0; }
+  .lens::after { content: "4×"; position: absolute; left: 50%; bottom: 3px; transform: translateX(-50%); padding: 1px 5px; border-radius: 6px; background: rgba(0, 0, 0, .55); color: #fff; font: 700 9px var(--mono); }
+  .meta { position: absolute; left: 10px; top: 10px; display: flex; gap: 5px; }
+  .meta span { padding: 4px 8px; border-radius: 8px; background: rgba(10, 16, 40, .6); color: #fff; font: 700 10.5px var(--mono); backdrop-filter: blur(4px); }
+  .scan { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent) -100% 0 / 40% 100% no-repeat; }
+  .preview.busy .scan { opacity: 1; animation: scan 1s linear infinite; }
+  @keyframes scan { to { background-position: 220% 0; } }
+
+  /* ---------- The size gate: the file block must fit under the beam ---------- */
+  .lane { position: relative; height: 96px; margin-top: 12px; overflow: hidden; border-radius: 16px; background: var(--soft); border: 1px solid var(--line); }
+  .lane .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; background: repeating-linear-gradient(90deg, var(--line) 0 10px, transparent 10px 20px); animation: belt 1.2s linear infinite paused; }
+  .lane.moving .floor { animation-play-state: running; }
+  @keyframes belt { to { background-position: 20px 0; } }
+  .block {
+    position: absolute; left: 22px; bottom: 12px; width: 78px; height: 40px; display: grid; place-items: center; border-radius: 9px 9px 4px 4px;
+    background: linear-gradient(160deg, var(--cob2), var(--cob)); color: #fff; font: 800 12px var(--mono); text-align: center; line-height: 1.15;
+    box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18), 0 8px 14px -8px var(--cob);
+    transition: height .45s cubic-bezier(.34, 1.56, .64, 1), transform .8s cubic-bezier(.34, 1.3, .64, 1), background .3s;
+    transform-origin: 50% 100%;
+  }
+  .block::before { content: ""; position: absolute; top: 6px; right: 7px; width: 14px; height: 14px; border-radius: 3px; background: rgba(255, 255, 255, .3); clip-path: polygon(0 0, 60% 0, 100% 40%, 100% 100%, 0 100%); }
+  .block.over { background: linear-gradient(160deg, #ff8f70, var(--bad)); box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18), 0 8px 14px -8px var(--bad); }
+  .block.bump { animation: bump .7s cubic-bezier(.3, .7, .4, 1); }
+  @keyframes bump { 35% { transform: translateX(var(--hit)) scaleX(.9) scaleY(1.06); } 55% { transform: translateX(calc(var(--hit) - 14px)) rotate(-4deg); } 75% { transform: translateX(calc(var(--hit) - 4px)) rotate(1deg); } }
+  .gate { position: absolute; right: 86px; bottom: 12px; width: 18px; height: 74px; }
+  .gate .beam { position: absolute; left: -54px; right: -54px; bottom: var(--open); height: 8px; border-radius: 4px; background: repeating-linear-gradient(-45deg, var(--lemon) 0 8px, var(--ink) 8px 16px); transition: bottom .5s cubic-bezier(.34, 1.56, .64, 1); }
+  .gate .post { position: absolute; bottom: 0; width: 8px; height: 100%; border-radius: 3px; background: var(--ink); opacity: .85; }
+  .gate .post.l { left: -54px; }
+  .gate .post.r { right: -54px; }
+  .gate .lamp { position: absolute; right: -60px; top: -4px; width: 16px; height: 16px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 3px var(--card), 0 0 14px var(--bad); transition: background .3s, box-shadow .3s; }
+  .gate.ok .lamp { background: var(--ok); box-shadow: 0 0 0 3px var(--card), 0 0 14px var(--ok); }
+  .gate .tag { position: absolute; left: -54px; right: -54px; bottom: calc(var(--open) + 12px); text-align: center; font: 800 10.5px var(--mono); color: var(--muted); transition: bottom .5s cubic-bezier(.34, 1.56, .64, 1); white-space: nowrap; }
+  .spark { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: var(--lemon); pointer-events: none; animation: spark .8s ease-out forwards; }
+  @keyframes spark { from { transform: translate(0, 0) scale(1); opacity: 1; } to { transform: translate(var(--x), var(--y)) scale(.2); opacity: 0; } }
+
+  /* ---------- Budget chips ---------- */
+  .budgets { display: flex; gap: 6px; margin-top: 12px; }
+  .budgets button {
+    flex: 1; min-width: 0; padding: 8px 4px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--soft); color: var(--ink);
+    font: 700 12px/1.15 var(--ff); cursor: pointer; transition: border-color .2s, background .2s, transform .3s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .budgets button small { display: block; font: 700 11px var(--mono); color: var(--muted); }
+  .budgets button[aria-checked="true"] { border-color: var(--cob); background: color-mix(in srgb, var(--cob) 12%, var(--card)); transform: translateY(-2px); }
+  .budgets button[aria-checked="true"] small { color: var(--cob); }
+
+  /* ---------- Sliders ---------- */
+  .ctl { margin-top: 10px; }
+  .ctl label { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .ctl output { font: 800 12px var(--mono); color: var(--ink); }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; margin: 0; background: none; cursor: pointer; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--cob) var(--p, 50%), var(--line) var(--p, 50%)); }
+  input[type="range"]::-moz-range-track { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--cob) var(--p, 50%), var(--line) var(--p, 50%)); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -7px; border-radius: 50%; background: var(--card); border: 3px solid var(--cob); box-shadow: 0 3px 8px -2px var(--shadow); transition: transform .2s; }
+  input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.2); }
+  input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--card); border: 3px solid var(--cob); }
+  input[type="range"]:focus-visible { outline: 3px solid var(--cob); outline-offset: 2px; border-radius: 6px; }
+
+  /* ---------- Size readout and actions ---------- */
+  .sum { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 12px; }
+  .sum strong { font: 800 22px var(--mono); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .sum span { font-size: 12.5px; font-weight: 600; color: var(--muted); text-align: right; }
+  .sum span.ok { color: var(--ok); }
+  .sum span.bad { color: var(--bad); }
+  .meter { position: relative; height: 8px; margin-top: 6px; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .meter i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 4px; background: var(--ok); transition: width .35s cubic-bezier(.34, 1.3, .64, 1), background .3s; }
+  .meter i.bad { background: linear-gradient(90deg, var(--ok) 0 var(--b), var(--bad) var(--b)); }
+  .meter b { position: absolute; top: -2px; bottom: -2px; left: 66.67%; width: 2px; background: var(--ink); }
+  .acts { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin-top: 12px; }
+  .btn {
+    position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 44px; padding: 0 14px; border-radius: 14px;
+    border: 1.5px solid var(--line); background: var(--soft); color: var(--ink); font: 700 13px/1 var(--ff); cursor: pointer; text-decoration: none;
+    white-space: nowrap; transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), border-color .2s, opacity .2s;
+  }
+  .btn:hover { transform: translateY(-2px); border-color: var(--cob); }
+  .btn svg { width: 16px; height: 16px; flex: none; }
+  .btn.primary { border: 0; background: linear-gradient(180deg, var(--cob2), var(--cob)); color: #fff; box-shadow: 0 10px 18px -10px var(--cob); }
+  [data-theme="dark"] .btn.primary { color: #0a1022; }
+  .btn.primary.busy { pointer-events: none; opacity: .85; }
+  .btn.primary.busy svg { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(1turn); } }
+  .btn[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+  .btn:focus-within, .btn:focus-visible { outline: 3px solid var(--cob); outline-offset: 2px; }
+  .file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 370px) { .acts { grid-template-columns: 1fr 1fr; } .acts .primary { grid-column: 1 / -1; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" aria-labelledby="title">
+    <p class="kicker">Before you upload</p>
+    <h1 id="title">Fit your photo to the size limit</h1>
+
+    <div class="preview" id="preview">
+      <img id="img" alt="Preview of the compressed photo">
+      <div class="meta"><span id="dims">1400 × 934</span><span id="fmt">JPEG 92%</span></div>
+      <div class="lens" aria-hidden="true"><img id="lensImg" alt=""></div>
+      <div class="scan" aria-hidden="true"></div>
+    </div>
+
+    <div class="lane" id="lane" aria-hidden="true">
+      <div class="floor"></div>
+      <div class="gate" id="gate" style="--open:52px"><i class="post l"></i><i class="post r"></i><i class="beam"></i><span class="tag" id="gateTag">250 KB</span><span class="lamp"></span></div>
+      <div class="block" id="block"><span id="blockLbl">… KB</span></div>
+    </div>
+
+    <div class="budgets" id="budgets" role="radiogroup" aria-label="Size limit">
+      <button type="button" role="radio" aria-checked="false" data-kb="100">Profile<small>100 KB</small></button>
+      <button type="button" role="radio" aria-checked="true" data-kb="250">Chat<small>250 KB</small></button>
+      <button type="button" role="radio" aria-checked="false" data-kb="1024">Email<small>1 MB</small></button>
+    </div>
+
+    <div class="ctl">
+      <label for="q">Quality <output id="qOut" for="q">92%</output></label>
+      <input id="q" type="range" min="10" max="100" value="92" step="1">
+    </div>
+    <div class="ctl">
+      <label for="w">Width <output id="wOut" for="w">1400 px</output></label>
+      <input id="w" type="range" min="320" max="1400" value="1400" step="10">
+    </div>
+
+    <div class="sum">
+      <strong id="size">… KB</strong>
+      <span id="verdict" aria-live="polite">Measuring…</span>
+    </div>
+    <div class="meter" aria-hidden="true"><i id="fill"></i><b></b></div>
+
+    <div class="acts">
+      <button class="btn primary" id="fit" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6"/></svg>Fit to limit</button>
+      <label class="btn" for="file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/></svg>Your photo<input class="file" id="file" type="file" accept="image/*"></label>
+      <a class="btn" id="dl" href="#" download="photo.jpg" aria-disabled="true" aria-label="Download the compressed photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></a>
+    </div>
+    <p class="sr" id="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  var preview = $("#preview"), img = $("#img"), lensImg = $("#lensImg"), lane = $("#lane"), block = $("#block"), gate = $("#gate");
+  var qIn = $("#q"), wIn = $("#w"), sizeEl = $("#size"), verdict = $("#verdict"), fill = $("#fill"), fitBtn = $("#fit"), dl = $("#dl"), status = $("#status");
+  var budgetKB = 250, lastBlob = null, lastURL = "", lastSize = 0, fits = null;
+
+  // ---------- The source photo: a sunset lake painted on a canvas (or the visitor's own photo) ----------
+  var src = document.createElement("canvas");
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function paintDefault() {
+    var W = 1400, H = 934, c, r = rng(7), g, i;
+    src.width = W; src.height = H; c = src.getContext("2d");
+    g = c.createLinearGradient(0, 0, 0, 560);
+    g.addColorStop(0, "#27377a"); g.addColorStop(.42, "#b9537e"); g.addColorStop(.78, "#ff9e62"); g.addColorStop(1, "#ffd89a");
+    c.fillStyle = g; c.fillRect(0, 0, W, 580);
+    g = c.createRadialGradient(960, 470, 10, 960, 470, 260);
+    g.addColorStop(0, "rgba(255,246,200,1)"); g.addColorStop(.18, "rgba(255,214,140,.9)"); g.addColorStop(1, "rgba(255,160,90,0)");
+    c.fillStyle = g; c.fillRect(600, 160, 720, 520);
+    for (i = 0; i < 26; i++) { // soft clouds
+      c.fillStyle = "rgba(255," + (190 + r() * 50 | 0) + "," + (170 + r() * 60 | 0) + "," + (.12 + r() * .2).toFixed(2) + ")";
+      c.beginPath(); c.ellipse(r() * W, 60 + r() * 300, 60 + r() * 160, 10 + r() * 22, 0, 0, Math.PI * 2); c.fill();
+    }
+    function ridge(y0, amp, col, step) { // mountain layers
+      c.fillStyle = col; c.beginPath(); c.moveTo(0, 600);
+      var y = y0;
+      for (var x = 0; x <= W; x += step) { y += (r() - .5) * amp; y = Math.max(y0 - 160, Math.min(y0 + 30, y)); c.lineTo(x, y); }
+      c.lineTo(W, 600); c.closePath(); c.fill();
+    }
+    ridge(380, 70, "#7a4a86", 26); ridge(450, 60, "#56386f", 18); ridge(520, 40, "#30244d", 12);
+    g = c.createLinearGradient(0, 580, 0, H);
+    g.addColorStop(0, "#e88b6c"); g.addColorStop(.35, "#7b4b7d"); g.addColorStop(1, "#1d1838");
+    c.fillStyle = g; c.fillRect(0, 580, W, H - 580);
+    for (i = 0; i < 260; i++) { // sparkles on the water
+      var y = 590 + Math.pow(r(), 1.6) * 330, x = 960 + (r() - .5) * (80 + (y - 580) * 1.3);
+      c.fillStyle = "rgba(255,226,170," + (.25 + r() * .6).toFixed(2) + ")"; c.fillRect(x, y, 8 + r() * 40, 2 + r() * 2);
+    }
+    c.fillStyle = "#161126"; // shore trees
+    for (i = 0; i < 70; i++) { var tx = r() * 520, th = 40 + r() * 90; c.beginPath(); c.moveTo(tx, 610); c.lineTo(tx + 14, 610 - th); c.lineTo(tx + 28, 610); c.fill(); }
+    c.fillRect(0, 600, 560, 22);
+    c.beginPath(); c.moveTo(700, 700); c.lineTo(790, 700); c.lineTo(770, 716); c.lineTo(716, 716); c.fill(); // boat
+    c.fillRect(744, 640, 4, 60);
+    c.beginPath(); c.moveTo(750, 642); c.lineTo(790, 692); c.lineTo(750, 692); c.fill();
+    // film grain: this is what makes quality matter for the file size
+    var d = c.getImageData(0, 0, W, H), px = d.data;
+    for (i = 0; i < px.length; i += 4) { var n = (r() - .5) * 26; px[i] += n; px[i + 1] += n; px[i + 2] += n; }
+    c.putImageData(d, 0, 0);
+  }
+
+  // ---------- Encoding: real JPEG compression with toBlob, one at a time ----------
+  var work = document.createElement("canvas"), wctx = work.getContext("2d"), chain = Promise.resolve();
+  function encode(w, q) {
+    var p = chain.then(function () {
+      return new Promise(function (res) {
+        var h = Math.max(1, Math.round(w * src.height / src.width));
+        work.width = w; work.height = h;
+        wctx.imageSmoothingQuality = "high";
+        wctx.drawImage(src, 0, 0, w, h);
+        work.toBlob(function (b) { res(b); }, "image/jpeg", q / 100);
+      });
+    });
+    chain = p.catch(function () {});
+    return p;
+  }
+  var pending = null, running = false;
+  function request() {
+    pending = { w: +wIn.value, q: +qIn.value };
+    if (!running) pump();
+  }
+  async function pump() {
+    running = true;
+    preview.classList.add("busy");
+    while (pending) {
+      var job = pending; pending = null;
+      var blob = await encode(job.w, job.q);
+      if (blob) show(blob, job);
+    }
+    preview.classList.remove("busy");
+    running = false;
+  }
+  function kb(bytes) { var k = bytes / 1024; return k >= 1000 ? (k / 1024).toFixed(2) + " MB" : Math.round(k) + " KB"; }
+  function show(blob, job) {
+    lastBlob = blob; lastSize = blob.size;
+    var url = URL.createObjectURL(blob), old = lastURL;
+    lastURL = url;
+    img.onload = function () { if (old) URL.revokeObjectURL(old); };
+    img.src = url; lensImg.src = url;
+    dl.href = url;
+    dl.download = "photo-" + job.w + "px-" + Math.round(blob.size / 1024) + "kb.jpg";
+    dl.setAttribute("aria-disabled", "false");
+    $("#dims").textContent = job.w + " × " + Math.round(job.w * src.height / src.width);
+    $("#fmt").textContent = "JPEG " + job.q + "%";
+    judge();
+  }
+  // lens: show a 4x crop of the busiest spot (the sparkles on the water)
+  lensImg.addEventListener("load", function () {
+    var lw = 82, iw = lw * 4, ih = iw * src.height / src.width;
+    lensImg.style.width = iw + "px";
+    lensImg.style.transform = "translate(" + (-iw * .66 + lw / 2) + "px," + (-ih * .72 + lw / 2) + "px)";
+  });
+
+  // ---------- Judge against the budget: block, gate, meter and words ----------
+  var OPEN = 52, wasFit = null;
+  function judge() {
+    var budget = budgetKB * 1024, ratio = lastSize / budget, ok = ratio <= 1;
+    sizeEl.textContent = kb(lastSize);
+    var pct = Math.min(100, ratio / 1.5 * 100);
+    fill.style.width = pct + "%";
+    fill.classList.toggle("bad", !ok);
+    fill.style.setProperty("--b", (66.67 / Math.max(pct, 1) * 100).toFixed(1) + "%");
+    var diff = Math.abs(lastSize - budget);
+    verdict.textContent = ok ? "Fits, " + kb(diff) + " to spare" : kb(diff) + " over the " + kb(budget) + " limit";
+    verdict.className = ok ? "ok" : "bad";
+    block.style.height = Math.max(16, Math.min(80, OPEN * ratio)).toFixed(1) + "px";
+    $("#blockLbl").textContent = kb(lastSize);
+    block.classList.toggle("over", !ok);
+    gate.classList.toggle("ok", ok);
+    fits = ok;
+    if (wasFit !== ok) { ok ? passThrough() : bounceBack(); wasFit = ok; }
+  }
+  function gateX() { var lr = lane.getBoundingClientRect(), gr = gate.getBoundingClientRect(); return gr.left - lr.left; }
+  var inGate = false;
+  function passThrough() {
+    lane.classList.add("moving");
+    // roll the block in under the beam, centred between the posts
+    block.style.transform = "translateX(" + (gateX() + 9 - 39 - 22) + "px)";
+    inGate = true;
+    clearTimeout(passThrough.t);
+    passThrough.t = setTimeout(function () { lane.classList.remove("moving"); sparks(); }, reduce.matches ? 0 : 650);
+  }
+  function bounceBack() {
+    var back = inGate;
+    inGate = false;
+    clearTimeout(passThrough.t);
+    lane.classList.remove("moving");
+    block.classList.remove("bump");
+    block.style.transform = "translateX(0)";
+    // too tall: it rolls up to the beam, hits it and bounces back
+    passThrough.t = setTimeout(function () {
+      block.style.setProperty("--hit", Math.max(0, gateX() - 54 - 22 - 78 - 3) + "px");
+      void block.offsetWidth; block.classList.add("bump");
+    }, back && !reduce.matches ? 650 : 0);
+  }
+  function sparks() {
+    if (reduce.matches) return;
+    var x = gateX() + 9, y = lane.clientHeight - 12 - OPEN;
+    for (var i = 0; i < 12; i++) {
+      var s = document.createElement("i"), a = Math.PI + Math.random() * Math.PI, d = 18 + Math.random() * 26;
+      s.className = "spark";
+      s.style.cssText = "left:" + x + "px;top:" + y + "px;--x:" + (Math.cos(a) * d).toFixed(0) + "px;--y:" + (Math.sin(a) * d).toFixed(0) + "px";
+      lane.appendChild(s);
+      setTimeout(s.remove.bind(s), 900);
+    }
+  }
+
+  // ---------- Inputs ----------
+  function track(inp) { inp.style.setProperty("--p", ((inp.value - inp.min) / (inp.max - inp.min) * 100).toFixed(1) + "%"); }
+  function syncLabels() {
+    $("#qOut").textContent = qIn.value + "%";
+    $("#wOut").textContent = wIn.value + " px";
+    qIn.setAttribute("aria-valuetext", qIn.value + " percent");
+    wIn.setAttribute("aria-valuetext", wIn.value + " pixels wide");
+    track(qIn); track(wIn);
+  }
+  [qIn, wIn].forEach(function (inp) { inp.addEventListener("input", function () { syncLabels(); request(); }); });
+  var budgetBtns = [].slice.call(document.querySelectorAll("#budgets button"));
+  function setBudget(kbv) {
+    budgetKB = kbv;
+    budgetBtns.forEach(function (b) { var on = +b.dataset.kb === kbv; b.setAttribute("aria-checked", String(on)); b.tabIndex = on ? 0 : -1; });
+    $("#gateTag").textContent = kbv >= 1024 ? kbv / 1024 + " MB" : kbv + " KB";
+    if (lastSize) judge();
+  }
+  budgetBtns.forEach(function (b, i) {
+    b.addEventListener("click", function () { setBudget(+b.dataset.kb); });
+    b.addEventListener("keydown", function (e) {
+      var d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      var nb = budgetBtns[(i + d + budgetBtns.length) % budgetBtns.length]; nb.focus(); setBudget(+nb.dataset.kb);
+    });
+  });
+  dl.addEventListener("click", function (e) { if (!lastBlob) e.preventDefault(); });
+
+  // ---------- Fit to limit: search the best quality that fits, shrink the width if it must ----------
+  var fitting = false, glideToken = 0;
+  async function glideSliders(w, q, ms, fromDemo) {
+    var w0 = +wIn.value, q0 = +qIn.value, t0 = performance.now(), token = glideToken;
+    if (reduce.matches) ms = 1;
+    while (true) {
+      if (fromDemo && token !== glideToken) return; // the visitor took over
+      var k = Math.min(1, (performance.now() - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+      wIn.value = Math.round((w0 + (w - w0) * e) / 10) * 10; qIn.value = Math.round(q0 + (q - q0) * e);
+      syncLabels(); request();
+      if (k >= 1) break;
+      await wait(40);
+    }
+  }
+  async function fit(btn, fromDemo) {
+    if (fitting) return;
+    fitting = true;
+    btn.classList.add("busy");
+    var label = btn.lastChild, before = label.textContent;
+    label.textContent = "Searching…";
+    var target = budgetKB * 1024 * .98, w = +wIn.value, found = null, tries = 0;
+    while (!found && w >= 320) {
+      var lo = 20, hi = 95, best = null;
+      for (var i = 0; i < 6; i++) {
+        var mid = Math.round((lo + hi) / 2), b = await encode(w, mid);
+        tries++;
+        label.textContent = "Try " + tries + "…";
+        if (b && b.size <= target) { best = mid; lo = mid + 1; } else hi = mid - 1;
+        if (lo > hi) break;
+      }
+      if (best !== null) found = { w: w, q: best };
+      else w = Math.round(w * .8 / 10) * 10;
+    }
+    label.textContent = before;
+    btn.classList.remove("busy");
+    fitting = false;
+    if (!found) { status.textContent = "Even the smallest version is over the limit."; verdict.textContent = "Too big even at 320 px"; return; }
+    if (fromDemo && !demoOn) return;
+    await glideSliders(found.w, found.q, 700, fromDemo);
+    status.textContent = "Fitted in " + tries + " tries: " + found.w + " pixels wide at " + found.q + " percent quality.";
+  }
+  fitBtn.addEventListener("click", function (e) { var btn = e.currentTarget; fit(btn); });
+
+  // ---------- Your own photo: file picker or drop it on the preview ----------
+  async function loadFile(file) {
+    if (!file || !/^image\//.test(file.type)) { verdict.textContent = "That file is not a photo"; verdict.className = "bad"; return; }
+    try {
+      var bmp = await createImageBitmap(file);
+      var W = Math.min(2400, bmp.width), H = Math.round(bmp.height * W / bmp.width);
+      src.width = W; src.height = H;
+      src.getContext("2d").drawImage(bmp, 0, 0, W, H);
+      wIn.max = W; wIn.min = Math.min(320, W);
+      wIn.value = Math.min(W, 1400);
+      wasFit = null;
+      syncLabels(); request();
+      status.textContent = "Loaded " + file.name + ", " + bmp.width + " by " + bmp.height + " pixels, " + kb(file.size) + " before compression.";
+    } catch (err) {
+      verdict.textContent = "We could not read that photo"; verdict.className = "bad";
+    }
+  }
+  $("#file").addEventListener("change", function (e) { loadFile(e.target.files[0]); e.target.value = ""; });
+  preview.addEventListener("dragover", function (e) { e.preventDefault(); preview.classList.add("drag"); });
+  preview.addEventListener("dragleave", function () { preview.classList.remove("drag"); });
+  preview.addEventListener("drop", function (e) { e.preventDefault(); preview.classList.remove("drag"); loadFile(e.dataTransfer.files[0]); });
+
+  // ---------- Start ----------
+  paintDefault();
+  syncLabels();
+  request();
+
+  // ---------- Auto demo: slide, bump into the gate, fit, switch limits, loop ----------
+  var demoOn = true;
+  function stopDemo(e) { if (e.isTrusted && demoOn) { demoOn = false; glideToken++; } }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  async function demo() {
+    try {
+      await pause(1100);
+      while (demoOn) {
+        await glideSliders(+wIn.value, 87, 900, true); if (!demoOn) throw 0;
+        await pause(900);
+        await fit(fitBtn, true); if (!demoOn) throw 0;
+        await pause(2200);
+        setBudget(100); await pause(1400);
+        await fit(fitBtn, true); if (!demoOn) throw 0;
+        await pause(2200);
+        setBudget(1024); await pause(400);
+        await glideSliders(1400, 92, 900, true); if (!demoOn) throw 0;
+        await pause(1800);
+        setBudget(250); await pause(1600);
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>

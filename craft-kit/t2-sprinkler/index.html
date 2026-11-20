@@ -1,0 +1,513 @@
+<!doctype html>
+<!-- Chill & Craft · Sprinkler · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sprinkler · Off, auto and on toggle</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg-a: #dff3ff;
+    --bg-b: #e9f8e4;
+    --card: #ffffff;
+    --ink: #17302a;
+    --muted: #5f7570;
+    --line: rgba(23, 48, 42, 0.1);
+    --track: #eef3f1;
+    --sky1: #86cdfb;
+    --sky2: #e4f6ff;
+    --hill: #a9d98c;
+    --fence: #fbf5ea;
+    --rail: #e6d8c0;
+    --soil: #8d5c37;
+    --hole: #3c2717;
+    --metal: #2f3a46;
+    --metal-hi: #708092;
+    --tube: rgba(255, 255, 255, 0.9);
+    --off: #7c8798;
+    --auto: #f0a12c;
+    --on: #1e8ff0;
+    --focus: #1e8ff0;
+    --shadow: rgba(20, 70, 60, 0.4);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #08162b;
+    --bg-b: #0b1f19;
+    --card: #12232b;
+    --ink: #e8f4f0;
+    --muted: #92aaa3;
+    --line: rgba(232, 244, 240, 0.1);
+    --track: #1b3039;
+    --sky1: #0b1830;
+    --sky2: #1d3a5e;
+    --hill: #1d3b2d;
+    --fence: #4b5668;
+    --rail: #3a4353;
+    --soil: #4c321f;
+    --hole: #1c120a;
+    --metal: #1d242d;
+    --metal-hi: #8aa0b6;
+    --tube: rgba(255, 255, 255, 0.16);
+    --off: #6b7689;
+    --auto: #f4ac3c;
+    --on: #3aa3ff;
+    --focus: #7cc4ff;
+    --shadow: rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg-b);
+  }
+
+  /* ---------- Stage ---------- */
+  .stage { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; overflow: hidden; background: linear-gradient(170deg, var(--bg-a), var(--bg-b)); }
+  .panel { position: relative; width: min(560px, 100%); border-radius: 28px; background: var(--card); overflow: hidden; box-shadow: 0 1px 0 var(--line), 0 40px 80px -44px var(--shadow); }
+
+  /* ---------- Garden scene (SVG drawing + a canvas for the water) ---------- */
+  .scene { position: relative; aspect-ratio: 2 / 1; overflow: hidden; }
+  .scene svg, .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .cloud { animation: drift 40s linear infinite; }
+  .cloud.c2 { animation-duration: 56s; animation-delay: -30s; }
+  @keyframes drift { from { transform: translateX(-180px); } to { transform: translateX(640px); } }
+  .rays { transform-origin: 478px 58px; animation: spin 30s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .sunny, .night { transition: opacity 0.4s; }
+  :root[data-theme="dark"] .sunny { opacity: 0; }
+  :root:not([data-theme="dark"]) .night { opacity: 0; }
+  .tuft { transform-box: fill-box; transform-origin: 50% 100%; animation: sway 3.4s ease-in-out infinite; }
+  .tuft:nth-child(2n) { animation-duration: 4.1s; animation-delay: -1.3s; }
+  .tuft:nth-child(3n) { animation-duration: 3.8s; animation-delay: -2.2s; }
+  @keyframes sway { 50% { transform: skewX(-8deg); } }
+  .wing { transform-box: fill-box; transform-origin: 100% 50%; animation: flap 0.22s ease-in-out infinite alternate; }
+  .wing.w2 { transform-origin: 0% 50%; }
+  @keyframes flap { to { transform: scaleX(0.2); } }
+  .flower { transform-box: fill-box; transform-origin: 50% 100%; }
+
+  /* ---------- Controls ---------- */
+  .controls { padding: 16px clamp(16px, 4vw, 24px) 20px; display: grid; gap: 14px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .name { margin: 0; font-size: 1.02rem; font-weight: 750; }
+  .status { margin: 2px 0 0; font-size: 0.8rem; color: var(--muted); min-height: 1.2em; }
+  .now {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 15px 9px 12px;
+    border: 0;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(180deg, #3aa3ff, #1679d6);
+    box-shadow: 0 8px 18px -10px #1679d6, inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+    transition: transform 0.35s cubic-bezier(0.3, 1.7, 0.5, 1), filter 0.2s, opacity 0.2s;
+  }
+  .now:hover { transform: translateY(-2px); }
+  .now:active { transform: scale(0.95); }
+  .now:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .now:disabled { opacity: 0.45; cursor: default; transform: none; }
+  .now svg { width: 15px; height: 15px; }
+
+  /* the three-way switch: native radios under a sliding knob */
+  .tri { position: relative; margin: 0; padding: 5px; border: 0; min-width: 0; display: grid; grid-template-columns: repeat(3, 1fr); border-radius: 18px; background: var(--track); box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.08); }
+  .tri legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .opt { position: relative; z-index: 2; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .opt input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+  .lab { display: flex; align-items: center; justify-content: center; gap: 7px; height: 46px; border-radius: 14px; font-size: 0.9rem; font-weight: 700; color: var(--muted); transition: color 0.3s; }
+  .lab svg { width: 17px; height: 17px; flex: none; }
+  .opt input:checked + .lab { color: #fff; }
+  .opt input:focus-visible + .lab { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .knob { position: absolute; z-index: 1; left: 5px; top: 5px; width: calc((100% - 10px) / 3); height: 46px; border-radius: 14px; background: var(--off); box-shadow: 0 8px 16px -8px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3); transition: background 0.35s; }
+  .tri[data-mode="auto"] .knob { background: var(--auto); }
+  .tri[data-mode="on"] .knob { background: var(--on); }
+  .knob::after { content: ""; position: absolute; inset: 2px 2px 50%; border-radius: 12px 12px 6px 6px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent); }
+
+  /* soil moisture meter */
+  .meter-wrap { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; font-size: 0.8rem; color: var(--muted); }
+  .meter { position: relative; height: 10px; border-radius: 99px; background: var(--track); overflow: hidden; }
+  .meter i { position: absolute; left: 0; top: 0; bottom: 0; width: 30%; border-radius: inherit; background: linear-gradient(90deg, #c9a24a, #57b85a 55%, #1e8ff0); }
+  .meter b { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); opacity: 0.35; }
+  .meter-val { min-width: 3.2em; text-align: right; font-weight: 750; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .band { font-size: 0.72rem; color: var(--muted); margin: -6px 0 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* roomy screens (full-screen view): draw the piece larger */
+  @media (min-width: 1100px) and (min-height: 780px) { .panel { scale: 1.2; } }
+  @media (prefers-reduced-motion: reduce) {
+    .cloud, .rays, .tuft, .wing { animation: none; }
+    .now, .lab, .knob { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <section class="panel" aria-labelledby="name">
+      <div class="scene" id="scene">
+        <svg viewBox="0 0 560 280" aria-hidden="true" id="art">
+          <defs>
+            <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--sky1)" /><stop offset="1" style="stop-color: var(--sky2)" /></linearGradient>
+            <linearGradient id="bow" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff5d5d" /><stop offset="0.25" stop-color="#ffc24a" /><stop offset="0.5" stop-color="#6bdc6b" /><stop offset="0.75" stop-color="#4aa8ff" /><stop offset="1" stop-color="#9b6bff" /></linearGradient>
+            <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#fff6c8" stop-opacity="0.9" /><stop offset="1" stop-color="#fff6c8" stop-opacity="0" /></radialGradient>
+          </defs>
+          <rect width="560" height="280" fill="url(#sky)" />
+          <!-- sun by day, moon and stars by night -->
+          <g class="sunny">
+            <circle cx="478" cy="58" r="60" fill="url(#glow)" />
+            <g class="rays" stroke="#ffd34d" stroke-width="3" stroke-linecap="round"><path d="M478 18v-10M478 108v-10M438 58h-10M528 58h-10M450 30l-7-7M513 93l-7-7M450 86l-7 7M513 23l-7 7" /></g>
+            <circle cx="478" cy="58" r="24" fill="#ffd34d" />
+          </g>
+          <g class="night">
+            <circle cx="478" cy="58" r="20" fill="#f3efd8" /><circle cx="487" cy="51" r="18" style="fill: var(--sky1)" />
+            <g fill="#fff"><circle cx="80" cy="40" r="1.4" /><circle cx="190" cy="24" r="1.1" /><circle cx="330" cy="46" r="1.3" /><circle cx="400" cy="20" r="1" /><circle cx="250" cy="70" r="0.9" /></g>
+          </g>
+          <path class="cloud" d="M40 60 c-14 0-14-18 0-18 c2-12 20-14 26-4 c6-10 26-8 26 6 c12 0 12 16 0 16 z" fill="#fff" opacity="0.75" />
+          <path class="cloud c2" d="M140 92 c-10 0-10-13 0-13 c2-9 15-10 19-3 c4-7 19-6 19 4 c9 0 9 12 0 12 z" fill="#fff" opacity="0.55" />
+          <path d="M0 176 Q90 138 180 166 T360 158 T560 146 V280 H0 Z" style="fill: var(--hill)" />
+          <g id="fence"></g>
+          <path id="lawn" d="M0 196 Q280 180 560 196 V280 H0 Z" fill="#79b85a" />
+          <g opacity="0.12" fill="#fff"><path d="M60 198 L130 192 L170 280 H80 Z" /><path d="M250 186 L320 186 L360 280 H270 Z" /><path d="M440 190 L510 194 L560 280 H470 Z" /></g>
+          <!-- flower bed: the flowers droop when the soil is dry -->
+          <ellipse cx="74" cy="224" rx="62" ry="11" style="fill: var(--soil)" />
+          <g id="flowers"></g>
+          <!-- soil probe -->
+          <g transform="translate(508 150)">
+            <rect x="-7" y="0" width="14" height="80" rx="7" style="fill: var(--tube)" stroke="rgba(0,0,0,0.15)" />
+            <clipPath id="probe-clip"><rect x="-5" y="2" width="10" height="76" rx="5" /></clipPath>
+            <rect id="probe" clip-path="url(#probe-clip)" x="-5" y="40" width="10" height="40" fill="#2f95ef" />
+            <path d="M-11 51 h22 M-11 25 h22" stroke="rgba(0,0,0,0.35)" stroke-width="1.2" stroke-dasharray="2 2" />
+            <rect x="-9" y="-6" width="18" height="8" rx="3" fill="#2f3a46" />
+          </g>
+          <!-- the pop-up sprinkler -->
+          <ellipse cx="280" cy="217" rx="22" ry="6" style="fill: var(--hole)" />
+          <g id="sprinkler" transform="translate(280 216)">
+            <!-- everything below the ground line is hidden, so the riser slides out of the earth -->
+            <clipPath id="ground-clip"><rect x="-40" y="-90" width="80" height="92" /></clipPath>
+            <g clip-path="url(#ground-clip)">
+            <g id="riser">
+              <rect x="-7" y="-2" width="14" height="30" rx="3" style="fill: var(--metal)" />
+              <rect x="-7" y="-2" width="4" height="30" rx="2" style="fill: var(--metal-hi)" opacity="0.5" />
+              <g id="head">
+                <rect x="-11" y="-8" width="22" height="9" rx="4" style="fill: var(--metal)" />
+                <circle cx="0" cy="-9" r="4" fill="#1fb8a6" />
+                <g id="arm"><path d="M-2 -10 L-2 -20 L10 -25 L11 -21 L2 -17 L2 -10 Z" style="fill: var(--metal-hi)" /></g>
+              </g>
+            </g>
+            </g>
+            <ellipse cx="0" cy="1" rx="12" ry="3.5" fill="#55402c" />
+          </g>
+          <g id="tufts"></g>
+          <!-- a butterfly for idle life -->
+          <g id="fly"><g transform="translate(-6 -5)"><path class="wing" d="M6 5 C0 -2 -2 8 6 6 Z" fill="#ff8ab8" /><path class="wing w2" d="M6 5 C12 -2 14 8 6 6 Z" fill="#ffb3d1" /></g></g>
+        </svg>
+        <canvas id="water" aria-hidden="true"></canvas>
+      </div>
+
+      <div class="controls">
+        <div class="row">
+          <div>
+            <h1 class="name" id="name">Back lawn sprinkler</h1>
+            <p class="status" id="status" role="status" aria-live="polite">Off. The sprinkler is down.</p>
+          </div>
+          <button class="now" id="now" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5C8 1.5 3.5 6.6 3.5 9.6a4.5 4.5 0 0 0 9 0C12.5 6.6 8 1.5 8 1.5z" fill="currentColor" /></svg><span id="now-label">Water now</span></button>
+        </div>
+        <fieldset class="tri" id="tri" data-mode="off">
+          <legend>Sprinkler mode</legend>
+          <span class="knob" id="knob" aria-hidden="true"></span>
+          <label class="opt"><input type="radio" name="mode" value="off" checked /><span class="lab"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8v5.4M4.6 3.9a5.2 5.2 0 1 0 6.8 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" /></svg>Off</span></label>
+          <label class="opt"><input type="radio" name="mode" value="auto" /><span class="lab"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.8" /><path d="M8 4.6V8l2.4 1.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>Auto</span></label>
+          <label class="opt"><input type="radio" name="mode" value="on" /><span class="lab"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5C8 1.5 3.5 6.6 3.5 9.6a4.5 4.5 0 0 0 9 0C12.5 6.6 8 1.5 8 1.5z" fill="currentColor" /></svg>On</span></label>
+        </fieldset>
+        <div class="meter-wrap">
+          <span>Soil</span>
+          <div class="meter" id="meter" role="meter" aria-label="Soil moisture" aria-valuemin="0" aria-valuemax="100" aria-valuenow="31"><i id="meter-fill"></i><b style="left: 35%"></b><b style="left: 70%"></b></div>
+          <span class="meter-val" id="meter-val">31%</span>
+        </div>
+        <p class="band">Auto waters when the soil drops below 35% and stops at 70%.</p>
+      </div>
+    </section>
+  </main>
+
+<script>
+  // Sprinkler: a three-way Off / Auto / On toggle that runs a garden sprinkler.
+  // Changing mode = the knob squashes, then springs to its slot with a stretch (anticipation → move → overshoot).
+  // Watering = the ground shakes, the head pops up with a spring and dirt flies → the nozzle sweeps a water jet
+  // that arcs over the lawn and splashes → the soil probe fills, the grass greens and the flowers lift their heads.
+  // Stopping = the jet dies, the last drips fall and the head sinks back into the ground with a puff.
+  (function () {
+    "use strict";
+    var $ = function (id) { return document.getElementById(id); };
+    var calm = matchMedia("(prefers-reduced-motion: reduce)");
+    var NS = "http://www.w3.org/2000/svg";
+    var scene = $("scene"), canvas = $("water"), ctx = canvas.getContext("2d");
+    var tri = $("tri"), knob = $("knob"), statusEl = $("status"), nowBtn = $("now"), nowLabel = $("now-label");
+    var riser = $("riser"), arm = $("arm"), lawn = $("lawn"), probe = $("probe"), fly = $("fly");
+    var meter = $("meter"), meterFill = $("meter-fill"), meterVal = $("meter-val");
+    var MODES = ["off", "auto", "on"];
+    var GROUND = 216; // ground line under the sprinkler, in drawing units
+    var S = { mode: "off", autoRun: false, burstEnd: 0, m: 31, up: 0, upV: 0, flow: 0, want: false, riseAt: 0, sweep: 0, phi: Math.PI / 2 };
+    var drops = [], bits = [];
+
+    function spring(stiff, damp) {
+      var x = 0, v = 0, out = [0];
+      for (var i = 0; i < 240; i++) { v += (-stiff * (x - 1) - damp * v) / 60; x += v / 60; out.push(x); if (Math.abs(v) < 0.01 && Math.abs(x - 1) < 0.002) break; }
+      out[out.length - 1] = 1;
+      return out;
+    }
+    function el(name, attrs, parent) {
+      var e = document.createElementNS(NS, name);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      parent.appendChild(e);
+      return e;
+    }
+
+    // ---------- Build the fence, grass tufts and flowers ----------
+    (function build() {
+      var fence = $("fence");
+      for (var x = 4; x < 560; x += 24) el("path", { d: "M" + x + " 198 V160 L" + (x + 6) + " 151 L" + (x + 12) + " 160 V198 Z", style: "fill: var(--fence)" }, fence);
+      el("rect", { x: 0, y: 166, width: 560, height: 5, style: "fill: var(--rail)" }, fence);
+      el("rect", { x: 0, y: 184, width: 560, height: 5, style: "fill: var(--rail)" }, fence);
+      var tufts = $("tufts");
+      [[150, 262], [196, 248], [360, 254], [420, 270], [470, 244], [30, 270], [240, 276], [320, 238]].forEach(function (p) {
+        el("path", { class: "tuft", d: "M" + p[0] + " " + p[1] + " q-6 -10 -10 -16 q7 6 9 10 q0 -10 2 -18 q2 8 1 18 q4 -6 10 -11 q-4 7 -7 17 z", fill: "#3e9a48", opacity: 0.8 }, tufts);
+      });
+      var flowers = $("flowers"), hues = ["#ff6fa1", "#ffd23f", "#ffffff", "#ff8a5c", "#c58bff"];
+      for (var i = 0; i < 5; i++) {
+        var g = el("g", { class: "flower" }, flowers), fx = 34 + i * 20, fy = 222 - (i % 2) * 4, h = 30 + (i % 3) * 6;
+        el("path", { d: "M" + fx + " " + fy + " q-3 " + -h / 2 + " 0 " + -h, stroke: "#3f8f45", "stroke-width": 2, fill: "none" }, g);
+        el("path", { d: "M" + fx + " " + (fy - 10) + " q6 -2 8 -8 q-6 0 -8 6", fill: "#4aa552" }, g);
+        for (var k = 0; k < 5; k++) { var a = (k / 5) * Math.PI * 2; el("circle", { cx: fx + Math.cos(a) * 4.2, cy: fy - h + Math.sin(a) * 4.2, r: 3.6, fill: hues[i] }, g); }
+        el("circle", { cx: fx, cy: fy - h, r: 2.6, fill: "#8a5a1e" }, g);
+      }
+    })();
+    var flowerEls = [].slice.call(document.querySelectorAll(".flower"));
+
+    // ---------- Canvas sizing: draw in the SVG's 560 x 280 units ----------
+    var scale = 1, dpr = 1;
+    function size() {
+      var w = scene.clientWidth, h = scene.clientHeight;
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+      scale = w / 560;
+    }
+    size();
+    addEventListener("resize", size);
+    if (window.ResizeObserver) new ResizeObserver(size).observe(scene);
+
+    // ---------- Water, splashes and dirt ----------
+    function nozzle() { return { x: 280 + Math.cos(S.phi) * 8, y: -(S.up * 28 + 22) }; } // y = height above the ground line
+    function emit(dt) {
+      if (S.flow < 0.03 || calm.matches) return;
+      var n = Math.round(240 * dt * S.flow + Math.random() * 0.6), nz = nozzle();
+      for (var i = 0; i < n; i++) {
+        var phi = S.phi + (Math.random() - 0.5) * 0.08, sp = (0.86 + Math.random() * 0.2) * (0.55 + 0.45 * S.flow);
+        drops.push({ x: nz.x, y: nz.y, z: 0, vx: Math.cos(phi) * 190 * sp, vz: Math.sin(phi) * 42 * sp, vy: -255 * sp - Math.random() * 20, t: 0 });
+      }
+    }
+    function dirt(count, power) {
+      if (calm.matches) return;
+      for (var i = 0; i < count; i++) {
+        var a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+        bits.push({ x: 280 + (Math.random() - 0.5) * 16, y: GROUND - 2, vx: Math.cos(a) * 60 * power, vy: Math.sin(a) * (90 + Math.random() * 70) * power, t: 0, life: 0.5 + Math.random() * 0.3, r: 1.2 + Math.random() * 1.6, kind: "dirt" });
+      }
+    }
+    function physics(dt) {
+      for (var i = drops.length - 1; i >= 0; i--) {
+        var d = drops[i];
+        d.vy += 520 * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt; d.t += dt;
+        if (d.y >= 0) {
+          if (Math.random() < 0.5) bits.push({ x: d.x, y: GROUND + d.z, vx: (Math.random() - 0.5) * 40, vy: -40 - Math.random() * 40, t: 0, life: 0.3, r: 1.1, kind: "splash" });
+          drops.splice(i, 1);
+        } else if (d.x < -10 || d.x > 570) drops.splice(i, 1);
+      }
+      for (i = bits.length - 1; i >= 0; i--) {
+        var b = bits[i];
+        b.vy += 420 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.t += dt;
+        if (b.t > b.life) bits.splice(i, 1);
+      }
+    }
+    function drawCanvas() {
+      ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+      ctx.clearRect(0, 0, 560, 280);
+      var dark = document.documentElement.dataset.theme === "dark";
+      // the rainbow shows through the spray on sunny days
+      // a faint partial rainbow in the mist, on the side away from the sun (red outside, violet inside)
+      if (!dark && S.flow > 0.05) {
+        ctx.lineWidth = 3.4;
+        ["#ff5d5d", "#ffb347", "#ffe15a", "#6bdc6b", "#4aa8ff", "#9b6bff"].forEach(function (c, i) {
+          ctx.strokeStyle = c;
+          ctx.globalAlpha = 0.22 * S.flow * (i === 2 ? 0.8 : 1);
+          ctx.beginPath(); ctx.arc(280, 236, 136 - i * 3.2, Math.PI * 1.07, Math.PI * 1.43); ctx.stroke();
+        });
+        ctx.globalAlpha = 1;
+      }
+      if (calm.matches && S.flow > 0.5) {
+        // reduced motion: a still fan of water arcs instead of flying drops
+        ctx.strokeStyle = dark ? "rgba(160, 220, 255, 0.7)" : "rgba(30, 130, 230, 0.6)";
+        ctx.lineWidth = 2;
+        [-1, -0.5, 0.5, 1].forEach(function (s) { ctx.beginPath(); ctx.moveTo(280, GROUND - 50); ctx.quadraticCurveTo(280 + s * 90, GROUND - 150, 280 + s * 170, GROUND + 20); ctx.stroke(); });
+      }
+      ctx.lineCap = "round";
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = dark ? "rgba(170, 225, 255, 0.75)" : "rgba(28, 128, 232, 0.62)";
+      ctx.beginPath();
+      for (var i = 0; i < drops.length; i++) {
+        var d = drops[i], sx = d.x, sy = GROUND + d.y + d.z;
+        ctx.moveTo(sx, sy); ctx.lineTo(sx - d.vx * 0.017, sy - (d.vy + d.vz) * 0.017);
+      }
+      ctx.stroke();
+      for (i = 0; i < bits.length; i++) {
+        var b = bits[i], a = 1 - b.t / b.life;
+        ctx.globalAlpha = Math.max(0, a);
+        ctx.fillStyle = b.kind === "dirt" ? (dark ? "#7a5636" : "#7a4f2c") : dark ? "#bfe6ff" : "#5fb0f5";
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ---------- Drawing the sprinkler, lawn, flowers and probe ----------
+    function mix(a, b, t) { return "rgb(" + a.map(function (v, i) { return Math.round(v + (b[i] - v) * t); }).join(",") + ")"; }
+    function drawSvg(now) {
+      var shake = S.want && now < S.riseAt ? (Math.random() - 0.5) * 2.4 : 0;
+      riser.setAttribute("transform", "translate(" + shake.toFixed(2) + " " + (-S.up * 28).toFixed(2) + ")");
+      // the nozzle arm leans toward where the jet is pointing
+      arm.setAttribute("transform", "scale(" + (Math.cos(S.phi) >= 0 ? 1 : -1) + " 1) rotate(" + (-(1 - Math.abs(Math.cos(S.phi))) * 30).toFixed(1) + ")");
+      var wet = Math.max(0, Math.min(1, (S.m - 12) / 58)), dark = document.documentElement.dataset.theme === "dark";
+      lawn.setAttribute("fill", dark ? mix([96, 88, 50], [38, 110, 60], wet) : mix([206, 190, 104], [86, 184, 86], wet));
+      flowerEls.forEach(function (f, i) { f.style.transform = "rotate(" + ((1 - wet) * (i % 2 ? 26 : -22)).toFixed(1) + "deg)"; });
+      var ph = (S.m / 100) * 76;
+      probe.setAttribute("y", (78 - ph).toFixed(1)); probe.setAttribute("height", ph.toFixed(1));
+      // the butterfly drifts on a slow looping path (still when motion is reduced)
+      var ft = calm.matches ? 0 : now;
+      fly.setAttribute("transform", "translate(" + (300 + Math.sin(ft * 0.00027) * 210).toFixed(1) + " " + (112 + Math.sin(ft * 0.00061) * 34 + Math.sin(ft * 0.0024) * 5).toFixed(1) + ")");
+    }
+
+    // ---------- Readouts and status ----------
+    var lastSaid = "", lastPct = -1;
+    function readouts(now) {
+      var pct = Math.round(S.m);
+      if (pct !== lastPct) {
+        lastPct = pct;
+        meterFill.style.width = pct + "%";
+        meterVal.textContent = pct + "%";
+        meter.setAttribute("aria-valuenow", pct);
+      }
+      var bursting = S.burstEnd > now, say;
+      if (bursting) say = "Watering now. " + Math.ceil((S.burstEnd - now) / 1000) + " s left.";
+      else if (S.mode === "on") say = "On. Watering the lawn.";
+      else if (S.mode === "auto") say = S.autoRun ? "Auto. Watering until the soil reaches 70%." : "Auto. Waiting: runs when the soil drops below 35%.";
+      else say = S.up > 0.1 ? "Off. Stopping the water." : "Off. The sprinkler is down.";
+      if (say !== lastSaid) { lastSaid = say; statusEl.textContent = say; }
+      var label = S.mode === "on" ? "Already on" : bursting ? "Stop · " + Math.ceil((S.burstEnd - now) / 1000) + " s" : "Water now";
+      if (nowLabel.textContent !== label) nowLabel.textContent = label;
+      nowBtn.disabled = S.mode === "on";
+    }
+
+    // ---------- Main loop ----------
+    var last = performance.now(), prevUp = 0;
+    function frame(now) {
+      var dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      last = now;
+      var bursting = S.burstEnd > now;
+      if (S.burstEnd && !bursting) S.burstEnd = 0;
+      if (S.mode === "auto") {
+        if (!S.autoRun && S.m < 35) S.autoRun = true;
+        else if (S.autoRun && S.m >= 70) S.autoRun = false;
+      } else S.autoRun = false;
+      var want = S.mode === "on" || S.autoRun || bursting;
+      if (want && !S.want) { S.riseAt = now + (calm.matches || S.up > 0.5 ? 0 : 170); if (S.up < 0.1) dirt(6, 0.5); }
+      S.want = want;
+      // the head rises (with overshoot) after the ground shakes, and only sinks once the jet has died
+      var target = want ? (now >= S.riseAt ? 1 : 0) : S.flow < 0.08 ? 0 : 1;
+      if (calm.matches) { S.up = target; S.upV = 0; }
+      else {
+        if (target === 1 && S.up < 0.05 && S.upV === 0) dirt(14, 1);
+        S.upV = (S.upV + (target - S.up) * (target ? 0.14 : 0.06)) * (target ? 0.8 : 0.86);
+        S.up = Math.max(0, S.up + S.upV);
+        if (S.up === 0) S.upV = 0;
+      }
+      if (prevUp > 0.15 && S.up <= 0.15 && !want) dirt(8, 0.6);
+      prevUp = S.up;
+      var ft = want && S.up > 0.8 ? 1 : 0;
+      S.flow += (ft - S.flow) * Math.min(1, dt * (ft ? 3.2 : 5));
+      if (calm.matches) S.flow = ft;
+      // moisture: water raises it, sun and wind lower it (sped up for the demo)
+      if (S.flow > 0.4) S.m = Math.min(100, S.m + 9 * dt * S.flow);
+      else S.m = Math.max(6, S.m - 1.1 * dt);
+      if (S.flow > 0.02 && !calm.matches) S.sweep += dt * 1.6;
+      S.phi = Math.PI / 2 + Math.sin(S.sweep) * 1.2;
+      emit(dt);
+      physics(dt);
+      drawCanvas();
+      drawSvg(now);
+      readouts(now);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    // ---------- The three-way switch ----------
+    function moveKnob(from, to) {
+      knob.getAnimations().forEach(function (a) { a.cancel(); });
+      knob.style.transform = "translateX(" + to * 100 + "%)";
+      if (calm.matches || from === to) return;
+      var c = spring(230, 17), dir = to > from ? 1 : -1, frames = [];
+      // anticipation: the knob squashes against the side it is leaving
+      for (var a = 0; a <= 4; a++) { var s = Math.sin((a / 4) * Math.PI) * 0.1; frames.push({ transform: "translateX(" + (from * 100 - dir * s * 30).toFixed(2) + "%) scale(" + (1 - s).toFixed(3) + "," + (1 + s * 0.6).toFixed(3) + ")" }); }
+      c.forEach(function (p, i) {
+        var x = from + (to - from) * p, v = i ? Math.abs(p - c[i - 1]) * Math.abs(to - from) : 0, st = 1 + Math.min(0.28, v * 5);
+        frames.push({ transform: "translateX(" + (x * 100).toFixed(2) + "%) scale(" + st.toFixed(3) + "," + (1 / st).toFixed(3) + ")" });
+      });
+      knob.animate(frames, { duration: (frames.length * 1000) / 60, easing: "linear" });
+    }
+    function setMode(mode) {
+      if (mode === S.mode) return;
+      var from = MODES.indexOf(S.mode), to = MODES.indexOf(mode);
+      S.mode = mode;
+      tri.dataset.mode = mode;
+      tri.querySelector('input[value="' + mode + '"]').checked = true;
+      if (mode === "on") S.burstEnd = 0;
+      moveKnob(from, to);
+    }
+    [].forEach.call(tri.querySelectorAll("input"), function (inp) {
+      inp.addEventListener("change", function () { if (inp.checked) setMode(inp.value); });
+    });
+    nowBtn.addEventListener("click", function () {
+      if (S.mode === "on") return;
+      var now = performance.now();
+      S.burstEnd = S.burstEnd > now ? 0 : now + 6000;
+      nowBtn.animate([{ transform: "scale(1)" }, { transform: "scale(0.9)" }, { transform: "scale(1.06)" }, { transform: "scale(1)" }], { duration: 380, easing: "ease-out" });
+    });
+
+    // ---------- Auto demo: Auto → On → Off on a loop until a real input ----------
+    var demoOn = !calm.matches, timer = 0, plan = [["auto", 5600], ["on", 3600], ["off", 2600]], k = 0;
+    function stopDemo(e) { if (e.isTrusted && demoOn) { demoOn = false; clearTimeout(timer); } }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, stopDemo, { capture: true, passive: true }); });
+    function demo() {
+      if (!demoOn) return;
+      var p = plan[k++ % plan.length];
+      setMode(p[0]);
+      timer = setTimeout(demo, p[1]);
+    }
+    if (demoOn) timer = setTimeout(demo, 350);
+  })();
+</script>
+</body>
+</html>

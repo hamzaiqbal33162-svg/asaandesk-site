@@ -1,0 +1,530 @@
+<!doctype html>
+<!-- Chill & Craft · Round Table · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Round Table · split the bill calculator</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: terracotta, olive and brass (light), candle-lit walnut (dark) ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --bg: #efe1d3;
+    --bg2: #f9f1e8;
+    --card: #fffaf4;
+    --ink: #2b1c15;
+    --muted: #7d665a;
+    --line: #ecdccd;
+    --soft: #f7ede2;
+    --terra: #cf5a35;
+    --terra2: #e9805b;
+    --olive: #687a34;
+    --brass: #e1aa3e;
+    --wood: #b9794f;
+    --wood2: #9b5f3c;
+    --cloth: #f6efe5;
+    --red: #c93838;
+    --shadow: rgba(70, 35, 15, .28);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #140d09;
+    --bg2: #21160f;
+    --card: #1f150f;
+    --ink: #f6eadf;
+    --muted: #b49b8b;
+    --line: #382719;
+    --soft: #2a1c13;
+    --terra: #ff875c;
+    --terra2: #ffa985;
+    --olive: #b2c66f;
+    --brass: #f2c25c;
+    --wood: #6d442c;
+    --wood2: #563421;
+    --cloth: #e9dccb;
+    --red: #ff6b60;
+    --shadow: rgba(0, 0, 0, .7);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: var(--ff); color: var(--ink); background: var(--bg); }
+  .stage {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 14px;
+    overflow: hidden;
+    background:
+      radial-gradient(45% 35% at 50% 38%, color-mix(in srgb, var(--brass) 22%, transparent), transparent 70%),
+      repeating-linear-gradient(45deg, transparent 0 18px, color-mix(in srgb, var(--terra) 4%, transparent) 18px 19px),
+      radial-gradient(90% 80% at 50% 40%, var(--bg2), var(--bg));
+  }
+  .card {
+    position: relative;
+    width: min(100%, 410px);
+    padding: 16px 16px 18px;
+    border-radius: 28px;
+    overflow: hidden;
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 40px 80px -48px var(--shadow), 0 10px 24px -16px var(--shadow);
+    animation: rise .8s cubic-bezier(.22, 1.3, .36, 1) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(20px) scale(.97); } }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+  .kicker { margin: 0 0 2px; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--terra); }
+  h1 { margin: 0; font-size: clamp(18px, 5vw, 20px); letter-spacing: -.015em; }
+  .each { text-align: right; }
+  .each small { display: block; font-size: 11px; font-weight: 700; color: var(--muted); }
+  .each b { font-size: 19px; font-variant-numeric: tabular-nums; color: var(--olive); }
+
+  /* ---------- The table ---------- */
+  .scene { position: relative; width: min(100%, 290px); aspect-ratio: 1; margin: 6px auto 0; }
+  .table {
+    position: absolute; left: 15%; top: 15%; width: 70%; height: 70%; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, var(--wood), var(--wood2));
+    box-shadow: 0 22px 34px -18px var(--shadow), inset 0 0 0 6px color-mix(in srgb, var(--wood2) 70%, #000 10%), inset 0 0 40px rgba(0, 0, 0, .25);
+  }
+  .table::after { content: ""; position: absolute; inset: 14%; border-radius: 50%; background: repeating-radial-gradient(circle, transparent 0 9px, rgba(0, 0, 0, .05) 9px 10px); }
+  .chair {
+    position: absolute; width: 52px; height: 20px; margin: -10px 0 0 -26px; border-radius: 10px 10px 6px 6px;
+    background: var(--c); opacity: .9; box-shadow: 0 6px 10px -6px var(--shadow);
+    transition: left .7s cubic-bezier(.34, 1.4, .64, 1), top .7s cubic-bezier(.34, 1.4, .64, 1), transform .7s cubic-bezier(.34, 1.4, .64, 1), opacity .3s;
+  }
+  .plate {
+    position: absolute; width: 68px; height: 68px; margin: -34px 0 0 -34px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+    background: radial-gradient(circle, #fff 0 52%, #ece6dd 53% 60%, #fff 61% 68%, #d9d0c4 69%);
+    color: #2b1c15; box-shadow: 0 6px 12px -6px rgba(0, 0, 0, .45);
+    transition: left .7s cubic-bezier(.34, 1.4, .64, 1), top .7s cubic-bezier(.34, 1.4, .64, 1), transform .4s cubic-bezier(.34, 1.56, .64, 1), opacity .3s;
+  }
+  .plate.enter { transform: scale(0); opacity: 0; }
+  .plate.leave { transform: scale(0); opacity: 0; pointer-events: none; }
+  .plate:hover { transform: scale(1.07); }
+  .plate .nm { display: block; margin-top: 15px; font: 800 10.5px/1 var(--ff); color: var(--c); letter-spacing: .02em; }
+  .plate .amt { display: block; margin-top: 3px; font: 800 13.5px/1 var(--ff); font-variant-numeric: tabular-nums; }
+  .plate .pin { position: absolute; top: -4px; right: -2px; display: none; width: 22px; height: 22px; border-radius: 50%; background: var(--terra); box-shadow: 0 0 0 2px var(--card); }
+  .plate .pin svg { width: 12px; height: 12px; margin: 5px; }
+  .plate.locked .pin { display: block; animation: pinIn .4s cubic-bezier(.34, 1.8, .64, 1); }
+  @keyframes pinIn { from { transform: scale(0) rotate(-40deg); } }
+  .plate .tick { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--olive) 88%, transparent); opacity: 0; transform: scale(.4); transition: opacity .25s, transform .4s cubic-bezier(.34, 1.8, .64, 1); }
+  .plate .tick svg { width: 28px; height: 28px; }
+  .plate.paid .tick { opacity: 1; transform: none; }
+  .plate.bad { animation: wob .4s ease; }
+  @keyframes wob { 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
+  .plate:focus-visible { outline: 3px solid var(--terra); outline-offset: 3px; }
+
+  .bill {
+    position: absolute; left: 50%; top: 50%; width: 96px; padding: 8px 8px 12px; margin: -44px 0 0 -48px; border-radius: 3px; white-space: nowrap;
+    background: var(--cloth); color: #2b1c15; text-align: center; transform: rotate(-7deg); transform-origin: 50% 0;
+    box-shadow: 0 8px 14px -8px rgba(0, 0, 0, .5); animation: flutter 4s ease-in-out infinite;
+    -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - 6px) no-repeat, conic-gradient(from -45deg at bottom, transparent 90deg, #000 0) bottom / 8px 6px repeat-x;
+  }
+  @keyframes flutter { 50% { transform: rotate(-5deg) skewY(1deg); } }
+  .bill small { display: block; font: 800 8px var(--ff); letter-spacing: .12em; color: #8a6d5c; }
+  .bill b { display: block; margin: 3px 0; font-size: 13px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .bill i { display: block; height: 2px; margin: 4px 6px; background: #d8c8b6; }
+  .bill i + i { margin-right: 20px; }
+  .bill.bump { animation: billBump .4s cubic-bezier(.34, 1.8, .64, 1); }
+  @keyframes billBump { 40% { transform: rotate(-7deg) scale(1.1); } }
+  .coin { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px; border-radius: 50%; pointer-events: none; z-index: 3; background: radial-gradient(circle at 35% 30%, #fff6c8, var(--brass) 55%, #a87418); box-shadow: 0 2px 3px rgba(0, 0, 0, .35); }
+
+  /* fixed-share editor that opens over the table */
+  .editor {
+    position: absolute; left: 50%; top: 50%; z-index: 5; width: 210px; margin: -78px 0 0 -105px; padding: 12px; border-radius: 18px;
+    background: var(--card); border: 1px solid var(--line); box-shadow: 0 24px 40px -16px var(--shadow);
+    opacity: 0; transform: scale(.7); pointer-events: none; transition: opacity .2s, transform .4s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .editor.on { opacity: 1; transform: none; pointer-events: auto; }
+  .editor h2 { margin: 0 0 8px; font-size: 13.5px; }
+  .editor .row { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 10px; border-radius: 12px; background: var(--soft); border: 1.5px solid var(--line); }
+  .editor .row:focus-within { border-color: var(--terra); }
+  .editor .row.err { border-color: var(--red); }
+  .editor .row span { font: 800 11px var(--ff); color: var(--muted); }
+  .editor input { flex: 1; width: 0; border: 0; outline: none; background: none; color: var(--ink); font: 800 17px var(--ff); font-variant-numeric: tabular-nums; }
+  .editor p { min-height: 15px; margin: 5px 2px 8px; font-size: 11.5px; color: var(--muted); }
+  .editor p.err { color: var(--red); font-weight: 600; }
+  .editor .btns { display: flex; gap: 6px; }
+  .editor .btns button { flex: 1; height: 34px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); color: var(--ink); font: 700 12.5px var(--ff); cursor: pointer; }
+  .editor .btns .go { border: 0; background: var(--terra); color: #fff; }
+
+  /* ---------- Controls ---------- */
+  .ctrls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; margin-top: 8px; }
+  .lbl { display: block; margin: 0 0 5px 2px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .money { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 12px; border-radius: 14px; background: var(--soft); border: 1.5px solid var(--line); transition: border-color .2s, box-shadow .2s; }
+  .money:focus-within { border-color: var(--terra); box-shadow: 0 0 0 4px color-mix(in srgb, var(--terra) 18%, transparent); }
+  .money.err { border-color: var(--red); animation: shake .4s ease; }
+  @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+  .money span { font: 900 11.5px var(--ff); color: var(--terra); letter-spacing: .06em; }
+  .money input { flex: 1; width: 0; min-width: 0; border: 0; outline: none; background: none; color: var(--ink); font: 800 20px var(--ff); font-variant-numeric: tabular-nums; }
+  .stepper { display: flex; align-items: center; gap: 4px; height: 46px; padding: 0 4px; border-radius: 14px; background: var(--soft); border: 1.5px solid var(--line); }
+  .stepper button { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 10px; background: var(--card); color: var(--ink); font: 800 18px/1 var(--ff); cursor: pointer; transition: transform .2s cubic-bezier(.34, 1.8, .64, 1); }
+  .stepper button:active { transform: scale(.88); }
+  .stepper button:disabled { opacity: .35; cursor: default; }
+  .stepper output { min-width: 26px; text-align: center; font: 800 18px var(--ff); font-variant-numeric: tabular-nums; }
+  .tip { margin-top: 10px; }
+  .tip .lbl { display: flex; justify-content: space-between; }
+  .tip .lbl b { color: var(--ink); letter-spacing: 0; text-transform: none; font-size: 12px; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 24px; margin: 0; background: none; cursor: pointer; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--olive) var(--p, 40%), var(--line) var(--p, 40%)); }
+  input[type="range"]::-moz-range-track { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--olive) var(--p, 40%), var(--line) var(--p, 40%)); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; margin-top: -8px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6c8, var(--brass) 55%, #a87418); border: 2px solid var(--card); box-shadow: 0 3px 6px -1px var(--shadow); }
+  input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--brass); border: 2px solid var(--card); }
+  input[type="range"]:focus-visible { outline: 3px solid var(--terra); outline-offset: 2px; border-radius: 6px; }
+  .opts { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+  .switch { flex: none; display: inline-flex; align-items: center; gap: 9px; padding: 0; border: 0; background: none; color: var(--ink); font: 600 12.5px var(--ff); cursor: pointer; white-space: nowrap; }
+  .switch i { position: relative; width: 38px; height: 22px; border-radius: 11px; background: var(--line); transition: background .25s; }
+  .switch i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .35s cubic-bezier(.34, 1.56, .64, 1); }
+  .switch[aria-checked="true"] i { background: var(--olive); }
+  .switch[aria-checked="true"] i::after { transform: translateX(16px); }
+  .note { margin: 0; font-size: 11.5px; color: var(--muted); text-align: right; }
+  .note.err { color: var(--red); font-weight: 600; }
+  .send {
+    width: 100%; height: 48px; margin-top: 12px; border: 0; border-radius: 15px; cursor: pointer;
+    background: linear-gradient(180deg, var(--terra2), var(--terra)); color: #fff; font: 800 14.5px/1 var(--ff);
+    box-shadow: 0 12px 20px -12px var(--terra); transition: transform .25s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  [data-theme="dark"] .send { color: #2a1206; }
+  .send:hover { transform: translateY(-2px); }
+  .send:active { transform: scale(.97); }
+
+  /* summary sheet */
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 16px 18px 18px; border-radius: 24px 24px 0 0;
+    background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -20px 40px -20px var(--shadow);
+    transform: translateY(105%); transition: transform .6s cubic-bezier(.34, 1.2, .64, 1);
+  }
+  .sheet.on { transform: none; }
+  .sheet h2 { margin: 0 0 8px; font-size: 16px; }
+  .sheet ul { margin: 0; padding: 0; list-style: none; columns: 2; column-gap: 18px; }
+  .sheet li { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--line); font-size: 13px; break-inside: avoid; }
+  .sheet li b { font-variant-numeric: tabular-nums; }
+  .sheet .tot { display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .sheet .tot b { color: var(--ink); }
+  .sheet .btns { display: flex; gap: 8px; margin-top: 12px; }
+  .sheet .btns button { flex: 1; height: 42px; border-radius: 13px; border: 1.5px solid var(--line); background: var(--soft); color: var(--ink); font: 700 13px var(--ff); cursor: pointer; }
+  .sheet .btns .go { border: 0; background: var(--olive); color: #fff; }
+  [data-theme="dark"] .sheet .btns .go { color: #141a05; }
+
+  button:focus-visible { outline: 3px solid var(--terra); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" id="card" aria-labelledby="title">
+    <header class="head">
+      <div>
+        <p class="kicker">Friday dinner</p>
+        <h1 id="title">Split the bill</h1>
+      </div>
+      <div class="each"><small id="eachLbl">Each pays</small><b id="eachAmt">PKR 0</b></div>
+    </header>
+
+    <div class="scene" id="scene">
+      <div class="table" aria-hidden="true"></div>
+      <div id="seats"></div>
+      <div class="bill" id="bill" aria-hidden="true"><small>TOTAL</small><b id="billTotal">PKR 0</b><i></i><i></i><i></i></div>
+      <div class="editor" id="editor" role="dialog" aria-labelledby="edTitle">
+        <h2 id="edTitle">Fixed share</h2>
+        <div class="row" id="edRow"><span>PKR</span><input id="edIn" type="text" inputmode="numeric" autocomplete="off" aria-describedby="edMsg"></div>
+        <p id="edMsg">The others share the rest.</p>
+        <div class="btns"><button type="button" id="edClear">Split equally</button><button type="button" class="go" id="edLock">Lock</button></div>
+      </div>
+    </div>
+
+    <div class="ctrls">
+      <div>
+        <label class="lbl" for="billIn">Bill</label>
+        <div class="money" id="money"><span>PKR</span><input id="billIn" type="text" inputmode="numeric" autocomplete="off" value="6,840"></div>
+      </div>
+      <div>
+        <span class="lbl" id="pplLbl">People</span>
+        <div class="stepper" role="group" aria-labelledby="pplLbl">
+          <button type="button" id="minus" aria-label="One person fewer">−</button>
+          <output id="ppl" aria-live="polite">5</output>
+          <button type="button" id="plus" aria-label="One more person">+</button>
+        </div>
+      </div>
+    </div>
+    <div class="tip">
+      <label class="lbl" for="tipIn">Tip <b id="tipOut">10% · PKR 684</b></label>
+      <input id="tipIn" type="range" min="0" max="25" step="1" value="10">
+    </div>
+    <div class="opts">
+      <button class="switch" id="round" type="button" role="switch" aria-checked="true"><i aria-hidden="true"></i>Round to PKR 10</button>
+      <p class="note" id="note" aria-live="polite"></p>
+    </div>
+    <button class="send" id="send" type="button">Send payment requests</button>
+
+    <div class="sheet" id="sheet" role="dialog" aria-labelledby="shTitle" aria-hidden="true">
+      <h2 id="shTitle">Requests sent</h2>
+      <ul id="shList"></ul>
+      <div class="tot"><span id="shInfo">Bill + tip</span><b id="shTot">PKR 0</b></div>
+      <div class="btns"><button type="button" id="copy">Copy summary</button><button type="button" class="go" id="done">Done</button></div>
+    </div>
+    <p class="sr" id="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var fmt = function (n) { return Math.round(n).toLocaleString("en-US"); };
+
+  var FRIENDS = [["Ali", "#cf5a35"], ["Sana", "#687a34"], ["Hamza", "#3c79b8"], ["Zara", "#b4417a"], ["Bilal", "#c58a12"], ["Hira", "#7a52c7"], ["Usman", "#1f8f86"], ["Mahnoor", "#d1483f"]];
+  var people = FRIENDS.slice(0, 5).map(function (f) { return { name: f[0], c: f[1], lock: null, share: 0 }; });
+  var bill = 6840, tip = 10, round = true, shares = [], total = 0, editing = -1;
+  var scene = $("#scene"), seats = $("#seats"), billIn = $("#billIn"), money = $("#money"), tipIn = $("#tipIn"), note = $("#note"), status = $("#status");
+
+  // ---------- Maths ----------
+  function compute() {
+    total = Math.round(bill * (1 + tip / 100));
+    var locked = 0, free = [];
+    people.forEach(function (p, i) { if (p.lock != null) locked += p.lock; else free.push(i); });
+    var rest = total - locked, res = { total: total, rest: rest, extra: 0, uneven: [], error: "" };
+    if (!bill) res.error = "Enter the bill first";
+    else if (rest < 0) res.error = "Fixed shares are PKR " + fmt(-rest) + " more than the total";
+    else if (!free.length && rest > 0) res.error = "Fixed shares leave PKR " + fmt(rest) + " unpaid";
+    people.forEach(function (p) { p.share = p.lock != null ? p.lock : 0; });
+    if (free.length && rest >= 0) {
+      if (round) {
+        var each = Math.ceil(rest / free.length / 10) * 10;
+        free.forEach(function (i) { people[i].share = each; });
+        res.extra = each * free.length - rest;
+      } else {
+        var base = Math.floor(rest / free.length), rem = rest - base * free.length;
+        free.forEach(function (i, k) { people[i].share = base + (k < rem ? 1 : 0); if (k < rem) res.uneven.push(people[i].name); });
+      }
+    }
+    res.free = free;
+    return res;
+  }
+
+  // ---------- Seats around the table ----------
+  function pos(i, n, r) { var a = (-90 + i * 360 / n) * Math.PI / 180; return { x: 50 + Math.cos(a) * r, y: 50 + Math.sin(a) * r, deg: -90 + i * 360 / n }; }
+  function seatHTML(p, i) {
+    return '<span class="chair" data-i="' + i + '" style="--c:' + p.c + '"></span>' +
+      '<button class="plate enter" type="button" data-i="' + i + '" style="--c:' + p.c + '"><span class="nm">' + p.name + '</span><span class="amt">0</span>' +
+      '<span class="pin" aria-hidden="true"><svg viewBox="0 0 12 12" fill="#fff"><path d="M4 1h4l-.5 3.5L9.5 6v1H6.6L6 11l-.6-4H2.5V6l2-1.5z"/></svg></span>' +
+      '<span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button>';
+  }
+  function layout() {
+    var n = people.length;
+    // add seats for new people, remove seats for people who left
+    var have = seats.querySelectorAll(".plate").length; // includes plates still fading out, which come back if needed
+    for (var i = have; i < n; i++) seats.insertAdjacentHTML("beforeend", seatHTML(people[i], i));
+    [].forEach.call(seats.querySelectorAll(".plate, .chair"), function (el) {
+      var i = +el.dataset.i;
+      if (i >= n) {
+        if (el.classList.contains("plate")) el.classList.add("leave"); else el.style.opacity = 0;
+        setTimeout(function () { if (+el.dataset.i >= people.length) el.remove(); }, 350);
+        return;
+      }
+      el.classList.remove("leave");
+      var chair = el.classList.contains("chair"), p = pos(i, n, chair ? 45 : 31);
+      if (chair) el.style.opacity = "";
+      el.style.left = p.x.toFixed(2) + "%";
+      el.style.top = p.y.toFixed(2) + "%";
+      if (chair) el.style.transform = "rotate(" + (p.deg + 90) + "deg)";
+    });
+    requestAnimationFrame(function () { [].forEach.call(seats.querySelectorAll(".plate.enter"), function (el) { el.classList.remove("enter"); }); });
+  }
+
+  // ---------- Paint numbers (they roll) and fly coins ----------
+  var shown = {};
+  function rollTo(el, key, to, prefix) {
+    var from = shown[key] == null ? to : shown[key], t0 = performance.now(), ms = reduce.matches ? 1 : 520;
+    shown[key] = to;
+    (function step(now) {
+      var k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = (prefix || "") + fmt(from + (to - from) * e);
+      if (k < 1 && shown[key] === to) requestAnimationFrame(step);
+    })(t0);
+  }
+  function coins() {
+    if (reduce.matches || !scene.animate) return;
+    var S = scene.clientWidth, n = people.length;
+    for (var i = 0; i < n; i++) {
+      var p = pos(i, n, 31), dx = (p.x - 50) / 100 * S, dy = (p.y - 50) / 100 * S, c = document.createElement("i");
+      c.className = "coin";
+      scene.appendChild(c);
+      c.animate([
+        { transform: "translate(0,0) scale(.5)", opacity: 0 },
+        { transform: "translate(" + dx * .5 + "px," + (dy * .5 - 34) + "px) scale(1.15)", opacity: 1, offset: .5 },
+        { transform: "translate(" + dx + "px," + dy + "px) scale(.6)", opacity: 0 }
+      ], { duration: 620, delay: i * 55, easing: "cubic-bezier(.3,.7,.4,1)", fill: "both" }).onfinish = c.remove.bind(c);
+    }
+  }
+  var coinTimer;
+  function update(withCoins) {
+    var r = compute();
+    rollTo($("#billTotal"), "total", r.total, "PKR ");
+    var plates = seats.querySelectorAll(".plate:not(.leave)");
+    people.forEach(function (p, i) {
+      var el = plates[i];
+      if (!el) return;
+      el.classList.toggle("locked", p.lock != null);
+      rollTo(el.querySelector(".amt"), "p" + i, p.share);
+      el.setAttribute("aria-label", p.name + " pays PKR " + fmt(p.share) + (p.lock != null ? ", fixed" : "") + ". Press to set a fixed amount");
+    });
+    var free = r.free.length ? people[r.free[0]].share : 0;
+    $("#eachLbl").textContent = r.free.length < people.length ? "Others pay" : "Each pays";
+    $("#eachAmt").textContent = "PKR " + fmt(free);
+    $("#tipOut").textContent = tip + "% · PKR " + fmt(r.total - bill);
+    tipIn.style.setProperty("--p", (tip / 25 * 100) + "%");
+    tipIn.setAttribute("aria-valuetext", tip + " percent, " + fmt(r.total - bill) + " rupees");
+    $("#ppl").textContent = people.length;
+    $("#minus").disabled = people.length <= 2;
+    $("#plus").disabled = people.length >= FRIENDS.length;
+    note.classList.toggle("err", !!r.error);
+    note.textContent = r.error || (round ? (r.extra ? "PKR " + fmt(r.extra) + " extra goes to the waiter" : "Splits evenly") : r.uneven.length ? r.uneven.join(", ") + " pay" + (r.uneven.length > 1 ? "" : "s") + " 1 rupee more" : "Splits evenly");
+    if (withCoins) { clearTimeout(coinTimer); coinTimer = setTimeout(function () { coins(); var b = $("#bill"); b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump"); }, 120); }
+    return r;
+  }
+
+  // ---------- Inputs ----------
+  function digits(s) { return s.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 8); }
+  billIn.addEventListener("input", function () {
+    var d = digits(billIn.value);
+    bill = d ? +d : 0;
+    billIn.value = d ? fmt(bill) : "";
+    money.classList.remove("err");
+    update(true);
+  });
+  tipIn.addEventListener("input", function () { tip = +tipIn.value; update(true); });
+  function setCount(n) {
+    n = Math.max(2, Math.min(FRIENDS.length, n));
+    while (people.length < n) { var f = FRIENDS[people.length]; people.push({ name: f[0], c: f[1], lock: null, share: 0 }); }
+    while (people.length > n) { people.pop(); delete shown["p" + people.length]; }
+    closeEditor();
+    layout(); update(true);
+    status.textContent = n + " people at the table";
+  }
+  $("#plus").addEventListener("click", function () { setCount(people.length + 1); });
+  $("#minus").addEventListener("click", function () { setCount(people.length - 1); });
+  var roundBtn = $("#round");
+  roundBtn.addEventListener("click", function () { round = !round; roundBtn.setAttribute("aria-checked", String(round)); update(true); });
+
+  // ---------- Fixed share editor ----------
+  var editor = $("#editor"), edIn = $("#edIn"), edMsg = $("#edMsg"), edRow = $("#edRow");
+  function openEditor(i, quiet) {
+    editing = i;
+    var p = people[i];
+    $("#edTitle").textContent = p.name + " pays a fixed amount";
+    edIn.value = fmt(p.share);
+    edMsg.textContent = "The others share the rest."; edMsg.className = ""; edRow.classList.remove("err");
+    editor.classList.add("on");
+    if (!quiet) setTimeout(function () { edIn.focus({ preventScroll: true }); edIn.select(); }, 60);
+  }
+  function closeEditor() { editor.classList.remove("on"); editing = -1; }
+  edIn.addEventListener("input", function () { var d = digits(edIn.value); edIn.value = d ? fmt(+d) : ""; edRow.classList.remove("err"); edMsg.className = ""; edMsg.textContent = "The others share the rest."; });
+  function lockShare() {
+    if (editing < 0) return;
+    var v = +digits(edIn.value), others = 0;
+    people.forEach(function (p, j) { if (j !== editing && p.lock != null) others += p.lock; });
+    var max = total - others;
+    if (!edIn.value) { edRow.classList.add("err"); edMsg.className = "err"; edMsg.textContent = "Type an amount or press Split equally"; return; }
+    if (v > max) { edRow.classList.add("err"); edMsg.className = "err"; edMsg.textContent = "Too much: only PKR " + fmt(max) + " is left"; return; }
+    var p = people[editing];
+    p.lock = v;
+    status.textContent = p.name + " pays a fixed PKR " + fmt(v);
+    closeEditor();
+    update(true);
+  }
+  $("#edLock").addEventListener("click", lockShare);
+  $("#edClear").addEventListener("click", function () { if (editing >= 0) { people[editing].lock = null; closeEditor(); update(true); } });
+  edIn.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); lockShare(); } if (e.key === "Escape") closeEditor(); });
+  seats.addEventListener("click", function (e) { var b = e.target.closest(".plate"); if (b && !b.classList.contains("leave")) openEditor(+b.dataset.i); });
+
+  // ---------- Send requests: every plate gets a tick, then the summary slides up ----------
+  var sheet = $("#sheet"), busy = false;
+  async function send(btn) {
+    if (busy) return;
+    var r = compute();
+    if (r.error) {
+      note.textContent = r.error; note.classList.add("err");
+      if (!bill) { money.classList.remove("err"); void money.offsetWidth; money.classList.add("err"); }
+      seats.querySelectorAll(".plate").forEach(function (pl) { pl.classList.remove("bad"); void pl.offsetWidth; pl.classList.add("bad"); });
+      return;
+    }
+    busy = true;
+    closeEditor();
+    btn.textContent = "Sending…";
+    var plates = seats.querySelectorAll(".plate:not(.leave)");
+    for (var i = 0; i < plates.length; i++) { plates[i].classList.add("paid"); await wait(reduce.matches ? 0 : 160); }
+    $("#shList").innerHTML = people.map(function (p) { return '<li><span>' + p.name + "</span><b>" + fmt(p.share) + "</b></li>"; }).join("");
+    $("#shInfo").textContent = "Bill " + fmt(bill) + " + tip " + tip + "%" + (r.extra ? " + " + fmt(r.extra) + " rounding" : "");
+    $("#shTot").textContent = "PKR " + fmt(people.reduce(function (a, p) { return a + p.share; }, 0));
+    await wait(reduce.matches ? 0 : 300);
+    sheet.classList.add("on");
+    sheet.setAttribute("aria-hidden", "false");
+    btn.textContent = "Send payment requests";
+    status.textContent = "Requests sent to " + people.length + " people.";
+    busy = false;
+  }
+  function closeSheet() {
+    sheet.classList.remove("on");
+    sheet.setAttribute("aria-hidden", "true");
+    seats.querySelectorAll(".plate").forEach(function (pl) { pl.classList.remove("paid"); });
+  }
+  $("#send").addEventListener("click", function (e) { var btn = e.currentTarget; send(btn); });
+  $("#done").addEventListener("click", function () { closeSheet(); $("#send").focus({ preventScroll: true }); });
+  $("#copy").addEventListener("click", function (e) {
+    var btn = e.currentTarget, text = "Friday dinner, PKR " + fmt(total) + ": " + people.map(function (p) { return p.name + " " + fmt(p.share); }).join(", ");
+    function done() { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy summary"; }, 1400); }
+    try { if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, done); else done(); } catch (err) { done(); }
+  });
+
+  // ---------- Start ----------
+  layout();
+  update(false);
+  setTimeout(function () { update(true); }, 500);
+
+  // ---------- Auto demo: someone joins, the tip goes up, Ali pays a fixed amount, requests go out ----------
+  var demoOn = true;
+  function stopDemo(e) { if (e.isTrusted) demoOn = false; }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  async function slideTip(to) { while (tip !== to) { await pause(90); tip += tip < to ? 1 : -1; tipIn.value = tip; update(false); } update(true); }
+  async function demo() {
+    try {
+      await pause(1600);
+      while (demoOn) {
+        setCount(6); await pause(1400);
+        await slideTip(15); await pause(1200);
+        openEditor(0, true); await pause(700);
+        edIn.value = ""; for (var s = "2,500", k = 0; k < s.length; k++) { await pause(110); edIn.value += s[k]; }
+        await pause(500); lockShare(); await pause(1500);
+        await send($("#send")); await pause(2600);
+        closeSheet(); await pause(600);
+        people.forEach(function (p) { p.lock = null; });
+        round = !round; roundBtn.setAttribute("aria-checked", String(round)); update(true); await pause(1500);
+        round = true; roundBtn.setAttribute("aria-checked", "true");
+        await slideTip(10); setCount(5); await pause(1800);
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>

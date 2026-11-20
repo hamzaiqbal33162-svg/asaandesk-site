@@ -1,0 +1,740 @@
+<!doctype html>
+<!-- Chill & Craft · Mailwing · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mailwing · magic link waiting screen with resend and a backup code</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: lavender air, plum ink and tangerine ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #efe9ff;
+    --bg-2: #ffe3d1;
+    --card: #fffdfb;
+    --ink: #2a1f4f;
+    --muted: #776e9a;
+    --line: rgba(42, 31, 79, .12);
+    --plum: #5b3fd6;
+    --plum-2: #8d77ff;
+    --tang: #ff7f32;
+    --tang-2: #ffb45e;
+    --ok: #10a37a;
+    --bad: #e5484d;
+    --field: #f4f0ff;
+    --sky-a: #e6ddff;
+    --sky-b: #ffe8d8;
+    --hill: #d6cbff;
+    --hill-2: #c4b6fb;
+    --cloud: #ffffff;
+    --shadow: rgba(70, 40, 160, .26);
+    --stars: 0;
+    --sun: #ffb45e;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #120d2b;
+    --bg-2: #2b1530;
+    --card: #1b1540;
+    --ink: #f1edff;
+    --muted: #aaa2d4;
+    --line: rgba(241, 237, 255, .13);
+    --plum: #a08cff;
+    --plum-2: #c3b6ff;
+    --tang: #ff9a52;
+    --tang-2: #ffc078;
+    --ok: #39d6a2;
+    --bad: #ff7378;
+    --field: #241d52;
+    --sky-a: #1a1446;
+    --sky-b: #3a1f4a;
+    --hill: #2a2160;
+    --hill-2: #221a52;
+    --cloud: #3a3270;
+    --shadow: rgba(0, 0, 0, .65);
+    --stars: 1;
+    --sun: #fff1cf;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 20px 16px;
+    overflow-x: hidden;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 12% 18%, var(--bg-2), transparent 46%),
+      radial-gradient(circle at 88% 84%, rgba(91, 63, 214, .18), transparent 50%),
+      var(--bg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  button, input { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Card with an airmail border ---------- */
+  .card {
+    position: relative;
+    width: min(100%, 420px);
+    padding: 7px;
+    border-radius: 30px;
+    background: repeating-linear-gradient(135deg, var(--tang) 0 9px, var(--card) 9px 15px, var(--plum) 15px 24px, var(--card) 24px 30px);
+    box-shadow: 0 40px 70px -38px var(--shadow), 0 2px 0 rgba(255, 255, 255, .4) inset;
+    animation: rise .8s cubic-bezier(.3, 1.4, .5, 1) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } }
+  .inner { position: relative; overflow: hidden; border-radius: 23px; background: var(--card); }
+
+  /* ---------- Scene: laptop, flight path and mailbox ---------- */
+  .scene { display: block; width: 100%; height: auto; }
+  .scene .s1 { stop-color: var(--sky-a); }
+  .scene .s2 { stop-color: var(--sky-b); }
+  .scene .hill { fill: var(--hill); }
+  .scene .hill2 { fill: var(--hill-2); }
+  .scene .cloud { fill: var(--cloud); opacity: .9; }
+  .scene .c1 { animation: drift 26s linear infinite; }
+  .scene .c2 { animation: drift 38s linear infinite -14s; opacity: .65; }
+  .scene .c3 { animation: drift 31s linear infinite -24s; opacity: .8; }
+  @keyframes drift { from { transform: translateX(-90px); } to { transform: translateX(400px); } }
+  .scene .star { fill: #fff; opacity: calc(var(--stars) * .8); animation: twinkle 3s ease-in-out infinite; }
+  .scene .star:nth-child(2n) { animation-delay: -1.4s; }
+  @keyframes twinkle { 50% { opacity: calc(var(--stars) * .15); } }
+  .scene .sun { fill: var(--sun); opacity: .6; }
+  .scene .route { fill: none; stroke: var(--plum-2); stroke-width: 2; stroke-dasharray: 2 7; stroke-linecap: round; opacity: .55; }
+  .scene .trail { fill: none; stroke: var(--tang); stroke-width: 2.6; stroke-linecap: round; opacity: 0; transition: opacity .5s; }
+  .scene .trail.on { opacity: .9; transition: none; }
+  .scene .lap-screen { fill: var(--ink); }
+  .scene .lap-glow { fill: var(--plum-2); opacity: .0; transition: opacity .4s; }
+  .scene.sending .lap-glow { opacity: .5; }
+  .scene .lap-base { fill: var(--muted); }
+  .scene .lap-mail { fill: none; stroke: #fff; stroke-width: 2; stroke-linejoin: round; transition: opacity .3s; }
+  .scene .lap-check { fill: none; stroke: var(--ok); stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 30; stroke-dashoffset: 30; transition: stroke-dashoffset .5s ease .1s; }
+  .scene.signed .lap-check { stroke-dashoffset: 0; }
+  .scene.signed .lap-mail { opacity: 0; }
+  .scene .box { transform-origin: 292px 98px; }
+  .scene .box.thud { animation: thud .6s cubic-bezier(.3, 1.6, .5, 1); }
+  @keyframes thud { 0% { transform: scale(1, 1); } 25% { transform: scale(1.08, .88); } 55% { transform: scale(.96, 1.06); } 100% { transform: scale(1, 1); } }
+  .scene .box-body { fill: var(--tang); }
+  .scene .box-door { fill: var(--tang-2); }
+  .scene .post { fill: var(--muted); opacity: .8; }
+  .scene .flag { transform-origin: 323px 88px; transform: rotate(90deg); transition: transform .7s cubic-bezier(.34, 1.9, .5, 1); }
+  .scene.has-mail .flag { transform: rotate(0deg); }
+  .scene .flag-cloth { fill: var(--plum); }
+  .scene .badge { transform-origin: 266px 62px; transform: scale(0); transition: transform .5s cubic-bezier(.34, 1.9, .5, 1); }
+  .scene.has-mail .badge { transform: scale(1); }
+  .scene .badge circle { fill: var(--bad); }
+  .scene .plane { opacity: 0; }
+  .scene .plane .wing { fill: #fff; stroke: var(--plum); stroke-width: 1.4; stroke-linejoin: round; }
+  .scene .plane .fold { fill: none; stroke: var(--plum); stroke-width: 1.1; }
+  .scene .puff { fill: var(--cloud); opacity: 0; }
+
+  /* ---------- Text, waiting pill and buttons ---------- */
+  .body { position: relative; padding: 2px 24px 22px; text-align: center; }
+  h1 { margin: 4px 0 0; font-size: 22px; letter-spacing: -.01em; }
+  .sub { margin: 7px auto 0; max-width: 330px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+  .sub b { color: var(--ink); overflow-wrap: anywhere; }
+  .link { padding: 0; border: 0; background: none; color: var(--plum); font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .email-form { display: flex; gap: 8px; margin: 10px auto 0; max-width: 340px; }
+  .email-form input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 12px; border: 0; background: var(--field); box-shadow: inset 0 0 0 1.5px var(--line); outline: none; }
+  .email-form input:focus { box-shadow: inset 0 0 0 2px var(--plum); }
+
+  .wait { display: inline-flex; align-items: center; gap: 9px; margin-top: 14px; padding: 7px 14px 7px 12px; border-radius: 999px; background: var(--field); font-size: 13px; color: var(--muted); }
+  .wait b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .dots { display: inline-flex; gap: 3px; }
+  .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--tang); animation: hop 1.1s ease-in-out infinite; }
+  .dots i:nth-child(2) { animation-delay: .15s; background: var(--plum-2); }
+  .dots i:nth-child(3) { animation-delay: .3s; background: var(--plum); }
+  @keyframes hop { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-5px); } }
+
+  .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 16px; }
+  .btn {
+    position: relative; display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 18px; border: 0; border-radius: 999px; cursor: pointer;
+    font-size: 14px; font-weight: 750; background: var(--field); color: var(--plum);
+    box-shadow: inset 0 0 0 1.5px var(--line);
+    transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), box-shadow .2s, opacity .2s;
+  }
+  .btn:hover:not(:disabled) { transform: translateY(-2px); }
+  .btn:active:not(:disabled), .btn.press { transform: scale(.94); }
+  .btn:disabled { opacity: .6; cursor: default; }
+  .btn.solid { color: #fff; background: linear-gradient(135deg, var(--plum), var(--tang)); box-shadow: 0 12px 22px -12px var(--shadow); }
+  .btn:focus-visible, .link:focus-visible, .x:focus-visible { outline: 2.5px solid var(--tang); outline-offset: 3px; }
+  .ring { width: 18px; height: 18px; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 3; }
+  .ring .bg { stroke: var(--line); }
+  .ring .fg { stroke: var(--tang); stroke-linecap: round; stroke-dasharray: 44; transition: stroke-dashoffset 1s linear; }
+
+  /* Code boxes */
+  .or { display: flex; align-items: center; gap: 10px; margin: 18px 0 12px; font-size: 12.5px; color: var(--muted); }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .boxes { display: flex; justify-content: center; align-items: center; gap: clamp(5px, 1.8vw, 8px); }
+  .boxes .dash { width: 10px; height: 3px; border-radius: 2px; background: var(--line); }
+  .cell { position: relative; flex: 0 1 auto; width: clamp(34px, 10vw, 46px); height: 54px; perspective: 300px; }
+  .cell input {
+    width: 100%; height: 100%; padding: 0; border: 0; border-radius: 14px; outline: none; text-align: center; text-transform: uppercase;
+    background: var(--field); color: var(--ink); caret-color: var(--tang);
+    font: 800 22px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    box-shadow: inset 0 0 0 1.5px var(--line);
+    transition: box-shadow .2s, transform .35s cubic-bezier(.34, 1.56, .64, 1), background .3s;
+  }
+  .cell input:focus, .cell.cur input { box-shadow: inset 0 0 0 2px var(--plum), 0 0 0 5px rgba(91, 63, 214, .14); transform: translateY(-3px); }
+  .cell.filled input { box-shadow: inset 0 0 0 2px var(--plum-2); }
+  .cell.land input { animation: land .45s cubic-bezier(.34, 1.8, .5, 1); }
+  @keyframes land { 0% { transform: translateY(-10px) scale(.8); } 60% { transform: translateY(2px) scale(1.08); } }
+  .boxes.check .cell input { animation: wave .7s ease-in-out infinite; animation-delay: calc(var(--i) * 70ms); }
+  @keyframes wave { 50% { transform: translateY(-6px); } }
+  .boxes.good .cell input { background: var(--ok); color: #fff; box-shadow: none; animation: flip .5s ease both; animation-delay: calc(var(--i) * 60ms); }
+  @keyframes flip { 0% { transform: rotateX(0); } 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
+  .boxes.bad { animation: shake .45s ease; }
+  .boxes.bad .cell input { box-shadow: inset 0 0 0 2px var(--bad); }
+  @keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+  .cell input:disabled { opacity: .45; }
+
+  .status { min-height: 21px; margin: 14px 0 0; font-size: 13.5px; font-weight: 650; }
+  .status[data-tone="good"] { color: var(--ok); }
+  .status[data-tone="bad"] { color: var(--bad); }
+  .status.pop { animation: pop .45s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px); } }
+
+  .welcome { display: inline-flex; align-items: center; gap: 10px; margin-top: 14px; padding: 8px 16px 8px 8px; border-radius: 999px; background: var(--field); animation: pop .6s cubic-bezier(.34, 1.56, .64, 1); }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 13px; background: linear-gradient(135deg, var(--tang), var(--plum)); }
+  .welcome span { text-align: left; font-size: 13px; color: var(--muted); line-height: 1.3; }
+  .welcome b { display: block; color: var(--ink); font-size: 14px; }
+
+  /* ---------- The email, a sheet that slides up inside the card ---------- */
+  .mail {
+    position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 3;
+    padding: 16px 16px 14px; border-radius: 22px; text-align: left;
+    background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 -18px 40px -16px var(--shadow);
+    transform: translateY(calc(100% + 24px)); visibility: hidden;
+    transition: transform .6s cubic-bezier(.3, 1.3, .5, 1), visibility 0s .6s;
+  }
+  .mail.open { transform: none; visibility: visible; transition: transform .6s cubic-bezier(.3, 1.3, .5, 1), visibility 0s; }
+  .mail .grip { width: 40px; height: 4px; margin: -6px auto 10px; border-radius: 2px; background: var(--line); }
+  .mail .from { display: grid; grid-template-columns: 38px 1fr auto; gap: 10px; align-items: center; }
+  .mail .logo { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, var(--plum), var(--plum-2)); }
+  .mail .who { font-size: 12.5px; color: var(--muted); line-height: 1.35; min-width: 0; }
+  .mail .who b { display: block; color: var(--ink); font-size: 14px; }
+  .mail .who > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .x { width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--field); cursor: pointer; display: grid; place-items: center; }
+  .mail h2 { margin: 12px 0 4px; font-size: 16px; }
+  .mail p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+  .magic {
+    position: relative; overflow: hidden; display: flex; width: 100%; justify-content: center; margin: 12px 0 10px; padding: 13px;
+    border: 0; border-radius: 14px; cursor: pointer; color: #fff; font-weight: 800; font-size: 15px;
+    background: linear-gradient(135deg, var(--plum), var(--tang)); box-shadow: 0 12px 22px -12px var(--shadow);
+    transition: transform .3s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .magic::after { content: ""; position: absolute; top: 0; bottom: 0; width: 40%; left: -60%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .45), transparent); animation: shine 2.8s ease-in-out infinite; }
+  @keyframes shine { 60%, 100% { left: 130%; } }
+  .magic:active, .magic.press { transform: scale(.96); }
+  .magic:focus-visible { outline: 2.5px solid var(--tang); outline-offset: 3px; }
+  .magic:disabled { cursor: default; filter: grayscale(.6); opacity: .7; }
+  .mail .code { font: 800 15px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .16em; color: var(--ink); background: var(--field); padding: 4px 8px; border-radius: 8px; white-space: nowrap; }
+
+  .fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+  .fx i { position: absolute; left: 0; top: 0; display: block; }
+
+  @media (max-width: 380px) {
+    .body { padding: 2px 16px 18px; }
+    .cell { height: 50px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="card" id="card">
+    <div class="inner">
+      <svg class="scene" id="scene" viewBox="0 0 360 150" aria-hidden="true">
+        <defs>
+          <linearGradient id="mwSky" x1="0" y1="0" x2="0" y2="1"><stop class="s1" offset="0"/><stop class="s2" offset="1"/></linearGradient>
+        </defs>
+        <rect width="360" height="150" fill="url(#mwSky)"/>
+        <g><circle class="star" cx="40" cy="22" r="1.2"/><circle class="star" cx="120" cy="14" r="1"/><circle class="star" cx="210" cy="28" r="1.3"/><circle class="star" cx="300" cy="16" r="1"/><circle class="star" cx="338" cy="44" r="1.2"/><circle class="star" cx="170" cy="50" r=".9"/></g>
+        <circle class="sun" cx="300" cy="34" r="16"/>
+        <g class="cloud c1"><ellipse cx="40" cy="36" rx="22" ry="8"/><ellipse cx="50" cy="30" rx="12" ry="9"/></g>
+        <g class="cloud c2"><ellipse cx="120" cy="58" rx="18" ry="6"/><ellipse cx="128" cy="53" rx="9" ry="7"/></g>
+        <g class="cloud c3"><ellipse cx="220" cy="24" rx="20" ry="7"/><ellipse cx="212" cy="19" rx="10" ry="7"/></g>
+        <path class="hill2" d="M0 128 C 70 108, 140 118, 200 126 S 320 110, 360 118 V150 H0z"/>
+        <path class="hill" d="M0 136 C 90 124, 170 140, 250 132 S 340 126, 360 130 V150 H0z"/>
+        <!-- laptop -->
+        <g>
+          <rect class="lap-glow" x="38" y="70" width="76" height="54" rx="10"/>
+          <rect class="lap-screen" x="44" y="76" width="64" height="42" rx="5"/>
+          <path class="lap-mail" d="M62 88h28v18H62z M62 88l14 10 14-10"/>
+          <path class="lap-check" d="M64 98l8 8 16-17"/>
+          <path class="lap-base" d="M34 118h84l-6 8H40z"/>
+        </g>
+        <!-- flight path and trail -->
+        <path class="route" id="route" d="M84 80 C 130 12, 214 4, 262 74"/>
+        <path class="trail" id="trail" d="M84 80 C 130 12, 214 4, 262 74"/>
+        <!-- mailbox -->
+        <rect class="post" x="288" y="96" width="9" height="38" rx="3"/>
+        <g class="box" id="box">
+          <path class="box-body" d="M258 98V76a18 18 0 0 1 18-18h30a18 18 0 0 1 18 18v22z"/>
+          <path class="box-door" d="M258 98V76a11 18 0 0 1 22 0v22z" opacity=".9"/>
+          <rect x="263" y="72" width="12" height="4" rx="2" fill="#2a1f4f" opacity=".55"/>
+          <path d="M290 70h24M290 78h24" stroke="#fff" stroke-opacity=".35" stroke-width="2" stroke-linecap="round"/>
+          <g class="flag"><rect x="321" y="66" width="4" height="24" rx="2" fill="#6b6290"/><path class="flag-cloth" d="M325 66h14l-4 5 4 5h-14z"/></g>
+          <g class="badge"><circle cx="266" cy="62" r="8"/><text x="266" y="66" text-anchor="middle" font-size="10" font-weight="800" fill="#fff">1</text></g>
+        </g>
+        <circle class="puff" id="puff1" cx="262" cy="74" r="5"/>
+        <circle class="puff" id="puff2" cx="262" cy="74" r="4"/>
+        <!-- the paper plane, placed along the path by the script -->
+        <g class="plane" id="plane">
+          <path class="wing" d="M-12 -7 L 12 0 L -12 7 L -6 0 Z"/>
+          <path class="fold" d="M-6 0 L 12 0"/>
+        </g>
+      </svg>
+
+      <div class="body">
+        <h1 id="title">Check your inbox</h1>
+        <p class="sub" id="sub">We sent a magic sign-in link to <b id="emailOut">hira.qureshi@example.com</b>. <button type="button" class="link" id="change">Change</button></p>
+        <form class="email-form" id="emailForm" hidden novalidate>
+          <label class="sr" for="email">Email address</label>
+          <input id="email" type="email" autocomplete="email" placeholder="you@example.com">
+          <button type="submit" class="btn solid">Send link</button>
+        </form>
+
+        <div id="waitArea">
+          <div class="wait" id="wait"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span>Waiting for you to open it</span><b id="elapsed">0:00</b></div>
+          <div class="actions">
+            <button type="button" class="btn solid" id="openMail"><svg width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14v10H3z M3 5l7 6 7-6" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>Open the email</button>
+            <button type="button" class="btn" id="resend" disabled><svg class="ring" viewBox="0 0 18 18" aria-hidden="true"><circle class="bg" cx="9" cy="9" r="7"/><circle class="fg" id="ringFg" cx="9" cy="9" r="7"/></svg><span id="resendText">Resend in 0:30</span></button>
+          </div>
+          <div class="or" id="orText">or type the 6-character code from the email</div>
+          <div class="boxes" id="boxes" role="group" aria-label="6-character sign-in code">
+            <span class="cell" style="--i:0"><input aria-label="Character 1 of 6" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false"></span>
+            <span class="cell" style="--i:1"><input aria-label="Character 2 of 6" autocomplete="off" autocapitalize="characters" spellcheck="false"></span>
+            <span class="cell" style="--i:2"><input aria-label="Character 3 of 6" autocomplete="off" autocapitalize="characters" spellcheck="false"></span>
+            <span class="dash" aria-hidden="true"></span>
+            <span class="cell" style="--i:3"><input aria-label="Character 4 of 6" autocomplete="off" autocapitalize="characters" spellcheck="false"></span>
+            <span class="cell" style="--i:4"><input aria-label="Character 5 of 6" autocomplete="off" autocapitalize="characters" spellcheck="false"></span>
+            <span class="cell" style="--i:5"><input aria-label="Character 6 of 6" autocomplete="off" autocapitalize="characters" spellcheck="false"></span>
+          </div>
+        </div>
+
+        <div id="doneArea" hidden>
+          <div class="welcome"><span class="avatar" aria-hidden="true">HQ</span><span><b>Hira Qureshi</b>Signed in on this laptop</span></div>
+          <div class="actions"><button type="button" class="btn" id="signOut">Sign out and try again</button></div>
+        </div>
+        <p class="status" id="status" role="status" aria-live="polite"></p>
+      </div>
+
+      <!-- The demo email -->
+      <section class="mail" id="mail" aria-label="Demo email" aria-hidden="true">
+        <div class="grip" aria-hidden="true"></div>
+        <div class="from">
+          <span class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="-13 -8 26 16"><path d="M-12 -7 L 12 0 L -12 7 L -6 0 Z" fill="#fff"/></svg></span>
+          <span class="who"><b>Sign-in desk</b><span>to <span id="mailTo">hira.qureshi@example.com</span> · just now</span></span>
+          <button type="button" class="x" id="closeMail" aria-label="Close the email"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        </div>
+        <h2>Your magic sign-in link</h2>
+        <p>Hi Hira, press the button to sign in. It works once and stops working after 15 minutes.</p>
+        <button type="button" class="magic" id="magic">Sign in as Hira</button>
+        <p>Or type this code: <span class="code" id="mailCode">K7Q-4MZ</span></p>
+      </section>
+    </div>
+  </main>
+  <div class="fx" id="fx" aria-hidden="true"></div>
+
+<script>
+(function () {
+  "use strict";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (id) => document.getElementById(id);
+  const ALPHA = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";   // no 0/O or 1/I/L, so codes are easy to read
+  const LEN = 6;
+
+  const scene = $("scene"), plane = $("plane"), route = $("route"), trail = $("trail"), box = $("box");
+  const mail = $("mail"), magic = $("magic"), statusEl = $("status");
+  const openBtn = $("openMail"), resendBtn = $("resend"), boxesEl = $("boxes");
+  const cells = Array.from(boxesEl.querySelectorAll(".cell"));
+  const inputs = cells.map((c) => c.querySelector("input"));
+
+  // ---- Cancellable waits: a reset bumps `gen`, and older runs stop quietly ----
+  const CANCEL = { cancelled: true };
+  let gen = 0;
+  const pause = (ms, g) => new Promise((ok, no) => setTimeout(() => (g === gen ? ok() : no(CANCEL)), ms));
+  const anim = (ms, g) => pause(reduce ? Math.min(ms, 120) : ms, g);
+  const quiet = (p) => p.catch((e) => { if (e !== CANCEL) throw e; });
+  const restart = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
+  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const spring = (t) => 1 - Math.cos(t * 4.2 * Math.PI) * Math.exp(-t * 6);
+  function tween(ms, g, fn, ease) {
+    if (reduce) { fn(1); return Promise.resolve(); }
+    return new Promise((ok, no) => {
+      const t0 = performance.now();
+      const step = (now) => {
+        if (g !== gen) return no(CANCEL);
+        const t = Math.min(1, (now - t0) / ms);
+        fn((ease || easeInOut)(t));
+        if (t < 1) requestAnimationFrame(step); else ok();
+      };
+      requestAnimationFrame(step);
+    });
+  }
+  function say(msg, tone) { statusEl.textContent = msg; statusEl.dataset.tone = tone || ""; restart(statusEl, "pop"); }
+
+  // ---- State ----
+  let code = "", email = "hira.qureshi@example.com", tries = 3, resends = 0, busy = false, signedIn = false;
+  function newCode() { let c = ""; for (let i = 0; i < LEN; i++) c += ALPHA[Math.floor(Math.random() * ALPHA.length)]; return c; }
+
+  // ---- Paper plane along the dotted route ----
+  const RL = route.getTotalLength();
+  function setPlane(d, back, scale, tilt) {
+    const p = route.getPointAtLength(d);
+    const a = route.getPointAtLength(Math.max(0, d - 1)), b = route.getPointAtLength(Math.min(RL, d + 1));
+    const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI + (back ? 180 : 0) + (tilt || 0);
+    plane.setAttribute("transform", "translate(" + p.x.toFixed(1) + " " + p.y.toFixed(1) + ") rotate(" + ang.toFixed(1) + ") scale(" + scale.toFixed(3) + ")");
+  }
+  function setTrail(t, back) {
+    trail.style.strokeDasharray = (RL * t) + " " + (RL * 2);
+    trail.style.strokeDashoffset = back ? String(-RL * (1 - t)) : "0";
+  }
+  async function fly(g, back) {
+    const start = back ? RL : 0, end = back ? 0 : RL;
+    plane.style.opacity = "1";
+    trail.classList.add("on");
+    setTrail(0, back);
+    // anticipation: the plane pops out and leans back
+    await tween(340, g, (t) => setPlane(start, back, Math.max(0.05, spring(t)), -16 * t), (t) => t);
+    // the flight: follow the curve with a soft wobble, drawing the trail behind it
+    await tween(1250, g, (t) => {
+      setPlane(start + (end - start) * t, back, 1, -16 * (1 - t) + Math.sin(t * Math.PI * 3) * 5);
+      setTrail(t, back);
+    });
+    // dive into the slot (or the laptop screen)
+    await tween(200, g, (t) => setPlane(end, back, 1 - 0.85 * t, 0), (t) => t);
+    plane.style.opacity = "0";
+    trail.classList.remove("on");
+  }
+  function puffs(back) {
+    if (reduce) return;
+    const x = back ? 84 : 262, y = back ? 80 : 74;
+    [$("puff1"), $("puff2")].forEach((p, i) => {
+      p.setAttribute("cx", x); p.setAttribute("cy", y);
+      p.animate([{ opacity: 0.9, transform: "translate(0,0) scale(.4)" }, { opacity: 0, transform: "translate(" + (i ? 12 : -12) + "px,-10px) scale(1.6)" }], { duration: 600, easing: "ease-out" });
+    });
+  }
+
+  // ---- Code boxes: typing, paste, backspace, delete, arrows, Home/End ----
+  const vals = Array(LEN).fill("");
+  const keep = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  function setCh(i, ch) {
+    vals[i] = ch;
+    inputs[i].value = ch;
+    cells[i].classList.toggle("filled", !!ch);
+    if (ch) restart(cells[i], "land");
+  }
+  function clearBoxes() { for (let i = 0; i < LEN; i++) setCh(i, ""); boxesEl.classList.remove("good", "bad", "check"); }
+  function mark(i) { cells.forEach((c, n) => c.classList.toggle("cur", n === i && demoOn)); }
+  function focusBox(i) { i = Math.max(0, Math.min(LEN - 1, i)); if (!demoOn) { inputs[i].focus(); inputs[i].select(); } }
+  function fillFrom(start, text) {
+    let i = start;
+    for (const ch of text) { if (i >= LEN) break; setCh(i++, ch); }
+    focusBox(i);
+    whenFull();
+  }
+  function whenFull() { if (!busy && !signedIn && vals.every(Boolean)) quiet(checkCode(gen)); }
+  inputs.forEach((inp, i) => {
+    inp.addEventListener("focus", () => requestAnimationFrame(() => inp.select()));
+    inp.addEventListener("input", (e) => {
+      if (busy || signedIn) { inp.value = vals[i]; return; }
+      const got = keep(inp.value);
+      if (e.inputType === "insertText" && e.data && e.data.length === 1) {
+        const ch = keep(e.data);
+        if (!ch) { inp.value = vals[i]; return; }
+        setCh(i, ch); focusBox(i + 1); whenFull();
+      } else if (got.length > 1) {
+        fillFrom(got.length >= LEN ? 0 : i, got);        // autofill or a long paste
+      } else {
+        setCh(i, got);
+        if (got) { focusBox(i + 1); whenFull(); }
+      }
+    });
+    inp.addEventListener("keydown", (e) => {
+      if (busy || signedIn) return;
+      if (e.key === "Backspace") { e.preventDefault(); if (vals[i]) setCh(i, ""); else if (i > 0) { setCh(i - 1, ""); focusBox(i - 1); } }
+      else if (e.key === "Delete") { e.preventDefault(); setCh(i, ""); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); focusBox(i - 1); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); focusBox(i + 1); }
+      else if (e.key === "Home") { e.preventDefault(); focusBox(0); }
+      else if (e.key === "End") { e.preventDefault(); focusBox(LEN - 1); }
+    });
+    inp.addEventListener("paste", (e) => {
+      e.preventDefault();
+      if (busy || signedIn) return;
+      const text = keep(e.clipboardData ? e.clipboardData.getData("text") : "");
+      if (text) fillFrom(text.length >= LEN ? 0 : i, text);
+      else say("That paste has no letters or numbers in it.", "bad");
+    });
+  });
+  function lockBoxes(on) { inputs.forEach((b) => (b.disabled = on)); }
+
+  // ---- Timers: time waiting, and the resend countdown ----
+  let waitTimer = 0, resendTimer = 0, waited = 0, left = 0;
+  function startTimers(seconds) {
+    clearInterval(waitTimer); clearInterval(resendTimer);
+    waited = 0; left = seconds;
+    const total = seconds;
+    const paintWait = () => { $("elapsed").textContent = Math.floor(waited / 60) + ":" + String(waited % 60).padStart(2, "0"); };
+    const paintResend = () => {
+      $("ringFg").style.strokeDashoffset = String(44 * (1 - left / total));
+      if (left > 0) { resendBtn.disabled = true; $("resendText").textContent = "Resend in 0:" + String(left).padStart(2, "0"); }
+      else if (resends >= 3) { resendBtn.disabled = true; $("resendText").textContent = "No more resends today"; }
+      else { resendBtn.disabled = false; $("resendText").textContent = "Resend link"; }
+    };
+    paintWait(); paintResend();
+    waitTimer = setInterval(() => { waited++; paintWait(); }, 1000);
+    resendTimer = setInterval(() => { if (left > 0) { left--; paintResend(); } else clearInterval(resendTimer); }, 1000);
+  }
+
+  // ---- A fresh link goes out (the plane flies to the mailbox) ----
+  function freshLink() {
+    code = newCode();
+    tries = 3;
+    $("mailCode").textContent = code.slice(0, 3) + "-" + code.slice(3);
+    $("mailTo").textContent = email;
+    $("emailOut").textContent = email;
+    magic.disabled = false;
+    magic.textContent = "Sign in as Hira";
+    clearBoxes();
+    lockBoxes(false);
+  }
+  async function send(g, fly0) {
+    busy = true;
+    closeMail();
+    scene.classList.remove("has-mail", "signed");
+    freshLink();
+    startTimers(30);
+    if (fly0) {
+      scene.classList.add("sending");
+      await anim(250, g);
+      await fly(g, false);
+      scene.classList.remove("sending");
+    }
+    arrive();
+    busy = false;
+  }
+  function arrive() {
+    restart(box, "thud");
+    scene.classList.add("has-mail");
+    puffs(false);
+  }
+
+  // ---- The email sheet ----
+  function openMail() {
+    if (signedIn) return;
+    mail.classList.add("open");
+    mail.setAttribute("aria-hidden", "false");
+    scene.classList.remove("has-mail");
+    if (!demoOn) setTimeout(() => magic.focus(), 120);
+  }
+  function closeMail() { mail.classList.remove("open"); mail.setAttribute("aria-hidden", "true"); }
+  openBtn.addEventListener("click", () => { if (!busy) openMail(); });
+  $("closeMail").addEventListener("click", () => { closeMail(); openBtn.focus(); });
+
+  // ---- Using the link: the plane carries it back to the laptop ----
+  async function useLink(g) {
+    if (busy || signedIn || magic.disabled) return;
+    busy = true;
+    magic.textContent = "Opening the link…";
+    await anim(450, g);
+    closeMail();
+    say("Link opened. Signing you in…");
+    await anim(350, g);
+    await fly(g, true);
+    puffs(true);
+    await success(g);
+  }
+  magic.addEventListener("click", () => quiet(useLink(gen)));
+
+  // ---- Checking a typed code ----
+  async function checkCode(g) {
+    busy = true;
+    mark(-1);
+    lockBoxes(true);
+    boxesEl.classList.add("check");
+    say("Checking the code…");
+    await anim(900, g);
+    boxesEl.classList.remove("check");
+    if (vals.join("") === code) {
+      boxesEl.classList.add("good");
+      await anim(600, g);
+      await success(g);
+      return;
+    }
+    tries--;
+    restart(boxesEl, "bad");
+    say(tries > 0 ? "That code does not match. " + tries + (tries === 1 ? " try" : " tries") + " left." : "Too many tries. Use the link, or resend a new one.", "bad");
+    await anim(500, g);
+    clearBoxes();
+    busy = false;
+    if (tries > 0) { lockBoxes(false); focusBox(0); }
+  }
+
+  // ---- Signed in ----
+  async function success(g) {
+    signedIn = true;
+    busy = false;
+    clearInterval(waitTimer); clearInterval(resendTimer);
+    scene.classList.add("signed");
+    $("card").classList.add("ok");
+    $("title").textContent = "You are signed in";
+    $("sub").hidden = true;
+    $("emailForm").hidden = true;
+    $("waitArea").hidden = true;
+    $("doneArea").hidden = false;
+    say("Welcome back, Hira. This laptop will remember you for 30 days.", "good");
+    confetti();
+    if (!demoOn) $("signOut").focus();
+    await anim(10, g);
+  }
+
+  // ---- Back to the start ----
+  function resetView() {
+    signedIn = false;
+    busy = false;
+    $("card").classList.remove("ok");
+    $("title").textContent = "Check your inbox";
+    $("sub").hidden = false;
+    $("emailForm").hidden = true;
+    $("waitArea").hidden = false;
+    $("doneArea").hidden = true;
+    plane.style.opacity = "0";
+    trail.classList.remove("on");
+    say("");
+  }
+  $("signOut").addEventListener("click", () => {
+    const g = ++gen;
+    resetView();
+    resends = 0;
+    quiet(send(g, true).then(() => { say("A new link is on its way to " + email + "."); }));
+  });
+
+  // ---- Resend ----
+  resendBtn.addEventListener("click", () => {
+    if (busy || resendBtn.disabled) return;
+    resends++;
+    const g = gen;
+    say("Sending a new link…");
+    quiet(send(g, true).then(() => say("New link sent. The old link and code no longer work.")));
+  });
+
+  // ---- Change the email address ----
+  $("change").addEventListener("click", () => {
+    if (busy) return;
+    $("sub").hidden = true;
+    $("emailForm").hidden = false;
+    const f = $("email");
+    f.value = email;
+    f.focus();
+    f.select();
+  });
+  $("emailForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const v = $("email").value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) { say("Please type a full email address, like name@example.com.", "bad"); $("email").focus(); return; }
+    email = v;
+    resends = 0;
+    $("emailForm").hidden = true;
+    $("sub").hidden = false;
+    const g = gen;
+    say("Sending a link to " + v + "…");
+    quiet(send(g, true).then(() => say("Link sent to " + v + ".")));
+  });
+  $("email").addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { $("emailForm").hidden = true; $("sub").hidden = false; $("change").focus(); }
+  });
+
+  // ---- Confetti of little paper planes and dots ----
+  function confetti() {
+    if (reduce) return;
+    const r = $("card").getBoundingClientRect();
+    const x0 = r.left + r.width / 2, y0 = r.top + r.height * 0.32;
+    const COLORS = ["#ff7f32", "#5b3fd6", "#8d77ff", "#10a37a", "#ffb45e"];
+    for (let n = 0; n < 40; n++) {
+      const p = document.createElement("i");
+      const s = 6 + Math.random() * 8;
+      p.style.width = s + "px";
+      p.style.height = (n % 3 ? s : s * 0.6) + "px";
+      p.style.background = COLORS[n % COLORS.length];
+      p.style.borderRadius = n % 3 === 1 ? "50%" : "2px";
+      if (n % 3 === 0) p.style.clipPath = "polygon(0 0, 100% 50%, 0 100%, 30% 50%)";
+      $("fx").append(p);
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, d = 90 + Math.random() * 120;
+      const x1 = x0 + Math.cos(a) * d, y1 = y0 + Math.sin(a) * d;
+      p.animate([
+        { transform: "translate(" + x0 + "px," + y0 + "px) rotate(0) scale(.3)", opacity: 1 },
+        { transform: "translate(" + x1 + "px," + y1 + "px) rotate(" + (200 + Math.random() * 200) + "deg) scale(1)", opacity: 1, offset: 0.45 },
+        { transform: "translate(" + (x1 + (Math.random() - 0.5) * 60) + "px," + (y1 + 170) + "px) rotate(520deg) scale(.8)", opacity: 0 }
+      ], { duration: 1500 + Math.random() * 700, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = () => p.remove();
+    }
+  }
+
+  // ---- Auto-demo: the plane delivers, the email opens and the link is used; every other round the code is typed ----
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() {
+    if (!demoOn) return;
+    demoOn = false;
+    clearTimeout(demoTimer);
+    gen++;
+    mark(-1);
+    cells.forEach((c) => c.classList.remove("cur"));
+    resetView();
+    freshLink();
+    closeMail();
+    scene.classList.remove("signed", "sending");
+    scene.classList.add("has-mail");
+    startTimers(30);
+  }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) =>
+    window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  async function press(el, g) { el.classList.add("press"); await pause(170, g); el.classList.remove("press"); }
+  async function runDemo() {
+    const g = gen;
+    round++;
+    resetView();
+    await send(g, true);
+    await pause(900, g);
+    if (round % 2) {
+      await press(openBtn, g);
+      openMail();
+      await pause(1300, g);
+      await press(magic, g);
+      await useLink(g);
+    } else {
+      for (let i = 0; i < LEN; i++) { mark(i); await pause(120, g); setCh(i, code[i]); await pause(80, g); }
+      mark(-1);
+      await checkCode(g);
+    }
+    await pause(2600, g);
+    demoTimer = setTimeout(() => quiet(runDemo()), 400);
+  }
+
+  resetView();
+  freshLink();
+  demoTimer = setTimeout(() => quiet(runDemo()), 300);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,485 @@
+<!doctype html>
+<!-- Chill & Craft · Punchcard · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Punchcard · 8-digit backup code that punches a card and feeds a reader</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: teal desk, manila card, brick and brass ---------- */
+  :root {
+    color-scheme: light;
+    --desk: #0f5f66;
+    --desk-2: #0a474d;
+    --panel: #fbf6ea;
+    --ink: #2b2a26;
+    --muted: #736d60;
+    --line: rgba(43, 42, 38, .14);
+    --manila: #f2e0b3;
+    --manila-2: #e6cf98;
+    --print: #9a8356;
+    --brick: #c8553d;
+    --brass: #d9a441;
+    --ok: #1f9d6b;
+    --bad: #d2402f;
+    --field: #f4ecd9;
+    --reader: #24292b;
+    --reader-2: #3a4245;
+    --shadow: rgba(4, 30, 33, .45);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --desk: #082528;
+    --desk-2: #051a1c;
+    --panel: #172629;
+    --ink: #f3ecdb;
+    --muted: #b1ab9b;
+    --line: rgba(243, 236, 219, .14);
+    --manila: #e3cf9c;
+    --manila-2: #d2bb82;
+    --print: #8e784a;
+    --brick: #e86b52;
+    --brass: #e7b75a;
+    --ok: #3fd096;
+    --bad: #ff6f5c;
+    --field: #1f3235;
+    --reader: #0f1314;
+    --reader-2: #262d30;
+    --shadow: rgba(0, 0, 0, .7);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 20px 16px;
+    overflow-x: hidden;
+    color: var(--ink);
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(255, 255, 255, .1), transparent 60%),
+      repeating-linear-gradient(0deg, transparent 0 22px, rgba(255, 255, 255, .025) 22px 23px),
+      linear-gradient(160deg, var(--desk), var(--desk-2));
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  button, input { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+
+  .panel { position: relative; width: min(100%, 460px); padding: 22px 20px 18px; border-radius: 26px; background: var(--panel); box-shadow: 0 50px 70px -40px var(--shadow), 0 0 0 1px var(--line); text-align: center; animation: rise .8s cubic-bezier(.3, 1.4, .5, 1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px); } }
+  h1 { margin: 0; font-size: 21px; letter-spacing: -.01em; }
+  .sub { margin: 6px auto 0; max-width: 340px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+
+  /* ---------- Boxes ---------- */
+  .boxes { display: flex; justify-content: center; align-items: center; gap: clamp(3px, 1.2vw, 7px); margin: 16px 0 14px; }
+  .boxes .dash { flex: none; width: 10px; height: 3px; border-radius: 2px; background: var(--ink); opacity: .3; }
+  .cell { flex: 0 1 auto; width: clamp(28px, 8.4vw, 42px); height: 50px; }
+  .cell input {
+    width: 100%; height: 100%; padding: 0; border: 0; border-radius: 10px; outline: none; text-align: center;
+    background: var(--field); color: var(--ink); caret-color: var(--brick);
+    font: 800 21px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    box-shadow: inset 0 0 0 1.5px var(--line), inset 0 -3px 0 rgba(0, 0, 0, .06);
+    transition: box-shadow .2s, transform .3s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .cell input:focus, .cell.cur input { box-shadow: inset 0 0 0 2px var(--brick), 0 0 0 4px rgba(200, 85, 61, .16); transform: translateY(-2px); }
+  .cell.filled input { box-shadow: inset 0 0 0 2px var(--brass); }
+  .cell.land input { animation: land .35s cubic-bezier(.34, 1.8, .5, 1); }
+  @keyframes land { 0% { transform: translateY(3px) scale(.88); } 60% { transform: translateY(-1px) scale(1.06); } }
+  .boxes.bad { animation: shake .45s ease; }
+  .boxes.bad .cell input { box-shadow: inset 0 0 0 2px var(--bad); }
+  @keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+  .cell input:disabled { opacity: .6; }
+
+  /* ---------- Card and reader ---------- */
+  .machine { position: relative; overflow: clip; padding: 6px 4px 58px; }
+  .pcard { position: relative; z-index: 1; display: block; width: 100%; height: auto; filter: drop-shadow(0 10px 10px rgba(0, 0, 0, .18)); transform: translateY(var(--y, 0px)); }
+  .pcard.jolt { animation: jolt .18s ease; }
+  @keyframes jolt { 50% { transform: translateY(calc(var(--y, 0px) + 2px)); } }
+  .pcard .paper { fill: var(--manila); }
+  .pcard .band { fill: var(--manila-2); }
+  .pcard .num { fill: var(--print); font: 600 9px ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-anchor: middle; }
+  .pcard .head { fill: #2b2a26; font: 800 10px system-ui, sans-serif; letter-spacing: .14em; }
+  .pcard .head2 { fill: var(--print); font: 600 8.5px system-ui, sans-serif; letter-spacing: .08em; }
+  .pcard .sep { stroke: var(--print); stroke-dasharray: 3 3; opacity: .5; }
+  .pcard .hole { fill: var(--desk-2); transform-box: fill-box; transform-origin: 50% 50%; transform: scale(0); transition: transform .25s cubic-bezier(.34, 1.9, .5, 1), fill .2s; }
+  .pcard .hole.on { transform: scale(1); }
+  .pcard .hole.lit { fill: var(--brass); }
+  .pcard .ring { fill: none; stroke: var(--brick); stroke-width: 1.5; opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; }
+  .pcard .ring.go { animation: shock .45s ease-out; }
+  @keyframes shock { from { opacity: .9; transform: scale(.6); } to { opacity: 0; transform: scale(2.2); } }
+  .pcard .scan { fill: url(#pcScan); opacity: 0; }
+  .pcard .stamp { opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; }
+  .pcard .stamp.on { animation: stamp .6s cubic-bezier(.3, 1.6, .5, 1) both; }
+  @keyframes stamp { from { opacity: 0; transform: rotate(-24deg) scale(2); } to { opacity: .92; transform: rotate(-12deg) scale(1); } }
+  .pcard .stamp rect { fill: none; stroke: var(--brick); stroke-width: 3; }
+  .pcard .stamp text { fill: var(--brick); font: 900 24px system-ui, sans-serif; letter-spacing: .14em; text-anchor: middle; }
+
+  .reader { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; height: 66px; border-radius: 16px 16px 18px 18px; background: linear-gradient(180deg, var(--reader-2), var(--reader)); box-shadow: 0 14px 26px -14px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .12); display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 8px; }
+  .reader::before { content: ""; position: absolute; left: 12px; right: 12px; top: 6px; height: 5px; border-radius: 3px; background: #050607; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .8); }
+  .lcd { min-width: 0; padding: 7px 12px; border-radius: 8px; background: #0b1f14; color: #5dff9f; font: 700 13px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .12em; text-shadow: 0 0 8px rgba(93, 255, 159, .6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lcd::after { content: "_"; margin-left: 2px; animation: lcdBlink 1s steps(1) infinite; }
+  .lcd.bad { color: #ff7a66; text-shadow: 0 0 8px rgba(255, 122, 102, .6); }
+  .lcd.blink { animation: lcdBlink .5s steps(1) infinite; }
+  @keyframes lcdBlink { 50% { opacity: .35; } }
+  .leds { display: flex; gap: 7px; }
+  .leds i { width: 9px; height: 9px; border-radius: 50%; background: #4a5356; box-shadow: inset 0 1px 1px rgba(0, 0, 0, .5); transition: background .2s, box-shadow .2s; }
+  .leds i.g { background: #3dff8f; box-shadow: 0 0 8px #3dff8f; }
+  .leds i.a { background: #ffbe3d; box-shadow: 0 0 8px #ffbe3d; animation: lcdBlink .3s steps(1) infinite; }
+  .leds i.r { background: #ff5a4a; box-shadow: 0 0 8px #ff5a4a; }
+
+  /* Saved codes note */
+  .note { margin-top: 14px; padding: 10px 12px; border-radius: 14px; background: var(--field); text-align: left; }
+  .note b { display: block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { padding: 6px 10px; border: 0; border-radius: 9px; cursor: pointer; background: var(--panel); box-shadow: inset 0 0 0 1.5px var(--line); font: 700 13px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .05em; transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), opacity .2s; }
+  .chip:hover { transform: translateY(-2px); }
+  .chip.used { text-decoration: line-through; text-decoration-color: var(--brick); text-decoration-thickness: 2px; opacity: .6; }
+  .chip:focus-visible, .btn:focus-visible { outline: 2.5px solid var(--brick); outline-offset: 3px; }
+  .status { min-height: 20px; margin: 12px 0 0; font-size: 13.5px; font-weight: 650; }
+  .status[data-tone="good"] { color: var(--ok); }
+  .status[data-tone="bad"] { color: var(--bad); }
+  .btn { margin-top: 10px; padding: 11px 20px; border: 0; border-radius: 999px; cursor: pointer; font-weight: 800; color: #fff; background: var(--brick); box-shadow: 0 10px 20px -10px rgba(200, 85, 61, .9); transition: transform .3s cubic-bezier(.34, 1.56, .64, 1); }
+  .btn:hover { transform: translateY(-2px); }
+
+  .fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+  .fx i { position: absolute; left: 0; top: 0; display: block; border-radius: 2px; background: var(--manila); box-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
+
+  @media (max-width: 380px) { .panel { padding: 18px 14px 16px; } .lcd { font-size: 11.5px; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="panel" id="panel">
+    <h1 id="title">Use a backup code</h1>
+    <p class="sub" id="sub">Lost your phone? Type one of the 8-digit codes you saved when you turned on two-step sign-in.</p>
+
+    <div class="boxes" id="boxes" role="group" aria-label="8-digit backup code"></div>
+
+    <div class="machine">
+      <svg class="pcard" id="pcard" viewBox="0 0 400 186" aria-hidden="true">
+        <defs>
+          <linearGradient id="pcScan" x1="0" x2="1"><stop offset="0" stop-color="#ffd36b" stop-opacity="0"/><stop offset=".5" stop-color="#ffd36b" stop-opacity=".75"/><stop offset="1" stop-color="#ffd36b" stop-opacity="0"/></linearGradient>
+        </defs>
+        <path class="paper" d="M20 0H392a8 8 0 0 1 8 8V178a8 8 0 0 1-8 8H8a8 8 0 0 1-8-8V20z"/>
+        <path class="band" d="M20 0H392a8 8 0 0 1 8 8V30H0V20z"/>
+        <text class="head" x="30" y="19">BACKUP CODE</text>
+        <text class="head2" x="388" y="19" text-anchor="end">HIRA QURESHI · 8 DIGITS</text>
+        <line class="sep" x1="196" y1="36" x2="196" y2="182"/>
+        <g id="grid"></g>
+        <rect class="scan" id="scan" x="-60" y="30" width="60" height="156"/>
+        <g class="stamp" id="stampMark"><rect x="128" y="76" width="144" height="40" rx="6"/><text x="200" y="105">USED</text></g>
+      </svg>
+      <div class="reader" aria-hidden="true">
+        <span class="lcd" id="lcd">INSERT CODE</span>
+        <span class="leds"><i id="led1"></i><i id="led2"></i><i id="led3"></i></span>
+      </div>
+    </div>
+
+    <div class="note" id="note">
+      <b>Your saved codes (demo)</b>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div id="doneArea" hidden><button type="button" class="btn" id="again">Use another code</button></div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </main>
+  <div class="fx" id="fx" aria-hidden="true"></div>
+
+<script>
+(function () {
+  "use strict";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (id) => document.getElementById(id);
+  const NS = "http://www.w3.org/2000/svg";
+  const LEN = 8;
+  // Demo codes: the first three still work, the last one was used last month
+  const SAVED = ["48291736", "55310274", "90674415", "21948850"];
+  const START_USED = ["21948850"];
+  let used = new Set(START_USED);
+
+  const pcard = $("pcard"), grid = $("grid"), scan = $("scan"), lcd = $("lcd"), boxesEl = $("boxes"), statusEl = $("status");
+  const leds = [$("led1"), $("led2"), $("led3")];
+
+  // ---- Cancellable waits ----
+  const CANCEL = { cancelled: true };
+  let gen = 0;
+  const pause = (ms, g) => new Promise((ok, no) => setTimeout(() => (g === gen ? ok() : no(CANCEL)), ms));
+  const anim = (ms, g) => pause(reduce ? Math.min(ms, 120) : ms, g);
+  const quiet = (p) => p.catch((e) => { if (e !== CANCEL) throw e; });
+  const restart = (el, cls) => { el.classList.remove(cls); void (el.offsetWidth || el.getBoundingClientRect()); el.classList.add(cls); };
+  function tween(ms, g, fn, ease) {
+    if (reduce) { fn(1); return Promise.resolve(); }
+    return new Promise((ok, no) => {
+      const t0 = performance.now();
+      const step = (now) => {
+        if (g !== gen) return no(CANCEL);
+        const t = Math.min(1, (now - t0) / ms);
+        fn(ease ? ease(t) : t);
+        if (t < 1) requestAnimationFrame(step); else ok();
+      };
+      requestAnimationFrame(step);
+    });
+  }
+  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const springOut = (t) => 1 - Math.cos(t * 3.2 * Math.PI) * Math.exp(-t * 5);
+  function say(msg, tone) { statusEl.textContent = msg; statusEl.dataset.tone = tone || ""; }
+  function setLcd(text, bad, blink) { lcd.textContent = text; lcd.classList.toggle("bad", !!bad); lcd.classList.toggle("blink", !!blink); }
+  function setLeds(k) { leds.forEach((l, i) => { l.className = k[i] || ""; }); }
+
+  // ---- Draw the 8 x 10 grid of printed digits, with a hidden hole on each ----
+  const colX = (c) => (c < 4 ? 44 + c * 40 : 236 + (c - 4) * 40);
+  const rowY = (r) => 46 + r * 13.6;
+  const holes = [];
+  for (let c = 0; c < LEN; c++) {
+    holes.push([]);
+    for (let r = 0; r < 10; r++) {
+      const t = document.createElementNS(NS, "text");
+      t.setAttribute("class", "num");
+      t.setAttribute("x", colX(c));
+      t.setAttribute("y", rowY(r) + 3.2);
+      t.textContent = r;
+      grid.append(t);
+      const h = document.createElementNS(NS, "rect");
+      h.setAttribute("class", "hole");
+      h.setAttribute("x", colX(c) - 8);
+      h.setAttribute("y", rowY(r) - 5);
+      h.setAttribute("width", 16);
+      h.setAttribute("height", 10.4);
+      h.setAttribute("rx", 2.5);
+      grid.append(h);
+      holes[c].push(h);
+    }
+  }
+  const rings = [];
+  for (let c = 0; c < LEN; c++) {
+    const ring = document.createElementNS(NS, "rect");
+    ring.setAttribute("class", "ring");
+    ring.setAttribute("width", 16); ring.setAttribute("height", 10.4); ring.setAttribute("rx", 3);
+    grid.append(ring);
+    rings.push(ring);
+  }
+
+  // ---- Punch a hole: the paper bit falls off the desk ----
+  const punched = Array(LEN).fill(-1);
+  function punch(c, r) {
+    if (punched[c] === r) return;
+    if (punched[c] >= 0) holes[c][punched[c]].classList.remove("on", "lit");
+    punched[c] = r;
+    if (r < 0) return;
+    const h = holes[c][r];
+    h.classList.add("on");
+    const ring = rings[c];
+    ring.setAttribute("x", colX(c) - 8); ring.setAttribute("y", rowY(r) - 5);
+    restart(ring, "go");
+    restart(pcard, "jolt");
+    if (reduce) return;
+    const b = h.getBoundingClientRect();
+    const chad = document.createElement("i");
+    chad.style.width = b.width + "px";
+    chad.style.height = b.height + "px";
+    $("fx").append(chad);
+    const dx = (Math.random() - 0.5) * 60, rot = (Math.random() - 0.5) * 540;
+    chad.animate([
+      { transform: "translate(" + b.left + "px," + b.top + "px) rotate(0)", opacity: 1 },
+      { transform: "translate(" + (b.left + dx * 0.3) + "px," + (b.top + 14) + "px) rotate(" + rot * 0.2 + "deg)", opacity: 1, offset: 0.25 },
+      { transform: "translate(" + (b.left + dx) + "px," + (b.top + 170) + "px) rotate(" + rot + "deg)", opacity: 0 }
+    ], { duration: 900, easing: "cubic-bezier(.4,0,.8,.6)" }).onfinish = () => chad.remove();
+  }
+
+  // ---- Boxes: typing, paste, backspace, delete, arrows, Home/End ----
+  const cells = [], inputs = [];
+  for (let i = 0; i < LEN; i++) {
+    if (i === 4) { const d = document.createElement("span"); d.className = "dash"; d.setAttribute("aria-hidden", "true"); boxesEl.append(d); }
+    const c = document.createElement("span");
+    c.className = "cell";
+    const inp = document.createElement("input");
+    inp.inputMode = "numeric";
+    inp.autocomplete = i ? "off" : "one-time-code";
+    inp.setAttribute("aria-label", "Digit " + (i + 1) + " of " + LEN);
+    c.append(inp);
+    boxesEl.append(c);
+    cells.push(c); inputs.push(inp);
+  }
+  const vals = Array(LEN).fill("");
+  let busy = false, done = false;
+  function setCh(i, ch) {
+    vals[i] = ch;
+    inputs[i].value = ch;
+    cells[i].classList.toggle("filled", !!ch);
+    if (ch) restart(cells[i], "land");
+    punch(i, ch ? Number(ch) : -1);
+    const n = vals.filter(Boolean).length;
+    if (!busy && !done) setLcd(n ? "DIGITS " + n + "/8" : "INSERT CODE");
+  }
+  function clearBoxes() { for (let i = 0; i < LEN; i++) setCh(i, ""); boxesEl.classList.remove("bad"); }
+  function mark(i) { cells.forEach((c, n) => c.classList.toggle("cur", n === i && demoOn)); }
+  function focusBox(i) { i = Math.max(0, Math.min(LEN - 1, i)); if (!demoOn) { inputs[i].focus(); inputs[i].select(); } }
+  function fillFrom(start, text) { let i = start; for (const ch of text) { if (i >= LEN) break; setCh(i++, ch); } focusBox(i); whenFull(); }
+  function whenFull() { if (!busy && !done && vals.every(Boolean)) quiet(read(gen)); }
+  inputs.forEach((inp, i) => {
+    inp.addEventListener("focus", () => requestAnimationFrame(() => inp.select()));
+    inp.addEventListener("input", (e) => {
+      if (busy || done) { inp.value = vals[i]; return; }
+      const got = inp.value.replace(/\D/g, "");
+      if (e.inputType === "insertText" && e.data && e.data.length === 1) {
+        const d = e.data.replace(/\D/g, "");
+        if (!d) { inp.value = vals[i]; return; }
+        setCh(i, d); focusBox(i + 1); whenFull();
+      } else if (got.length > 1) fillFrom(got.length >= LEN ? 0 : i, got);
+      else { setCh(i, got); if (got) { focusBox(i + 1); whenFull(); } }
+    });
+    inp.addEventListener("keydown", (e) => {
+      if (busy || done) return;
+      if (e.key === "Backspace") { e.preventDefault(); if (vals[i]) setCh(i, ""); else if (i > 0) { setCh(i - 1, ""); focusBox(i - 1); } }
+      else if (e.key === "Delete") { e.preventDefault(); setCh(i, ""); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); focusBox(i - 1); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); focusBox(i + 1); }
+      else if (e.key === "Home") { e.preventDefault(); focusBox(0); }
+      else if (e.key === "End") { e.preventDefault(); focusBox(LEN - 1); }
+    });
+    inp.addEventListener("paste", (e) => {
+      e.preventDefault();
+      if (busy || done) return;
+      const d = (e.clipboardData ? e.clipboardData.getData("text") : "").replace(/\D/g, "");
+      if (d) fillFrom(d.length >= LEN ? 0 : i, d); else say("Only numbers can be pasted here.", "bad");
+    });
+  });
+  function lockBoxes(on) { inputs.forEach((b) => (b.disabled = on)); }
+
+  // ---- Saved code chips fill the boxes ----
+  function paintChips() {
+    const box = $("chips");
+    box.innerHTML = "";
+    SAVED.forEach((c) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip" + (used.has(c) ? " used" : "");
+      b.textContent = c.slice(0, 4) + "-" + c.slice(4);
+      b.setAttribute("aria-label", "Fill in saved code " + c.split("").join(" ") + (used.has(c) ? " (already used)" : ""));
+      b.addEventListener("click", () => { if (busy || done) return; clearBoxes(); fillFrom(0, c); });
+      box.append(b);
+    });
+  }
+
+  // ---- Feed the card into the reader and read the holes ----
+  const setY = (y) => pcard.style.setProperty("--y", y.toFixed(1) + "px");
+  async function read(g) {
+    busy = true;
+    mark(-1);
+    lockBoxes(true);
+    const value = vals.join("");
+    say("Reading the card…");
+    setLcd("READING", false, true);
+    setLeds(["a", "", ""]);
+    // anticipation: lift a little, then slide down into the slot
+    await tween(180, g, (t) => setY(-6 * t), easeInOut);
+    await tween(520, g, (t) => setY(-6 + 62 * t), easeInOut);
+    setLeds(["a", "a", ""]);
+    // the light bar sweeps across and every hole it passes glows
+    scan.style.opacity = "1";
+    await tween(900, g, (t) => {
+      const x = -60 + 480 * t;
+      scan.setAttribute("x", x);
+      for (let c = 0; c < LEN; c++) if (punched[c] >= 0 && colX(c) < x + 30) holes[c][punched[c]].classList.add("lit");
+    });
+    scan.style.opacity = "0";
+    await anim(250, g);
+    const ok = SAVED.includes(value) && !used.has(value);
+    const wasUsed = used.has(value);
+    if (ok) {
+      setLcd("CODE OK");
+      setLeds(["g", "g", "g"]);
+      used.add(value);
+    } else {
+      setLcd(wasUsed ? "ALREADY USED" : "NO MATCH", true);
+      setLeds(["r", "r", "r"]);
+    }
+    // eject with a spring
+    await tween(650, g, (t) => setY(56 - 56 * springOut(t)));
+    setY(0);
+    if (ok) {
+      restart($("stampMark"), "on");
+      done = true;
+      busy = false;
+      paintChips();
+      const left = SAVED.filter((c) => !used.has(c)).length;
+      $("title").textContent = "You are back in, Hira";
+      $("sub").textContent = "That code is now used up. " + left + " saved code" + (left === 1 ? "" : "s") + " left. Set up your new phone next.";
+      $("doneArea").hidden = false;
+      say("Signed in with a backup code.", "good");
+      if (!demoOn) $("again").focus();
+      return;
+    }
+    restart(boxesEl, "bad");
+    say(wasUsed ? "Each backup code works once, and this one has been used. Try another." : "That code is not one of yours. Check your saved list.", "bad");
+    await anim(900, g);
+    clearBoxes();
+    setLeds(["", "", ""]);
+    lockBoxes(false);
+    busy = false;
+    focusBox(0);
+  }
+
+  // ---- Start again ----
+  function fresh() {
+    busy = false;
+    done = false;
+    setY(0);
+    scan.style.opacity = "0";
+    $("stampMark").classList.remove("on");
+    $("title").textContent = "Use a backup code";
+    $("sub").textContent = "Lost your phone? Type one of the 8-digit codes you saved when you turned on two-step sign-in.";
+    $("doneArea").hidden = true;
+    lockBoxes(false);
+    clearBoxes();
+    setLeds(["", "", ""]);
+    setLcd("INSERT CODE");
+    paintChips();
+    say("");
+  }
+  $("again").addEventListener("click", () => {
+    if (SAVED.every((c) => used.has(c))) used = new Set(START_USED);   // all used up: hand out the demo codes again
+    fresh();
+    focusBox(0);
+  });
+
+  // ---- Auto-demo: punch a good code, then a used one every third round ----
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); gen++; mark(-1); used = new Set(START_USED); fresh(); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) =>
+    window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  async function runDemo() {
+    const g = gen;
+    round++;
+    used = new Set(START_USED);
+    fresh();
+    await pause(700, g);
+    const text = round % 3 === 0 ? "21948850" : SAVED[(round - 1) % 3];
+    for (let i = 0; i < LEN; i++) { mark(i); await pause(130, g); setCh(i, text[i]); await pause(90, g); }
+    mark(-1);
+    await read(g);
+    await pause(done ? 2600 : 600, g);
+    demoTimer = setTimeout(() => quiet(runDemo()), 300);
+  }
+
+  fresh();
+  demoTimer = setTimeout(() => quiet(runDemo()), 250);
+})();
+</script>
+</body>
+</html>

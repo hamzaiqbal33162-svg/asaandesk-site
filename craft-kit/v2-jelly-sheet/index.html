@@ -1,0 +1,517 @@
+<!doctype html>
+<!-- Chill & Craft · Jelly Sheet · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jelly Sheet · bottom sheet navigation</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and keep following it)
+  (function () {
+    var q = new URLSearchParams(location.search).get("theme");
+    var m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { document.documentElement.setAttribute("data-theme", q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"); }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colours: grape jelly, lavender and a soft city map ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #efe8ff;
+    --bg2: #d6c8fb;
+    --frame: #241a3d;
+    --land: #eef1ea;
+    --land2: #e4e8df;
+    --water: #a8d2f0;
+    --park: #cfe6c1;
+    --road: #ffffff;
+    --casing: #dcdfd6;
+    --label: #8b90a0;
+    --sheet: #ffffff;
+    --tile: #f4f0ff;
+    --line: #ebe5fa;
+    --ink: #241a3d;
+    --ink2: #6c6485;
+    --soft: #a39cbb;
+    --grape: #7b4dff;
+    --grape2: #b48cff;
+    --scrim: rgba(36, 26, 61, .35);
+    --shadow: rgba(60, 30, 130, .35);
+    --focus: #7b4dff;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #150f26;
+    --bg2: #261843;
+    --frame: #0b0716;
+    --land: #1b1f2e;
+    --land2: #20253a;
+    --water: #23406a;
+    --park: #1e392c;
+    --road: #2e3448;
+    --casing: #22273a;
+    --label: #6c7493;
+    --sheet: #1d1830;
+    --tile: #2a2343;
+    --line: #342b52;
+    --ink: #f1ecff;
+    --ink2: #ada4cb;
+    --soft: #776f96;
+    --grape: #a283ff;
+    --grape2: #c9b2ff;
+    --scrim: rgba(5, 3, 12, .55);
+    --shadow: rgba(0, 0, 0, .6);
+    --focus: #c9b2ff;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; font-family: var(--sans); color: var(--ink); background: radial-gradient(60% 50% at 20% 10%, var(--bg2), transparent 70%), radial-gradient(60% 50% at 90% 90%, var(--bg2), transparent 70%), var(--bg1); }
+  .stage { position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 16px 12px; overflow: hidden; }
+  .blob { position: absolute; border-radius: 50%; filter: blur(30px); opacity: .5; pointer-events: none; animation: float 10s ease-in-out infinite; }
+  .blob.a { width: 260px; height: 260px; left: 8%; top: 12%; background: var(--grape2); }
+  .blob.b { width: 200px; height: 200px; right: 10%; bottom: 10%; background: #ff9ad5; animation-delay: -5s; opacity: .35; }
+  @keyframes float { 50% { transform: translate(20px, -24px) scale(1.1); } }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- Phone ---------- */
+  .phone { position: relative; width: min(380px, 100%); height: min(780px, calc(100vh - 32px)); min-height: 600px; padding: 10px; border-radius: 50px; background: linear-gradient(150deg, #3a2c5c, var(--frame)); box-shadow: 0 60px 100px -50px var(--shadow), inset 0 0 0 1.5px rgba(255, 255, 255, .1); }
+  .screen { position: relative; height: 100%; border-radius: 40px; overflow: hidden; background: var(--land); isolation: isolate; touch-action: none; }
+
+  /* map behind everything */
+  .mapwrap { position: absolute; inset: 0; transform-origin: 50% 0; will-change: transform; }
+  .map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .map .land { fill: var(--land); }
+  .map .blocks path { fill: var(--land2); }
+  .map .water { fill: none; stroke: var(--water); stroke-linecap: round; }
+  .map .park { fill: var(--park); }
+  .map .cas { fill: none; stroke: var(--casing); stroke-linecap: round; }
+  .map .rd { fill: none; stroke: var(--road); stroke-linecap: round; }
+  .map text { fill: var(--label); font: 600 10px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+  .route { fill: none; stroke: var(--grape); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+  .route.under { stroke: #fff; stroke-width: 9; opacity: .9; }
+  .halo { fill: var(--grape); opacity: .25; transform-box: fill-box; transform-origin: center; animation: halo 2.2s ease-out infinite; }
+  @keyframes halo { from { transform: scale(.5); opacity: .45; } to { transform: scale(2.4); opacity: 0; } }
+  .pin .drop { transform-box: fill-box; transform-origin: 50% 100%; animation: pinDrop .7s var(--spring) backwards; }
+  @keyframes pinDrop { from { transform: translateY(-46px) scale(.6); opacity: 0; } 60% { opacity: 1; } }
+  .pin .bob { animation: bob 3s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translate(var(--dx, 3px), var(--dy, -2px)); } }
+  .scrim { position: absolute; inset: 0; background: var(--scrim); opacity: 0; pointer-events: none; }
+
+  /* top: status bar, title chip, info card */
+  .status { position: absolute; z-index: 3; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; padding: 14px 28px 0; font-size: 13px; font-weight: 700; color: var(--ink); }
+  .status svg { width: 52px; height: 12px; fill: currentColor; }
+  .topbar { position: absolute; z-index: 3; left: 14px; right: 14px; top: 42px; display: flex; align-items: center; gap: 10px; }
+  .chip { display: flex; align-items: center; gap: 10px; min-width: 0; margin-right: auto; padding: 8px 14px 8px 8px; border-radius: 18px; background: var(--sheet); box-shadow: 0 10px 24px -14px var(--shadow); }
+  .chip i { flex: none; width: 30px; height: 30px; border-radius: 11px; display: grid; place-items: center; background: var(--grape); color: #fff; }
+  .chip i svg { width: 17px; height: 17px; }
+  .chip span { display: grid; min-width: 0; }
+  .chip b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip small { font-size: 11.5px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip.swap { animation: chipIn .55s var(--spring); }
+  @keyframes chipIn { 0% { transform: scale(.85); opacity: .3; } }
+  .me { flex: none; width: 40px; height: 40px; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(140deg, #ffb0d8, #9a6bff); color: #fff; font-weight: 800; font-size: 14px; box-shadow: 0 10px 24px -14px var(--shadow); }
+  .info { position: absolute; z-index: 3; left: 14px; right: 14px; top: 100px; display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: 20px; background: var(--sheet); box-shadow: 0 18px 30px -18px var(--shadow); transform-origin: 50% 0; animation: infoIn .6s var(--spring); }
+  @keyframes infoIn { from { opacity: 0; transform: translateY(-14px) scale(.9); } }
+  .info i { flex: none; width: 44px; height: 44px; border-radius: 15px; display: grid; place-items: center; background: var(--tile); color: var(--grape); }
+  .info i svg { width: 22px; height: 22px; }
+  .info b { display: block; font-size: 15px; }
+  .info small { color: var(--ink2); font-size: 12.5px; }
+
+  /* ---------- The sheet ---------- */
+  .sheet { position: absolute; z-index: 4; left: 0; right: 0; bottom: 0; will-change: transform; touch-action: none; }
+  .skin { position: absolute; left: 0; top: -40px; width: 100%; overflow: visible; pointer-events: none; filter: drop-shadow(0 -6px 18px var(--shadow)); }
+  .skin path { fill: var(--sheet); }
+  .inner { position: relative; padding: 0 16px; will-change: transform; }
+  .grip { display: block; width: 100%; height: 26px; margin: 0; padding: 0; border: 0; background: none; cursor: grab; }
+  .grip i { display: block; height: 5px; margin: 10px auto 0; border-radius: 3px; background: var(--soft); transition: background .3s; }
+  .grip:hover i { background: var(--grape); }
+  .grip:focus-visible { outline-offset: -4px; border-radius: 12px; }
+  .search { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 14px; border-radius: 16px; background: var(--tile); }
+  .search svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--grape); stroke-width: 2.2; stroke-linecap: round; }
+  .search input { width: 100%; border: 0; outline: none; background: none; font-size: 15px; font-weight: 600; }
+  .search input::placeholder { color: var(--ink2); }
+  .search:focus-within { box-shadow: 0 0 0 2px var(--grape); }
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .tile { position: relative; overflow: hidden; display: grid; justify-items: center; gap: 4px; padding: 10px 2px 9px; border: 0; border-radius: 18px; background: var(--tile); font-size: 12.5px; font-weight: 700; transition: transform .35s var(--spring), background .3s, color .3s; }
+  .tile svg { width: 30px; height: 30px; }
+  .tile:active { transform: scale(.92); }
+  .tile[aria-current="page"] { background: var(--grape); color: #fff; }
+  .tile[aria-current="page"] svg .fillable { fill: rgba(255, 255, 255, .35); }
+  .rip { position: absolute; width: 10px; height: 10px; margin: -5px; border-radius: 50%; background: currentColor; opacity: .3; pointer-events: none; animation: rip .6s ease-out forwards; }
+  @keyframes rip { to { transform: scale(18); opacity: 0; } }
+  .sec { margin: 16px 2px 8px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); }
+  .more { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .mi { position: relative; overflow: hidden; display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 10px; border: 0; border-radius: 16px; background: var(--tile); font-size: 13px; font-weight: 700; text-align: left; transition: transform .35s var(--spring), background .3s, color .3s; }
+  .mi svg { flex: none; width: 20px; height: 20px; color: var(--grape); }
+  .mi:active { transform: scale(.94); }
+  .mi[aria-current="page"] { background: var(--grape); color: #fff; }
+  .mi[aria-current="page"] svg { color: #fff; }
+  .places { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .place { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 6px; border: 0; border-radius: 14px; background: none; text-align: left; }
+  .place:hover { background: var(--tile); }
+  .place i { flex: none; width: 38px; height: 38px; border-radius: 13px; display: grid; place-items: center; background: var(--tile); color: var(--grape); }
+  .place i svg { width: 18px; height: 18px; }
+  .place b { display: block; font-size: 14px; }
+  .place small { font-size: 12px; color: var(--ink2); }
+  .place em { margin-left: auto; font-style: normal; font-size: 12px; font-weight: 700; color: var(--ink2); }
+  .reveal { will-change: opacity, transform; }
+  .home-ind { position: absolute; z-index: 6; left: 50%; bottom: 8px; width: 118px; height: 5px; margin-left: -59px; border-radius: 3px; background: var(--ink); opacity: .8; pointer-events: none; }
+  .finger { position: absolute; z-index: 7; left: 0; top: 0; width: 44px; height: 44px; margin: -22px; border-radius: 50%; background: rgba(255, 255, 255, .55); box-shadow: 0 0 0 2px rgba(123, 77, 255, .5), 0 8px 20px rgba(0, 0, 0, .2); opacity: 0; pointer-events: none; transition: opacity .25s, scale .25s; }
+  .finger.on { opacity: 1; }
+  :root[data-theme="dark"] .finger { background: rgba(255, 255, 255, .2); }
+  .finger.press { scale: .82; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="blob a" aria-hidden="true"></div><div class="blob b" aria-hidden="true"></div>
+  <div class="phone">
+    <section class="screen" id="screen" aria-label="City app with a bottom sheet menu">
+      <div class="mapwrap" id="mapwrap" aria-hidden="true">
+        <svg class="map" id="map" viewBox="0 0 380 760" preserveAspectRatio="xMidYMid slice">
+          <rect class="land" width="380" height="760"/>
+          <g class="blocks"><path d="M20 330h120v80H20zM230 300h120v90H230zM20 470h110v120H20zM230 450h110v100H230zM200 640h150v100H200zM10 20h100v60H10zM230 30h120v90H230z"/></g>
+          <path class="water" stroke-width="30" d="M-30 70C60 40 100 130 50 210S-20 340 20 430"/>
+          <path class="park" d="M232 168c32-12 62 6 64 32s-22 46-54 42-42-22-40-42 6-28 30-32ZM58 528c26-8 54 4 56 28s-20 38-48 34-36-20-34-36 4-22 26-26Z"/>
+          <path class="water" stroke-width="6" d="M410 110C310 250 250 380 130 560S20 730-20 800"/>
+          <g>
+            <path class="cas" stroke-width="16" d="M-10 300 400 262M180-10l30 790M-10 632l410-74M300-10 262 780M-10 455l400-44"/>
+            <path class="rd" stroke-width="11" d="M-10 300 400 262M180-10l30 790M-10 632l410-74M300-10 262 780M-10 455l400-44"/>
+            <path class="cas" stroke-width="8" d="M90-10l26 790M-10 140l400-20M-10 540l400-20M-10 720l400-30"/>
+            <path class="rd" stroke-width="5" d="M90-10l26 790M-10 140l400-20M-10 540l400-20M-10 720l400-30"/>
+          </g>
+          <text x="236" y="150">Gulberg</text><text x="24" y="266">Walled City</text><text x="282" y="500">DHA</text><text x="30" y="700">Johar Town</text><text x="214" y="612">Model Town</text>
+          <g id="route"></g>
+          <g id="pins"></g>
+          <g transform="translate(196 420)"><circle class="halo" r="16"/><circle r="9" fill="#fff"/><circle r="6" fill="var(--grape)" style="fill:var(--grape)"/></g>
+        </svg>
+        <div class="scrim" id="scrim"></div>
+      </div>
+
+      <div class="status" aria-hidden="true"><span>9:41</span><svg viewBox="0 0 52 12"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2.5" width="3" height="9.5" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/><rect x="28" y="1" width="20" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="30.5" y="3.5" width="13" height="5" rx="1.5"/><rect x="49" y="4" width="2" height="4" rx="1"/></svg></div>
+      <div class="topbar">
+        <div class="chip" id="chip"><i id="chipIco"></i><span><b id="chipTitle">Rides</b><small id="chipSub">6 drivers near Gulberg</small></span></div>
+        <span class="me" aria-hidden="true">AK</span>
+      </div>
+      <div class="info" id="info" hidden aria-live="polite"><i id="infoIco"></i><span><b id="infoTitle"></b><small id="infoText"></small></span></div>
+
+      <div class="sheet" id="sheet">
+        <svg class="skin" id="skin" aria-hidden="true"><path id="skinPath"/></svg>
+        <div class="inner" id="inner">
+          <button class="grip" id="grip" type="button" aria-label="Menu sheet, peeking. Press to open more"><i id="gripBar" style="width:40px"></i></button>
+          <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg><input id="q" type="search" placeholder="Where to?" aria-label="Search places" autocomplete="off"></label>
+          <div class="tiles" id="tiles"></div>
+          <div class="reveal" data-band="1"><p class="sec">More</p></div>
+          <div class="more" id="more"></div>
+          <div class="reveal" data-band="2"><p class="sec">Recent places</p></div>
+          <ul class="places" id="places"></ul>
+        </div>
+      </div>
+      <div class="home-ind" aria-hidden="true"></div>
+      <div class="finger" id="finger" aria-hidden="true"></div>
+    </section>
+  </div>
+  <p class="sr-only" aria-live="polite" id="live"></p>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const live = $("#live");
+  const say = (t) => { live.textContent = ""; setTimeout(() => { live.textContent = t; }, 30); };
+
+  // ---------- Icons ----------
+  const S = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const IC = {
+    rides: S('<path class="fillable" d="M5 15.5V12l2-5h10l2 5v3.5Z"/><path d="M4 12h16M7.5 18.5v-3M16.5 18.5v-3"/><circle cx="8" cy="13.6" r=".8"/><circle cx="16" cy="13.6" r=".8"/>'),
+    food: S('<path class="fillable" d="M4 12a8 8 0 0 0 16 0Z"/><path d="M3 12h18M9 4c0 2 2 2 2 4M14 4c0 2 2 2 2 4"/>'),
+    parcel: S('<path class="fillable" d="m12 3 8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9M8 5.3l8 4.5"/>'),
+    mart: S('<path class="fillable" d="M4 9h16l-1.5 10h-13Z"/><path d="M8 9 11 4M16 9l-3-5M9 13v3M15 13v3"/>'),
+    wallet: S('<rect x="3.5" y="6" width="17" height="13" rx="3"/><path d="M16 12.5h4.5M7 6V4.5h10V6"/>'),
+    offers: S('<path d="M4 12V4h8l8 8-8 8Z"/><circle cx="8.5" cy="8.5" r="1.3"/>'),
+    trips: S('<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6"/>'),
+    help: S('<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.8.7-.8 1.3v.6M12 16.8v.2"/>'),
+    saved: S('<path d="M7 4h10v16l-5-4-5 4Z"/>'),
+    settings: S('<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>'),
+    pin: S('<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/>')
+  };
+
+  // ---------- Sections and places ----------
+  const MAIN = [
+    { id: "rides", name: "Rides", sub: "6 drivers near Gulberg", hint: "Where to?", pins: [[150, 360], [240, 380], [210, 300], [120, 470], [260, 440], [170, 520]] },
+    { id: "food", name: "Food", sub: "32 places open now", hint: "Search food", pins: [[250, 320], [140, 300], [290, 400], [110, 420], [220, 500]] },
+    { id: "parcel", name: "Parcel", sub: "Pickup in 15 minutes", hint: "Send to…", pins: [[200, 350], [130, 440], [270, 470]] },
+    { id: "mart", name: "Mart", sub: "Groceries in 25 minutes", hint: "Search groceries", pins: [[160, 330], [280, 350], [240, 520], [100, 380]] }
+  ];
+  const MORE = [
+    { id: "wallet", name: "Wallet", title: "PKR 2,450 balance", text: "Top up by card or bank transfer" },
+    { id: "offers", name: "Offers", title: "20% off food rides", text: "Until Sunday, up to PKR 300" },
+    { id: "trips", name: "Trips", title: "Last trip: DHA to Liberty", text: "Yesterday · PKR 420 · 18 min" },
+    { id: "help", name: "Help", title: "Chat with support", text: "We usually reply in 2 minutes" },
+    { id: "saved", name: "Saved", title: "Home, Work and Gym", text: "Tap a saved place to go there" },
+    { id: "settings", name: "Settings", title: "Notifications on", text: "Ride updates and offers by SMS" }
+  ];
+  const PLACES = [
+    { name: "Liberty Market", area: "Gulberg III", at: [262, 330], min: 12 },
+    { name: "Emporium Mall", area: "Johar Town", at: [110, 650], min: 26 },
+    { name: "Badshahi Mosque", area: "Walled City", at: [78, 176], min: 31 },
+    { name: "Allama Iqbal Airport", area: "Airport Road", at: [330, 110], min: 28 },
+    { name: "Packages Mall", area: "Walton Road", at: [300, 604], min: 19 }
+  ];
+  const YOU = [196, 420];
+
+  $("#tiles").innerHTML = MAIN.map((m) => `<button class="tile" type="button" data-id="${m.id}">${IC[m.id]}<span>${m.name}</span></button>`).join("");
+  $("#more").innerHTML = MORE.map((m, i) => `<button class="mi reveal" type="button" data-band="1" data-k="${i}" data-id="${m.id}">${IC[m.id]}<span>${m.name}</span></button>`).join("");
+  function renderPlaces(q = "") {
+    const s = q.trim().toLowerCase();
+    const list = PLACES.filter((p) => !s || (p.name + " " + p.area).toLowerCase().includes(s));
+    $("#places").innerHTML = list.length ? list.map((p, i) => `<li class="reveal" data-band="2" data-k="${i}"><button class="place" type="button" data-name="${p.name}"><i>${IC.pin}</i><span><b>${p.name}</b><small>${p.area}</small></span><em>${p.min} min</em></button></li>`).join("") : `<li class="reveal" data-band="2" data-k="0"><span class="place"><small>No place matches “${q.replace(/[<>&]/g, "")}”</small></span></li>`;
+    bands = $$(".reveal");
+  }
+  let bands = [];
+  renderPlaces();
+
+  // ---------- Sheet physics ----------
+  const screen = $("#screen"), sheet = $("#sheet"), inner = $("#inner"), skinPath = $("#skinPath"), skin = $("#skin");
+  const grip = $("#grip"), gripBar = $("#gripBar"), mapwrap = $("#mapwrap"), scrim = $("#scrim");
+  const SNAP = { peek: 190, half: 400, full: 700 };
+  let W = 360, SH = 740;
+  const st = { h: SNAP.peek, v: 0, target: SNAP.peek, drag: false, b: 0, bv: 0 };
+  function measure() {
+    W = screen.clientWidth; SH = screen.clientHeight;
+    SNAP.peek = 190; SNAP.half = Math.round(clamp(SH * .55, 330, 430)); SNAP.full = SH - 64;
+    sheet.style.height = SNAP.full + 40 + "px";
+    skin.setAttribute("height", SNAP.full + 80);
+    skin.setAttribute("viewBox", `0 0 ${W} ${SNAP.full + 80}`);
+  }
+  const level = () => { const d = (k) => Math.abs(st.target - SNAP[k]); return ["peek", "half", "full"].reduce((a, k) => d(k) < d(a) ? k : a, "peek"); };
+  function snapTo(name, v) {
+    st.target = SNAP[name];
+    if (typeof v === "number") st.v = v;
+    if (reduce) { st.h = st.target; st.v = 0; }
+    const words = { peek: "peeking. Press to open more", half: "half open. Press to open fully", full: "fully open. Press to close" };
+    grip.setAttribute("aria-label", "Menu sheet, " + words[name]);
+  }
+
+  // one frame: spring the height, wobble the jelly edge, reveal what fits
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(.032, (now - last) / 1000); last = now;
+    if (!st.drag) { st.v += (-190 * (st.h - st.target) - 19 * st.v) * dt; st.h += st.v * dt; }
+    // the middle of the top edge lags behind the corners: moving up makes it dip, stopping makes it wobble
+    const bt = clamp(-st.v * .022, -26, 26);
+    st.bv += (-260 * (st.b - bt) - 10 * st.bv) * dt; st.b += st.bv * dt;
+    if (reduce) st.b = 0;
+    const b = st.b, T = 40, r = 30, H = SNAP.full + 80;
+    skinPath.setAttribute("d", `M0 ${T + r}Q0 ${T} ${r} ${T}C${W * .3} ${T - b} ${W * .7} ${T - b} ${W - r} ${T}Q${W} ${T} ${W} ${T + r}V${H}H0Z`);
+    sheet.style.transform = `translateY(${SNAP.full + 40 - st.h}px)`;
+    inner.style.transform = `translateY(${-b * .62}px)`;
+    gripBar.style.width = 40 + clamp(Math.abs(st.v) * .03, 0, 34) + "px";
+    // map recedes like a card underneath when the sheet is high
+    const p1 = clamp((st.h - SNAP.peek) / (SNAP.half - SNAP.peek), 0, 1.2), p2 = clamp((st.h - SNAP.half) / (SNAP.full - SNAP.half), 0, 1);
+    mapwrap.style.transform = `translateY(${-p1 * 40}px) scale(${1 - p2 * .05})`;
+    scrim.style.opacity = (p2 * .9).toFixed(3);
+    // rows fade and rise in, one after another, as their band comes into view
+    bands.forEach((el) => {
+      const p = el.dataset.band === "1" ? p1 : p2, k = +(el.dataset.k || 0);
+      const o = clamp(p * 1.7 - k * .12, 0, 1);
+      el.style.opacity = o.toFixed(3);
+      el.style.transform = `translateY(${((1 - o) * 16).toFixed(1)}px)`;
+      const hide = o < .05; // rows you cannot see cannot be tabbed to either
+      if (el._hide !== hide) { el._hide = hide; el.inert = hide; }
+    });
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Dragging with the finger or mouse ----------
+  let drag = null, eatClick = false;
+  const rubber = (h) => h > SNAP.full ? SNAP.full + (h - SNAP.full) * .3 : h < SNAP.peek ? SNAP.peek - (SNAP.peek - h) * .3 : h;
+  sheet.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("input") || e.button > 0) return;
+    drag = { id: e.pointerId, y0: e.clientY, h0: st.h, moved: false, pts: [[performance.now(), st.h]] };
+  });
+  addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dy = drag.y0 - e.clientY;
+    if (!drag.moved && Math.abs(dy) > 6) { drag.moved = true; st.drag = true; try { sheet.setPointerCapture(e.pointerId); } catch (_) {} }
+    if (!drag.moved) return;
+    const now = performance.now(), h = rubber(drag.h0 + dy);
+    drag.pts.push([now, h]); if (drag.pts.length > 6) drag.pts.shift();
+    const [t0, h0] = drag.pts[0];
+    st.v = now > t0 ? (h - h0) / ((now - t0) / 1000) : 0;
+    st.h = h;
+  });
+  function endDrag(e) {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    if (drag.moved) { release(st.v); eatClick = true; setTimeout(() => { eatClick = false; }, 50); }
+    drag = null; st.drag = false;
+  }
+  addEventListener("pointerup", endDrag);
+  addEventListener("pointercancel", endDrag);
+  sheet.addEventListener("click", (e) => { if (eatClick) { e.stopPropagation(); e.preventDefault(); eatClick = false; } }, true);
+  function release(v) {
+    const proj = st.h + v * .2;
+    const name = ["peek", "half", "full"].reduce((a, k) => Math.abs(proj - SNAP[k]) < Math.abs(proj - SNAP[a]) ? k : a, "peek");
+    snapTo(name, v);
+    say("Sheet " + (name === "peek" ? "lowered" : name === "half" ? "half open" : "fully open"));
+  }
+
+  // grip: click or keys move between the three heights
+  const ORDER = ["peek", "half", "full"];
+  grip.addEventListener("click", () => { const i = ORDER.indexOf(level()); snapTo(ORDER[i === 2 ? 0 : i + 1], i === 2 ? 260 : -260); });
+  grip.addEventListener("keydown", (e) => {
+    const i = ORDER.indexOf(level());
+    const to = { ArrowUp: Math.min(2, i + 1), ArrowDown: Math.max(0, i - 1), Home: 0, End: 2 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault(); snapTo(ORDER[to], to > i ? -260 : 260);
+  });
+
+  // ---------- Navigating: services change the map, the rest open an info card ----------
+  const chip = $("#chip"), info = $("#info");
+  function setChip(icon, title, sub) {
+    $("#chipIco").innerHTML = icon; $("#chipTitle").textContent = title; $("#chipSub").textContent = sub;
+    chip.classList.remove("swap"); void chip.offsetWidth; chip.classList.add("swap");
+  }
+  const NS = "http://www.w3.org/2000/svg";
+  function dropPins(list, id) {
+    const g = $("#pins");
+    g.innerHTML = list.map(([x, y], k) => `<g class="pin" transform="translate(${x} ${y})"><g class="drop" style="animation-delay:${k * 70}ms"><g class="bob" style="--dx:${(k % 2 ? 3 : -3)}px;--dy:${k % 3 ? -2 : 2}px;animation-delay:${-k * .4}s"><path d="M0 0c-6-8-11-12-11-18a11 11 0 0 1 22 0c0 6-5 10-11 18Z" style="fill:var(--grape)"/><circle cy="-18" r="7.5" fill="#fff"/><g transform="translate(-6 -24) scale(.5)" style="color:var(--grape)">${IC[id].replace('aria-hidden="true"', 'width="24" height="24"')}</g></g></g></g>`).join("");
+  }
+  function ripple(btn, e) {
+    if (reduce) return;
+    const r = btn.getBoundingClientRect(), s = document.createElement("span");
+    s.className = "rip";
+    s.style.left = (e && e.clientX ? e.clientX - r.left : r.width / 2) + "px";
+    s.style.top = (e && e.clientY ? e.clientY - r.top : r.height / 2) + "px";
+    btn.appendChild(s); setTimeout(() => s.remove(), 650);
+  }
+  function setCurrent(btn) { $$(".tile, .mi").forEach((b) => b.removeAttribute("aria-current")); if (btn) btn.setAttribute("aria-current", "page"); }
+  function goMain(id, btn, e) {
+    const m = MAIN.find((x) => x.id === id);
+    ripple(btn, e); setCurrent(btn);
+    info.hidden = true; $("#route").innerHTML = "";
+    setChip(IC[id], m.name, m.sub);
+    $("#q").placeholder = m.hint;
+    dropPins(m.pins, id);
+    snapTo("peek", 300);
+    say(`${m.name}: ${m.sub}`);
+  }
+  function goMore(id, btn, e) {
+    const m = MORE.find((x) => x.id === id);
+    ripple(btn, e); setCurrent(btn);
+    $("#infoIco").innerHTML = IC[id]; $("#infoTitle").textContent = m.title; $("#infoText").textContent = m.text;
+    info.hidden = false; info.style.animation = "none"; void info.offsetWidth; info.style.animation = "";
+    setChip(IC[id], m.name, m.title);
+    snapTo("peek", 300);
+    say(`${m.name}: ${m.title}. ${m.text}`);
+  }
+  function goPlace(name) {
+    const p = PLACES.find((x) => x.name === name);
+    info.hidden = true; $("#pins").innerHTML = "";
+    const [x0, y0] = YOU, [x1, y1] = p.at, sy = Math.sign(y1 - y0) || 1, sx = Math.sign(x1 - x0) || 1;
+    const d = `M${x0} ${y0}V${y1 - sy * 14}Q${x0} ${y1} ${x0 + sx * 14} ${y1}H${x1}`;
+    $("#route").innerHTML = `<path class="route under" d="${d}"/><path class="route" id="rline" d="${d}"/><g class="pin" transform="translate(${x1} ${y1})"><g class="drop" style="animation-delay:.7s"><path d="M0 0c-6-8-11-12-11-18a11 11 0 0 1 22 0c0 6-5 10-11 18Z" fill="#ff5fa8"/><circle cy="-18" r="5" fill="#fff"/></g></g>`;
+    const line = $("#rline"), len = line.getTotalLength();
+    line.style.strokeDasharray = len; line.style.strokeDashoffset = reduce ? 0 : len;
+    if (!reduce) line.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 900, delay: 250, easing: "cubic-bezier(.6,0,.3,1)", fill: "forwards" });
+    setCurrent(null);
+    setChip(IC.pin, "To " + p.name, `${p.min} min · ${p.area}`);
+    $("#q").value = ""; renderPlaces();
+    snapTo("peek", 300);
+    say(`Route to ${p.name}, ${p.min} minutes`);
+  }
+  $("#tiles").addEventListener("click", (e) => { const b = e.target.closest(".tile"); if (b) goMain(b.dataset.id, b, e); });
+  $("#more").addEventListener("click", (e) => { const b = e.target.closest(".mi"); if (b) goMore(b.dataset.id, b, e); });
+  $("#places").addEventListener("click", (e) => { const b = e.target.closest(".place[data-name]"); if (b) goPlace(b.dataset.name); });
+  const q = $("#q");
+  q.addEventListener("focus", () => { if (level() !== "full") snapTo("full", -260); });
+  q.addEventListener("input", () => renderPlaces(q.value));
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") { const b = $(".place[data-name]"); if (b) goPlace(b.dataset.name); } if (e.key === "Escape") { q.value = ""; renderPlaces(); q.blur(); snapTo("peek", 260); } });
+  screen.addEventListener("keydown", (e) => { if (e.key === "Escape" && level() !== "peek" && e.target !== q) snapTo("peek", 260); });
+
+  // ---------- Start ----------
+  measure();
+  st.h = reduce ? SNAP.peek : 40; st.target = SNAP.peek; // the sheet springs up from the bottom on load
+  setChip(IC.rides, "Rides", MAIN[0].sub);
+  setCurrent($(".tile"));
+  dropPins(MAIN[0].pins, "rides");
+  requestAnimationFrame(frame);
+  addEventListener("resize", () => { measure(); st.target = SNAP[level()]; });
+
+  // ---------- Auto demo: a ghost finger drags and flings the sheet, then uses it ----------
+  let demo = !reduce;
+  const stop = (e) => { if (e.isTrusted) { demo = false; finger.classList.remove("on", "press"); } };
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach((t) => addEventListener(t, stop, { capture: true, passive: true }));
+  const finger = $("#finger");
+  const fingerAt = (x, y) => { finger.style.transform = `translate(${x}px, ${y}px)`; };
+  const sheetTopY = () => SH - st.h + 14;
+  async function ghostDrag(toH, ms) {
+    const x = W / 2, h0 = st.h;
+    fingerAt(x, sheetTopY()); finger.classList.add("on"); await sleep(260); if (!demo) return;
+    finger.classList.add("press"); await sleep(140);
+    st.drag = true;
+    const t0 = performance.now();
+    let prevH = st.h, prevT = t0;
+    await new Promise((res) => {
+      const f = (now) => {
+        if (!demo) { st.drag = false; return res(); }
+        const t = Math.min(1, (now - t0) / ms), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        st.h = h0 + (toH - h0) * e;
+        const dt = (now - prevT) / 1000; if (dt > 0) st.v = (st.h - prevH) / dt;
+        prevH = st.h; prevT = now;
+        fingerAt(x, sheetTopY());
+        if (t < 1) requestAnimationFrame(f); else res();
+      };
+      requestAnimationFrame(f);
+    });
+    st.drag = false;
+    if (!demo) return;
+    release(st.v * 1.6);
+    finger.classList.remove("press"); await sleep(200); finger.classList.remove("on");
+  }
+  async function ghostTap(el) {
+    const r = el.getBoundingClientRect(), sr = screen.getBoundingClientRect();
+    fingerAt(r.left + r.width / 2 - sr.left, r.top + r.height / 2 - sr.top);
+    finger.classList.add("on"); await sleep(320); if (!demo) return false;
+    finger.classList.add("press"); await sleep(140);
+    finger.classList.remove("press"); el.click(); await sleep(160); finger.classList.remove("on");
+    return demo;
+  }
+  (async () => {
+    await sleep(1300);
+    let k = 0;
+    while (demo) {
+      await ghostDrag(SNAP.half - 30, 520); await sleep(1300); if (!demo) break;
+      await ghostDrag(SNAP.full - 70, 420); await sleep(1400); if (!demo) break;
+      const places = $$(".place[data-name]");
+      if (!(await ghostTap(places[k % places.length]))) break;
+      await sleep(2600); if (!demo) break;
+      await ghostDrag(SNAP.half - 20, 480); await sleep(1100); if (!demo) break;
+      const pick = k % 2 ? $$(".tile")[1 + (k % 3)] : $$(".mi")[k % 6];
+      if (!(await ghostTap(pick))) break;
+      await sleep(2600);
+      k++;
+    }
+  })();
+})();
+</script>
+</body>
+</html>
