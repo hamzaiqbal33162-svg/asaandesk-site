@@ -1,0 +1,563 @@
+<!doctype html>
+<!-- Chill & Craft · Kite Flyer · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kite Flyer · fly a kite over the rooftops</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL wins over the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    --page: #fbf0e4; --page2: #ffe1c4; --ink: #2b1d17; --muted: #7a5f50; --line: rgba(43, 29, 23, 0.12);
+    --chip: rgba(255, 255, 255, 0.8); --btn: #c2304f; --btnInk: #fff5ec; --focus: #1c7c8c; --track: #f1d7c2;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #110f1f; --page2: #2a1f3f; --ink: #f6ecf2; --muted: #b9a9c2; --line: rgba(255, 255, 255, 0.1);
+      --chip: rgba(30, 24, 46, 0.82); --btn: #ffb347; --btnInk: #2a1406; --focus: #7fe0e8; --track: #3b2f55;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #110f1f; --page2: #2a1f3f; --ink: #f6ecf2; --muted: #b9a9c2; --line: rgba(255, 255, 255, 0.1);
+    --chip: rgba(30, 24, 46, 0.82); --btn: #ffb347; --btnInk: #2a1406; --focus: #7fe0e8; --track: #3b2f55;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; overflow-x: clip;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(110% 70% at 50% 0%, var(--page2), transparent 70%), var(--page);
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; overflow-x: clip; }
+  .cap, .scene, .wind { width: min(500px, 100%, calc((100vh - 270px) * 0.8)); min-width: 260px; }
+  .controls { width: min(520px, 100%); }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0 4px; font-size: 13px; color: var(--muted); }
+  .cap b { font-size: 15px; color: var(--ink); }
+  .cap span { font-variant-numeric: tabular-nums; }
+  .scene {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 26px; overflow: hidden; isolation: isolate; touch-action: none; cursor: crosshair;
+    background: #ffc9a0;
+    box-shadow: 0 30px 60px -24px rgba(90, 40, 20, 0.55), 0 10px 22px -12px rgba(90, 40, 20, 0.35), inset 0 0 0 1px var(--line);
+  }
+  .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .badge {
+    position: absolute; left: 50%; top: 14px; transform: translate(-50%, -8px) scale(0.9); opacity: 0; pointer-events: none;
+    padding: 7px 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.92); color: #2b1d17; font: 800 13px/1 system-ui, sans-serif;
+    box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.45); transition: opacity 0.3s, transform 0.45s cubic-bezier(.2, 1.6, .4, 1); white-space: nowrap;
+  }
+  .badge.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 10px 16px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--chip); color: var(--ink); font: 600 14px/1 system-ui, sans-serif; user-select: none; -webkit-user-select: none;
+    box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.4); transition: transform 0.18s cubic-bezier(.3, 1.6, .5, 1), background 0.2s; touch-action: manipulation;
+  }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn.main { background: var(--btn); color: var(--btnInk); border-color: transparent; }
+  .btn.held, .btn:active { transform: translateY(1px) scale(0.96); }
+  .btn:focus-visible, input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .wind { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; font: 600 13px/1 system-ui, sans-serif; color: var(--muted); }
+  .wind output { min-width: 64px; text-align: right; color: var(--ink); }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; margin: 0; cursor: pointer; border-radius: 8px; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 6px; background: linear-gradient(90deg, var(--track), var(--btn)); }
+  input[type="range"]::-moz-range-track { height: 6px; border-radius: 6px; background: linear-gradient(90deg, var(--track), var(--btn)); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: #fff; border: 3px solid var(--btn); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); }
+  input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid var(--btn); }
+  .status { margin: 0; min-height: 1.4em; font-size: 14px; font-weight: 600; text-align: center; max-width: 500px; }
+  .hint { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); text-align: center; max-width: 500px; }
+  @media (max-height: 720px) { .hint { display: none; } }
+  @media (max-width: 420px) { .btn { padding: 10px 12px; font-size: 13px; gap: 6px; } }
+  @media (prefers-reduced-motion: reduce) { .badge { transition: opacity 0.3s; } }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Kite Flyer: steer a kite over the rooftops, pull the line to climb and let it out to go higher</h1>
+  <div class="cap"><b>Kite Flyer</b><span id="readout">Height 0 m · Line 0 m</span></div>
+  <div class="scene" id="scene">
+    <canvas id="cv" aria-hidden="true"></canvas>
+    <div class="badge" id="badge" aria-hidden="true"></div>
+  </div>
+  <div class="controls">
+    <button class="btn main" id="pull" type="button" aria-describedby="holdHint">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V5M6 11l6 -6l6 6"/></svg>
+      Pull
+    </button>
+    <button class="btn" id="letOut" type="button" aria-describedby="holdHint">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M19 12h3"/></svg>
+      Let out
+    </button>
+    <button class="btn" id="loop" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14a8 8 0 1 0 3 -8"/><path d="M4 4v4h4"/></svg>
+      Loop
+    </button>
+  </div>
+  <label class="wind" for="wind"><span>Wind</span><input id="wind" type="range" min="0" max="100" value="60"><output id="windOut" for="wind">Breezy</output></label>
+  <p class="status" id="status" aria-live="polite">Steer with your pointer. Hold Pull to climb.</p>
+  <p class="hint" id="holdHint">Hold Pull or press on the sky to tug the line. Arrow keys work too: up pulls, down lets out, left and right steer.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var W = 400, H = 500, DEG = Math.PI / 180, TAU = Math.PI * 2;
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  var darkQ = matchMedia("(prefers-color-scheme: dark)");
+  function isDark() { var t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : darkQ.matches; }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  var scene = $("scene"), cv = $("cv"), ctx = cv.getContext("2d"), statusEl = $("status");
+  function say(m) { if (statusEl.textContent !== m) statusEl.textContent = m; }
+  var badgeT = 0;
+  function badge(m) { var b = $("badge"); b.textContent = m; b.classList.add("on"); clearTimeout(badgeT); badgeT = setTimeout(function () { b.classList.remove("on"); }, 1800); }
+
+  /* ---------- 1. A seeded town so it looks the same after every resize ---------- */
+  function seeded(s) { return function () { s |= 0; s = s + 0x6D2B79F5 | 0; var t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  var R = seeded(1407), far = [], houses = [], i;
+  for (var x = -10; x < 410; x += 14 + R() * 22) far.push({ x: x, w: 16 + R() * 26, h: 40 + R() * 60, dome: R() < 0.12, tank: R() < 0.3 });
+  var HX = [-12, 46, 92, 150, 196, 252, 300, 352];
+  for (i = 0; i < HX.length; i++) houses.push({ x: HX[i], w: 58 + R() * 18, top: 340 + R() * 50, c: i % 6, win: Math.floor(R() * 3) + 1, tank: R() < 0.45, lit: R() });
+  var LIGHT = {
+    sky: [[0, "#86c6ee"], [0.42, "#ffdcae"], [0.78, "#ffb98a"], [1, "#ff9e78"]], sun: [300, 318, "#fff2c0", "rgba(255,190,110,0.6)"], stars: 0,
+    far: "rgba(214,132,110,0.55)", houses: ["#d9774f", "#86c3aa", "#e79aa7", "#efd6ae", "#7fa6d4", "#f0b548"], shade: "rgba(90,40,30,0.22)",
+    win: "#5d6f7e", lit: 0, roof: "#c79f7a", parapet: "#e6c49c", cap: "#f6e0c4", cloud: "rgba(255,255,255,0.92)", cloudB: "rgba(255,206,170,0.9)",
+    kurta: "#3d8fb5", haze: "rgba(255,214,170,0.35)"
+  };
+  var DARK = {
+    sky: [[0, "#121533"], [0.45, "#47387a"], [0.8, "#c2657a"], [1, "#f29a6a"]], sun: [300, 362, "#ffd6a0", "rgba(255,140,100,0.45)"], stars: 1,
+    far: "rgba(40,30,74,0.85)", houses: ["#7c4137", "#33605a", "#7a4757", "#6a5843", "#384a70", "#7a5a26"], shade: "rgba(0,0,0,0.3)",
+    win: "#2a2f3f", lit: 1, roof: "#4b3a3c", parapet: "#5d4849", cap: "#735a59", cloud: "rgba(110,92,160,0.75)", cloudB: "rgba(214,120,130,0.7)",
+    kurta: "#5aa7c9", haze: "rgba(240,140,120,0.18)"
+  };
+  var P = LIGHT;
+  var stars = [];
+  for (i = 0; i < 60; i++) stars.push({ x: R() * W, y: R() * 260, r: 0.4 + Math.pow(R(), 3) * 1.3, ph: R() * 6 });
+
+  /* ---------- 2. Painted layers: the sky, and the town in front of it ---------- */
+  var skyL = document.createElement("canvas"), townL = document.createElement("canvas"), sc = 1;
+  function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  function paintLayers() {
+    P = isDark() ? DARK : LIGHT;
+    [skyL, townL].forEach(function (c) { c.width = cv.width; c.height = cv.height; });
+    var g = skyL.getContext("2d");
+    g.setTransform(sc, 0, 0, sc, 0, 0);
+    var gr = g.createLinearGradient(0, 0, 0, H);
+    P.sky.forEach(function (s) { gr.addColorStop(s[0], s[1]); });
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    var sg = g.createRadialGradient(P.sun[0], P.sun[1], 0, P.sun[0], P.sun[1], 170);
+    sg.addColorStop(0, P.sun[3]); sg.addColorStop(1, "rgba(255,200,150,0)");
+    g.fillStyle = sg; g.fillRect(0, 0, W, H);
+    g.fillStyle = P.sun[2]; g.beginPath(); g.arc(P.sun[0], P.sun[1], 26, 0, TAU); g.fill();
+    if (P.stars) { // a thin moon
+      g.fillStyle = "#f6efd9"; g.beginPath(); g.arc(78, 78, 13, 0, TAU); g.fill();
+      g.fillStyle = P.sky[0][1]; g.beginPath(); g.arc(84, 74, 12, 0, TAU); g.fill();
+    }
+    // the town layer: far skyline, coloured houses, then the near roof with its parapet
+    var t = townL.getContext("2d");
+    t.setTransform(sc, 0, 0, sc, 0, 0);
+    t.fillStyle = P.far;
+    far.forEach(function (b) {
+      t.fillRect(b.x, 400 - b.h - 20, b.w, b.h + 20);
+      if (b.dome) { t.beginPath(); t.arc(b.x + b.w / 2, 380 - b.h, b.w * 0.36, Math.PI, 0); t.fill(); }
+      if (b.tank) t.fillRect(b.x + 4, 372 - b.h, 8, 8);
+    });
+    var hz = t.createLinearGradient(0, 300, 0, 420); hz.addColorStop(0, "rgba(0,0,0,0)"); hz.addColorStop(1, P.haze);
+    t.fillStyle = hz; t.fillRect(0, 300, W, 120);
+    houses.forEach(function (h, n) {
+      var col = P.houses[h.c];
+      t.fillStyle = col; t.fillRect(h.x, h.top, h.w, 470 - h.top);
+      t.fillStyle = P.shade; t.fillRect(h.x + h.w - 8, h.top, 8, 470 - h.top);
+      t.fillStyle = "rgba(255,255,255,0.28)"; t.fillRect(h.x - 2, h.top - 5, h.w + 4, 5); // parapet cap
+      if (h.tank) { t.fillStyle = n % 2 ? "#3c4a5c" : "#2f3b4b"; rr(t, h.x + 10, h.top - 22, 18, 17, 3); t.fill(); t.fillStyle = "rgba(255,255,255,0.18)"; t.fillRect(h.x + 12, h.top - 20, 4, 13); }
+      for (var r = 0; r < 3; r++) for (var c = 0; c < h.win; c++) {
+        var wx = h.x + 10 + c * 18, wy = h.top + 14 + r * 26;
+        if (wx > h.x + h.w - 14) continue;
+        var lit = P.lit && (h.lit * 7 + r + c * 3) % 3 < 1.6;
+        t.fillStyle = lit ? "#ffcf6e" : P.win; rr(t, wx, wy, 10, 13, 2); t.fill();
+        if (lit) { t.fillStyle = "rgba(255,207,110,0.18)"; t.beginPath(); t.arc(wx + 5, wy + 6, 13, 0, TAU); t.fill(); }
+      }
+    });
+    // near roof
+    t.fillStyle = P.roof; t.fillRect(0, 446, W, 54);
+    t.fillStyle = P.parapet; t.fillRect(0, 452, W, 48);
+    t.fillStyle = P.cap; t.fillRect(0, 448, W, 7);
+    t.fillStyle = "rgba(0,0,0,0.08)";
+    for (var bx = 0; bx < W; bx += 26) t.fillRect(bx, 462 + (bx / 26 % 2) * 12, 24, 1.5);
+    // potted plants on the parapet
+    [[250, "#c8553d"], [282, "#3f7cac"], [372, "#c8553d"]].forEach(function (p, j) {
+      t.fillStyle = "#3f8f4f"; t.beginPath(); t.arc(p[0] + 7, 436 - j % 2 * 3, 10, 0, TAU); t.fill();
+      t.fillStyle = "#57a85f"; t.beginPath(); t.arc(p[0] + 3, 432, 6, 0, TAU); t.fill();
+      t.fillStyle = p[1]; t.beginPath(); t.moveTo(p[0], 438); t.lineTo(p[0] + 14, 438); t.lineTo(p[0] + 12, 449); t.lineTo(p[0] + 2, 449); t.closePath(); t.fill();
+    });
+  }
+  function resize() {
+    var r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    var w = Math.max(2, Math.round(r.width * dpr)), h = Math.max(2, Math.round(r.height * dpr));
+    cv.width = w; cv.height = h; sc = w / W;
+    paintLayers();
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(scene); else window.addEventListener("resize", resize);
+  darkQ.addEventListener && darkQ.addEventListener("change", paintLayers);
+  resize();
+
+  /* ---------- 3. Clouds, distant kites, pigeons and laundry ---------- */
+  var clouds = [];
+  for (i = 0; i < 6; i++) clouds.push({ x: rnd(-60, 420), y: rnd(40, 250), s: rnd(0.6, 1.3), sp: rnd(4, 9) * (i % 2 ? 1 : 0.6), puffs: [[0, 0, 22], [22, -8, 18], [42, 2, 16], [-20, 4, 14], [14, 8, 18]] });
+  var farKites = [
+    { x: 64, y: 130, c: "#1aa39a", c2: "#ffe066", s: 0.38, ph: 0, ax: 40 },
+    { x: 196, y: 96, c: "#7b4fd6", c2: "#ff7aa0", s: 0.3, ph: 2, ax: 210 },
+    { x: 348, y: 170, c: "#f26d3d", c2: "#2d6cdf", s: 0.42, ph: 4, ax: 330 }
+  ];
+  var pigeons = [];
+  for (i = 0; i < 7; i++) pigeons.push({ hx: 262 + i * 10 + rnd(-2, 2), hy: 0, x: 0, y: 0, mode: "sit", t: rnd(0, 6), ang: i / 7 * TAU, rad: rnd(40, 70), delay: 0 });
+  function perchY(px) { for (var j = 0; j < houses.length; j++) { var h = houses[j]; if (px >= h.x && px <= h.x + h.w) return h.top - 6; } return 380; }
+  pigeons.forEach(function (p) { p.hy = perchY(p.hx); p.x = p.hx; p.y = p.hy; });
+  var flockT = 0;
+  function scarePigeons() { if (flockT > 0) return; flockT = 6.5; pigeons.forEach(function (p, j) { p.mode = "fly"; p.delay = j * 0.08; }); }
+  var cloth = [["#ffd23f", 0], ["#ffffff", 1], ["#e63946", 0], ["#2a9d8f", 1], ["#f4a261", 0]];
+
+  /* ---------- 4. The kite, its line (a rope of verlet points) and its tail ---------- */
+  var SH = { x: 106, y: 426 }; // the flyer's shoulder
+  var hand = { x: 120, y: 410 };
+  var kite = { x: 262, y: 196, vx: 0, vy: 0, a: 0 };
+  var line = 250, wind = 0.6, steerX = null, autoSteer = 0;
+  var pulling = false, letting = false, holdUntil = 0, letUntil = 0, tug = 0;
+  var N = 26, rope = [], tail = [];
+  for (i = 0; i < N; i++) { var f = i / (N - 1); rope.push({ x: hand.x + (kite.x - hand.x) * f, y: hand.y + (kite.y - hand.y) * f, px: 0, py: 0 }); rope[i].px = rope[i].x; rope[i].py = rope[i].y; }
+  for (i = 0; i < 12; i++) tail.push({ x: kite.x, y: kite.y + 20 + i * 7, px: kite.x, py: kite.y + 20 + i * 7 });
+  var loopT = -1, loopFrom = 0, loops = 0, best = 0, milestone = 0, dipped = false, sparks = [], streaks = [];
+  function gustAt(t) { return 0.5 * Math.sin(t * 0.7) + 0.3 * Math.sin(t * 1.9 + 1) + 0.2 * Math.sin(t * 4.3 + 2); }
+  function heightM() { return Math.max(0, (hand.y - kite.y) * 0.42); }
+
+  function stepKite(dt, t) {
+    var calm = reduce.matches, now = t;
+    var isPull = pulling || now < holdUntil, isLet = letting || now < letUntil;
+    var g = gustAt(t) * wind * 0.45;
+    var lift = wind * 0.85 + g + (isPull ? 0.5 : 0) + 0.08;
+    var elevMax = (12 + 76 * clamp(lift, 0, 1)) * DEG;
+    // where the visitor steers: pointer x maps onto the wind window, or a slow drift when nobody steers
+    var sx = steerX != null ? steerX : 190 + Math.sin(t * 0.3) * 55 + autoSteer;
+    var th = (126 - (clamp(sx, 20, 380) - 20) / 360 * 106) * DEG; // 126° (left) … 20° (right)
+    var side = th <= 90 * DEG ? 1 : -1, e = side > 0 ? th : Math.PI - th;
+    e = Math.min(e, elevMax);
+    // line: let out unspools, pull reels in a little and climbs
+    if (isLet) line = Math.min(400, line + 80 * dt);
+    if (isPull) line = Math.max(90, line - (demoReel ? 70 : 16) * dt);
+    var tx = hand.x + side * Math.cos(e) * line, ty = hand.y - Math.sin(e) * line;
+    if (loopT >= 0) { // the loop trick: circle around the spot where it started
+      loopT += dt / 1.5;
+      var ph = loopT * TAU, rad = 46 * Math.sin(Math.min(1, loopT) * Math.PI) + 6;
+      tx = loopFrom.x + Math.sin(ph) * rad; ty = loopFrom.y - (1 - Math.cos(ph)) * rad * 0.9;
+      if (!calm && Math.random() < 0.7) spark(kite.x, kite.y, 1);
+      if (loopT >= 1) { loopT = -1; loops++; burst(kite.x, kite.y, 26); badge(loops === 1 ? "Perfect loop!" : loops + " loops!"); say("A clean loop. That is " + loops + (loops === 1 ? " loop" : " loops") + " so far."); }
+    }
+    tx = clamp(tx, 44, 356); ty = clamp(ty, 40, 430);
+    var k = loopT >= 0 ? 30 : 4 + 6 * clamp(lift, 0, 1), c = loopT >= 0 ? 7 : 2.4;
+    var fl = calm ? 0 : wind * (Math.sin(t * 5.3) * 26 + Math.sin(t * 8.7 + 1) * 14);
+    var ax = (tx - kite.x) * k - kite.vx * c + fl;
+    var ay = (ty - kite.y) * k - kite.vy * c + (calm ? 0 : wind * Math.cos(t * 6.1) * 16);
+    if (lift < 0.3 && loopT < 0) ay += (0.3 - lift) * 260; // too little wind: it sinks
+    if (tug > 0) { ay += 260 * tug; tug = Math.max(0, tug - dt * 4); } // anticipation: a small dip before the climb
+    kite.vx += ax * dt; kite.vy += ay * dt;
+    kite.x += kite.vx * dt; kite.y += kite.vy * dt;
+    // the line is a hard limit
+    var dx = kite.x - hand.x, dy = kite.y - hand.y, d = Math.hypot(dx, dy);
+    if (d > line && loopT < 0) { var nx = dx / d, ny = dy / d; kite.x = hand.x + nx * line; kite.y = hand.y + ny * line; var vr = kite.vx * nx + kite.vy * ny; if (vr > 0) { kite.vx -= vr * nx; kite.vy -= vr * ny; } }
+    if (kite.y > 426) { kite.y = 426; kite.vy = Math.min(0, kite.vy); }
+    kite.x = clamp(kite.x, 30, 370); kite.y = Math.max(32, kite.y);
+    var wantA = clamp(kite.vx * 0.004, -0.5, 0.5) + (calm ? 0 : Math.sin(t * 6.5) * 0.05 * (0.4 + wind)) + (loopT >= 0 ? loopT * TAU : 0) - side * (e - 60 * DEG) * 0.25;
+    kite.a += (wantA - kite.a) * Math.min(1, dt * (loopT >= 0 ? 30 : 8));
+    if (loopT < 0 && kite.a > Math.PI) kite.a -= TAU;
+    // milestones and the dip warning
+    var hM = heightM();
+    best = Math.max(best, hM);
+    var next = [50, 100, 150][milestone];
+    if (next && hM >= next) {
+      milestone++; burst(kite.x, kite.y, 34); scarePigeons();
+      badge(next + " m up!"); say(next === 150 ? "Sky high: 150 metres! The pigeons came up to see." : next + " metres up. Keep going!");
+    }
+    if (kite.y > 400 && !dipped) { dipped = true; say("The kite is dipping over the roofs. Pull or add wind to lift it."); }
+    if (kite.y < 360) dipped = false;
+  }
+  function stepRope(dt) {
+    var calm = reduce.matches, dist = Math.hypot(kite.x - hand.x, kite.y - hand.y);
+    var slack = 1 + 0.05 * clamp(0.9 - wind, 0, 1) + (letting ? 0.03 : 0);
+    var seg = Math.max(dist, Math.min(line, dist * 1.08)) * slack / (N - 1);
+    var gy = 200 * dt * dt, wx = (calm ? 0.3 : 1) * wind * 50 * dt * dt;
+    for (var j = 1; j < N - 1; j++) {
+      var p = rope[j], vx = (p.x - p.px) * 0.98, vy = (p.y - p.py) * 0.98;
+      p.px = p.x; p.py = p.y; p.x += vx + wx; p.y += vy + gy;
+    }
+    rope[0].x = hand.x; rope[0].y = hand.y; rope[N - 1].x = kite.x; rope[N - 1].y = kite.y + 4;
+    for (var it = 0; it < 12; it++) {
+      for (j = 0; j < N - 1; j++) {
+        var a = rope[j], b = rope[j + 1], ddx = b.x - a.x, ddy = b.y - a.y, dd = Math.hypot(ddx, ddy) || 0.001, diff = (dd - seg) / dd * 0.5;
+        if (j > 0) { a.x += ddx * diff; a.y += ddy * diff; }
+        if (j + 1 < N - 1) { b.x -= ddx * diff; b.y -= ddy * diff; }
+      }
+    }
+    // the tail streams downwind from the bottom tip
+    var ca = Math.cos(kite.a), sa = Math.sin(kite.a);
+    tail[0].x = kite.x - sa * 28; tail[0].y = kite.y + ca * 28;
+    var tw = (calm ? 0.4 : 1) * (60 + wind * 140) * dt * dt;
+    for (j = 1; j < tail.length; j++) {
+      var q = tail[j], qvx = (q.x - q.px) * 0.92, qvy = (q.y - q.py) * 0.92;
+      q.px = q.x; q.py = q.y; q.x += qvx + tw; q.y += qvy + 90 * dt * dt;
+    }
+    for (it = 0; it < 4; it++) for (j = 0; j < tail.length - 1; j++) {
+      var u = tail[j], v = tail[j + 1], ex = v.x - u.x, ey = v.y - u.y, el2 = Math.hypot(ex, ey) || 0.001, df = (el2 - 7) / el2;
+      v.x -= ex * df; v.y -= ey * df;
+    }
+  }
+
+  /* ---------- 5. Sparkles and paper confetti ---------- */
+  var COLS = ["#ffe066", "#ff7aa0", "#7fe0e8", "#ffffff", "#ffb347"];
+  function spark(x, y, n) { for (var j = 0; j < n; j++) sparks.push({ x: x + rnd(-6, 6), y: y + rnd(-6, 6), vx: rnd(-20, 20), vy: rnd(-20, 20), life: rnd(0.5, 0.9), max: 0.9, s: rnd(1.5, 3), c: COLS[j % 5], star: true }); }
+  function burst(x, y, n) {
+    if (reduce.matches) n = Math.ceil(n / 4);
+    for (var j = 0; j < n; j++) { var a = rnd(0, TAU), v = rnd(60, 170); sparks.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, life: rnd(0.8, 1.5), max: 1.5, s: rnd(2.5, 5), c: COLS[j % 5], rot: rnd(0, 6), vr: rnd(-8, 8), star: j % 3 === 0 }); }
+  }
+
+  /* ---------- 6. Drawing ---------- */
+  function drawKiteShape(g, s, c1, c2, bow) {
+    // a diamond kite with two coloured halves, a centre disc and bowed cross spars
+    g.beginPath(); g.moveTo(0, -26 * s); g.lineTo(18 * s, -6 * s); g.lineTo(0, 22 * s); g.closePath(); g.fillStyle = c1; g.fill();
+    g.beginPath(); g.moveTo(0, -26 * s); g.lineTo(-18 * s, -6 * s); g.lineTo(0, 22 * s); g.closePath(); g.fillStyle = c2; g.fill();
+    g.beginPath(); g.moveTo(-18 * s, -6 * s); g.lineTo(0, 22 * s); g.lineTo(18 * s, -6 * s); g.closePath(); g.fillStyle = "rgba(0,0,0,0.12)"; g.fill();
+    g.beginPath(); g.arc(0, -5 * s, 5.5 * s, 0, TAU); g.fillStyle = "#fff"; g.fill();
+    g.beginPath(); g.arc(0, -5 * s, 3 * s, 0, TAU); g.fillStyle = c1; g.fill();
+    g.strokeStyle = "rgba(60,30,20,0.55)"; g.lineWidth = 1.1 * s;
+    g.beginPath(); g.moveTo(0, -26 * s); g.lineTo(0, 22 * s); g.moveTo(-18 * s, -6 * s); g.quadraticCurveTo(0, (-6 - bow) * s, 18 * s, -6 * s); g.stroke();
+  }
+  function draw(t) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(skyL, 0, 0);
+    ctx.setTransform(sc, 0, 0, sc, 0, 0);
+    var j;
+    if (P.stars) for (j = 0; j < stars.length; j++) { var st = stars[j]; ctx.globalAlpha = 0.5 + 0.4 * Math.sin(t * 1.6 + st.ph); ctx.fillStyle = "#fff"; ctx.fillRect(st.x, st.y, st.r, st.r); }
+    ctx.globalAlpha = 1;
+    // clouds: a lit top and a warm underside
+    clouds.forEach(function (c) {
+      c.puffs.forEach(function (p) { ctx.fillStyle = P.cloudB; ctx.beginPath(); ctx.arc(c.x + p[0] * c.s, c.y + p[1] * c.s + 4 * c.s, p[2] * c.s, 0, TAU); ctx.fill(); });
+      c.puffs.forEach(function (p) { ctx.fillStyle = P.cloud; ctx.beginPath(); ctx.arc(c.x + p[0] * c.s, c.y + p[1] * c.s, p[2] * c.s, 0, TAU); ctx.fill(); });
+    });
+    // streaks of wind
+    ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 1;
+    streaks.forEach(function (s) { ctx.globalAlpha = Math.min(1, s.life) * 0.6; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x + s.len, s.y); ctx.stroke(); });
+    ctx.globalAlpha = 1;
+    // distant kites and their thin lines
+    farKites.forEach(function (k) {
+      var kx = k.x + Math.sin(t * 0.6 + k.ph) * 14, ky = k.y + Math.cos(t * 0.8 + k.ph) * 9;
+      ctx.strokeStyle = "rgba(60,30,30,0.35)"; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(kx, ky); ctx.quadraticCurveTo(kx + 20, ky + 140, k.ax, 380); ctx.stroke();
+      ctx.save(); ctx.translate(kx, ky); ctx.rotate(Math.sin(t * 1.7 + k.ph) * 0.2); drawKiteShape(ctx, k.s, k.c, k.c2, 3); ctx.restore();
+    });
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(townL, 0, 0);
+    ctx.setTransform(sc, 0, 0, sc, 0, 0);
+    // laundry on a line between two roof poles
+    var lx0 = 156, lx1 = 236, ly = perchY(170) - 30;
+    ctx.strokeStyle = "#5a4636"; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(lx0, ly + 30); ctx.lineTo(lx0, ly - 2); ctx.moveTo(lx1, ly + 30); ctx.lineTo(lx1, ly - 2); ctx.stroke();
+    ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(lx0, ly); ctx.quadraticCurveTo((lx0 + lx1) / 2, ly + 8, lx1, ly); ctx.stroke();
+    cloth.forEach(function (cl, n) {
+      var cx = lx0 + 10 + n * 15, cy = ly + 3 + Math.sin(n / 4 * Math.PI) * 6, flap = (reduce.matches ? 0.2 : 1) * wind * Math.sin(t * 7 + n * 1.3);
+      ctx.save(); ctx.translate(cx, cy); ctx.transform(1, 0, flap * 0.5, 1, 0, 0);
+      ctx.fillStyle = cl[0];
+      if (cl[1]) { ctx.fillRect(-5, 0, 10, 13); ctx.fillRect(-8, 0, 16, 4); } else { ctx.fillRect(-4, 0, 8, 15); }
+      ctx.fillStyle = "rgba(0,0,0,0.12)"; ctx.fillRect(2, 0, 3, 13);
+      ctx.restore();
+    });
+    // pigeons: sitting on a parapet or wheeling in the sky
+    ctx.fillStyle = isDark() ? "#cfd3e6" : "#4a4f63";
+    pigeons.forEach(function (p) {
+      ctx.save(); ctx.translate(p.x, p.y);
+      if (p.mode === "sit") { ctx.beginPath(); ctx.ellipse(0, 0, 4, 2.6, 0, 0, TAU); ctx.fill(); ctx.beginPath(); ctx.arc(3.2, -2.4, 1.7, 0, TAU); ctx.fill(); }
+      else { var fl = Math.sin(p.t * 20) * 4; ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-5, -fl); ctx.quadraticCurveTo(-2, 0, 0, 0); ctx.quadraticCurveTo(2, 0, 5, -fl); ctx.stroke(); }
+      ctx.restore();
+    });
+    drawFlyer(t);
+    // the line: a soft shadow and a bright thread
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.strokeStyle = isDark() ? "rgba(255,240,220,0.85)" : "rgba(70,40,30,0.75)"; ctx.lineWidth = 1.1;
+    ctx.beginPath(); ctx.moveTo(rope[0].x, rope[0].y);
+    for (j = 1; j < N; j++) ctx.lineTo(rope[j].x, rope[j].y);
+    ctx.stroke();
+    // tail with little bows
+    ctx.strokeStyle = "#e83f6f"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(tail[0].x, tail[0].y);
+    for (j = 1; j < tail.length; j++) ctx.lineTo(tail[j].x, tail[j].y);
+    ctx.stroke();
+    for (j = 2; j < tail.length; j += 3) {
+      var q = tail[j]; ctx.fillStyle = j % 2 ? "#ffe066" : "#7fe0e8";
+      ctx.beginPath(); ctx.moveTo(q.x - 5.5, q.y - 4); ctx.lineTo(q.x + 5.5, q.y + 4); ctx.lineTo(q.x + 5.5, q.y - 4); ctx.lineTo(q.x - 5.5, q.y + 4); ctx.closePath(); ctx.fill();
+    }
+    // the kite itself, with a glow at night
+    ctx.save(); ctx.translate(kite.x, kite.y); ctx.rotate(kite.a);
+    if (isDark()) { var kg = ctx.createRadialGradient(0, 0, 2, 0, 0, 40); kg.addColorStop(0, "rgba(255,180,120,0.35)"); kg.addColorStop(1, "rgba(255,180,120,0)"); ctx.fillStyle = kg; ctx.fillRect(-40, -40, 80, 80); }
+    ctx.shadowColor = "rgba(0,0,0,0.25)"; ctx.shadowBlur = 6 * sc; ctx.shadowOffsetY = 3 * sc;
+    drawKiteShape(ctx, 1.3, "#e83f6f", "#ffbf3c", 4 + Math.sin(t * 8) * (reduce.matches ? 0 : 1.5));
+    ctx.restore();
+    // sparkles
+    sparks.forEach(function (s) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, s.life / s.max * 1.6));
+      ctx.fillStyle = s.c;
+      ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.rot || 0);
+      if (s.star) { ctx.beginPath(); for (var m = 0; m < 8; m++) { var rr2 = m % 2 ? s.s * 0.35 : s.s, a = m * Math.PI / 4; ctx.lineTo(Math.cos(a) * rr2, Math.sin(a) * rr2); } ctx.fill(); }
+      else ctx.fillRect(-s.s / 2, -s.s / 3, s.s, s.s * 0.66);
+      ctx.restore();
+    });
+    ctx.globalAlpha = 1;
+  }
+  function drawFlyer(t) {
+    // the flyer stands behind the parapet: kurta, cap, one arm up holding the line, a spool at the waist
+    var bob = reduce.matches ? 0 : Math.sin(t * 2.2) * 0.6;
+    ctx.save(); ctx.translate(0, bob);
+    ctx.fillStyle = P.kurta; ctx.beginPath(); ctx.moveTo(92, 449); ctx.lineTo(95, 424); ctx.quadraticCurveTo(103, 418, 112, 424); ctx.lineTo(116, 449); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,0.15)"; ctx.fillRect(104, 426, 2, 22);
+    ctx.fillStyle = "#c98b62"; ctx.beginPath(); ctx.arc(103, 410, 8.5, 0, TAU); ctx.fill();
+    ctx.fillStyle = "#2b2b3a"; ctx.beginPath(); ctx.arc(103, 407, 8.6, Math.PI * 1.05, Math.PI * 1.95); ctx.fill(); ctx.fillRect(96, 404, 15, 3);
+    ctx.fillStyle = "#3b2516"; ctx.beginPath(); ctx.arc(106.5, 410, 1.1, 0, TAU); ctx.fill();
+    // arm towards the hand
+    ctx.strokeStyle = P.kurta; ctx.lineWidth = 5; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(SH.x + 4, SH.y); ctx.lineTo(hand.x, hand.y); ctx.stroke();
+    ctx.fillStyle = "#c98b62"; ctx.beginPath(); ctx.arc(hand.x, hand.y, 3, 0, TAU); ctx.fill();
+    // spool, spinning when the line runs out
+    ctx.save(); ctx.translate(97, 440); ctx.rotate(spoolA);
+    ctx.fillStyle = "#b5793f"; ctx.beginPath(); ctx.arc(0, 0, 7, 0, TAU); ctx.fill();
+    ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(7, 0); ctx.moveTo(0, -7); ctx.lineTo(0, 7); ctx.stroke();
+    ctx.fillStyle = "#f2e6d0"; ctx.beginPath(); ctx.arc(0, 0, 3.4, 0, TAU); ctx.fill();
+    ctx.restore();
+    ctx.restore();
+  }
+  var spoolA = 0;
+
+  /* ---------- 7. Main loop ---------- */
+  var last = performance.now(), readT = 0, demoReel = false;
+  function frame(now) {
+    var dt = Math.min(0.033, (now - last) / 1000), t = now / 1000; last = now;
+    // the hand follows the line direction, with a jerk back on every tug
+    var ang = Math.atan2(kite.y - SH.y, kite.x - SH.x); ang = clamp(ang, -2.6, -0.3);
+    var pullBack = (pulling || t < holdUntil) && !reduce.matches ? Math.max(0, Math.sin(t * 16)) * 4 : 0;
+    hand.x = SH.x + Math.cos(ang) * (20 - pullBack); hand.y = SH.y + Math.sin(ang) * (20 - pullBack) + pullBack * 0.6;
+    if (letting || t < letUntil) spoolA += dt * 14;
+    stepKite(dt, t); stepRope(dt);
+    var calm = reduce.matches;
+    clouds.forEach(function (c) { c.x += c.sp * (0.4 + wind) * dt * (calm ? 0.4 : 1); if (c.x > 470) { c.x = -90; c.y = rnd(40, 250); } });
+    if (!calm && Math.random() < dt * wind * (1 + Math.max(0, gustAt(t)) * 3)) streaks.push({ x: rnd(-60, 300), y: rnd(30, 330), len: rnd(30, 80), life: 1 });
+    for (var j = streaks.length - 1; j >= 0; j--) { var s = streaks[j]; s.x += (160 + wind * 200) * dt; s.life -= dt * 1.2; if (s.life <= 0) streaks.splice(j, 1); }
+    for (j = sparks.length - 1; j >= 0; j--) { var p = sparks[j]; p.life -= dt; if (p.life <= 0) { sparks.splice(j, 1); continue; } p.vy += 60 * dt; p.vx *= 0.98; p.x += p.vx * dt; p.y += p.vy * dt; if (p.rot !== undefined) p.rot += p.vr * dt; }
+    // pigeons wheel around the kite, then come home
+    if (flockT > 0) flockT -= dt;
+    pigeons.forEach(function (p, n) {
+      p.t += dt;
+      if (p.mode === "fly") {
+        if (p.delay > 0) { p.delay -= dt; return; }
+        p.ang += dt * 1.6;
+        var cx = kite.x * 0.6 + 120, cy = Math.min(300, kite.y + 40), tx = cx + Math.cos(p.ang) * p.rad, ty = cy + Math.sin(p.ang) * p.rad * 0.45;
+        p.x += (tx - p.x) * Math.min(1, dt * 2.2); p.y += (ty - p.y) * Math.min(1, dt * 2.2);
+        if (flockT <= 0) p.mode = "home";
+      } else if (p.mode === "home") {
+        var dx = p.hx - p.x, dy = p.hy - p.y, dd = Math.hypot(dx, dy);
+        if (dd < 1) { p.mode = "sit"; p.x = p.hx; p.y = p.hy; } else { var sp = Math.min(dd * 2, 90) * dt; p.x += dx / dd * sp; p.y += dy / dd * sp; }
+      } else { p.x = p.hx + (Math.sin(p.t * 0.7 + n) > 0.85 ? 1.5 : 0); p.y = p.hy; }
+    });
+    readT -= dt;
+    if (readT <= 0) { readT = 0.2; $("readout").textContent = "Height " + Math.round(heightM()) + " m · Line " + Math.round(line * 0.42) + " m"; }
+    draw(t);
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- 8. Input: hold buttons, the sky, keys and the wind slider ---------- */
+  function nowS() { return performance.now() / 1000; }
+  function startPull() { if (!pulling) { pulling = true; tug = 1; $("pull").classList.add("held"); } }
+  function endPull() { if (pulling) { pulling = false; holdUntil = nowS() + 0.25; $("pull").classList.remove("held"); } }
+  function startLet() { if (!letting) { letting = true; $("letOut").classList.add("held"); } }
+  function endLet() { if (letting) { letting = false; letUntil = nowS() + 0.35; $("letOut").classList.remove("held"); if (line >= 399) say("All the line is out. Pull to bring it in."); } }
+  function holdButton(btn, start, end) {
+    var lastStart = -9;
+    function go() { lastStart = nowS(); start(); }
+    btn.addEventListener("pointerdown", function (e) { e.preventDefault(); go(); try { btn.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ } });
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach(function (ev) { btn.addEventListener(ev, end); });
+    btn.addEventListener("keydown", function (e) { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); go(); } });
+    btn.addEventListener("keyup", function (e) { if (e.key === " " || e.key === "Enter") { e.preventDefault(); end(); } });
+    btn.addEventListener("blur", end);
+    // a click that did not come with a press (for example from a screen reader) is a short tug
+    btn.addEventListener("click", function () { if (nowS() - lastStart < 0.6) return; go(); setTimeout(end, 300); });
+  }
+  holdButton($("pull"), function () { startPull(); say("Pulling: the kite climbs into the wind."); }, endPull);
+  holdButton($("letOut"), function () { startLet(); say("Letting out line: the kite drifts further and higher."); }, endLet);
+  $("loop").addEventListener("click", function () {
+    if (loopT >= 0) return;
+    if (heightM() < 30) { say("Get the kite above 30 metres first, then try a loop."); badge("Climb higher first"); return; }
+    loopFrom = { x: kite.x, y: kite.y }; loopT = 0; say("Loop!");
+  });
+  var NAMES = ["Still", "Light air", "Breezy", "Windy", "Gusty"];
+  $("wind").addEventListener("input", function (e) {
+    wind = e.target.value / 100;
+    $("windOut").textContent = NAMES[Math.min(4, Math.floor(wind * 4.99))];
+  });
+  function logical(e) { var r = scene.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; }
+  scene.addEventListener("pointermove", function (e) { if (e.isTrusted) steerX = logical(e).x; });
+  scene.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse") steerX = null; });
+  scene.addEventListener("pointerdown", function (e) {
+    var p = logical(e); steerX = p.x;
+    if (p.x > 240 && p.x < 350 && p.y > 300 && p.y < 420) { scarePigeons(); say("Whoosh: the pigeons take off."); }
+    startPull();
+    try { scene.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  });
+  ["pointerup", "pointercancel"].forEach(function (ev) { scene.addEventListener(ev, endPull); });
+  window.addEventListener("keydown", function (e) {
+    if (e.target && e.target.id === "wind") return;
+    if (e.key === "ArrowUp") { e.preventDefault(); startPull(); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); startLet(); }
+    else if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); steerX = clamp((steerX == null ? kite.x : steerX) + (e.key === "ArrowLeft" ? -24 : 24), 20, 380); }
+  });
+  window.addEventListener("keyup", function (e) { if (e.key === "ArrowUp") endPull(); if (e.key === "ArrowDown") endLet(); });
+
+  /* ---------- 9. Auto demo until the visitor takes over ---------- */
+  var demoOn = true, timers = [];
+  function at(ms, fn) { timers.push(setTimeout(function () { if (demoOn) fn(); }, ms)); }
+  function demo() {
+    if (!demoOn) return;
+    at(200, function () { startLet(); autoSteer = 10; });
+    at(1900, function () { endLet(); });
+    at(2300, function () { startPull(); });
+    at(3900, function () { endPull(); });
+    at(4500, function () { $("loop").click(); });
+    at(6600, function () { autoSteer = -105; });
+    at(8200, function () { autoSteer = 55; startLet(); });
+    at(9400, function () { endLet(); startPull(); });
+    at(10600, function () { endPull(); });
+    at(11200, function () { demoReel = true; startPull(); });
+    at(13400, function () { endPull(); demoReel = false; autoSteer = 0; });
+    at(14200, demo);
+  }
+  function stopDemo(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false; timers.forEach(clearTimeout); autoSteer = 0; demoReel = false;
+    if (pulling && e.target !== $("pull")) endPull();
+    if (letting) endLet();
+  }
+  ["pointerdown", "keydown", "wheel"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+
+  requestAnimationFrame(frame);
+  demo();
+})();
+</script>
+</body>
+</html>

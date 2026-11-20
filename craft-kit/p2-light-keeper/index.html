@@ -1,0 +1,555 @@
+<!doctype html>
+<!-- Chill & Craft · Light Keeper · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Light Keeper · guide the boats home with a lighthouse beam</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL wins over the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    --page: #e9edf6; --page2: #cfd9ef; --ink: #142036; --muted: #55637d; --line: rgba(20, 32, 54, 0.12);
+    --chip: rgba(255, 255, 255, 0.82); --btn: #1d3566; --btnInk: #fff3d6; --on: #f2b33d; --onInk: #241705; --focus: #c2410c;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #050913; --page2: #0f1b36; --ink: #eef2fb; --muted: #9eabc4; --line: rgba(255, 255, 255, 0.1);
+      --chip: rgba(18, 26, 46, 0.84); --btn: #f2c45a; --btnInk: #1a1204; --on: #f2c45a; --onInk: #1a1204; --focus: #ffb35c;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #050913; --page2: #0f1b36; --ink: #eef2fb; --muted: #9eabc4; --line: rgba(255, 255, 255, 0.1);
+    --chip: rgba(18, 26, 46, 0.84); --btn: #f2c45a; --btnInk: #1a1204; --on: #f2c45a; --onInk: #1a1204; --focus: #ffb35c;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; overflow-x: clip;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(110% 70% at 50% 0%, var(--page2), transparent 70%), var(--page);
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; overflow-x: clip; }
+  .cap, .scene, .speed { width: min(500px, 100%, calc((100vh - 270px) * 0.8)); min-width: 260px; }
+  .controls { width: min(520px, 100%); }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0 4px; font-size: 13px; color: var(--muted); }
+  .cap b { font-size: 15px; color: var(--ink); }
+  .cap span { font-variant-numeric: tabular-nums; text-align: right; }
+  .scene {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 26px; overflow: hidden; isolation: isolate; touch-action: none; cursor: crosshair;
+    background: #0c1a3d;
+    box-shadow: 0 30px 60px -24px rgba(5, 12, 30, 0.7), 0 10px 22px -12px rgba(5, 12, 30, 0.45), inset 0 0 0 1px var(--line);
+  }
+  .scene:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 10px 16px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--chip); color: var(--ink); font: 600 14px/1 system-ui, sans-serif;
+    box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.4); transition: transform 0.18s cubic-bezier(.3, 1.6, .5, 1), background 0.25s, color 0.25s;
+  }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(1px) scale(0.97); }
+  .btn[aria-pressed="true"] { background: var(--on); color: var(--onInk); border-color: transparent; }
+  .btn.main[aria-pressed="false"] { background: var(--btn); color: var(--btnInk); }
+  .btn:focus-visible, input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .speed { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; font: 600 13px/1 system-ui, sans-serif; color: var(--muted); }
+  .speed output { min-width: 58px; text-align: right; color: var(--ink); }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; margin: 0; cursor: pointer; border-radius: 8px; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 6px; background: linear-gradient(90deg, #1d3566, #f2c45a); }
+  input[type="range"]::-moz-range-track { height: 6px; border-radius: 6px; background: linear-gradient(90deg, #1d3566, #f2c45a); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: #fff; border: 3px solid #f2b33d; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); }
+  input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid #f2b33d; }
+  .status { margin: 0; min-height: 1.4em; font-size: 14px; font-weight: 600; text-align: center; max-width: 500px; }
+  .hint { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); text-align: center; max-width: 500px; }
+  @media (max-height: 720px) { .hint { display: none; } }
+  @media (max-width: 420px) { .btn { padding: 10px 12px; font-size: 13px; gap: 6px; } }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Light Keeper: aim a lighthouse beam to guide fishing boats into the harbour</h1>
+  <div class="cap"><b>Light Keeper</b><span id="tally">Saved 0</span></div>
+  <div class="scene" id="scene" tabindex="0" role="application" aria-label="Night sea with a lighthouse. Drag, or use the left and right arrow keys, to aim the beam at a boat." aria-describedby="hint">
+    <canvas id="cv" aria-hidden="true"></canvas>
+  </div>
+  <div class="controls">
+    <button class="btn main" id="lamp" type="button" aria-pressed="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21h6M10 21l1 -11h2l1 11M8 10h8l-1 -4h-6z M12 2v2M4 6l2 1M20 6l-2 1"/></svg>
+      <span id="lampLabel">Lamp on</span>
+    </button>
+    <button class="btn" id="fog" type="button" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 9h14M6 13h15M3 17h12M8 5h9"/></svg>
+      Fog
+    </button>
+    <button class="btn" id="horn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4h3l6 4V6L7 10z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>
+      Foghorn
+    </button>
+  </div>
+  <label class="speed" for="speed"><span>Turn</span><input id="speed" type="range" min="1" max="10" value="5"><output id="speedOut" for="speed">9 s</output></label>
+  <p class="status" id="status" aria-live="polite">The lamp turns. Catch a lost boat in the beam to guide it home.</p>
+  <p class="hint" id="hint">Drag on the sea to aim the beam. The foghorn warns boats away from the rocks. The moon shows tonight's real phase.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var W = 400, H = 500, TAU = Math.PI * 2;
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  var darkQ = matchMedia("(prefers-color-scheme: dark)");
+  function isDark() { var t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : darkQ.matches; }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function angDiff(a, b) { var d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; }
+  var scene = $("scene"), cv = $("cv"), ctx = cv.getContext("2d"), statusEl = $("status");
+  function say(m) { statusEl.textContent = m; }
+
+  /* ---------- 1. A tiny 3D world: camera at sea level + 10, horizon at y = 300 ---------- */
+  var FOC = 400, HZ = 300, EYE = 10, CX = 200;
+  function proj(X, Y, Z) { return { x: CX + FOC * X / Z, y: HZ - FOC * (Y - EYE) / Z }; }
+  var LX = -18.3, LY = 25.9, LZ = 60; // the lamp: projects to (78, 194)
+  var LAMP = proj(LX, LY, LZ);
+  function seaPoint(x, y) { var Z = FOC * EYE / Math.max(0.5, y - HZ); return { X: (x - CX) * Z / FOC, Z: Z }; }
+
+  /* ---------- 2. Tonight's moon from the real date ---------- */
+  var SYN = 29.530588853, ref = Date.UTC(2000, 0, 6, 18, 14);
+  var moonP = (((Date.now() - ref) / 86400000) % SYN + SYN) % SYN / SYN; // 0 new, 0.5 full
+  var illum = Math.round((1 - Math.cos(moonP * TAU)) / 2 * 100);
+  var PHASES = ["New moon", "Waxing crescent", "First quarter", "Waxing gibbous", "Full moon", "Waning gibbous", "Last quarter", "Waning crescent"];
+  var phaseName = PHASES[Math.floor((moonP * 8 + 0.5)) % 8];
+
+  /* ---------- 3. Palettes and the painted still layer (cliff, lighthouse, cottage, pier) ---------- */
+  var DARK = { sky: ["#02061a", "#0b1838", "#1d3264"], sea: ["#0e1d3d", "#050b1a"], wave: "170,200,255", rim: "#34446a", cliff: ["#0a0e19", "#121a2c"],
+    white: "#d9dee8", red: "#a8323a", stars: 1, moon: "#f2efe2", cottage: "#1c2233", cloud: "52,70,118", cloudA: 0.7 };
+  var LIGHT = { sky: ["#1a3264", "#4d68a2", "#e2a688"], sea: ["#36558a", "#162746"], wave: "220,230,255", rim: "#7d8db6", cliff: ["#141b2e", "#232c45"],
+    white: "#eef0f5", red: "#c63f3f", stars: 0.35, moon: "#fbf7e8", cottage: "#2a3146", cloud: "255,214,196", cloudA: 0.45 };
+  var P = DARK, still = document.createElement("canvas"), sc = 1, cloudS = document.createElement("canvas");
+  cloudS.width = cloudS.height = 64;
+  var CLIFF = [[0, 318], [30, 311], [62, 322], [118, 326], [148, 334], [164, 352], [172, 372], [188, 402], [202, 440], [212, 500], [0, 500]];
+  function cliffX(y) { for (var i = 4; i < 10; i++) { var a = CLIFF[i], b = CLIFF[i + 1]; if (y >= a[1] && y <= b[1]) return a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]); } return y < 334 ? 148 : 212; }
+  function paintStill() {
+    P = isDark() ? DARK : LIGHT;
+    // a soft cloud sprite in tonight's colour
+    var cg0 = cloudS.getContext("2d"), cgr = cg0.createRadialGradient(32, 32, 0, 32, 32, 32);
+    cgr.addColorStop(0, "rgba(" + P.cloud + ",0.9)"); cgr.addColorStop(0.55, "rgba(" + P.cloud + ",0.45)"); cgr.addColorStop(1, "rgba(" + P.cloud + ",0)");
+    cg0.clearRect(0, 0, 64, 64); cg0.fillStyle = cgr; cg0.fillRect(0, 0, 64, 64);
+    still.width = cv.width; still.height = cv.height;
+    var g = still.getContext("2d"), i;
+    g.setTransform(sc, 0, 0, sc, 0, 0);
+    // pier with posts on the right
+    g.fillStyle = "#1a1f2c"; g.fillRect(296, 382, 110, 7);
+    for (i = 300; i < 404; i += 14) g.fillRect(i, 386, 3, 14);
+    g.fillStyle = "rgba(255,255,255,0.12)"; g.fillRect(296, 382, 110, 1.5);
+    g.fillStyle = "#2a3040"; g.fillRect(300, 362, 6, 20); g.fillRect(392, 356, 6, 26);
+    // cliff with a moonlit rim
+    var cg = g.createLinearGradient(0, 310, 160, 500); cg.addColorStop(0, P.cliff[1]); cg.addColorStop(1, P.cliff[0]);
+    g.fillStyle = cg; g.beginPath(); CLIFF.forEach(function (p, j) { j ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.closePath(); g.fill();
+    g.strokeStyle = P.rim; g.lineWidth = 1.6; g.beginPath(); for (i = 0; i < 10; i++) { i ? g.lineTo(CLIFF[i][0], CLIFF[i][1]) : g.moveTo(CLIFF[i][0], CLIFF[i][1]); } g.stroke();
+    g.fillStyle = "rgba(0,0,0,0.12)";
+    [[40, 360, 30], [96, 410, 40], [30, 450, 36], [140, 470, 30]].forEach(function (r) { g.beginPath(); g.ellipse(r[0], r[1], r[2], r[2] * 0.45, -0.3, 0, TAU); g.fill(); });
+    // keeper's cottage with a lit window
+    g.fillStyle = P.cottage; g.fillRect(104, 312, 34, 18);
+    g.beginPath(); g.moveTo(100, 313); g.lineTo(121, 300); g.lineTo(142, 313); g.closePath(); g.fillStyle = "#3a2630"; g.fill();
+    g.fillRect(130, 298, 5, 10);
+    g.fillStyle = "#ffcf73"; g.fillRect(110, 317, 8, 7); g.fillRect(124, 317, 8, 7);
+    var wg = g.createRadialGradient(121, 320, 0, 121, 320, 26); wg.addColorStop(0, "rgba(255,207,115,0.35)"); wg.addColorStop(1, "rgba(255,207,115,0)");
+    g.fillStyle = wg; g.fillRect(90, 296, 62, 50);
+    // the tower: tapered, with red bands, a door, a gallery and a dome
+    var tw = g.createLinearGradient(61, 0, 95, 0); tw.addColorStop(0, P.white); tw.addColorStop(0.6, P.white); tw.addColorStop(1, "#8a93a6");
+    g.fillStyle = tw; g.beginPath(); g.moveTo(61, 330); g.lineTo(67, 206); g.lineTo(89, 206); g.lineTo(95, 330); g.closePath(); g.fill();
+    g.save(); g.clip();
+    for (i = 0; i < 4; i++) { g.fillStyle = P.red; g.fillRect(55, 222 + i * 28, 46, 13); }
+    g.fillStyle = "rgba(0,0,0,0.22)"; g.fillRect(85, 200, 14, 140);
+    g.restore();
+    g.fillStyle = "#1a1f2c"; g.beginPath(); g.moveTo(73, 330); g.lineTo(73, 318); g.arc(78, 318, 5, Math.PI, 0); g.lineTo(83, 330); g.closePath(); g.fill();
+    g.fillStyle = "#ffcf73"; g.fillRect(76, 262, 4, 6); g.fillRect(76, 292, 4, 6);
+    g.fillStyle = "#20242f"; g.fillRect(62, 202, 32, 5);
+    g.strokeStyle = "#20242f"; g.lineWidth = 1; g.beginPath(); for (i = 63; i <= 93; i += 5) { g.moveTo(i, 202); g.lineTo(i, 196); } g.moveTo(62, 196); g.lineTo(94, 196); g.stroke();
+    g.fillStyle = "#2a2f3c"; g.fillRect(68, 182, 3, 20); g.fillRect(85, 182, 3, 20);
+    g.beginPath(); g.moveTo(66, 183); g.quadraticCurveTo(78, 166, 90, 183); g.closePath(); g.fillStyle = P.red; g.fill();
+    g.fillStyle = "#20242f"; g.beginPath(); g.arc(78, 170, 2.2, 0, TAU); g.fill(); g.fillRect(77.4, 160, 1.2, 10);
+  }
+  function resize() {
+    var r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.max(2, Math.round(r.width * dpr)); cv.height = Math.max(2, Math.round(r.height * dpr)); sc = cv.width / W;
+    paintStill();
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(scene); else window.addEventListener("resize", resize);
+  darkQ.addEventListener && darkQ.addEventListener("change", paintStill);
+  resize();
+
+  var stars = [], clouds = [], i;
+  for (i = 0; i < 80; i++) stars.push({ x: rnd(0, W), y: rnd(0, 280), r: 0.4 + Math.pow(Math.random(), 3) * 1.4, ph: rnd(0, 6) });
+  for (i = 0; i < 5; i++) clouds.push({ x: rnd(-100, 400), y: rnd(60, 250), w: rnd(90, 170), h: rnd(10, 20), sp: rnd(2, 6) });
+  // soft sprites for glows and fog
+  function sprite(rgb) { var s = document.createElement("canvas"); s.width = s.height = 64; var g = s.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(" + rgb + ",1)"); gr.addColorStop(1, "rgba(" + rgb + ",0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return s; }
+  var warm = sprite("255,214,140"), white = sprite("255,246,225"), fogS = sprite("170,185,215"), greenS = sprite("90,255,160"), redS = sprite("255,80,70");
+  var fogBlobs = [];
+  for (i = 0; i < 16; i++) fogBlobs.push({ x: rnd(-60, 460), y: rnd(250, 470), s: rnd(90, 170), sp: rnd(5, 12) });
+
+  /* ---------- 4. The lamp: auto rotation, manual aim, ignition and the projected beam ---------- */
+  var lamp = { on: true, level: 0, flick: [], phi: 0.3, omega: 0, tau: 0.05, manual: false, manualUntil: 0, aimPhi: 0, aimTau: 0.05 };
+  var period = 9;
+  function ignite(on) {
+    lamp.on = on;
+    lamp.flick = on && !reduce.matches ? [[0.12, 0.7], [0.2, 0.05], [0.34, 0.85], [0.42, 0.15], [0.6, 1]] : [];
+    lamp.flickT = 0;
+    $("lamp").setAttribute("aria-pressed", on ? "true" : "false");
+    $("lampLabel").textContent = on ? "Lamp on" : "Lamp off";
+  }
+  function beamGeom(phi, tau) {
+    var ct = Math.cos(tau), dx = Math.cos(phi) * ct, dy = -Math.sin(tau), dz = Math.sin(phi) * ct;
+    var sHit = tau > 0.002 ? LY / Math.sin(tau) : 3000, sMax = Math.min(sHit, 2400), pts = [], SEG = 22;
+    for (var k = 0; k <= SEG; k++) {
+      var s = 0.8 * Math.pow(sMax / 0.8, k / SEG), X = LX + dx * s, Y = LY + dy * s, Z = LZ + dz * s;
+      if (Z < 26) break; // towards the camera: stop before it fills the view (the glare shows it instead)
+      var c = proj(X, Y, Z), w = 0.35 + s * 0.045;
+      pts.push({ x: c.x, y: c.y, r: FOC * w / Z, s: s });
+    }
+    return { pts: pts, hit: pts.length > SEG && sHit <= 2400, dx: dx, dy: dy, dz: dz, reach: sHit * ct };
+  }
+  function drawBeam(phi, tau, I, fogF) {
+    var b = beamGeom(phi, tau), p = b.pts;
+    if (p.length < 2 || I <= 0.01) return b;
+    var L = [], R = [], k;
+    for (k = 0; k < p.length; k++) {
+      var a = p[Math.max(0, k - 1)], c = p[Math.min(p.length - 1, k + 1)], tx = c.x - a.x, ty = c.y - a.y, tl = Math.hypot(tx, ty) || 1, nx = -ty / tl, ny = tx / tl;
+      L.push([p[k].x + nx * p[k].r, p[k].y + ny * p[k].r]); R.push([p[k].x - nx * p[k].r, p[k].y - ny * p[k].r]);
+    }
+    var end = p[p.length - 1], gr = ctx.createLinearGradient(p[0].x, p[0].y, end.x, end.y), boost = 1 + fogF * 1.2;
+    gr.addColorStop(0, "rgba(255,244,214," + (0.75 * I * boost).toFixed(3) + ")");
+    gr.addColorStop(0.35, "rgba(255,236,190," + (0.32 * I * boost).toFixed(3) + ")");
+    gr.addColorStop(1, "rgba(255,230,180," + (b.hit ? 0.1 * I : 0).toFixed(3) + ")");
+    ctx.fillStyle = gr; ctx.beginPath();
+    L.forEach(function (q, j) { j ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); });
+    for (k = R.length - 1; k >= 0; k--) ctx.lineTo(R[k][0], R[k][1]);
+    ctx.closePath(); ctx.fill();
+    // bright core
+    ctx.beginPath();
+    for (k = 0; k < p.length; k++) { var q2 = L[k]; ctx[k ? "lineTo" : "moveTo"](p[k].x + (q2[0] - p[k].x) * 0.3, p[k].y + (q2[1] - p[k].y) * 0.3); }
+    for (k = p.length - 1; k >= 0; k--) ctx.lineTo(p[k].x + (R[k][0] - p[k].x) * 0.3, p[k].y + (R[k][1] - p[k].y) * 0.3);
+    ctx.closePath(); ctx.fill();
+    if (b.hit) { // a pool of light where the beam meets the water
+      ctx.globalAlpha = Math.min(1, 0.8 * I * boost);
+      ctx.drawImage(white, end.x - end.r * 2.2, end.y - end.r * 0.8, end.r * 4.4, end.r * 1.6);
+      ctx.globalAlpha = 1;
+    }
+    // glare when the beam swings towards you
+    var tc = [-LX, EYE - LY, -LZ], tl2 = Math.hypot(tc[0], tc[1], tc[2]), dot = (b.dx * tc[0] + b.dy * tc[1] + b.dz * tc[2]) / tl2;
+    var flare = Math.pow(Math.max(0, dot), 14) * I;
+    if (flare > 0.01) {
+      var fr = 22 + 110 * flare;
+      ctx.globalAlpha = Math.min(0.75, flare * 0.8); ctx.drawImage(white, LAMP.x - fr, LAMP.y - fr, fr * 2, fr * 2);
+      ctx.strokeStyle = "rgba(255,248,230," + (0.6 * flare).toFixed(3) + ")"; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(LAMP.x - fr * 0.85, LAMP.y); ctx.lineTo(LAMP.x + fr * 0.85, LAMP.y); ctx.moveTo(LAMP.x, LAMP.y - fr * 0.5); ctx.lineTo(LAMP.x, LAMP.y + fr * 0.5); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    return b;
+  }
+  function beams() { return lamp.manual ? [lamp.phi] : [lamp.phi, lamp.phi + Math.PI]; }
+
+  /* ---------- 5. Boats: drift in lost, get caught by the beam, sail into harbour ---------- */
+  var boats = [], saved = 0, bumps = 0, SLOTS = [{ x: 318 }, { x: 352 }, { x: 386 }], HULLS = ["#b8433a", "#2f6fa3", "#d9a441", "#3f8f6a", "#7b5bb5"];
+  var MOUTH = seaPoint(352, 376);
+  SLOTS.forEach(function (s) { var q = seaPoint(s.x, 381); s.X = q.X; s.Z = q.Z; s.boat = null; });
+  function spawnBoat(x) {
+    if (boats.filter(function (b) { return b.mode !== "docked"; }).length >= 4) return;
+    var q = seaPoint(x == null ? rnd(190, 390) : x, rnd(312, 326));
+    boats.push({ X: q.X, Z: q.Z, mode: "lost", lit: 0, warn: 0, hull: HULLS[Math.floor(Math.random() * HULLS.length)], ph: rnd(0, 6), toot: 0, fade: 1, slot: null, ping: 0, bumpT: 0 });
+  }
+  function boatScreen(b) { var c = proj(b.X, 0, b.Z); c.s = Math.min(34, 6 * FOC / b.Z); return c; }
+  function stepBoats(dt, t, I) {
+    var bs = beams(), i;
+    for (i = boats.length - 1; i >= 0; i--) {
+      var b = boats[i], c = boatScreen(b);
+      if (b.mode === "lost") {
+        b.Z -= b.Z * 0.07 * dt;
+        b.X += (b.warn > 0 ? 0.03 : -0.016) * b.Z * dt;
+        if (b.warn > 0) b.warn -= dt;
+        // in the beam long enough? then it has seen the way home
+        var hx = b.X - LX, hz = b.Z - LZ, bd = Math.hypot(hx, hz), bp = Math.atan2(hz, hx), inBeam = false;
+        bs.forEach(function (ph) { var g = beamGeom(ph, lamp.tau); if (Math.abs(angDiff(bp, ph)) < 0.045 + 4 / bd && bd < g.reach * 1.3) inBeam = true; });
+        if (inBeam && I > 0.3) { b.lit += dt; if (b.lit > 0.3) { b.mode = "home"; b.ping = 1; burst(c.x, c.y - c.s * 0.5, 10, "#fff3c4"); say("Boat spotted. It has turned for the harbour."); } }
+        else b.lit = Math.max(0, b.lit - dt * 0.5);
+        if (c.x - c.s * 0.5 < cliffX(c.y) + 3 && b.bumpT <= 0) {
+          b.bumpT = 2; b.warn = 2.5; bumps++; splash(c.x - c.s * 0.4, c.y, 18);
+          say("Bump! A boat scraped the rocks. Light it up or sound the foghorn.");
+        }
+        if (b.bumpT > 0) b.bumpT -= dt;
+        if (b.Z < 26) { boats.splice(i, 1); continue; } // drifted out of view
+      } else if (b.mode === "home") {
+        b.Z += (MOUTH.Z - b.Z) * Math.min(1, dt * 0.7);
+        b.X += (MOUTH.X - b.X) * Math.min(1, dt * 0.9);
+        if (Math.abs(b.Z - MOUTH.Z) < 2.5 && Math.abs(b.X - MOUTH.X) < 2) dock(b);
+      } else if (b.mode === "docked") {
+        b.Z += (b.slot.Z - b.Z) * Math.min(1, dt * 2); b.X += (b.slot.X - b.X) * Math.min(1, dt * 2);
+        if (b.toot > 0) b.toot -= dt;
+      } else if (b.mode === "leave") {
+        b.X += 3 * dt; b.fade -= dt * 0.6;
+        if (b.fade <= 0) { boats.splice(i, 1); continue; }
+      }
+      if (b.ping > 0) b.ping -= dt * 1.5;
+    }
+  }
+  function dock(b) {
+    var slot = SLOTS.filter(function (s) { return !s.boat; })[0];
+    if (!slot) { // harbour full: the boat that came first heads out to fish again
+      var first = SLOTS[0].boat; first.mode = "leave"; first.slot = null; SLOTS[0].boat = SLOTS[1].boat; SLOTS[1].boat = SLOTS[2].boat; SLOTS[2].boat = null;
+      SLOTS.forEach(function (s) { if (s.boat) s.boat.slot = s; });
+      slot = SLOTS[2];
+    }
+    slot.boat = b; b.slot = slot; b.mode = "docked"; b.toot = 1.4; saved++;
+    var c = boatScreen(b); burst(c.x, c.y - 10, 22, null);
+    $("tally").textContent = "Saved " + saved + " · " + phaseName;
+    say("Home safe: " + saved + (saved === 1 ? " boat" : " boats") + " in the harbour tonight.");
+  }
+  function drawBoat(b, t) {
+    var c = boatScreen(b), s = c.s, bob = reduce.matches ? 0 : Math.sin(t * 2 + b.ph) * s * 0.06, tilt = reduce.matches ? 0 : Math.sin(t * 1.6 + b.ph) * 0.06;
+    var dir = b.mode === "home" || b.mode === "leave" ? 1 : b.mode === "docked" ? -1 : -1;
+    ctx.save(); ctx.globalAlpha = b.fade * (1 - fog * 0.45 * (b.mode === "docked" ? 0 : 1)); ctx.translate(c.x, c.y + bob); ctx.rotate(tilt); ctx.scale(dir, 1);
+    // hull, cabin, mast and lantern
+    ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(0, s * 0.02, s * 0.55, s * 0.06, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = b.hull; ctx.beginPath(); ctx.moveTo(-s * 0.5, -s * 0.16); ctx.lineTo(s * 0.55, -s * 0.2); ctx.lineTo(s * 0.36, 0); ctx.lineTo(-s * 0.4, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.75)"; ctx.fillRect(-s * 0.5, -s * 0.19, s * 1.04, s * 0.03);
+    ctx.fillStyle = "#e9e4d8"; ctx.fillRect(-s * 0.32, -s * 0.36, s * 0.3, s * 0.18);
+    ctx.fillStyle = "#ffcf73"; ctx.fillRect(-s * 0.27, -s * 0.32, s * 0.08, s * 0.07);
+    ctx.strokeStyle = "#2a2a30"; ctx.lineWidth = Math.max(0.6, s * 0.025); ctx.beginPath(); ctx.moveTo(s * 0.12, -s * 0.19); ctx.lineTo(s * 0.12, -s * 0.62); ctx.stroke();
+    ctx.restore();
+    // lantern glow: dim and flickering when lost, steady when going home, green running light
+    var lx = c.x + dir * s * 0.12, ly = c.y + bob - s * 0.62;
+    var lost = b.mode === "lost", fl = lost ? 0.45 + 0.35 * Math.sin(t * 9 + b.ph) * Math.sin(t * 3.3) : 1;
+    var gs = Math.max(13, s * 0.9);
+    ctx.globalAlpha = b.fade * fl; ctx.drawImage(warm, lx - gs / 2, ly - gs / 2, gs, gs);
+    ctx.fillStyle = "#fff0c0"; ctx.beginPath(); ctx.arc(lx, ly, Math.max(0.8, s * 0.035), 0, TAU); ctx.fill();
+    if (!lost) { ctx.globalAlpha = b.fade * 0.9; var gg = Math.max(6, s * 0.4); ctx.drawImage(greenS, c.x - dir * s * 0.45 - gg / 2, c.y + bob - s * 0.2 - gg / 2, gg, gg); }
+    if (b.ping > 0) { ctx.globalAlpha = b.ping; ctx.strokeStyle = "#fff3c4"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(c.x, c.y - s * 0.3, s * 0.4 + (1 - b.ping) * 30, 0, TAU); ctx.stroke(); }
+    ctx.globalAlpha = 1;
+    if (b.toot > 0) { // a toot bubble from the docked boat
+      var a = Math.min(1, b.toot * 2), yy = c.y - s * 0.9 - (1.4 - b.toot) * 10;
+      ctx.globalAlpha = a; ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(c.x - 20, yy - 11, 40, 16, 8) : ctx.rect(c.x - 20, yy - 11, 40, 16); ctx.fill();
+      ctx.fillStyle = "#142036"; ctx.font = "800 9px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("TOOT!", c.x, yy + 0.5); ctx.globalAlpha = 1;
+    }
+  }
+
+  /* ---------- 6. Particles, foghorn rings and fog ---------- */
+  var parts = [], rings = [], fog = 0, fogOn = false;
+  function burst(x, y, n, col) {
+    if (reduce.matches) n = Math.ceil(n / 3);
+    for (var j = 0; j < n; j++) { var a = rnd(0, TAU), v = rnd(30, 110); parts.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, life: rnd(0.6, 1.2), c: col || ["#ffe08a", "#ffffff", "#9ff0c8", "#ffb3c1"][j % 4], g: 90 }); }
+  }
+  function splash(x, y, n) { if (reduce.matches) n = Math.ceil(n / 3); for (var j = 0; j < n; j++) parts.push({ x: x + rnd(-6, 6), y: y, vx: rnd(-50, 50), vy: -rnd(40, 120), life: rnd(0.5, 1), c: "rgba(235,245,255,0.9)", g: 260 }); }
+  var audio = null;
+  function hornSound() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      audio = audio || new AC(); if (audio.state === "suspended") audio.resume();
+      var now = audio.currentTime, out = audio.createGain(), lp = audio.createBiquadFilter();
+      lp.type = "lowpass"; lp.frequency.value = 520; out.gain.setValueAtTime(0, now); out.gain.linearRampToValueAtTime(0.22, now + 0.35); out.gain.setValueAtTime(0.22, now + 1.4); out.gain.linearRampToValueAtTime(0, now + 2.3);
+      [98, 147, 196].forEach(function (f, j) { var o = audio.createOscillator(); o.type = j ? "sawtooth" : "triangle"; o.frequency.value = f; o.connect(lp); o.start(now); o.stop(now + 2.4); });
+      lp.connect(out); out.connect(audio.destination);
+    } catch (err) { /* sound is optional */ }
+  }
+  function foghorn(withSound) {
+    if (withSound) hornSound();
+    rings.push({ r: 4, life: 1 }); setTimeout(function () { rings.push({ r: 4, life: 1 }); }, 420);
+    var lost = boats.filter(function (b) { return b.mode === "lost"; }).length;
+    say(lost ? "Foghorn! Lost boats steer away from the rocks." : "Foghorn sounds across the bay.");
+  }
+
+  /* ---------- 7. Drawing the night ---------- */
+  function draw(t, I) {
+    ctx.setTransform(sc, 0, 0, sc, 0, 0);
+    var sg = ctx.createLinearGradient(0, 0, 0, HZ); sg.addColorStop(0, P.sky[0]); sg.addColorStop(0.6, P.sky[1]); sg.addColorStop(1, P.sky[2]);
+    ctx.fillStyle = sg; ctx.fillRect(0, 0, W, HZ + 1);
+    var j;
+    for (j = 0; j < stars.length; j++) { var st = stars[j]; ctx.globalAlpha = P.stars * (0.45 + 0.45 * Math.sin(t * 1.4 + st.ph)) * (1 - fog * 0.7); ctx.fillStyle = "#fff"; ctx.fillRect(st.x, st.y, st.r, st.r); }
+    ctx.globalAlpha = 1;
+    // the moon in tonight's phase
+    var mx = 306, my = 88, mr = 17;
+    ctx.globalAlpha = 0.5; ctx.drawImage(white, mx - 60, my - 60, 120, 120); ctx.globalAlpha = 1;
+    ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.beginPath(); ctx.arc(mx, my, mr, 0, TAU); ctx.fill();
+    var kk = Math.cos(moonP * TAU), rx = mr * Math.abs(kk), wax = moonP < 0.5;
+    ctx.fillStyle = P.moon; ctx.beginPath();
+    if (wax) { ctx.arc(mx, my, mr, -Math.PI / 2, Math.PI / 2, false); if (kk > 0) ctx.ellipse(mx, my, rx, mr, 0, Math.PI / 2, -Math.PI / 2, true); else ctx.ellipse(mx, my, rx, mr, 0, Math.PI / 2, Math.PI * 1.5, false); }
+    else { ctx.arc(mx, my, mr, Math.PI / 2, Math.PI * 1.5, false); if (kk > 0) ctx.ellipse(mx, my, rx, mr, 0, Math.PI * 1.5, Math.PI / 2, true); else ctx.ellipse(mx, my, rx, mr, 0, -Math.PI / 2, Math.PI / 2, false); }
+    ctx.fill();
+    clouds.forEach(function (c) { ctx.globalAlpha = P.cloudA; ctx.drawImage(cloudS, c.x - c.w, c.y - c.h * 1.6, c.w * 2, c.h * 3.2); ctx.drawImage(cloudS, c.x - c.w * 0.5, c.y - c.h * 2.2, c.w, c.h * 2.6); }); ctx.globalAlpha = 1;
+    // the sea: a gradient, then moonlit ripples that tighten towards the horizon
+    var seaG = ctx.createLinearGradient(0, HZ, 0, H); seaG.addColorStop(0, P.sea[0]); seaG.addColorStop(1, P.sea[1]);
+    ctx.fillStyle = seaG; ctx.fillRect(0, HZ, W, H - HZ);
+    ctx.fillStyle = "rgba(" + P.wave + ",0.18)"; ctx.fillRect(0, HZ, W, 1.2);
+    var calm = reduce.matches;
+    for (j = 0; j < 30; j++) {
+      var Z = 700 * Math.pow(22 / 700, j / 29), y0 = HZ + FOC * EYE / Z, amp = 9 / Z * 40, spd = calm ? 0.2 : 1;
+      ctx.strokeStyle = "rgba(" + P.wave + "," + (0.05 + 0.1 * (j / 29)).toFixed(3) + ")"; ctx.lineWidth = 0.6 + j / 29 * 1.2;
+      ctx.beginPath();
+      for (var x = 0; x <= W; x += 10) { var yy = y0 + Math.sin(x * 0.045 * (1 + Z / 200) + t * 1.3 * spd + j * 1.7) * amp + Math.sin(x * 0.11 + t * 2.1 * spd + j) * amp * 0.4; x ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy); }
+      ctx.stroke();
+    }
+    // moon glitter on the water
+    ctx.fillStyle = "rgba(255,250,230,0.8)";
+    for (j = 0; j < 46; j++) { var gy = HZ + 2 + Math.pow(Math.random(), 1.6) * 190, spread = 4 + (gy - HZ) * 0.28, gx = mx + rnd(-spread, spread); ctx.globalAlpha = Math.random() * 0.7 * (illum / 100 * 0.8 + 0.2); ctx.fillRect(gx, gy, rnd(2, 6) * (gy - HZ) / 60 + 1, 1); }
+    ctx.globalAlpha = 1;
+    // boats out at sea (docked boats are drawn in front of the pier)
+    boats.forEach(function (b) { if (b.mode !== "docked") drawBoat(b, t); });
+    // foam where the waves meet the rocks
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(still, 0, 0); ctx.setTransform(sc, 0, 0, sc, 0, 0);
+    boats.forEach(function (b) { if (b.mode === "docked") drawBoat(b, t); });
+    // harbour lights blink green and red
+    var blink = Math.sin(t * 3) > 0;
+    ctx.globalAlpha = blink ? 1 : 0.25; ctx.drawImage(greenS, 293, 352, 20, 20);
+    ctx.globalAlpha = blink ? 0.25 : 1; ctx.drawImage(redS, 385, 346, 20, 20); ctx.globalAlpha = 1;
+    // lantern room: rotating lens prisms and the lamp core
+    ctx.fillStyle = "#0e1422"; ctx.fillRect(70, 183, 16, 19);
+    if (I > 0.01) {
+      for (j = 0; j < 4; j++) { var ph = lamp.phi * 2 + j * Math.PI / 2, bx = 78 + Math.sin(ph) * 7, br = Math.max(0, Math.cos(ph)); ctx.fillStyle = "rgba(255,226,150," + (0.25 + 0.6 * br * I).toFixed(3) + ")"; ctx.fillRect(bx - 1.6, 184, 3.2, 17); }
+      ctx.globalAlpha = I; ctx.drawImage(warm, LAMP.x - 22, LAMP.y - 22, 44, 44); ctx.fillStyle = "#fffbe8"; ctx.beginPath(); ctx.arc(LAMP.x, LAMP.y, 3.2, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+    }
+    // fog drifts over the sea
+    if (fog > 0.01) {
+      fogBlobs.forEach(function (f) { ctx.globalAlpha = fog * 0.55; ctx.drawImage(fogS, f.x - f.s, f.y - f.s * 0.45, f.s * 2, f.s * 0.9); });
+      ctx.globalAlpha = fog * 0.25; ctx.fillStyle = "rgb(150,165,195)"; ctx.fillRect(0, HZ - 40, W, H - HZ + 40); ctx.globalAlpha = 1;
+    }
+    // the beams, added as light
+    ctx.globalCompositeOperation = "lighter";
+    if (I > 0.01) beams().forEach(function (ph) { drawBeam(ph, lamp.tau, I, fog); });
+    ctx.globalCompositeOperation = "source-over";
+    // foghorn rings spread over the water as ellipses
+    rings.forEach(function (r) {
+      ctx.strokeStyle = "rgba(220,235,255," + (0.5 * r.life).toFixed(3) + ")"; ctx.lineWidth = 1.4; ctx.beginPath();
+      var first = true;
+      for (var a = -0.2; a <= Math.PI + 0.2; a += 0.08) { var Zr = LZ + Math.sin(a) * r.r, Xr = LX + Math.cos(a) * r.r; if (Zr < 6) { first = true; continue; } var q = proj(Xr, 0, Zr); if (first) { ctx.moveTo(q.x, q.y); first = false; } else ctx.lineTo(q.x, q.y); }
+      ctx.stroke();
+    });
+    parts.forEach(function (p) { ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.5)); ctx.fillStyle = p.c; ctx.fillRect(p.x - 1.2, p.y - 1.2, 2.4, 2.4); });
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- 8. Main loop ---------- */
+  var last = performance.now(), spawnT = 0.6, foamT = 0;
+  function frame(now) {
+    var dt = Math.min(0.033, (now - last) / 1000), t = now / 1000; last = now;
+    // lamp level: ignition flicker, or a quick fade when switched off
+    if (lamp.flick.length) {
+      lamp.flickT += dt;
+      while (lamp.flick.length && lamp.flickT >= lamp.flick[0][0]) { lamp.level = lamp.flick[0][1]; if (lamp.flick.length === 1) lamp.flick = []; else lamp.flick.shift(); }
+    } else lamp.level += ((lamp.on ? 1 : 0) - lamp.level) * Math.min(1, dt * (lamp.on ? 6 : 3));
+    var I = clamp(lamp.level, 0, 1);
+    // rotation spins up and down like a heavy lens
+    var target = lamp.on ? TAU / period : 0;
+    lamp.omega += (target - lamp.omega) * Math.min(1, dt * 0.9);
+    if (lamp.manual) {
+      lamp.phi += angDiff(lamp.aimPhi, lamp.phi) * Math.min(1, dt * 10);
+      lamp.tau += (lamp.aimTau - lamp.tau) * Math.min(1, dt * 10);
+      if (!dragging && t > lamp.manualUntil) lamp.manual = false;
+    } else {
+      lamp.phi = (lamp.phi + lamp.omega * dt) % TAU;
+      lamp.tau += (0.05 - lamp.tau) * Math.min(1, dt * 2);
+    }
+    fog += ((fogOn ? 1 : 0) - fog) * Math.min(1, dt * 0.6);
+    fogBlobs.forEach(function (f) { f.x += f.sp * dt * (reduce.matches ? 0.3 : 1); if (f.x - f.s > W + 20) f.x = -f.s; });
+    clouds.forEach(function (c) { c.x += c.sp * dt; if (c.x - c.w > W) c.x = -c.w; });
+    spawnT -= dt; if (spawnT <= 0) { spawnT = rnd(4, 7); spawnBoat(); }
+    stepBoats(dt, t, I);
+    // foam bursts where waves break on the cliff
+    foamT -= dt; if (foamT <= 0) { foamT = rnd(0.6, 1.6); var fy = rnd(370, 495); splash(cliffX(fy) + 2, fy, reduce.matches ? 2 : 6); }
+    for (var j = parts.length - 1; j >= 0; j--) { var p = parts[j]; p.life -= dt; if (p.life <= 0) { parts.splice(j, 1); continue; } p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
+    for (j = rings.length - 1; j >= 0; j--) {
+      var r = rings[j], r0 = r.r; r.r += 110 * dt; r.life -= dt * 0.33;
+      boats.forEach(function (b) { var d = Math.hypot(b.X - LX, b.Z - LZ); if (b.mode === "lost" && d >= r0 && d < r.r) { b.warn = 5; b.ping = 1; } });
+      if (r.life <= 0) rings.splice(j, 1);
+    }
+    draw(t, I);
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- 9. Input: drag to aim, keys, buttons and the speed slider ---------- */
+  var dragging = false;
+  function aimAt(e) {
+    var rc = scene.getBoundingClientRect(), x = (e.clientX - rc.left) / rc.width * W, y = (e.clientY - rc.top) / rc.height * H;
+    var q = seaPoint(x, Math.max(HZ + 3, y)), hx = q.X - LX, hz = q.Z - LZ;
+    lamp.aimPhi = Math.atan2(hz, hx); lamp.aimTau = Math.atan2(LY, Math.hypot(hx, hz));
+    if (!lamp.manual) { lamp.manual = true; lamp.phi = lamp.aimPhi; }
+    lamp.manualUntil = performance.now() / 1000 + 2.5;
+  }
+  scene.addEventListener("pointerdown", function (e) {
+    dragging = true; aimAt(e);
+    if (!lamp.on) say("The lamp is off. Switch it on to light the way.");
+    try { scene.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  });
+  scene.addEventListener("pointermove", function (e) { if (dragging) aimAt(e); });
+  ["pointerup", "pointercancel"].forEach(function (ev) { scene.addEventListener(ev, function () { dragging = false; }); });
+  scene.addEventListener("keydown", function (e) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    if (!lamp.manual) { lamp.manual = true; lamp.aimPhi = lamp.phi; lamp.aimTau = lamp.tau; }
+    lamp.aimPhi += e.key === "ArrowLeft" ? 0.08 : -0.08; lamp.aimTau = 0.06;
+    lamp.manualUntil = performance.now() / 1000 + 3;
+  });
+  $("lamp").addEventListener("click", function () {
+    ignite(!lamp.on);
+    say(lamp.on ? "Lamp lit. The lens starts to turn." : "Lamp out. The bay goes dark: boats will drift.");
+  });
+  $("fog").addEventListener("click", function () {
+    fogOn = !fogOn; $("fog").setAttribute("aria-pressed", fogOn ? "true" : "false");
+    say(fogOn ? "Fog rolls in. The beam glows through it; sound the foghorn too." : "The fog lifts.");
+  });
+  $("horn").addEventListener("click", function () { foghorn(true); });
+  $("speed").addEventListener("input", function (e) {
+    period = 15 - e.target.value * 1.2;
+    $("speedOut").textContent = Math.round(period) + " s";
+  });
+
+  /* ---------- 10. Auto demo until the visitor takes over ---------- */
+  var demoOn = true, timers = [];
+  function at(ms, fn) { timers.push(setTimeout(function () { if (demoOn) fn(); }, ms)); }
+  function demoAim(x, y) { var q = seaPoint(x, y), hx = q.X - LX, hz = q.Z - LZ; lamp.aimPhi = Math.atan2(hz, hx); lamp.aimTau = Math.atan2(LY, Math.hypot(hx, hz)); if (!lamp.manual) { lamp.manual = true; } lamp.manualUntil = performance.now() / 1000 + 1.2; }
+  function demo() {
+    if (!demoOn) return;
+    at(400, function () { spawnBoat(300); spawnBoat(220); });
+    at(3800, function () {
+      // sweep the beam by hand towards the nearest lost boat
+      var lost = boats.filter(function (b) { return b.mode === "lost"; })[0];
+      if (!lost) return;
+      var n = 0, iv = setInterval(function () {
+        if (!demoOn || n++ > 22 || lost.mode !== "lost") { clearInterval(iv); return; }
+        var c = boatScreen(lost); demoAim(c.x, c.y);
+      }, 90);
+      timers.push(iv);
+    });
+    at(8000, function () { fogOn = true; $("fog").setAttribute("aria-pressed", "true"); say("Fog rolls in. The beam glows through it."); });
+    at(10200, function () { foghorn(false); });
+    at(15000, function () { fogOn = false; $("fog").setAttribute("aria-pressed", "false"); say("The fog lifts. Catch a lost boat in the beam."); });
+    at(18000, demo);
+  }
+  function stopDemo(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false; timers.forEach(function (x) { clearTimeout(x); clearInterval(x); });
+  }
+  ["pointerdown", "keydown", "wheel"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+
+  $("tally").textContent = "Saved 0 · " + phaseName;
+  lamp.level = 0; ignite(true);
+  requestAnimationFrame(frame);
+  demo();
+})();
+</script>
+</body>
+</html>

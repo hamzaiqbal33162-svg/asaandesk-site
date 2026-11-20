@@ -1,0 +1,498 @@
+<!doctype html>
+<!-- Chill & Craft · Potter's Wheel · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Potter's Wheel · throw, glaze and fire a pot</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL wins over the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    --page: #f5efe7; --page2: #e9ddd0; --ink: #2b1f19; --muted: #7a6758; --line: rgba(43, 31, 25, 0.12);
+    --chip: rgba(255, 255, 255, 0.84); --btn: #1f4fa3; --btnInk: #f6f1e7; --focus: #c2410c;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #110e10; --page2: #261c1c; --ink: #f4ece4; --muted: #b9a89b; --line: rgba(255, 255, 255, 0.1);
+      --chip: rgba(36, 28, 28, 0.86); --btn: #6f9bf0; --btnInk: #0e1830; --focus: #ffb35c;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #110e10; --page2: #261c1c; --ink: #f4ece4; --muted: #b9a89b; --line: rgba(255, 255, 255, 0.1);
+    --chip: rgba(36, 28, 28, 0.86); --btn: #6f9bf0; --btnInk: #0e1830; --focus: #ffb35c;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; overflow-x: clip;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(110% 70% at 50% 0%, var(--page2), transparent 70%), var(--page);
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; overflow-x: clip; }
+  .cap, .scene { width: min(500px, 100%, calc((100vh - 320px) * 0.8)); min-width: 260px; }
+  .controls, .row2 { width: min(520px, 100%); }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0 4px; font-size: 13px; color: var(--muted); }
+  .cap b { font-size: 15px; color: var(--ink); }
+  .cap span { font-variant-numeric: tabular-nums; text-align: right; }
+  .scene {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 26px; overflow: hidden; isolation: isolate; touch-action: none; cursor: grab;
+    background: #efe5d8;
+    box-shadow: 0 30px 60px -24px rgba(60, 35, 20, 0.5), 0 10px 22px -12px rgba(60, 35, 20, 0.3), inset 0 0 0 1px var(--line);
+  }
+  .scene:active { cursor: grabbing; }
+  .scene:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Controls ---------- */
+  .controls, .row2 { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 10px 15px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--chip); color: var(--ink); font: 600 14px/1 system-ui, sans-serif;
+    box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.4); transition: transform 0.18s cubic-bezier(.3, 1.6, .5, 1);
+  }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(1px) scale(0.97); }
+  .btn.main { background: var(--btn); color: var(--btnInk); border-color: transparent; }
+  .btn[aria-disabled="true"] { opacity: 0.6; cursor: default; }
+  .btn:focus-visible, .sw input:focus-visible + span, input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .sw { display: inline-flex; gap: 9px; padding: 7px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip); }
+  .sw label { position: relative; }
+  .sw input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  .sw span { display: block; width: 30px; height: 30px; border-radius: 50%; background: var(--c); box-shadow: inset 0 -4px 8px rgba(0, 0, 0, 0.25), inset 0 3px 6px rgba(255, 255, 255, 0.45); transition: transform 0.2s cubic-bezier(.3, 1.6, .5, 1); }
+  .sw input:checked + span { transform: scale(1.12); box-shadow: 0 0 0 2px var(--chip), 0 0 0 4px var(--ink), inset 0 -4px 8px rgba(0, 0, 0, 0.25); }
+  .spd { display: inline-flex; align-items: center; gap: 8px; font: 600 13px/1 system-ui, sans-serif; color: var(--muted); }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 110px; height: 28px; background: transparent; margin: 0; cursor: pointer; border-radius: 8px; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 6px; background: linear-gradient(90deg, #d9a27a, #8a4a2a); }
+  input[type="range"]::-moz-range-track { height: 6px; border-radius: 6px; background: linear-gradient(90deg, #d9a27a, #8a4a2a); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: #fff; border: 3px solid #8a4a2a; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); }
+  input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid #8a4a2a; }
+  .status { margin: 0; min-height: 1.4em; font-size: 14px; font-weight: 600; text-align: center; max-width: 500px; }
+  .hint { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); text-align: center; max-width: 500px; }
+  @media (max-height: 720px) { .hint { display: none; } }
+  @media (max-width: 420px) { .btn { padding: 10px 11px; font-size: 13px; gap: 6px; } .sw span { width: 26px; height: 26px; } input[type="range"] { width: 90px; } }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Potter's Wheel: shape spinning clay with your pointer, then glaze it and fire it in the kiln</h1>
+  <div class="cap"><b>Potter's Wheel</b><span id="readout">Height 9 cm · Width 12 cm</span></div>
+  <div class="scene" id="scene" tabindex="0" role="application" aria-label="Spinning clay on a potter's wheel. Drag on the clay to press it in or pull it out. With the keyboard, up and down choose a height, left and right press in and pull out." aria-describedby="hint">
+    <canvas id="cv" aria-hidden="true"></canvas>
+  </div>
+  <div class="controls">
+    <button class="btn" id="raise" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 20V8M16 20V8M5 11l3 -3l3 3M13 11l3 -3l3 3"/></svg>Raise</button>
+    <button class="btn" id="open" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><ellipse cx="12" cy="8" rx="8" ry="3"/><path d="M4 8v8c0 1.7 3.6 3 8 3s8 -1.3 8 -3V8"/></svg>Open</button>
+    <button class="btn" id="center" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 3 -6.3M4 4v4h4"/></svg>New clay</button>
+    <button class="btn main" id="fire" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3c3 4 5 6 5 10a5 5 0 0 1 -10 0c0 -2 1 -3 2 -4c0 2 1 3 2 3c0 -3 -1 -6 1 -9z"/></svg><span id="fireLabel">Glaze &amp; fire</span></button>
+  </div>
+  <div class="row2">
+    <div class="sw" role="radiogroup" aria-label="Glaze colour">
+      <label title="Cobalt"><input type="radio" name="glaze" value="cobalt" checked aria-label="Cobalt blue"><span style="--c: #1f4fa3"></span></label>
+      <label title="Celadon"><input type="radio" name="glaze" value="celadon" aria-label="Celadon green"><span style="--c: #8fbfa8"></span></label>
+      <label title="Turmeric"><input type="radio" name="glaze" value="turmeric" aria-label="Turmeric yellow"><span style="--c: #e3a72f"></span></label>
+      <label title="Ivory"><input type="radio" name="glaze" value="ivory" aria-label="Ivory white"><span style="--c: #efe6d2"></span></label>
+    </div>
+    <label class="spd" for="speed">Spin <input id="speed" type="range" min="1" max="10" value="6"></label>
+  </div>
+  <p class="status" id="status" aria-live="polite">The wheel is spinning. Drag on the clay to shape it.</p>
+  <p class="hint" id="hint">Press in to make it taller and slimmer, pull out to make it wider. Open it to make a pot, then glaze and fire it for your shelf.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var W = 400, H = 500, TAU = Math.PI * 2;
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  var darkQ = matchMedia("(prefers-color-scheme: dark)");
+  function isDark() { var t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : darkQ.matches; }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function lerp(a, b, k) { return a + (b - a) * k; }
+  var scene = $("scene"), cv = $("cv"), ctx = cv.getContext("2d"), statusEl = $("status");
+  function say(m) { statusEl.textContent = m; }
+
+  /* ---------- 1. The clay: a radius for each of N heights, and a total height ---------- */
+  var N = 64, CX = 200, BASE = 396;
+  var prof = new Float32Array(N), Ht = 90, vol = 0, opened = false, wall = 9;
+  function lump() {
+    for (var i = 0; i < N; i++) { var t = i / (N - 1); prof[i] = 64 * Math.sqrt(Math.max(0, 1 - Math.pow(t, 2.2))) * (0.9 + 0.1 * (1 - t)) + 4; }
+    Ht = 86; opened = false; vol = volume(Ht);
+  }
+  function volume(h) { var s = 0; for (var i = 0; i < N; i++) s += prof[i] * prof[i]; return s / N * h; }
+  function keepVolume() { var m = 0; for (var i = 0; i < N; i++) m += prof[i] * prof[i]; m /= N; Ht = clamp(vol / m, 40, 250); }
+  function smooth(k) { // a light blur along the height keeps the form smooth like real wet clay
+    var copy = Float32Array.from(prof);
+    for (var i = 1; i < N - 1; i++) prof[i] = copy[i] + (copy[i - 1] + copy[i + 1] - 2 * copy[i]) * k;
+  }
+  // press at height y with a fingertip at distance d from the axis: radii move towards d under a soft brush
+  function shape(y, d, strength) {
+    var tc = (BASE - y) / Ht;
+    if (tc < -0.05 || tc > 1.08) return false;
+    // only a fingertip that touches the wall moves it: grab the wall and drag it in or out
+    var here = prof[clamp(Math.round(tc * (N - 1)), 0, N - 1)];
+    if (Math.abs(d - here) > 28) return false;
+    var sig = 13 / Ht, moved = false;
+    for (var i = 0; i < N; i++) {
+      var t = i / (N - 1), w = Math.exp(-Math.pow((t - tc) / sig, 2));
+      if (w < 0.02) continue;
+      var target = clamp(d, opened ? wall + 6 : 6, 118);
+      if (i === 0) target = Math.max(target, 26); // keep a foot to stand on
+      var nr = prof[i] + (target - prof[i]) * w * strength;
+      if (Math.abs(nr - prof[i]) > 0.02) moved = true;
+      prof[i] = nr;
+    }
+    if (moved) keepVolume();
+    return moved;
+  }
+  function raise() { // squeeze from the bottom up: walls get thinner and taller
+    for (var i = 0; i < N; i++) prof[i] *= 0.9 + 0.06 * (i / (N - 1));
+    for (i = 0; i < N; i++) prof[i] = Math.max(prof[i], i === 0 ? 24 : opened ? wall + 6 : 6);
+    keepVolume();
+  }
+  function openUp() { // press the thumb in and draw the top into a rim
+    opened = true;
+    for (var i = Math.floor(N * 0.7); i < N; i++) { var k = (i - N * 0.7) / (N * 0.3); prof[i] = Math.max(prof[i], lerp(prof[Math.floor(N * 0.7)], prof[Math.floor(N * 0.7)] * 0.82, k)); }
+    keepVolume();
+  }
+
+  /* ---------- 2. Palettes, glazes and the shelf ---------- */
+  var CLAY = { sh: "#6e361d", mid: "#b46a43", hi: "#e2a47a", dk: "#4d2412" };
+  var GLAZES = {
+    cobalt: { name: "Cobalt", sh: "#0d2459", mid: "#1f4fa3", hi: "#6f9bf0", dk: "#081739", pat: "#f5f1e6", kind: "dots" },
+    celadon: { name: "Celadon", sh: "#4f7f69", mid: "#8fbfa8", hi: "#d2eee1", dk: "#36594a", pat: "#5d907a", kind: "lines" },
+    turmeric: { name: "Turmeric", sh: "#8a5a10", mid: "#e3a72f", hi: "#ffe08a", dk: "#5e3c08", pat: "#6b3a18", kind: "bands" },
+    ivory: { name: "Ivory", sh: "#a89a80", mid: "#efe6d2", hi: "#ffffff", dk: "#7e735e", pat: "#1f4fa3", kind: "bands" }
+  };
+  var shelf = [
+    { prof: Float32Array.from({ length: N }, function (_, i) { var t = i / (N - 1); return 28 + 30 * Math.sin(t * Math.PI * 0.9) - 8 * t; }), H: 120, g: "turmeric", open: true },
+    { prof: Float32Array.from({ length: N }, function (_, i) { var t = i / (N - 1); return 22 + 36 * Math.exp(-Math.pow((t - 0.35) / 0.3, 2)) + (t > 0.8 ? (t - 0.8) * 60 : 0); }), H: 150, g: "cobalt", open: true }
+  ];
+  var SLOTS = [64, 132, 268, 336];
+
+  /* ---------- 3. Drawing a lathe-turned form strip by strip ---------- */
+  function shadeGrad(x, r, P, glossy) {
+    var g = ctx.createLinearGradient(x - r, 0, x + r, 0);
+    g.addColorStop(0, P.dk); g.addColorStop(0.18, P.sh); g.addColorStop(0.36, P.hi); g.addColorStop(0.62, P.mid); g.addColorStop(0.9, P.sh); g.addColorStop(1, P.dk);
+    return g;
+  }
+  function drawForm(pr, h, x, base, s, P, opts) {
+    opts = opts || {};
+    var n = pr.length, dy = h * s / (n - 1), spin = opts.spin || 0, i, G = opts.glaze;
+    // shadow on the surface below
+    ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.beginPath(); ctx.ellipse(x, base + 1, pr[0] * s * 1.12, pr[0] * s * 0.2, 0, 0, TAU); ctx.fill();
+    for (i = 0; i < n - 1; i++) {
+      var y0 = base - i * dy, y1 = y0 - dy, r0 = pr[i] * s, r1 = pr[i + 1] * s, rm = Math.max(r0, r1), t = i / (n - 1);
+      var band = G && G.kind === "bands" && ((t > 0.18 && t < 0.24) || (t > 0.62 && t < 0.7) || (t > 0.9 && t < 0.94));
+      var BP = band ? { dk: G.dk, sh: G.pat, hi: G.hi, mid: G.pat } : P;
+      ctx.fillStyle = shadeGrad(x, rm, BP);
+      ctx.beginPath(); ctx.moveTo(x - r0, y0 + 0.6); ctx.lineTo(x + r0, y0 + 0.6); ctx.lineTo(x + r1, y1 - 0.2); ctx.lineTo(x - r1, y1 - 0.2); ctx.closePath(); ctx.fill();
+      // faces that look up catch more light, overhangs fall into shade
+      var slope = (r0 - r1) / Math.max(0.01, dy);
+      if (Math.abs(slope) > 0.05) { ctx.fillStyle = slope > 0 ? "rgba(255,240,220," + Math.min(0.22, slope * 0.12).toFixed(3) + ")" : "rgba(0,0,0," + Math.min(0.28, -slope * 0.16).toFixed(3) + ")"; ctx.fill(); }
+      if (G) { ctx.fillStyle = "rgba(255,255,255,0.32)"; ctx.fillRect(x - rm * 0.4, y1, Math.max(1, rm * 0.08), dy + 0.6); } // glossy streak
+    }
+    // throwing rings: thin front arcs that show the roundness
+    if (!G || G.kind === "lines") {
+      ctx.lineWidth = Math.max(0.5, s * 0.8);
+      for (i = 3; i < n - 2; i += G ? 5 : 4) { var ry = base - i * dy, rr = pr[i] * s; ctx.strokeStyle = G ? "rgba(40,70,60,0.25)" : (i % 8 ? "rgba(255,230,200,0.12)" : "rgba(60,25,10,0.16)"); ctx.beginPath(); ctx.ellipse(x, ry, rr, rr * 0.16, 0, 0.15, Math.PI - 0.15); ctx.stroke(); }
+    }
+    // specks or painted dots ride round with the spin
+    if (opts.specks) opts.specks.forEach(function (sp) {
+      var k = Math.floor(sp.t * (n - 1)), rr2 = pr[k] * s, a = sp.a + spin, c = Math.cos(a);
+      if (c <= 0.05) return;
+      ctx.globalAlpha = c * sp.o; ctx.fillStyle = sp.c;
+      ctx.beginPath(); ctx.ellipse(x + rr2 * Math.sin(a), base - k * dy + rr2 * 0.16 * c, sp.r * s * (0.4 + 0.6 * c), sp.r * s, 0, 0, TAU); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    if (G && G.kind === "dots") {
+      [0.3, 0.52, 0.74].forEach(function (tt, ring) {
+        var k = Math.floor(tt * (n - 1)), rr3 = pr[k] * s;
+        for (var j = 0; j < 10; j++) {
+          var a = j / 10 * TAU + spin + ring * 0.3, c = Math.cos(a);
+          if (c <= 0.05) continue;
+          var px = x + rr3 * Math.sin(a), py = base - k * dy + rr3 * 0.16 * c, sz = (ring === 1 ? 4.6 : 2.8) * s * (0.5 + 0.5 * c);
+          ctx.globalAlpha = c; ctx.fillStyle = G.pat;
+          if (ring === 1) { for (var q = 0; q < 5; q++) { ctx.beginPath(); ctx.ellipse(px + Math.cos(q * 1.257) * sz * 0.9 * c, py + Math.sin(q * 1.257) * sz * 0.9, sz * 0.5 * c + 0.3, sz * 0.5, 0, 0, TAU); ctx.fill(); } }
+          else { ctx.beginPath(); ctx.ellipse(px, py, sz * c + 0.3, sz, 0, 0, TAU); ctx.fill(); }
+        }
+      });
+      ctx.globalAlpha = 1;
+    }
+    // the top: a rim with a dark inside, or a soft dome
+    var rt = pr[n - 1] * s, yt = base - h * s;
+    if (opts.open) {
+      var lipP = G || P;
+      ctx.fillStyle = lipP.hi; ctx.beginPath(); ctx.ellipse(x, yt, rt, rt * 0.2, 0, 0, TAU); ctx.fill();
+      var inner = Math.max(2, rt - wall * s * 0.9), ig = ctx.createLinearGradient(0, yt - rt * 0.2, 0, yt + rt * 0.2);
+      ig.addColorStop(0, lipP.dk); ig.addColorStop(1, lipP.sh);
+      ctx.fillStyle = ig; ctx.beginPath(); ctx.ellipse(x, yt + 0.6 * s, inner, inner * 0.18, 0, 0, TAU); ctx.fill();
+    } else { ctx.fillStyle = P.mid; ctx.beginPath(); ctx.ellipse(x, yt + 1, Math.max(1, rt), Math.max(0.6, rt * 0.2), 0, 0, TAU); ctx.fill(); }
+  }
+
+  /* ---------- 4. The studio: wall, hanging lamp, shelf, the wheel and its splash pan ---------- */
+  var specks = [];
+  for (var i0 = 0; i0 < 70; i0++) specks.push({ t: Math.random() * 0.97, a: Math.random() * TAU, r: rnd(0.7, 1.5), o: rnd(0.25, 0.6), c: Math.random() < 0.5 ? "#5a2a14" : "#f0c39a" });
+  var sc = 1;
+  function resize() {
+    var r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.max(2, Math.round(r.width * dpr)); cv.height = Math.max(2, Math.round(r.height * dpr)); sc = cv.width / W;
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(scene); else window.addEventListener("resize", resize);
+  resize();
+  function drawStudio(t, dark) {
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    if (dark) { g.addColorStop(0, "#1d1719"); g.addColorStop(1, "#2a2022"); } else { g.addColorStop(0, "#efe4d6"); g.addColorStop(1, "#e3d3c1"); }
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // lamp light pool
+    var lg = ctx.createRadialGradient(200, 70, 10, 200, 260, 300);
+    lg.addColorStop(0, dark ? "rgba(255,200,130,0.35)" : "rgba(255,240,210,0.6)"); lg.addColorStop(1, "rgba(255,200,130,0)");
+    ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H);
+    // plaster texture lines
+    ctx.strokeStyle = dark ? "rgba(255,255,255,0.03)" : "rgba(90,60,40,0.05)"; ctx.lineWidth = 1;
+    for (var y = 30; y < 330; y += 34) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y + 6); ctx.stroke(); }
+    // shelf with fired pots
+    ctx.fillStyle = dark ? "#4a3226" : "#9b6038"; ctx.fillRect(18, 136, 364, 9);
+    ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.fillRect(18, 145, 364, 4);
+    ctx.fillStyle = dark ? "#3a271d" : "#7a4a2a"; ctx.fillRect(40, 145, 6, 16); ctx.fillRect(354, 145, 6, 16);
+    shelf.forEach(function (p, k) {
+      var x = SLOTS[k], bounce = p.drop ? Math.max(0, p.drop) : 0;
+      drawForm(p.prof, p.H, x, 136 - bounce * 60, 0.3 * (p.pop ? 1 + Math.sin(p.pop * Math.PI) * 0.25 : 1), GLAZES[p.g], { glaze: GLAZES[p.g], open: p.open, spin: 0.6 + k });
+    });
+    // hanging lamp
+    ctx.strokeStyle = dark ? "#0b0909" : "#3a2a20"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(200, 0); ctx.lineTo(200, 36); ctx.stroke();
+    ctx.fillStyle = dark ? "#2b3a35" : "#2f5d50"; ctx.beginPath(); ctx.moveTo(182, 58); ctx.lineTo(188, 38); ctx.lineTo(212, 38); ctx.lineTo(218, 58); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#fff3cf"; ctx.beginPath(); ctx.ellipse(200, 59, 12, 3.6, 0, 0, TAU); ctx.fill();
+    if (dark) { var cone = ctx.createLinearGradient(0, 60, 0, 400); cone.addColorStop(0, "rgba(255,220,160,0.22)"); cone.addColorStop(1, "rgba(255,220,160,0)"); ctx.fillStyle = cone; ctx.beginPath(); ctx.moveTo(186, 60); ctx.lineTo(214, 60); ctx.lineTo(330, 420); ctx.lineTo(70, 420); ctx.closePath(); ctx.fill(); }
+  }
+  function drawWheel(spin, dark) {
+    // machine body and splash pan
+    ctx.fillStyle = dark ? "#262b33" : "#4d5a6b"; ctx.beginPath(); ctx.moveTo(110, 440); ctx.lineTo(290, 440); ctx.lineTo(312, 500); ctx.lineTo(88, 500); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.fillRect(110, 440, 180, 4);
+    ctx.fillStyle = dark ? "#3a4250" : "#7b8fa6"; ctx.beginPath(); ctx.ellipse(200, 418, 170, 40, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = dark ? "#1b1f26" : "#3c4655"; ctx.beginPath(); ctx.ellipse(200, 414, 158, 33, 0, 0, TAU); ctx.fill();
+    // clay slurry in the pan
+    ctx.fillStyle = "rgba(150,80,45,0.5)"; ctx.beginPath(); ctx.ellipse(200, 420, 140, 22, 0, 0, Math.PI); ctx.fill();
+    // the wheel head: a thick disc with marks that turn
+    ctx.fillStyle = dark ? "#5b6575" : "#9aa7b6"; ctx.beginPath(); ctx.ellipse(200, 404, 124, 23, 0, 0, Math.PI); ctx.fill(); ctx.fillRect(76, 396, 248, 8);
+    var hg = ctx.createLinearGradient(76, 0, 324, 0); hg.addColorStop(0, dark ? "#7d8796" : "#b9c3cf"); hg.addColorStop(0.4, dark ? "#a9b2bf" : "#e6ebf0"); hg.addColorStop(1, dark ? "#6a7383" : "#a3afbd");
+    ctx.fillStyle = hg; ctx.beginPath(); ctx.ellipse(200, 396, 124, 23, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.16)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(200, 396, 90, 16.5, 0, 0, TAU); ctx.stroke();
+    for (var k = 0; k < 12; k++) {
+      var a = k / 12 * TAU + spin, c = Math.cos(a);
+      ctx.strokeStyle = "rgba(40,50,60," + (0.18 + 0.2 * (c * 0.5 + 0.5)).toFixed(3) + ")";
+      ctx.beginPath(); ctx.moveTo(200 + Math.sin(a) * 104, 396 + c * 19); ctx.lineTo(200 + Math.sin(a) * 120, 396 + c * 22); ctx.stroke();
+    }
+  }
+
+  /* ---------- 5. Kiln hood that lowers over the pot ---------- */
+  var phase = "throw", pt = 0, glaze = "cobalt", glazeK = 0, hoodY = -1, temp = 20, fired = false, flyK = 0;
+  function startFire() {
+    if (phase !== "throw") return;
+    var g = document.querySelector('input[name="glaze"]:checked'); glaze = g ? g.value : "cobalt";
+    if (!opened) { openUp(); say("Opened the top first, then into the glaze."); }
+    phase = "dip"; pt = 0; glazeK = 0;
+    $("fire").setAttribute("aria-disabled", "true"); $("fireLabel").textContent = "Glazing…";
+    say("Dipping it in " + GLAZES[glaze].name.toLowerCase() + " glaze…");
+  }
+  function drawHood(y, glow, t) {
+    var maxR = 0; for (var i = 0; i < N; i++) maxR = Math.max(maxR, prof[i]);
+    var w = Math.max(120, maxR * 2 + 50), h = Math.max(150, Ht + 70), x = CX - w / 2, top = y - h;
+    // glow spilling under the hood
+    if (glow > 0) { var gg = ctx.createRadialGradient(CX, 398, 10, CX, 398, w * 0.8); gg.addColorStop(0, "rgba(255,140,40," + (0.6 * glow).toFixed(3) + ")"); gg.addColorStop(1, "rgba(255,90,20,0)"); ctx.fillStyle = gg; ctx.fillRect(CX - w, 330, w * 2, 120); }
+    var bg = ctx.createLinearGradient(x, 0, x + w, 0); bg.addColorStop(0, "#5a2318"); bg.addColorStop(0.35, "#b5523a"); bg.addColorStop(1, "#4a1c12");
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, top + 24); ctx.quadraticCurveTo(x, top, x + 24, top); ctx.lineTo(x + w - 24, top); ctx.quadraticCurveTo(x + w, top, x + w, top + 24); ctx.lineTo(x + w, y); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = 1;
+    for (var yy = top + 18; yy < y; yy += 14) { ctx.beginPath(); ctx.moveTo(x + 2, yy); ctx.lineTo(x + w - 2, yy); ctx.stroke(); var off = ((yy - top) / 14 % 2) * 14; for (var xx = x + off; xx < x + w; xx += 28) { ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx, yy + 14); ctx.stroke(); } }
+    ctx.fillStyle = "#2a2f38"; ctx.fillRect(x - 4, y - 10, w + 8, 10); ctx.fillRect(CX - 18, top - 10, 36, 12);
+    // spy window glows with the heat
+    ctx.fillStyle = "rgb(" + Math.round(60 + 195 * glow) + "," + Math.round(30 + 120 * glow) + ",20)"; ctx.beginPath(); ctx.arc(CX, top + 40, 10, 0, TAU); ctx.fill();
+    ctx.strokeStyle = "#2a2f38"; ctx.lineWidth = 3; ctx.stroke();
+    // temperature readout
+    ctx.fillStyle = "#1a1d22"; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(CX - 34, top + 62, 68, 22, 6) : ctx.rect(CX - 34, top + 62, 68, 22); ctx.fill();
+    ctx.fillStyle = glow > 0.6 ? "#ffb35c" : "#9be7a8"; ctx.font = "800 13px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText(Math.round(temp) + " °C", CX, top + 78);
+    // heat shimmer lines above
+    if (glow > 0.2 && !reduce.matches) { ctx.strokeStyle = "rgba(255,190,120," + (0.35 * glow).toFixed(3) + ")"; ctx.lineWidth = 1.5; for (var k = 0; k < 3; k++) { ctx.beginPath(); for (var s = 0; s <= 30; s++) { var px = CX - 24 + k * 24 + Math.sin(s * 0.5 + t * 6 + k) * 4, py = top - 14 - s * 2; s ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.stroke(); } }
+  }
+
+  /* ---------- 6. Particles: slip flicked off the clay, sparkles on the finished pot ---------- */
+  var bits = [];
+  function slip(x, y, dir) { if (reduce.matches || bits.length > 160) return; bits.push({ x: x, y: y, vx: dir * rnd(60, 140), vy: rnd(-40, 10), life: rnd(0.5, 0.9), c: "rgba(120,60,30,0.8)", g: 400, s: rnd(1.2, 2.4) }); }
+  function sparkle(x, y, n) { if (reduce.matches) n = Math.ceil(n / 3); for (var j = 0; j < n; j++) { var a = rnd(0, TAU), v = rnd(30, 120); bits.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.6, 1.2), c: ["#fff7d6", "#ffd23f", "#9fd8ff"][j % 3], g: 30, s: rnd(1.6, 3.2), star: true }); } }
+
+  /* ---------- 7. Main loop ---------- */
+  var spin = 0, omega = 0, speedV = 6, last = performance.now(), touch = null, ghost = null, readT = 0, wobble = 0, dropK = 0;
+  function frame(now) {
+    var dt = Math.min(0.033, (now - last) / 1000), t = now / 1000; last = now;
+    var dark = isDark();
+    var wantOmega = phase === "throw" ? speedV * 0.9 : phase === "show" ? 1.2 : phase === "dip" ? 2 : 0;
+    omega += (wantOmega - omega) * Math.min(1, dt * 1.5);
+    spin += omega * dt;
+    // shaping from the visitor's finger (or the demo's ghost finger)
+    var f = touch || ghost;
+    if (f && phase === "throw" && omega > 0.5) {
+      var d = Math.abs(f.x - CX), str = Math.min(1, dt * (1.2 + omega * 0.5));
+      if (shape(f.y, d, str)) { if (Math.random() < 0.6) slip(f.x, f.y, f.x < CX ? -1 : 1); }
+    }
+    if (phase === "throw") smooth(0.08);
+    if (wobble > 0) wobble = Math.max(0, wobble - dt * 1.2);
+    if (dropK > 0) dropK = Math.max(0, dropK - dt * 1.6);
+    // firing sequence: dip → hood down → heat up → cool → hood up → show → to the shelf → new clay
+    pt += dt;
+    if (phase === "dip") { glazeK = Math.min(1, pt / 1.3); if (pt > 1.5) { phase = "hood"; pt = 0; hoodY = 0; $("fireLabel").textContent = "Firing…"; say("Into the kiln. The hood comes down…"); } }
+    else if (phase === "hood") { hoodY = Math.min(1, pt / 0.9); if (pt > 1) { phase = "heat"; pt = 0; } }
+    else if (phase === "heat") { temp = lerp(20, 1240, Math.min(1, pt / 2.4)); if (pt > 2.8) { phase = "cool"; pt = 0; fired = true; say("Fired at 1240 °C. Letting it cool…"); } }
+    else if (phase === "cool") { temp = lerp(1240, 80, Math.min(1, pt / 1)); if (pt > 1.1) { phase = "unhood"; pt = 0; } }
+    else if (phase === "unhood") { hoodY = 1 - Math.min(1, pt / 0.9); if (pt > 1) { phase = "show"; pt = 0; hoodY = -1; sparkle(CX, BASE - Ht * 0.6, 30); say("Out of the kiln: a glossy " + GLAZES[glaze].name.toLowerCase() + " pot."); } }
+    else if (phase === "show") { if (pt > 2.2) { phase = "fly"; pt = 0; flyK = 0; } }
+    else if (phase === "fly") {
+      flyK = Math.min(1, pt / 0.9);
+      if (pt > 0.95) {
+        shelf.push({ prof: Float32Array.from(prof), H: Ht, g: glaze, open: opened, pop: 1 });
+        if (shelf.length > 4) shelf.shift();
+        phase = "throw"; pt = 0; fired = false; glazeK = 0; temp = 20; lump(); dropK = 1; wobble = 1;
+        $("fire").removeAttribute("aria-disabled"); $("fireLabel").textContent = "Glaze & fire";
+        say("On the shelf with " + (shelf.length - 1) + (shelf.length === 2 ? " other pot" : " others") + ". A fresh lump of clay lands on the wheel.");
+      }
+    }
+    shelf.forEach(function (p) { if (p.pop) p.pop = Math.max(0, p.pop - dt * 2); });
+    for (var j = bits.length - 1; j >= 0; j--) { var b = bits[j]; b.life -= dt; if (b.life <= 0 || b.y > 430) { bits.splice(j, 1); continue; } b.vy += b.g * dt; b.x += b.vx * dt; b.y += b.vy * dt; }
+
+    // draw
+    ctx.setTransform(sc, 0, 0, sc, 0, 0);
+    drawStudio(t, dark);
+    drawWheel(spin, dark);
+    var hoodDown = hoodY >= 0 ? (reduce.matches ? hoodY : 1 - Math.pow(1 - hoodY, 3) * (1 + 0)) : -1;
+    var showPot = !(phase === "heat" || phase === "cool");
+    if (showPot) {
+      var P = CLAY, G = null;
+      if (phase !== "throw" && glazeK > 0) { G = GLAZES[glaze]; }
+      var off = wobble > 0 && !reduce.matches ? Math.sin(t * 40) * wobble * 3 : 0;
+      var squash = dropK > 0 && !reduce.matches ? 1 - Math.sin(dropK * Math.PI) * 0.18 : 1;
+      if (phase === "fly") {
+        // the finished pot shrinks and flies to the next shelf slot
+        var slot = SLOTS[Math.min(shelf.length, 3)], k = 1 - Math.pow(1 - flyK, 3);
+        drawForm(prof, Ht, lerp(CX, slot, k), lerp(BASE, 136, k) - Math.sin(k * Math.PI) * 60, lerp(1, 0.3, k), G, { glaze: G, open: opened, spin: spin });
+      } else if (G && glazeK < 1) {
+        // glaze rising from the foot: draw clay, then the glazed part clipped from below
+        drawForm(prof, Ht, CX + off, BASE, 1, P, { open: opened, spin: spin, specks: specks });
+        ctx.save(); ctx.beginPath(); ctx.rect(0, BASE - Ht * glazeK - 2, W, Ht * glazeK + 30); ctx.clip();
+        drawForm(prof, Ht, CX + off, BASE, 1, G, { glaze: G, open: opened, spin: spin });
+        ctx.restore();
+      } else if (G) {
+        drawForm(prof, Ht, CX, BASE, 1, G, { glaze: G, open: opened, spin: spin });
+      } else {
+        ctx.save(); ctx.translate(CX + off, BASE); ctx.scale(1 / Math.sqrt(squash), squash); ctx.translate(-CX, -BASE);
+        drawForm(prof, Ht, CX, BASE, 1, P, { open: opened, spin: spin, specks: specks });
+        ctx.restore();
+      }
+    }
+    if (hoodDown >= 0) drawHood(lerp(-20, 404, hoodDown), phase === "heat" ? Math.min(1, pt / 1.6) : phase === "cool" ? 1 - Math.min(1, pt) : 0, t);
+    // the fingertip
+    if (f && phase === "throw") {
+      ctx.fillStyle = "rgba(255,255,255,0.18)"; ctx.strokeStyle = touch ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.55)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(f.x, f.y, 9, 0, TAU); ctx.fill(); ctx.stroke();
+    }
+    bits.forEach(function (b) {
+      ctx.globalAlpha = Math.min(1, b.life * 2); ctx.fillStyle = b.c;
+      if (b.star) { ctx.beginPath(); for (var q = 0; q < 8; q++) { var rr = q % 2 ? b.s * 0.35 : b.s, a = q * Math.PI / 4; ctx.lineTo(b.x + Math.cos(a) * rr, b.y + Math.sin(a) * rr); } ctx.fill(); }
+      else ctx.fillRect(b.x, b.y, b.s, b.s);
+    });
+    ctx.globalAlpha = 1;
+    readT -= dt;
+    if (readT <= 0) { readT = 0.2; var mr = 0; for (var q2 = 0; q2 < N; q2++) mr = Math.max(mr, prof[q2]); $("readout").textContent = "Height " + (Ht / 10).toFixed(1) + " cm · Width " + (mr / 5).toFixed(1) + " cm"; }
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- 8. Input ---------- */
+  function logical(e) { var r = scene.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; }
+  var said = false;
+  scene.addEventListener("pointerdown", function (e) {
+    if (phase !== "throw") { say("Wait for the kiln to finish."); return; }
+    touch = logical(e);
+    if (!said) { said = true; say("Shaping: press in to make it taller, pull out to widen it."); }
+    try { scene.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  });
+  scene.addEventListener("pointermove", function (e) { if (touch) touch = logical(e); });
+  ["pointerup", "pointercancel"].forEach(function (ev) { scene.addEventListener(ev, function () { touch = null; }); });
+  // keyboard: choose a height with up and down, press in or pull out with left and right
+  var keyY = BASE - 50;
+  scene.addEventListener("keydown", function (e) {
+    if (phase !== "throw") return;
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); keyY = clamp(keyY + (e.key === "ArrowUp" ? -8 : 8), BASE - Ht, BASE - 4); ghost = { x: CX + profAt(keyY) + 4, y: keyY }; clearTimeout(keyT); keyT = setTimeout(function () { ghost = null; }, 600); }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault(); var r0 = profAt(keyY), d = r0 + (e.key === "ArrowLeft" ? -6 : 6);
+      for (var k = 0; k < 6; k++) shape(keyY, d, 0.35);
+      ghost = { x: CX + d, y: keyY }; clearTimeout(keyT); keyT = setTimeout(function () { ghost = null; }, 600);
+      say(e.key === "ArrowLeft" ? "Pressed in: " + (Ht / 10).toFixed(1) + " cm tall." : "Pulled out: " + (Ht / 10).toFixed(1) + " cm tall.");
+    }
+  });
+  var keyT = 0;
+  function profAt(y) { var k = clamp(Math.round((BASE - y) / Ht * (N - 1)), 0, N - 1); return prof[k]; }
+  $("raise").addEventListener("click", function () {
+    if (phase !== "throw") return;
+    raise(); raise(); wobble = 0.3;
+    say("Walls drawn up: now " + (Ht / 10).toFixed(1) + " cm tall.");
+  });
+  $("open").addEventListener("click", function () {
+    if (phase !== "throw") return;
+    if (opened) { say("It is already open. Press in near the top to shape the neck."); return; }
+    openUp(); wobble = 0.4; say("Thumbs in: the clay is open and has a rim.");
+  });
+  $("center").addEventListener("click", function () {
+    if (phase !== "throw") return;
+    lump(); dropK = 1; wobble = 1; say("A fresh lump of clay, centred on the wheel.");
+  });
+  $("fire").addEventListener("click", startFire);
+  $("speed").addEventListener("input", function (e) { speedV = +e.target.value; });
+  document.querySelectorAll('input[name="glaze"]').forEach(function (r) { r.addEventListener("change", function () { say(GLAZES[r.value].name + " glaze chosen."); }); });
+
+  /* ---------- 9. Auto demo: a ghost finger throws a vase, then it is fired ---------- */
+  var demoOn = true, timers = [];
+  function at(ms, fn) { timers.push(setTimeout(function () { if (demoOn) fn(); }, ms)); }
+  function sweep(fromY, toY, dFn, ms) {
+    var t0 = performance.now(), iv = setInterval(function () {
+      if (!demoOn) { clearInterval(iv); ghost = null; return; }
+      var k = Math.min(1, (performance.now() - t0) / ms), y = lerp(fromY, toY, k);
+      ghost = { x: CX + dFn(k, y), y: y };
+      if (k >= 1) { clearInterval(iv); ghost = null; }
+    }, 30);
+    timers.push(iv);
+  }
+  function demo() {
+    if (!demoOn) return;
+    var g = ["cobalt", "turmeric", "celadon", "ivory"][Math.floor(Math.random() * 4)];
+    at(200, function () { $("open").click(); });
+    at(900, function () { raise(); raise(); });
+    at(1500, function () { sweep(BASE - 10, BASE - Ht + 4, function (k) { return profAt(BASE - 10 - k * (Ht - 14)) * 0.86; }, 1300); });
+    at(3000, function () { sweep(BASE - Ht * 0.72, BASE - Ht * 0.78, function () { return 20; }, 900); });
+    at(4100, function () { sweep(BASE - Ht * 0.42, BASE - Ht * 0.3, function () { return 62; }, 900); });
+    at(5200, function () { sweep(BASE - Ht * 0.98, BASE - Ht * 0.92, function () { return 34; }, 600); });
+    at(6200, function () { var r = document.querySelector('input[name="glaze"][value="' + g + '"]'); if (r) r.checked = true; startFire(); });
+    at(19000, demo);
+  }
+  function stopDemo(e) { if (!e.isTrusted || !demoOn) return; demoOn = false; ghost = null; timers.forEach(function (x) { clearTimeout(x); clearInterval(x); }); }
+  ["pointerdown", "keydown", "wheel"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+
+  lump();
+  requestAnimationFrame(frame);
+  demo();
+})();
+</script>
+</body>
+</html>

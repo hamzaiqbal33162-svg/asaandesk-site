@@ -1,0 +1,664 @@
+<!doctype html>
+<!-- Chill & Craft · Chai Stall · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chai Stall · brew, pull and serve a cup of tea</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL wins over the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens (afternoon = light, late night = dark) ---------- */
+  :root {
+    --page: #f8efe6; --page2: #f3d9c0; --ink: #2d1b12; --muted: #7b6050; --line: rgba(45, 27, 18, 0.12);
+    --wall: #f1d2ad; --wall2: #e7c098; --awnA: #1f8a85; --awnB: #fbf0dc; --board: #24312b; --chalk: #f4efe2;
+    --wood: #8a5432; --wood2: #6d3f22; --woodTop: #a8673e; --panel: #c2452f; --shelf: #9b6038; --bulb: #fff1c2; --bulbGlow: 0.25;
+    --steam: 255, 255, 255; --chip: rgba(255, 255, 255, 0.82); --btn: #b23a1f; --btnInk: #fff6ea; --focus: #1f6f8b; --night: 0;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #120d0b; --page2: #2b1a12; --ink: #f7ede4; --muted: #c0a796; --line: rgba(255, 255, 255, 0.1);
+      --wall: #3a2a24; --wall2: #2e211c; --awnA: #155e5a; --awnB: #cbbfa8; --board: #16201b; --chalk: #efe6d2;
+      --wood: #5e3820; --wood2: #4a2b17; --woodTop: #774629; --panel: #8f3322; --shelf: #6a4026; --bulb: #ffd774; --bulbGlow: 1;
+      --steam: 255, 240, 225; --chip: rgba(40, 28, 22, 0.86); --btn: #f2a641; --btnInk: #2b1405; --focus: #7fd1e6; --night: 1;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #120d0b; --page2: #2b1a12; --ink: #f7ede4; --muted: #c0a796; --line: rgba(255, 255, 255, 0.1);
+    --wall: #3a2a24; --wall2: #2e211c; --awnA: #155e5a; --awnB: #cbbfa8; --board: #16201b; --chalk: #efe6d2;
+    --wood: #5e3820; --wood2: #4a2b17; --woodTop: #774629; --panel: #8f3322; --shelf: #6a4026; --bulb: #ffd774; --bulbGlow: 1;
+    --steam: 255, 240, 225; --chip: rgba(40, 28, 22, 0.86); --btn: #f2a641; --btnInk: #2b1405; --focus: #7fd1e6; --night: 1;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; overflow-x: clip;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(110% 70% at 50% 0%, var(--page2), transparent 70%), var(--page);
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; overflow-x: clip; }
+  .cap, .scene { width: min(500px, 100%, calc((100vh - 270px) * 0.8)); min-width: 260px; }
+  .controls { width: min(520px, 100%); }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0 4px; font-size: 13px; color: var(--muted); }
+  .cap b { font-size: 15px; color: var(--ink); }
+  .cap span { font-variant-numeric: tabular-nums; text-align: right; }
+  .scene {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 26px; overflow: hidden; isolation: isolate; touch-action: manipulation;
+    background: var(--wall);
+    box-shadow: 0 30px 60px -24px rgba(70, 30, 10, 0.55), 0 10px 22px -12px rgba(70, 30, 10, 0.35), inset 0 0 0 1px var(--line);
+  }
+  .scene svg, .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .scene canvas { pointer-events: none; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .night { opacity: var(--night); }
+  .glowB { opacity: var(--bulbGlow); }
+  .chalk { fill: var(--chalk); font: 700 10px system-ui, sans-serif; }
+  .chalk.h { font: 800 12px system-ui, sans-serif; letter-spacing: 0.08em; }
+  .tk text { font: 700 8.2px system-ui, sans-serif; fill: #3a2a1f; }
+  .tk .nm { font: 800 9.4px system-ui, sans-serif; }
+  .blink { animation: blink 4.5s infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 10px 16px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--chip); color: var(--ink); font: 600 14px/1 system-ui, sans-serif;
+    box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.4); transition: transform 0.18s cubic-bezier(.3, 1.6, .5, 1), background 0.2s;
+  }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(1px) scale(0.97); }
+  .btn.main { background: var(--btn); color: var(--btnInk); border-color: transparent; min-width: 132px; justify-content: center; }
+  .btn.main.urgent { animation: urgent 0.5s ease-in-out infinite alternate; }
+  @keyframes urgent { to { transform: scale(1.06); box-shadow: 0 0 0 6px rgba(242, 166, 65, 0.35); } }
+  .btn[aria-disabled="true"] { opacity: 0.65; cursor: default; }
+  .btn:focus-visible, .seg input:focus-visible + span, .tog input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .seg { display: inline-flex; padding: 4px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip); }
+  .seg label, .tog { position: relative; }
+  .seg input, .tog input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  .seg span { display: block; padding: 9px 11px; border-radius: 999px; font: 600 13px/1 system-ui, sans-serif; color: var(--muted); transition: background 0.25s, color 0.25s; }
+  .seg input:checked + span { background: var(--btn); color: var(--btnInk); }
+  .tog span { display: inline-flex; align-items: center; gap: 6px; padding: 11px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip); font: 600 13px/1 system-ui, sans-serif; color: var(--muted); }
+  .tog span::before { content: ""; width: 12px; height: 12px; border-radius: 4px; border: 2px solid currentColor; }
+  .tog input:checked + span { color: var(--ink); }
+  .tog input:checked + span::before { background: var(--btn); border-color: var(--btn); box-shadow: inset 0 0 0 2px var(--chip); }
+  .status { margin: 0; min-height: 1.4em; font-size: 14px; font-weight: 600; text-align: center; max-width: 500px; }
+  .hint { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); text-align: center; max-width: 500px; }
+  @media (max-height: 720px) { .hint { display: none; } }
+  @media (max-width: 420px) { .btn { padding: 10px 12px; font-size: 13px; } .btn.main { min-width: 0; } .seg span { padding: 9px 8px; font-size: 12.5px; } }
+  @media (prefers-reduced-motion: reduce) { .blink, .btn.main.urgent { animation: none; } }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Chai Stall: brew tea for each order, lower the flame before it boils over, pull it into the glass and get paid</h1>
+  <div class="cap"><b>Chai Stall</b><span id="till">Served 0 · PKR 0</span></div>
+  <div class="scene" id="scene">
+    <svg viewBox="0 0 400 500" aria-hidden="true" id="art">
+      <defs>
+        <linearGradient id="wallG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--wall2)"/><stop offset="1" style="stop-color: var(--wall)"/></linearGradient>
+        <radialGradient id="bulbG"><stop offset="0" stop-color="#ffe9a6" stop-opacity="0.9"/><stop offset="1" stop-color="#ffb84a" stop-opacity="0"/></radialGradient>
+        <radialGradient id="flameG" cx="0.5" cy="0.9" r="0.8"><stop offset="0" stop-color="#bfe6ff"/><stop offset="0.5" stop-color="#3d8bff"/><stop offset="1" stop-color="#3d8bff" stop-opacity="0"/></radialGradient>
+        <linearGradient id="steelG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7b8390"/><stop offset="0.35" stop-color="#e4e8ee"/><stop offset="0.6" stop-color="#a9b0bb"/><stop offset="1" stop-color="#5d6470"/></linearGradient>
+        <linearGradient id="glassG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.35"/><stop offset="0.25" stop-color="#fff" stop-opacity="0.08"/><stop offset="0.8" stop-color="#fff" stop-opacity="0.04"/><stop offset="1" stop-color="#fff" stop-opacity="0.3"/></linearGradient>
+        <clipPath id="glassClip"><path d="M-15 -58 L-12 0 H12 L15 -58Z"/></clipPath>
+        <pattern id="awn" width="40" height="60" patternUnits="userSpaceOnUse"><rect width="20" height="60" style="fill: var(--awnA)"/><rect x="20" width="20" height="60" style="fill: var(--awnB)"/></pattern>
+      </defs>
+
+      <!-- back wall, shelf with jars, clock, menu board and ticket rail -->
+      <rect width="400" height="500" fill="url(#wallG)"/>
+      <path d="M0 230 H400" stroke="#000" stroke-opacity="0.06" stroke-width="2"/>
+      <g opacity="0.07" fill="#000"><circle cx="40" cy="260" r="2"/><circle cx="120" cy="300" r="2"/><circle cx="330" cy="280" r="2"/><circle cx="180" cy="330" r="2"/></g>
+      <rect x="14" y="214" width="132" height="7" rx="2" style="fill: var(--shelf)"/>
+      <rect x="20" y="221" width="6" height="12" style="fill: var(--shelf)"/><rect x="134" y="221" width="6" height="12" style="fill: var(--shelf)"/>
+      <g id="jars">
+        <g transform="translate(36 214)"><rect x="-14" y="-38" width="28" height="38" rx="6" fill="#dff1f4" fill-opacity="0.5" stroke="#9fb9c0" stroke-width="1.2"/><rect x="-15" y="-43" width="30" height="7" rx="2" fill="#c8553d"/>
+          <g fill="#d99a52"><rect x="-10" y="-30" width="20" height="5" rx="2"/><rect x="-10" y="-23" width="20" height="5" rx="2"/><rect x="-10" y="-16" width="20" height="5" rx="2"/><rect x="-10" y="-9" width="20" height="5" rx="2"/></g></g>
+        <g transform="translate(76 214)"><rect x="-13" y="-34" width="26" height="34" rx="6" fill="#dff1f4" fill-opacity="0.5" stroke="#9fb9c0" stroke-width="1.2"/><rect x="-14" y="-39" width="28" height="6" rx="2" fill="#2f6fa3"/>
+          <g fill="#e9c27a"><circle cx="-5" cy="-8" r="5"/><circle cx="5" cy="-9" r="5"/><circle cx="0" cy="-17" r="5"/><circle cx="-5" cy="-25" r="5"/><circle cx="6" cy="-24" r="5"/></g></g>
+        <g transform="translate(116 214)"><rect x="-13" y="-36" width="26" height="36" rx="3" fill="#b8433a"/><rect x="-13" y="-36" width="26" height="6" fill="#8d2f28"/><rect x="-9" y="-24" width="18" height="12" rx="2" fill="#f6e7c8"/><text x="0" y="-15" text-anchor="middle" font-size="7" font-weight="800" fill="#8d2f28">TEA</text></g>
+      </g>
+      <g transform="translate(232 132)">
+        <circle r="17" fill="#fbf4e6" stroke="#6d3f22" stroke-width="3"/>
+        <g stroke="#6d3f22" stroke-width="1.2"><path d="M0 -13 V-10 M13 0 H10 M0 13 V10 M-13 0 H-10"/></g>
+        <path id="hH" d="M0 0 V-7" stroke="#2d1b12" stroke-width="2" stroke-linecap="round"/>
+        <path id="mH" d="M0 0 V-11" stroke="#2d1b12" stroke-width="1.3" stroke-linecap="round"/>
+        <circle r="1.6" fill="#2d1b12"/>
+      </g>
+      <g transform="translate(262 104)">
+        <rect width="126" height="112" rx="6" fill="#6d3f22"/>
+        <rect x="5" y="5" width="116" height="102" rx="3" style="fill: var(--board)"/>
+        <text class="chalk h" x="63" y="24" text-anchor="middle">MENU</text>
+        <path d="M30 30 H96" stroke="#f4efe2" stroke-opacity="0.4" stroke-dasharray="3 3"/>
+        <text class="chalk" x="14" y="46">Milk tea</text><text class="chalk" x="112" y="46" text-anchor="end">80</text>
+        <text class="chalk" x="14" y="62">Cardamom</text><text class="chalk" x="112" y="62" text-anchor="end">100</text>
+        <text class="chalk" x="14" y="78">Pink tea</text><text class="chalk" x="112" y="78" text-anchor="end">150</text>
+        <text class="chalk" x="14" y="94">Rusk</text><text class="chalk" x="112" y="94" text-anchor="end">40</text>
+        <text x="63" y="104" text-anchor="middle" font-size="6.5" font-weight="700" style="fill: var(--chalk)" opacity="0.7">PRICES IN PKR</text>
+      </g>
+      <path d="M12 110 H214" stroke="#6d3f22" stroke-width="2.4" stroke-linecap="round"/>
+      <g id="tickets"></g>
+
+      <!-- the stall keeper behind the counter -->
+      <g id="keeper">
+        <path d="M150 360 Q152 290 178 274 Q205 262 232 274 Q258 290 260 360Z" fill="#5b3a29"/>
+        <path d="M188 274 L205 300 L222 274 Q205 268 188 274Z" fill="#f3ead8"/>
+        <path d="M178 278 Q175 320 180 360 H230 Q235 320 232 278 Q218 300 205 302 Q192 300 178 278Z" fill="#7c4f36"/>
+        <rect x="197" y="250" width="16" height="22" rx="6" fill="#b97b52"/>
+        <ellipse cx="205" cy="232" rx="23" ry="25" fill="#c98b62"/>
+        <path d="M182 222 Q183 200 205 198 Q227 200 228 222 Q216 214 205 214 Q194 214 182 222Z" fill="#f7f1e3"/>
+        <path d="M182 222 Q205 210 228 222" fill="none" stroke="#d9cfbb" stroke-width="2"/>
+        <g class="blink"><ellipse cx="196" cy="234" rx="2.2" ry="2.8" fill="#2d1b12"/><ellipse cx="214" cy="234" rx="2.2" ry="2.8" fill="#2d1b12"/></g>
+        <path d="M193 226 Q196 224 199 226 M211 226 Q214 224 217 226" stroke="#4a2b17" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+        <path d="M194 246 Q205 243 216 246 Q213 250 205 249 Q197 250 194 246Z" fill="#3a2418"/>
+        <path id="mouth" d="M198 252 Q205 256 212 252" stroke="#7a3a2a" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        <ellipse cx="182" cy="234" rx="3" ry="5" fill="#b97b52"/><ellipse cx="228" cy="234" rx="3" ry="5" fill="#b97b52"/>
+        <circle cx="190" cy="243" r="4" fill="#e88a7a" opacity="0.35"/><circle cx="220" cy="243" r="4" fill="#e88a7a" opacity="0.35"/>
+      </g>
+      <!-- the keeper's resting arm -->
+      <path id="armL" d="M176 284 Q150 320 160 350" fill="none" stroke="#5b3a29" stroke-width="12" stroke-linecap="round"/>
+      <circle id="handL" cx="160" cy="352" r="6" fill="#c98b62"/>
+
+      <!-- counter: top slab, then a painted front panel -->
+      <rect x="0" y="356" width="400" height="12" style="fill: var(--woodTop)"/>
+      <rect x="0" y="356" width="400" height="3" fill="#fff" opacity="0.18"/>
+      <rect x="0" y="368" width="400" height="132" style="fill: var(--wood)"/>
+      <rect x="10" y="378" width="380" height="112" rx="8" style="fill: var(--panel)"/>
+      <rect x="16" y="384" width="368" height="100" rx="6" fill="none" stroke="#ffd23f" stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round"/>
+      <g id="motifs"></g>
+      <text x="200" y="443" text-anchor="middle" font-size="25" font-weight="900" fill="#fff6e0" letter-spacing="3" stroke="#6d1f12" stroke-width="5" paint-order="stroke">FRESH CHAI</text>
+      <text x="200" y="465" text-anchor="middle" font-size="9" font-weight="800" fill="#ffd23f" letter-spacing="2">BOILED TWICE · POURED HIGH</text>
+
+      <!-- till box at the right -->
+      <g transform="translate(362 356)">
+        <path d="M-28 0 V-24 Q-28 -28 -24 -28 H24 Q28 -28 28 -24 V0Z" style="fill: var(--wood2)"/>
+        <rect x="-16" y="-31" width="32" height="5" rx="2" fill="#2d1b12"/>
+        <rect x="-22" y="-20" width="44" height="12" rx="2" fill="#000" opacity="0.18"/>
+        <text id="tillTxt" y="-11" text-anchor="middle" font-size="8.5" font-weight="800" fill="#ffd23f">0</text>
+      </g>
+
+      <!-- stove with its blue flame -->
+      <g transform="translate(96 356)">
+        <rect x="-44" y="-18" width="88" height="18" rx="4" fill="#2f3440"/>
+        <rect x="-44" y="-18" width="88" height="4" rx="2" fill="#4a5161"/>
+        <circle cx="32" cy="-9" r="4.5" fill="#8a919e"/><path id="knob" d="M32 -9 V-13" stroke="#2f3440" stroke-width="1.6" stroke-linecap="round"/>
+        <g id="flame" transform="translate(0 -20)"></g>
+      </g>
+
+      <!-- the pan: it rides to the glass for the high pour -->
+      <g id="pan" transform="translate(96 336)">
+        <path d="M37 -36 L84 -45" stroke="#5d6470" stroke-width="4" stroke-linecap="round"/>
+        <path d="M66 -42 L86 -46" stroke="#3a2418" stroke-width="7" stroke-linecap="round"/>
+        <path d="M-37 -46 L-34 -2 Q0 4 34 -2 L37 -46Z" fill="url(#steelG)"/>
+        <ellipse cx="0" cy="-46" rx="37" ry="7" fill="#3a3f48"/>
+        <ellipse id="tea" cx="0" cy="-45" rx="34" ry="5.6" fill="#c9d8e0"/>
+        <path id="foam" d="M-34 -45 Q0 -45 34 -45" fill="#e2c39a"/>
+        <g id="bubbles"></g>
+        <path id="drip" d="" fill="#a8703f"/>
+        <ellipse cx="0" cy="-46" rx="37" ry="7" fill="none" stroke="#c9ced6" stroke-width="2"/>
+      </g>
+      <!-- the keeper's working arm (a soft rubber-hose sleeve) reaches the pan handle -->
+      <path id="armR" d="" fill="none" stroke="#5b3a29" stroke-width="12" stroke-linecap="round"/>
+      <circle id="handR" r="6.5" fill="#c98b62"/>
+
+      <!-- the glass on its saucer, the pour stream and the rusk -->
+      <g id="stream"><path id="streamP" d="" fill="none" stroke="#b07a4a" stroke-width="4.5" stroke-linecap="round"/><path id="streamH" d="" fill="none" stroke="#fff" stroke-opacity="0.35" stroke-width="1.2" stroke-linecap="round"/></g>
+      <g id="cup" transform="translate(240 356)">
+        <ellipse cx="0" cy="1" rx="30" ry="5" fill="#000" opacity="0.18"/>
+        <ellipse cx="0" cy="-1" rx="28" ry="5" fill="#f4f1ea" stroke="#c9c2b4"/>
+        <g id="rusk" opacity="0" transform="translate(19 -5) rotate(-12)"><rect x="-9" y="-4" width="20" height="7" rx="2.5" fill="#d99a52"/><path d="M-6 -2 h14 M-6 1 h14" stroke="#b8763a" stroke-width="0.8"/></g>
+        <g transform="translate(0 -2)">
+          <path d="M-15 -58 L-12 0 H12 L15 -58Z" fill="#fff" fill-opacity="0.18"/>
+          <g clip-path="url(#glassClip)">
+            <rect id="liq" x="-16" y="0" width="32" height="0" fill="#b07a4a"/>
+            <rect id="froth" x="-16" y="0" width="32" height="0" fill="#e8cda8"/>
+            <g id="nuts"></g>
+          </g>
+          <path d="M-15 -58 L-12 0 H12 L15 -58Z" fill="url(#glassG)" stroke="#fff" stroke-opacity="0.7" stroke-width="1.2"/>
+          <path d="M-10 -52 L-8.5 -6" stroke="#fff" stroke-opacity="0.55" stroke-width="2" stroke-linecap="round"/>
+        </g>
+      </g>
+      <!-- a customer's hand comes in to take the glass -->
+      <g id="customer" opacity="0">
+        <path id="custArm" d="" fill="none" stroke="#3a6ea5" stroke-width="16" stroke-linecap="round"/>
+        <circle id="custHand" r="8.5" fill="#d9a27a"/>
+      </g>
+      <g id="coins"></g>
+
+      <!-- awning, string lights and the bell -->
+      <path d="M0 0 H400 V58 H0Z" fill="url(#awn)"/>
+      <path d="M0 0 H400 V10 H0Z" fill="#000" opacity="0.12"/>
+      <g id="scallops"></g>
+      <path id="wire" d="M0 74 Q200 98 400 74" fill="none" stroke="#2d1b12" stroke-width="1"/>
+      <g id="bulbs"></g>
+      <g id="bell" transform="translate(378 64)">
+        <path d="M0 -6 V2" stroke="#2d1b12" stroke-width="1.2"/>
+        <g id="bellBody"><path d="M-8 14 Q-8 2 0 2 Q8 2 8 14Z" fill="#d4a93c"/><path d="M-9 14 H9" stroke="#a07a20" stroke-width="2" stroke-linecap="round"/><circle cy="16" r="2" fill="#a07a20"/></g>
+      </g>
+      <g id="fx"></g>
+    </svg>
+    <canvas id="steam" aria-hidden="true"></canvas>
+  </div>
+
+  <div class="controls">
+    <button class="btn main" id="brew" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9h11v5a5 5 0 0 1 -5 5h-1a5 5 0 0 1 -5 -5z M16 10h2a2 2 0 0 1 0 4h-2 M8 3c0 2 2 2 2 4M12 3c0 2 2 2 2 4"/></svg><span id="brewLabel">Brew</span></button>
+    <div class="seg" role="radiogroup" aria-label="Tea to brew">
+      <label><input type="radio" name="tea" value="milk" checked><span>Milk tea</span></label>
+      <label><input type="radio" name="tea" value="cardamom"><span>Cardamom</span></label>
+      <label><input type="radio" name="tea" value="pink"><span>Pink tea</span></label>
+    </div>
+    <label class="tog"><input type="checkbox" id="ruskBox"><span>Rusk</span></label>
+    <button class="btn" id="ring" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z M10 21h4"/></svg>Ring bell</button>
+  </div>
+  <p class="status" id="status" aria-live="polite">An order is in. Press Brew.</p>
+  <p class="hint">Lower the flame when the tea rises to the rim. Move your pointer through the steam. The wall clock shows the real time.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var NS = "http://www.w3.org/2000/svg", TAU = Math.PI * 2;
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function f1(v) { return v.toFixed(1); }
+  function lerp(a, b, k) { return a + (b - a) * k; }
+  function ease(k) { return k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; }
+  var scene = $("scene"), statusEl = $("status");
+  function say(m) { statusEl.textContent = m; }
+
+  /* ---------- 1. Decoration built once: scallops, bulbs, panel motifs ---------- */
+  var bulbs = [];
+  (function build() {
+    var i;
+    for (i = 0; i < 10; i++) el("path", { d: "M" + i * 40 + " 58 a20 12 0 0 0 40 0Z", fill: i % 2 ? "var(--awnB)" : "var(--awnA)", style: "fill: var(" + (i % 2 ? "--awnA" : "--awnB") + ")" }, $("scallops"));
+    for (i = 0; i < 9; i++) {
+      var x = 22 + i * 44.5, tt = x / 400, y = (1 - tt) * (1 - tt) * 74 + 2 * (1 - tt) * tt * 98 + tt * tt * 74;
+      var g = el("g", { transform: "translate(" + f1(x) + " " + f1(y) + ")" }, $("bulbs"));
+      var sw = el("g", {}, g);
+      el("circle", { "class": "glowB", cy: 9, r: 20, fill: "url(#bulbG)" }, sw);
+      el("rect", { x: -2.2, y: 0, width: 4.4, height: 4, fill: "#2d1b12" }, sw);
+      el("circle", { cy: 8.5, r: 4.6, style: "fill: var(--bulb)" }, sw);
+      bulbs.push({ g: sw, x: x, y: y, a: 0, v: 0 });
+    }
+    // flowers and leaves painted on the counter front
+    var M = $("motifs");
+    [[44, 408], [356, 408], [44, 462], [356, 462]].forEach(function (p, j) {
+      var fg = el("g", { transform: "translate(" + p[0] + " " + p[1] + ")" }, M);
+      for (var k = 0; k < 6; k++) el("ellipse", { cx: 0, cy: -7, rx: 3.6, ry: 7, fill: ["#ffd23f", "#3bceac", "#ff4f79", "#ffffff"][(j + k) % 4], transform: "rotate(" + k * 60 + ")" }, fg);
+      el("circle", { r: 3.6, fill: "#2d1b12" }, fg);
+    });
+    for (i = 0; i < 4; i++) el("path", { d: "M" + (78 + i * 80) + " 396 q10 -8 20 0 q-10 8 -20 0Z", fill: "#3bceac" }, M);
+    for (i = 0; i < 3; i++) el("path", { d: "M" + (128 + i * 62) + " 479 q10 -6 20 0 q-10 6 -20 0Z", fill: i === 1 ? "#ffd23f" : "#3bceac" }, M);
+    // flame tongues of the gas ring
+    for (i = 0; i < 9; i++) el("path", { "class": "tongue", d: "M" + (-28 + i * 7) + " 0 q-2.5 -7 0 -12 q2.5 5 0 12Z", fill: "url(#flameG)" }, $("flame"));
+  })();
+  var tongues = [].slice.call(document.querySelectorAll(".tongue"));
+
+  /* ---------- 2. Orders: tickets on the rail ---------- */
+  var TEAS = {
+    milk: { name: "Milk tea", short: "Milk tea", price: 80, col: "#b07a4a", froth: "#e8cda8" },
+    cardamom: { name: "Cardamom tea", short: "Cardamom", price: 100, col: "#b98352", froth: "#ecd3ae" },
+    pink: { name: "Pink tea", short: "Pink tea", price: 150, col: "#e39aac", froth: "#f6d2db" }
+  };
+  var NAMES = ["Ayesha", "Bilal", "Zainab", "Hamza", "Sana", "Usman", "Mahnoor", "Fahad", "Iqra", "Danish"];
+  var tickets = [], nameIdx = Math.floor(Math.random() * NAMES.length), served = 0, total = 0;
+  function addTicket(kind, rusk) {
+    if (tickets.length >= 3) { say("Three orders are waiting already. Brew!"); return null; }
+    var keys = Object.keys(TEAS);
+    var tk = { name: NAMES[nameIdx++ % NAMES.length], kind: kind || keys[Math.floor(Math.random() * 3)], rusk: rusk != null ? rusk : Math.random() < 0.45, y: -60, vy: 0, x: 0, g: null, done: false };
+    tk.price = TEAS[tk.kind].price + (tk.rusk ? 40 : 0);
+    var g = el("g", { "class": "tk" }, $("tickets"));
+    el("path", { d: "M0 0 H60 V50 L55 47 L50 50 L45 47 L40 50 L35 47 L30 50 L25 47 L20 50 L15 47 L10 50 L5 47 L0 50Z", fill: "#fff8e8", stroke: "#d9c9a8", "stroke-width": 0.8 }, g);
+    el("rect", { x: 24, y: -3, width: 12, height: 6, rx: 1.5, fill: "#8a919e" }, g);
+    var t1 = el("text", { "class": "nm", x: 5, y: 14 }, g); t1.textContent = tk.name;
+    var t2 = el("text", { x: 5, y: 25 }, g); t2.textContent = TEAS[tk.kind].short;
+    var t3 = el("text", { x: 5, y: 35 }, g); t3.textContent = tk.rusk ? "+ rusk" : "no rusk";
+    var t4 = el("text", { x: 55, y: 44, "text-anchor": "end", style: "font-weight:800" }, g); t4.textContent = "PKR " + tk.price;
+    tk.g = g; tickets.push(tk);
+    if (tickets.length === 1) matchControls(tk);
+    swingBell();
+    return tk;
+  }
+  function matchControls(tk) {
+    var r = document.querySelector('input[name="tea"][value="' + tk.kind + '"]'); if (r) r.checked = true;
+    $("ruskBox").checked = tk.rusk;
+  }
+  function stepTickets(dt) {
+    tickets.forEach(function (tk, i) {
+      var tx = 14 + i * 66, ty = tk.done ? -80 : 112;
+      tk.x += (tx - tk.x) * Math.min(1, dt * 8);
+      if (reduce.matches) tk.y += (ty - tk.y) * Math.min(1, dt * 8);
+      else { tk.vy += ((ty - tk.y) * 120 - tk.vy * 11) * dt; tk.y += tk.vy * dt; }
+      tk.g.setAttribute("transform", "translate(" + f1(tk.x) + " " + f1(tk.y) + ") rotate(" + f1(i === 0 && !tk.done ? Math.sin(perf() * 2) * 1.5 : 0) + " 30 0)");
+    });
+    for (var i = tickets.length - 1; i >= 0; i--) if (tickets[i].done && tickets[i].y < -60) { tickets[i].g.remove(); tickets.splice(i, 1); if (i === 0 && tickets[0]) matchControls(tickets[0]); }
+  }
+  function perf() { return performance.now() / 1000; }
+
+  /* ---------- 3. The brew: stages with timers, one at a time ---------- */
+  // idle → leaves → milk → spice → boil (lower the flame!) → simmer → lift → pour → back → serve → paid → idle
+  var stage = "idle", st = 0, heat = 0.35, flameHigh = false, foam = 0, spilled = false, teaCol = "#c9d8e0", pourK = 0, fill = 0, brewKind = "milk", brewRusk = false, boilCount = 0;
+  var panPos = { x: 96, y: 336, a: 0 };
+  var STOVE = { x: 96, y: 336, a: 0 }, POUR = { x: 300, y: 270, a: -56 };
+  function setBtn(label, state) {
+    $("brewLabel").textContent = label;
+    var b = $("brew");
+    b.classList.toggle("urgent", state === "urgent");
+    if (state === "busy") b.setAttribute("aria-disabled", "true"); else b.removeAttribute("aria-disabled");
+  }
+  function startBrew() {
+    if (stage !== "idle") return;
+    if (!tickets.filter(function (t) { return !t.done; }).length) addTicket(null, null);
+    var r = document.querySelector('input[name="tea"]:checked');
+    brewKind = r ? r.value : "milk"; brewRusk = $("ruskBox").checked;
+    stage = "leaves"; st = 0; foam = 0; spilled = false; boilCount = 0; flameHigh = true; teaCol = "#c9d8e0"; fill = 0;
+    $("nuts").textContent = ""; $("drip").setAttribute("d", "");
+    setBtn("Brewing…", "busy");
+    say("Tea leaves into the water…");
+  }
+  function lowerFlame() {
+    if (stage !== "boil") return;
+    flameHigh = false; stage = "simmer"; st = 0; boilCount++;
+    $("knob").setAttribute("transform", "rotate(-60 32 -9)");
+    setBtn("Brewing…", "busy");
+    say(boilCount === 1 ? "Flame down just in time. Once more for a strong cup." : "Perfect. Now the high pour.");
+  }
+  function next(s) { stage = s; st = 0; }
+  var leafBits = [];
+  function stepBrew(dt, t) {
+    st += dt;
+    var T = TEAS[brewKind];
+    if (stage === "leaves") {
+      if (Math.random() < dt * 30) leafBits.push({ x: 96 + rnd(-14, 14), y: 250, vy: rnd(40, 80), c: Math.random() < 0.5 ? "#3a2010" : "#5a2e12", s: rnd(1.4, 2.6) });
+      teaCol = mix("#c9d8e0", "#6b3a18", clamp(st / 1.2, 0, 1));
+      heat = lerp(heat, 0.55, dt);
+      if (st > 1.3) { next("milk"); say("Milk goes in…"); }
+    } else if (stage === "milk") {
+      teaCol = mix("#6b3a18", brewKind === "pink" ? TEAS.milk.col : T.col, clamp(st / 1.3, 0, 1));
+      if (st > 1.4) { next("spice"); say(brewKind === "cardamom" ? "Crushed cardamom pods…" : brewKind === "pink" ? "A pinch of the secret: it turns pink…" : "Sugar, stirred in…"); }
+    } else if (stage === "spice") {
+      if (brewKind === "cardamom" && Math.random() < dt * 14) leafBits.push({ x: 96 + rnd(-12, 12), y: 250, vy: rnd(50, 90), c: "#7fae4f", s: 2.6 });
+      if (brewKind === "pink") teaCol = mix(TEAS.milk.col, T.col, clamp(st / 0.9, 0, 1));
+      if (st > 1) { next("boil"); setBtn("Lower the flame", "urgent"); say("It is coming to the boil. Lower the flame before it spills!"); }
+    } else if (stage === "boil") {
+      heat = lerp(heat, 1, dt * 2);
+      foam += dt * (boilCount ? 0.42 : 0.34);
+      if (foam >= 1 && !spilled) {
+        spilled = true; flameHigh = false; boilCount++;
+        $("drip").setAttribute("d", "M-36 -46 q-3 10 -1 22 q2 3 3 0 q1 -12 2 -20Z M30 -45 q4 8 3 16 q-2 3 -3 0Z");
+        hiss(); say("It boiled over! A little lost on the stove, the rest is fine.");
+        stage = "simmer"; st = 0; setBtn("Brewing…", "busy");
+      }
+    } else if (stage === "simmer") {
+      heat = lerp(heat, 0.6, dt * 2);
+      foam = Math.max(0, foam - dt * 1.4);
+      if (st > 1.1) {
+        $("knob").removeAttribute("transform");
+        if (boilCount < 2) { flameHigh = true; next("boil"); setBtn("Lower the flame", "urgent"); say("Back up to the boil, once more…"); }
+        else { next("lift"); say("Up it goes for the high pour."); setBtn("Pouring…", "busy"); }
+      }
+    } else if (stage === "lift") {
+      var k = ease(clamp(st / 0.9, 0, 1));
+      panPos.x = lerp(STOVE.x, POUR.x, k); panPos.y = lerp(STOVE.y, POUR.y, k) - Math.sin(k * Math.PI) * 30; panPos.a = lerp(0, POUR.a, Math.max(0, k * 1.4 - 0.4));
+      heat = lerp(heat, 0.35, dt * 2);
+      if (st > 0.9) next("pour");
+    } else if (stage === "pour") {
+      // two long pulls: the pan rises high and drops low while the tea streams down
+      var p = st / 2.6;
+      panPos.x = POUR.x; panPos.a = POUR.a; panPos.y = POUR.y - 25 * Math.sin(Math.min(1, p) * Math.PI * 4 - Math.PI / 2) - 25;
+      pourK = p < 0.92 ? 1 : 0;
+      fill = clamp(p * 1.05, 0, 1);
+      if (st > 2.6) { pourK = 0; next("back"); if (brewKind === "pink") sprinkle(); }
+    } else if (stage === "back") {
+      var kb = ease(clamp(st / 0.8, 0, 1));
+      panPos.x = lerp(POUR.x, STOVE.x, kb); panPos.y = lerp(POUR.y, STOVE.y, kb) - Math.sin(kb * Math.PI) * 24; panPos.a = lerp(POUR.a, 0, Math.min(1, kb * 1.5));
+      if (st > 0.85) { next("serve"); if (brewRusk) $("rusk").setAttribute("opacity", 1); say("Served on a saucer" + (brewRusk ? " with a rusk." : ".")); }
+    } else if (stage === "serve") {
+      custU = clamp(st / 1.1, 0, 1);
+      if (st > 1.15) { next("paid"); pay(); }
+    } else if (stage === "paid") {
+      custU = 1 - clamp(st / 1.1, 0, 1);
+      cupAway = clamp(st / 1.1, 0, 1);
+      if (st > 1.2) {
+        next("idle"); cupAway = 0; fill = 0; $("rusk").setAttribute("opacity", 0); $("nuts").textContent = "";
+        setBtn("Brew", "idle"); heat = 0.35; teaCol = "#c9d8e0"; foam = 0; $("drip").setAttribute("d", "");
+        var left = tickets.filter(function (x) { return !x.done; }).length;
+        say(left ? "Next order: " + tickets.filter(function (x) { return !x.done; })[0].name + ". Press Brew." : "All served. Ring the bell for the next customer.");
+      }
+    }
+    if (stage === "idle" || stage === "leaves" || stage === "milk" || stage === "spice") { if (stage === "idle") heat = lerp(heat, 0.35, dt); }
+    if (stage !== "boil" && stage !== "simmer" && stage !== "spice" && stage !== "milk" && stage !== "leaves" && foam > 0) foam = Math.max(0, foam - dt);
+  }
+  var custU = 0, cupAway = 0;
+  function pay() {
+    var tk = tickets.filter(function (x) { return !x.done; })[0];
+    var price = TEAS[brewKind].price + (brewRusk ? 40 : 0), line;
+    if (tk) {
+      tk.done = true;
+      var right = tk.kind === brewKind && tk.rusk === brewRusk;
+      line = right ? ["Perfect, thank you!", "Just how I like it.", "Smells wonderful!"][served % 3] : "Not what I ordered, but lovely!";
+      if (brewKind === "pink" && right) line = "That colour! Thank you.";
+      say(tk.name + ": “" + line + "” Paid PKR " + price + ".");
+      bubble(334, 300, line);
+    }
+    served++; total += price;
+    $("till").textContent = "Served " + served + " · PKR " + total; $("tillTxt").textContent = total;
+    var nCoins = Math.min(5, Math.ceil(price / 40));
+    for (var i = 0; i < nCoins; i++) coins.push({ el: el("g", {}, $("coins")), x: 320 + rnd(-8, 8), y: 300 - i * 6, vy: 0, vx: rnd(10, 30), life: 2.2, bounce: 0, delay: i * 0.12 });
+    coins.forEach(function (c) { if (!c.el.firstChild) { el("ellipse", { rx: 5.5, ry: 5.5, fill: "#f2c14e", stroke: "#b88a1e", "stroke-width": 1.2 }, c.el); el("text", { y: 2.4, "text-anchor": "middle", "font-size": 5.5, "font-weight": 800, fill: "#8a6512" }, c.el).textContent = "10"; } });
+    $("mouth").setAttribute("d", "M196 251 Q205 260 214 251");
+    setTimeout(function () { $("mouth").setAttribute("d", "M198 252 Q205 256 212 252"); }, 1600);
+  }
+  function sprinkle() { for (var i = 0; i < 7; i++) el("circle", { cx: f1(rnd(-11, 11)), cy: f1(-58 + rnd(1, 4)), r: f1(rnd(0.9, 1.5)), fill: i % 2 ? "#8fbf4d" : "#c9e08a" }, $("nuts")); }
+  function mix(a, b, k) {
+    var pa = [1, 3, 5].map(function (i) { return parseInt(a.substr(i, 2), 16); }), pb = [1, 3, 5].map(function (i) { return parseInt(b.substr(i, 2), 16); });
+    return "rgb(" + pa.map(function (v, i) { return Math.round(v + (pb[i] - v) * k); }).join(",") + ")";
+  }
+  function bubble(x, y, text) {
+    var g = el("g", { transform: "translate(" + x + " " + y + ")" }, $("fx")), w = Math.min(150, text.length * 5.6 + 18);
+    el("rect", { x: -w / 2, y: -18, width: w, height: 22, rx: 11, fill: "#fff", stroke: "#2d1b12", "stroke-width": 1.2 }, g);
+    el("path", { d: "M8 4 L16 12 L18 4Z", fill: "#fff", stroke: "#2d1b12", "stroke-width": 1.2, "stroke-linejoin": "round" }, g);
+    el("rect", { x: 7, y: 2, width: 12, height: 3, fill: "#fff" }, g);
+    var tx = el("text", { y: -3, "text-anchor": "middle", "font-size": 9.5, "font-weight": 700, fill: "#2d1b12" }, g); tx.textContent = text;
+    g.animate && !reduce.matches && g.animate([{ opacity: 0, transform: "translate(" + x + "px," + (y + 8) + "px) scale(0.6)" }, { opacity: 1, transform: "translate(" + x + "px," + y + "px) scale(1.06)", offset: 0.2 }, { opacity: 1, transform: "translate(" + x + "px," + y + "px) scale(1)", offset: 0.85 }, { opacity: 0, transform: "translate(" + x + "px," + (y - 8) + "px) scale(1)" }], { duration: 2400, easing: "ease-out" });
+    setTimeout(function () { g.remove(); }, 2400);
+  }
+  function hiss() { for (var i = 0; i < 16; i++) steam.push({ x: 96 + rnd(-40, 40), y: 320, vx: rnd(-30, 30), vy: rnd(-60, -30), life: rnd(0.8, 1.4), max: 1.4, s: rnd(8, 14) }); }
+
+  /* ---------- 4. Bell, bulbs and coins ---------- */
+  var bellA = 0, bellV = 0;
+  function swingBell() { bellV += 260; }
+  var coins = [];
+
+  /* ---------- 5. Steam on a canvas that swirls away from your pointer ---------- */
+  var cv = $("steam"), cx = cv.getContext("2d"), sc = 1, steam = [], ptr = { x: -99, y: -99, vx: 0, vy: 0, t: 0 };
+  var puffS = document.createElement("canvas"); puffS.width = puffS.height = 64;
+  function paintPuff() {
+    var g = puffS.getContext("2d"), col = getComputedStyle(document.documentElement).getPropertyValue("--steam").trim() || "255,255,255";
+    g.clearRect(0, 0, 64, 64);
+    var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(" + col + ",0.9)"); gr.addColorStop(1, "rgba(" + col + ",0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  }
+  paintPuff();
+  function resize() { var r = cv.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1); cv.width = Math.max(2, Math.round(r.width * d)); cv.height = Math.max(2, Math.round(r.height * d)); sc = cv.width / 400; }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(scene); else window.addEventListener("resize", resize);
+  resize();
+  function stepSteam(dt, t) {
+    var calm = reduce.matches;
+    // from the pan while hot, from the full glass, and a wisp from the pour
+    if (Math.random() < dt * (calm ? 4 : 14) * heat && (stage !== "lift" && stage !== "pour" && stage !== "back")) steam.push({ x: panPos.x + rnd(-24, 24), y: panPos.y - 48, vx: rnd(-6, 6), vy: rnd(-34, -22), life: rnd(1.4, 2.4), max: 2.4, s: rnd(7, 12) });
+    if (fill > 0.6 && cupAway < 0.5 && Math.random() < dt * (calm ? 3 : 8)) steam.push({ x: 240 + rnd(-8, 8), y: 296 - cupAway * 40, vx: rnd(-4, 4), vy: rnd(-26, -18), life: rnd(1.2, 2), max: 2, s: rnd(5, 9) });
+    for (var i = steam.length - 1; i >= 0; i--) {
+      var p = steam[i]; p.life -= dt;
+      if (p.life <= 0 || p.y < 40) { steam.splice(i, 1); continue; }
+      var dx = p.x - ptr.x, dy = p.y - ptr.y, d2 = dx * dx + dy * dy;
+      if (d2 < 3600 && t - ptr.t < 0.3) { var f = (1 - Math.sqrt(d2) / 60) * 8; p.vx += (ptr.vx * 0.06 + dx * 0.05) * f * dt * 6; p.vy += (ptr.vy * 0.06 + dy * 0.05) * f * dt * 6; }
+      p.vx += Math.sin(t * 2 + p.y * 0.05) * 6 * dt; p.vx *= 0.985; p.vy = p.vy * 0.99 - 4 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.s += 6 * dt;
+    }
+  }
+  function drawSteam() {
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, cv.width, cv.height); cx.setTransform(sc, 0, 0, sc, 0, 0);
+    steam.forEach(function (p) { var a = Math.min(1, p.life / p.max * 1.4) * Math.min(1, (p.max - p.life) * 3) * 0.28; cx.globalAlpha = a; cx.drawImage(puffS, p.x - p.s, p.y - p.s, p.s * 2, p.s * 2); });
+    cx.globalAlpha = 1;
+  }
+
+  /* ---------- 6. Drawing the moving parts each frame ---------- */
+  function lipPoint() { var a = panPos.a * Math.PI / 180, x = -37, y = -46; return { x: panPos.x + x * Math.cos(a) - y * Math.sin(a), y: panPos.y + x * Math.sin(a) + y * Math.cos(a) }; }
+  function gripPoint() { var a = panPos.a * Math.PI / 180, x = 76, y = -44; return { x: panPos.x + x * Math.cos(a) - y * Math.sin(a), y: panPos.y + x * Math.sin(a) + y * Math.cos(a) }; }
+  function render(t, dt) {
+    var calm = reduce.matches;
+    // flame tongues flicker and grow with the heat
+    tongues.forEach(function (tg, i) { var h = (flameHigh ? 1.25 : 0.65) * (0.8 + 0.3 * Math.sin(t * 24 + i * 1.7)); tg.setAttribute("transform", "translate(" + (-28 + i * 7) + " 0) scale(1 " + h.toFixed(2) + ") translate(" + (28 - i * 7) + " 0)"); });
+    $("pan").setAttribute("transform", "translate(" + f1(panPos.x) + " " + f1(panPos.y) + ") rotate(" + f1(panPos.a) + ")");
+    $("tea").setAttribute("fill", teaCol);
+    // foam dome rising over the rim with bubbles
+    var fh = foam * 18 + (stage === "boil" && !calm ? Math.sin(t * 18) * 1.2 : 0);
+    $("foam").setAttribute("d", fh > 0.5 ? "M-35 -45 C-30 " + f1(-46 - fh * 1.3) + " 30 " + f1(-46 - fh * 1.3) + " 35 -45 Q0 -40 -35 -45Z" : "M-34 -45 Q0 -45 34 -45");
+    $("foam").setAttribute("fill", mix("#e2c39a", brewKind === "pink" && stage !== "leaves" && stage !== "milk" ? "#f3c6d2" : "#e8d2b0", 0.5));
+    var bg = $("bubbles");
+    if ((stage === "boil" || stage === "simmer" || heat > 0.55) && Math.random() < dt * 22 && bg.childNodes.length < 14 && panPos.a === 0) {
+      var b = el("circle", { cx: f1(rnd(-26, 26)), cy: -46, r: f1(rnd(1, 2.6)), fill: "#fff", opacity: 0.6 }, bg);
+      b.dataset.life = "0.5";
+    }
+    [].slice.call(bg.childNodes).forEach(function (c) { var l = +c.dataset.life - dt; c.dataset.life = l; c.setAttribute("cy", f1(+c.getAttribute("cy") - dt * 10 - foam * dt * 30)); if (l <= 0 || panPos.a !== 0) c.remove(); });
+    // the keeper's arm follows the handle
+    var gp = gripPoint(), sh = { x: 232, y: 284 };
+    var mx = (sh.x + gp.x) / 2 + 20, my = Math.max(sh.y, gp.y) + 24;
+    $("armR").setAttribute("d", "M" + sh.x + " " + sh.y + " Q" + f1(mx) + " " + f1(my) + " " + f1(gp.x) + " " + f1(gp.y));
+    $("handR").setAttribute("cx", f1(gp.x)); $("handR").setAttribute("cy", f1(gp.y));
+    // the pour stream
+    if (pourK > 0) {
+      var lp = lipPoint(), top = -2 - 58 * fill * 0.88 + 356 - 2;
+      $("streamP").setAttribute("d", "M" + f1(lp.x) + " " + f1(lp.y) + " Q" + f1(lp.x - 2) + " " + f1((lp.y + top) / 2) + " 240 " + f1(top));
+      $("streamP").setAttribute("stroke", teaCol);
+      $("streamH").setAttribute("d", "M" + f1(lp.x + 1) + " " + f1(lp.y + 4) + " L241 " + f1(top - 6));
+      if (!calm && Math.random() < dt * 30) splashes.push({ x: 240 + rnd(-6, 6), y: top, vx: rnd(-30, 30), vy: rnd(-60, -20), life: 0.4 });
+    } else { $("streamP").setAttribute("d", ""); $("streamH").setAttribute("d", ""); }
+    // glass fill and froth
+    var lh = 58 * fill * 0.88, frothH = Math.min(8, fill * 12);
+    $("liq").setAttribute("y", f1(-lh)); $("liq").setAttribute("height", f1(lh)); $("liq").setAttribute("fill", TEAS[brewKind].col);
+    $("froth").setAttribute("y", f1(-lh - 0.5)); $("froth").setAttribute("height", fill > 0.05 ? f1(frothH * (pourK ? 1.2 : 1)) : 0); $("froth").setAttribute("fill", TEAS[brewKind].froth);
+    // customer's arm reaches in from the lower right, takes the glass
+    var cu = ease(custU), hx = lerp(430, 262, cu), hy = lerp(520, 322, cu);
+    $("customer").setAttribute("opacity", custU > 0.01 ? 1 : 0);
+    $("custArm").setAttribute("d", "M440 540 Q" + f1(lerp(430, 330, cu)) + " " + f1(lerp(520, 420, cu)) + " " + f1(hx) + " " + f1(hy));
+    $("custHand").setAttribute("cx", f1(hx)); $("custHand").setAttribute("cy", f1(hy));
+    var ca = ease(cupAway);
+    $("cup").setAttribute("transform", "translate(" + f1(240 + ca * 190) + " " + f1(356 + ca * 160) + ")");
+    // bell and bulbs swing on springs
+    bellV += (-bellA * 90 - bellV * 3.5) * dt; bellA += bellV * dt;
+    $("bellBody").setAttribute("transform", "rotate(" + f1(clamp(bellA, -40, 40)) + " 0 2)");
+    bulbs.forEach(function (bl, i) {
+      bl.v += (-bl.a * 40 - bl.v * 2.2) * dt + (calm ? 0 : Math.sin(t * 0.8 + i) * 2 * dt);
+      bl.a += bl.v * dt; bl.g.setAttribute("transform", "rotate(" + f1(bl.a) + ")");
+    });
+    // coins fall, bounce and slide into the till
+    for (var i = coins.length - 1; i >= 0; i--) {
+      var c = coins[i];
+      if (c.delay > 0) { c.delay -= dt; c.el.setAttribute("opacity", 0); continue; }
+      c.el.setAttribute("opacity", 1);
+      c.life -= dt; c.vy += 600 * dt; c.y += c.vy * dt; c.x += c.vx * dt;
+      if (c.y > 349) { c.y = 349; c.vy = -c.vy * 0.45; c.vx += 30 * dt * 10; c.bounce++; }
+      if (c.x > 352 || c.life <= 0) { c.el.remove(); coins.splice(i, 1); continue; }
+      c.el.setAttribute("transform", "translate(" + f1(c.x) + " " + f1(c.y) + ") scale(" + f1(c.bounce % 2 ? 0.7 : 1) + " 1)");
+    }
+    // tea leaves falling into the pan and splashes from the pour
+    var fx = $("fx");
+    for (i = leafBits.length - 1; i >= 0; i--) {
+      var lb = leafBits[i]; lb.y += lb.vy * dt;
+      if (!lb.el) lb.el = el("rect", { width: f1(lb.s), height: f1(lb.s * 0.6), fill: lb.c }, fx);
+      lb.el.setAttribute("x", f1(lb.x)); lb.el.setAttribute("y", f1(lb.y));
+      if (lb.y > 290) { lb.el.remove(); leafBits.splice(i, 1); }
+    }
+    for (i = splashes.length - 1; i >= 0; i--) {
+      var sp = splashes[i]; sp.life -= dt; sp.vy += 300 * dt; sp.x += sp.vx * dt; sp.y += sp.vy * dt;
+      if (!sp.el) sp.el = el("circle", { r: 1.3, fill: teaCol }, fx);
+      sp.el.setAttribute("cx", f1(sp.x)); sp.el.setAttribute("cy", f1(sp.y));
+      if (sp.life <= 0) { sp.el.remove(); splashes.splice(i, 1); }
+    }
+  }
+  var splashes = [];
+  function clock() {
+    var d = new Date(), m = d.getMinutes() + d.getSeconds() / 60, h = (d.getHours() % 12) + m / 60;
+    $("hH").setAttribute("transform", "rotate(" + f1(h * 30) + ")"); $("mH").setAttribute("transform", "rotate(" + f1(m * 6) + ")");
+  }
+  clock(); setInterval(clock, 1000);
+
+  /* ---------- 7. Main loop ---------- */
+  var last = performance.now(), custT = 18;
+  function frame(now) {
+    var dt = Math.min(0.033, (now - last) / 1000), t = now / 1000; last = now;
+    stepBrew(dt, t); stepTickets(dt); stepSteam(dt, t);
+    custT -= dt;
+    if (custT <= 0) { custT = rnd(16, 26); if (tickets.filter(function (x) { return !x.done; }).length < 2) { var tk = addTicket(); if (tk) say(tk.name + " walks up: " + TEAS[tk.kind].name.toLowerCase() + (tk.rusk ? " and a rusk." : ".")); } }
+    render(t, dt); drawSteam();
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- 8. Input ---------- */
+  $("brew").addEventListener("click", function () {
+    if (stage === "idle") startBrew();
+    else if (stage === "boil") lowerFlame();
+    else say(stage === "pour" ? "Pouring: watch the froth build." : "Busy brewing. Wait for the boil to lower the flame.");
+  });
+  $("ring").addEventListener("click", function () {
+    var tk = addTicket();
+    if (tk) say("Ding! " + tk.name + " orders " + TEAS[tk.kind].name.toLowerCase() + (tk.rusk ? " and a rusk." : "."));
+  });
+  document.querySelectorAll('input[name="tea"]').forEach(function (r) { r.addEventListener("change", function () { say(TEAS[r.value].name + " chosen. PKR " + TEAS[r.value].price + "."); }); });
+  $("ruskBox").addEventListener("change", function (e) { say(e.target.checked ? "A rusk on the saucer: PKR 40 more." : "No rusk this time."); });
+  function logical(e) { var r = scene.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * 400, y: (e.clientY - r.top) / r.height * 500 }; }
+  scene.addEventListener("pointermove", function (e) {
+    var p = logical(e), now = perf();
+    ptr.vx = (p.x - ptr.x) / Math.max(0.016, now - ptr.t); ptr.vy = (p.y - ptr.y) / Math.max(0.016, now - ptr.t);
+    ptr.vx = clamp(ptr.vx, -600, 600); ptr.vy = clamp(ptr.vy, -600, 600); ptr.x = p.x; ptr.y = p.y; ptr.t = now;
+    bulbs.forEach(function (b) { if (Math.abs(b.x - p.x) < 18 && Math.abs(b.y + 9 - p.y) < 22) b.v += ptr.vx * 0.05; });
+  });
+  scene.addEventListener("pointerdown", function (e) {
+    var p = logical(e);
+    if (p.x > 360 && p.y < 96) { $("ring").click(); return; }
+    if (stage === "boil" && Math.hypot(p.x - 96, p.y - 320) < 70) { lowerFlame(); return; }
+    if (p.x > 30 && p.x < 170 && p.y > 270 && p.y < 360 && stage === "idle") startBrew();
+  });
+  window.addEventListener("keydown", function (e) { if ((e.key === "f" || e.key === "F") && stage === "boil") lowerFlame(); });
+
+  /* ---------- 9. Auto demo until the visitor takes over ---------- */
+  var demoOn = true, timers = [], KINDS = ["cardamom", "pink", "milk"], di = 0;
+  function at(ms, fn) { timers.push(setTimeout(function () { if (demoOn) fn(); }, ms)); }
+  function demo() {
+    if (!demoOn) return;
+    if (stage === "idle") {
+      if (!tickets.filter(function (x) { return !x.done; }).length) addTicket(KINDS[di % 3], di % 2 === 0);
+      di++;
+      var tk = tickets.filter(function (x) { return !x.done; })[0]; if (tk) matchControls(tk);
+      startBrew();
+    }
+    // lower the flame when the foam nears the rim, both boils
+    var iv = setInterval(function () { if (!demoOn) { clearInterval(iv); return; } if (stage === "boil" && foam > 0.8) lowerFlame(); if (stage === "idle") { clearInterval(iv); at(1800, demo); } }, 100);
+    timers.push(iv);
+  }
+  function stopDemo(e) { if (!e.isTrusted || !demoOn) return; demoOn = false; timers.forEach(function (x) { clearTimeout(x); clearInterval(x); }); }
+  ["pointerdown", "keydown", "wheel"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+
+  addTicket("cardamom", true);
+  requestAnimationFrame(frame);
+  at(700, demo);
+})();
+</script>
+</body>
+</html>

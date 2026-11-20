@@ -1,0 +1,624 @@
+<!doctype html>
+<!-- Chill & Craft · Fresco Shift · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fresco Shift · a sliding picture puzzle</title>
+<meta name="color-scheme" content="light dark">
+<script>
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  :root {
+    --wall: #ebe2d2; --wall2: #dfd3bd; --ink: #1f2a26; --muted: #6e6656; --card: #fbf8f1; --line: rgba(60, 50, 30, .16);
+    --green: #1f4d3f; --green-ink: #f7f1e3; --gold: #b8893b; --gold2: #e6c47a; --ring: #1f4d3f; --spot: rgba(255, 244, 214, .7);
+    --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Georgia", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --wall: #121a19; --wall2: #0b1110; --ink: #f1ead9; --muted: #a59d89; --card: #1a2321; --line: rgba(240, 225, 190, .14);
+      --green: #7fc4a8; --green-ink: #0b1311; --gold: #d6a75a; --gold2: #f0cf8a; --ring: #f0cf8a; --spot: rgba(255, 232, 180, .22);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --wall: #121a19; --wall2: #0b1110; --ink: #f1ead9; --muted: #a59d89; --card: #1a2321; --line: rgba(240, 225, 190, .14);
+    --green: #7fc4a8; --green-ink: #0b1311; --gold: #d6a75a; --gold2: #f0cf8a; --ring: #f0cf8a; --spot: rgba(255, 232, 180, .22);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; color: var(--ink); font-family: var(--serif); -webkit-font-smoothing: antialiased;
+    background: repeating-linear-gradient(90deg, transparent 0 120px, rgba(0, 0, 0, .025) 120px 121px), linear-gradient(180deg, var(--wall), var(--wall2)); }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .page { min-height: 100vh; display: flex; flex-direction: column; overflow-x: clip; }
+
+  .top { display: flex; align-items: center; gap: 16px; padding: 16px 30px 8px; animation: drop .7s cubic-bezier(.2, .9, .3, 1.1) both; }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+  .brand .mk { width: 40px; height: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 4px; border: 2px solid var(--gold); }
+  .brand .mk i { background: var(--green); } .brand .mk i:nth-child(2) { background: var(--gold); } .brand .mk i:nth-child(4) { background: transparent; }
+  .brand b { display: block; font-size: 23px; font-weight: 600; letter-spacing: .02em; font-variant: small-caps; line-height: 1; }
+  .brand small { display: block; font-size: 12px; font-style: italic; color: var(--muted); margin-top: 3px; }
+  .room { margin: 0 auto; font-variant: small-caps; letter-spacing: .14em; font-size: 15px; color: var(--muted); white-space: nowrap; }
+  .room b { color: var(--ink); font-weight: 600; }
+  .chip { font-variant: small-caps; letter-spacing: .1em; font-size: 15px; padding: 7px 14px; border: 1px solid var(--line); background: var(--card); white-space: nowrap; }
+  .chip b { color: var(--gold); }
+  .icon-btn { width: 42px; height: 42px; border: 1px solid var(--line); background: var(--card); display: grid; place-items: center; cursor: pointer; }
+  .icon-btn svg { width: 19px; height: 19px; }
+
+  .layout { flex: 1; display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 34px; padding: 4px 30px 24px; min-height: 0; }
+  .placard { display: flex; flex-direction: column; justify-content: center; gap: 16px; min-width: 0; }
+  .placard > * { animation: rise .8s cubic-bezier(.2, .8, .2, 1) both; }
+  .placard > *:nth-child(2) { animation-delay: .08s; } .placard > *:nth-child(3) { animation-delay: .16s; } .placard > *:nth-child(4) { animation-delay: .24s; } .placard > *:nth-child(5) { animation-delay: .32s; } .placard > *:nth-child(6) { animation-delay: .4s; }
+  .eyebrow { margin: 0; font-variant: small-caps; letter-spacing: .2em; font-size: 15px; color: var(--gold); }
+  h1 { margin: 0; font-weight: 400; font-size: clamp(38px, 3.4vw, 52px); line-height: 1.04; letter-spacing: -.01em; }
+  h1 em { color: var(--green); }
+  .lead { margin: 0; font-size: 16px; line-height: 1.55; color: var(--muted); }
+  .label { background: var(--card); border: 1px solid var(--line); padding: 16px 18px 14px; box-shadow: 0 18px 30px -24px rgba(40, 30, 10, .5); position: relative; }
+  .label::before { content: ""; position: absolute; left: 50%; top: -7px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--gold); box-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
+  .label .no { font-family: var(--sans); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+  .label h2 { margin: 3px 0 2px; font-size: 23px; font-weight: 600; font-style: italic; }
+  .label .meta { margin: 0; font-size: 14px; color: var(--muted); }
+  .label .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .label .stats span { display: block; font-family: var(--sans); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+  .label .stats b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stars { color: var(--gold); letter-spacing: .1em; }
+  .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+  .actions .btn:not(.primary) { padding: 0 6px; font-size: 12.5px; gap: 5px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); background: var(--card); font-family: var(--sans); font-size: 13.5px; font-weight: 600; letter-spacing: .04em; cursor: pointer; transition: transform .15s, background .2s; white-space: nowrap; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn svg { width: 15px; height: 15px; }
+  .btn.primary { grid-column: 1 / -1; background: var(--green); color: var(--green-ink); border-color: transparent; font-size: 15px; }
+  .btn[aria-pressed="true"] { background: color-mix(in srgb, var(--gold) 25%, var(--card)); border-color: var(--gold); }
+  .keys { margin: 0; font-family: var(--sans); font-size: 12.5px; color: var(--muted); line-height: 1.8; }
+  kbd { font: 700 11px var(--sans); padding: 2px 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 4px; }
+
+  .wall { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; min-width: 0; }
+  .wall::before { content: ""; position: absolute; top: -30px; left: 50%; width: min(760px, 100%); height: 100%; transform: translateX(-50%); background: radial-gradient(ellipse 50% 60% at 50% 30%, var(--spot), transparent 70%); pointer-events: none; animation: lamp 1.2s .2s both; }
+  .lampbar { position: relative; width: 140px; height: 12px; border-radius: 0 0 8px 8px; background: linear-gradient(180deg, #3a3a3a, #1a1a1a); box-shadow: 0 8px 18px -6px var(--spot); animation: drop .7s both; }
+  .frame { position: relative; padding: 26px; background: linear-gradient(135deg, #8a6324, #e6c47a 22%, #a87a2e 45%, #f2d895 62%, #8a6324 85%); box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .55), inset 0 0 0 3px rgba(60, 40, 10, .5), inset 0 0 0 9px rgba(255, 240, 200, .25); animation: hangin .9s .15s cubic-bezier(.2, .9, .3, 1.15) both; }
+  .frame::before { content: ""; position: absolute; inset: 14px; border: 2px solid rgba(70, 45, 10, .45); pointer-events: none; }
+  .mat { padding: 10px; background: #efe6d2; box-shadow: inset 0 3px 8px rgba(0, 0, 0, .35); }
+  .board { position: relative; width: var(--bs, 520px); height: var(--bs, 520px); overflow: hidden; touch-action: none;
+    background: repeating-linear-gradient(45deg, rgba(0, 0, 0, .05) 0 2px, transparent 2px 5px), #c9bb9d; }
+  .tile { position: absolute; left: 0; top: 0; width: calc(100% / var(--n)); height: calc(100% / var(--n)); border: 0; padding: 0; margin: 0; cursor: pointer;
+    transform: translate(calc(var(--c) * 100%), calc(var(--r) * 100%)); transition: transform .17s cubic-bezier(.3, .9, .3, 1), box-shadow .6s, filter .2s;
+    background-image: var(--img); background-size: calc(var(--n) * 100%) calc(var(--n) * 100%); background-position: var(--bx) var(--by); background-color: #b9a77f;
+    box-shadow: inset 0 0 0 1px rgba(30, 20, 5, .45), inset 1px 1px 0 2px rgba(255, 250, 230, .22); }
+  .tile:hover { filter: brightness(1.08); }
+  .tile.can { cursor: pointer; }
+  .tile .num { position: absolute; left: 6px; top: 5px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px; background: rgba(20, 20, 15, .72); color: #fff; font: 700 12px/22px var(--sans); opacity: 0; transition: opacity .2s; }
+  .board.nums .tile .num { opacity: 1; }
+  .tile.fly { animation: fly .8s cubic-bezier(.2, .9, .3, 1.1) backwards; }
+  .tile.ghost { opacity: 0; transition: opacity .8s; pointer-events: none; }
+  .board.done .tile { box-shadow: inset 0 0 0 0 transparent; cursor: default; }
+  .board.done .tile.ghost { opacity: 1; }
+  .peek { position: absolute; inset: 0; background-image: var(--img); background-size: cover; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 3; }
+  .board.peeking .peek { opacity: .9; }
+  .sweep { position: absolute; inset: 0; z-index: 4; pointer-events: none; background: linear-gradient(105deg, transparent 35%, rgba(255, 250, 225, .55) 50%, transparent 65%); transform: translateX(-120%); }
+  .board.done .sweep { animation: sweep 1.3s .3s ease-in-out both; }
+  .cloth { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; background: repeating-linear-gradient(90deg, #6b1f2a 0 14px, #5a1823 14px 28px); color: #f6e7c8; font-size: 22px; font-style: italic; transform: translateY(-101%); transition: transform .45s cubic-bezier(.5, 0, .2, 1); }
+  .board.paused .cloth { transform: none; }
+  .stamp { position: absolute; z-index: 6; right: -18px; bottom: -18px; width: 118px; height: 118px; border-radius: 50%; display: grid; place-items: center; text-align: center; background: radial-gradient(circle, #f6dc9a, #c8963f 70%); color: #4a3008; font-variant: small-caps; font-weight: 700; letter-spacing: .08em; font-size: 17px; line-height: 1.05; box-shadow: 0 10px 22px -6px rgba(0, 0, 0, .5), inset 0 0 0 5px rgba(255, 245, 210, .5); transform: scale(0) rotate(-30deg); transition: transform .5s cubic-bezier(.3, 1.6, .5, 1); pointer-events: none; }
+  .stamp.on { transform: scale(1) rotate(-12deg); }
+  .demo { position: absolute; z-index: 7; left: 50%; top: -22px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 5px 5px 5px 14px; background: var(--card); border: 1px solid var(--line); font-family: var(--sans); font-size: 12.5px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; box-shadow: 0 10px 20px -12px rgba(0, 0, 0, .5); transition: opacity .3s; animation: fadein .6s 1s both; }
+  .demo i { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: blink 1.2s infinite; }
+  .demo .btn { min-height: 32px; background: var(--green); color: var(--green-ink); border: 0; }
+  .demo.gone { opacity: 0; pointer-events: none; }
+  #confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
+
+  .strip { display: flex; gap: 12px; align-items: flex-start; animation: rise .8s .3s both; max-width: 100%; overflow-x: auto; padding: 6px 4px 4px; }
+  .thumb { position: relative; flex: none; width: 92px; border: 0; background: none; padding: 0; cursor: pointer; text-align: center; font-family: var(--sans); }
+  .thumb canvas { display: block; width: 92px; height: 70px; border: 4px solid #d8c08a; box-shadow: 0 6px 12px -6px rgba(0, 0, 0, .5); object-fit: cover; transition: transform .2s; }
+  .thumb:hover canvas { transform: translateY(-3px); }
+  .thumb span { display: block; font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.2; }
+  .thumb b { display: block; font-size: 11px; color: var(--gold); letter-spacing: .1em; min-height: 14px; }
+  .thumb.locked canvas { filter: grayscale(1) blur(1.5px) brightness(.8); }
+  .thumb.locked::after { content: ""; position: absolute; left: 50%; top: 22px; width: 18px; height: 16px; margin-left: -9px; border-radius: 3px; background: #2a2a2a; box-shadow: 0 -7px 0 -3px #2a2a2a; }
+  .thumb.cur canvas { border-color: var(--green); transform: translateY(-3px); }
+
+  .overlay { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; background: rgba(20, 16, 10, .45); backdrop-filter: blur(3px); }
+  .overlay[hidden] { display: none; }
+  .ov-card { width: min(440px, calc(100% - 32px)); padding: 28px 28px 22px; background: var(--card); border: 1px solid var(--line); text-align: center; box-shadow: 0 30px 60px -30px rgba(0, 0, 0, .7); animation: pop .45s cubic-bezier(.2, .9, .3, 1.3) both; }
+  .ov-card p.k { margin: 0; font-variant: small-caps; letter-spacing: .2em; color: var(--gold); }
+  .ov-card h2 { margin: 6px 0 4px; font-size: 34px; font-weight: 400; font-style: italic; }
+  .ov-card .bigstars { font-size: 30px; color: var(--gold); letter-spacing: .15em; }
+  .ov-card p.t { margin: 10px 0 18px; color: var(--muted); line-height: 1.55; }
+  .ov-card .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+  @keyframes drop { from { opacity: 0; transform: translateY(-16px); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(20px); } }
+  @keyframes fadein { from { opacity: 0; } }
+  @keyframes pop { from { opacity: 0; transform: scale(.6); } }
+  @keyframes blink { 50% { opacity: .3; } }
+  @keyframes lamp { 0% { opacity: 0; } 30% { opacity: .6; } 40% { opacity: .1; } 60% { opacity: 1; } }
+  @keyframes hangin { from { opacity: 0; transform: translateY(-40px) rotate(-2deg); } }
+  @keyframes fly { from { opacity: 0; transform: translate(calc(var(--c) * 100% + var(--fx)), calc(var(--r) * 100% + var(--fy))) rotate(var(--fr)); } }
+  @keyframes sweep { to { transform: translateX(120%); } }
+
+  @media (max-width: 1100px) {
+    .layout { grid-template-columns: 320px minmax(0, 1fr); gap: 22px; }
+    .room { display: none; }
+    .top .chip { margin-left: auto; }
+  }
+  @media (max-width: 820px) {
+    .top { padding: 12px 16px 6px; }
+    .brand small { display: none; }
+    .layout { grid-template-columns: 1fr; padding: 4px 16px 24px; }
+    .wall { order: -1; padding-top: 30px; }
+    .frame { padding: 14px; }
+    .mat { padding: 6px; }
+    .stamp { width: 92px; height: 92px; font-size: 14px; right: -8px; bottom: -8px; }
+    .placard { gap: 14px; }
+  }
+  @media (max-height: 860px) and (min-width: 821px) {
+    h1 { font-size: 40px; }
+    .lead { font-size: 14.5px; }
+    .placard { gap: 12px; }
+    .label { padding: 12px 16px 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <a class="brand" href="#" aria-label="Fresco Shift home"><span class="mk" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><b>Fresco Shift</b><small>The restoration room</small></span></a>
+    <p class="room">Gallery · <b id="roomName">Rivers &amp; Mountains</b></p>
+    <span class="chip">Best <b id="bestTop">0</b></span>
+    <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch light or dark theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21h6M12 17v4M7 3h10l-2 8H9z"/><path d="M8 11c0 3 2 5 4 6 2-1 4-3 4-6" /></svg>
+    </button>
+  </header>
+
+  <main class="layout">
+    <aside class="placard">
+      <p class="eyebrow" id="eyebrow">Room three · a restorer at work</p>
+      <h1>Put the <em>masterpiece</em> back together.</h1>
+      <p class="lead">A storm cut six gallery paintings into tiles. Slide the pieces into the gap, one or a whole row at a time, until the picture is whole and the varnish shines again.</p>
+      <section class="label" aria-label="Painting label">
+        <span class="no" id="paintNo">No. 1 of 6 · 3 × 3</span>
+        <h2 id="paintTitle">Dawn on the River</h2>
+        <p class="meta" id="paintMeta">Gouache study of boats at first light</p>
+        <div class="stats">
+          <div><span>Moves</span><b id="moves">0</b></div>
+          <div><span>Time</span><b id="time">0:00</b></div>
+          <div><span>Par</span><b id="par">40</b></div>
+          <div><span>Score</span><b id="score">0</b></div>
+        </div>
+      </section>
+      <div class="actions">
+        <button class="btn primary" id="playBtn" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>Start restoring</button>
+        <button class="btn" id="peekBtn" type="button" aria-label="Peek at the finished painting (hold)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>Peek</button>
+        <button class="btn" id="numBtn" type="button" aria-pressed="false" aria-label="Show tile numbers">1 2 3</button>
+        <button class="btn" id="pauseBtn" type="button" aria-pressed="false">Pause</button>
+        <button class="btn" id="shuffleBtn" type="button">Shuffle</button>
+      </div>
+      <p class="keys"><kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd> slide a tile into the gap · click or swipe tiles · hold <kbd>H</kbd> to peek · <kbd>N</kbd> numbers · <kbd>P</kbd> pause · <kbd>R</kbd> reshuffle</p>
+    </aside>
+
+    <section class="wall" id="wall" aria-label="The painting on the gallery wall">
+      <span class="lampbar" aria-hidden="true"></span>
+      <div class="frame" id="frame">
+        <div class="demo" id="demo"><i aria-hidden="true"></i>A restorer is at work<button class="btn" id="takeBtn" type="button">Let me try</button></div>
+        <div class="mat">
+          <div class="board" id="board" tabindex="-1" role="group" aria-label="Sliding puzzle board" style="--n:3">
+            <div class="peek" aria-hidden="true"></div>
+            <div class="sweep" aria-hidden="true"></div>
+            <div class="cloth" aria-hidden="true">Paused · press P to lift the cloth</div>
+          </div>
+        </div>
+        <div class="stamp" id="stamp" aria-hidden="true">Fully<br>restored</div>
+      </div>
+      <nav class="strip" id="strip" aria-label="Paintings in this gallery"></nav>
+    </section>
+  </main>
+  <div class="overlay" id="overlay" hidden>
+    <div class="ov-card" role="dialog" aria-modal="false" aria-labelledby="ovTitle">
+      <p class="k" id="ovKicker">Restored</p>
+      <h2 id="ovTitle">Dawn on the River</h2>
+      <div class="bigstars" id="ovStars" aria-hidden="true">★★★</div>
+      <p class="t" id="ovText"></p>
+      <div class="row"><button class="btn primary" id="ovGo" type="button">Next painting</button><button class="btn" id="ovAlt" type="button">Replay this one</button></div>
+    </div>
+  </div>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <p class="sr" id="live" aria-live="polite"></p>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const root = document.documentElement;
+  const rmq = matchMedia("(prefers-reduced-motion: reduce)");
+  let reduced = rmq.matches;
+  if (rmq.addEventListener) rmq.addEventListener("change", (e) => { reduced = e.matches; });
+  const dq = matchMedia("(prefers-color-scheme: dark)");
+  const isDark = () => { const t = root.getAttribute("data-theme"); return t ? t === "dark" : dq.matches; };
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage off */ } }
+  };
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  // ---------- paintings ----------
+  function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  function grad(c, y0, y1, stops) { const g = c.createLinearGradient(0, y0, 0, y1); stops.forEach((s, i) => g.addColorStop(i / (stops.length - 1), s)); return g; }
+  function hills(c, S, y, amp, col, r, freq) { c.fillStyle = col; c.beginPath(); c.moveTo(0, S); c.lineTo(0, y); for (let x = 0; x <= S; x += S / 40) c.lineTo(x, y - Math.sin(x / S * freq + r() * .2) * amp - Math.sin(x / S * freq * 2.3) * amp * .4); c.lineTo(S, S); c.closePath(); c.fill(); }
+  const PAINTINGS = [
+    { title: "Dawn on the River", meta: "Gouache study of boats at first light", n: 3, par: 40, draw(c, S, r) {
+      c.fillStyle = grad(c, 0, S * .62, ["#f4a99c", "#ffd3a6", "#fff0c8"]); c.fillRect(0, 0, S, S);
+      const sg = c.createRadialGradient(S * .68, S * .4, 0, S * .68, S * .4, S * .3); sg.addColorStop(0, "rgba(255,250,220,1)"); sg.addColorStop(.3, "rgba(255,235,190,.8)"); sg.addColorStop(1, "rgba(255,220,180,0)"); c.fillStyle = sg; c.fillRect(0, 0, S, S);
+      c.fillStyle = "#fffbe8"; c.beginPath(); c.arc(S * .68, S * .4, S * .075, 0, 7); c.fill();
+      c.fillStyle = "rgba(230,150,170,.55)"; [[.2, .16, .2], [.45, .1, .14], [.85, .2, .16]].forEach(([x, y, w]) => { c.beginPath(); c.ellipse(S * x, S * y, S * w, S * .022, 0, 0, 7); c.fill(); });
+      hills(c, S, S * .5, S * .04, "#c7a1c4", r, 7); hills(c, S, S * .56, S * .035, "#a487bd", r, 11); hills(c, S, S * .61, S * .02, "#7a6aa3", r, 5);
+      c.fillStyle = grad(c, S * .62, S, ["#a8c9db", "#6f9cc0", "#3f6d97"]); c.fillRect(0, S * .62, S, S * .38);
+      for (let i = 0; i < 60; i++) { c.fillStyle = `rgba(255,245,210,${.25 + r() * .5})`; const y = S * (.63 + r() * .3); c.fillRect(S * .68 - S * (.02 + r() * .06) * (1 + (y / S - .6) * 2), y, S * (.04 + r() * .1), 2 + r() * 2); }
+      c.save(); c.translate(S * .3, S * .74);
+      c.fillStyle = "#4a2d1f"; c.beginPath(); c.moveTo(-S * .11, 0); c.quadraticCurveTo(0, S * .06, S * .12, -S * .01); c.lineTo(S * .1, S * .02); c.quadraticCurveTo(0, S * .07, -S * .09, S * .02); c.fill();
+      c.fillRect(-2, -S * .2, 4, S * .2); c.fillStyle = "#fdf3dc"; c.beginPath(); c.moveTo(4, -S * .19); c.lineTo(S * .1, -S * .02); c.lineTo(4, -S * .02); c.fill();
+      c.fillStyle = "#d9534f"; c.fillRect(4, -S * .1, S * .055, S * .018); c.fillStyle = "#3b6ea8"; c.beginPath(); c.moveTo(-4, -S * .16); c.lineTo(-S * .07, -S * .03); c.lineTo(-4, -S * .03); c.fill();
+      c.restore();
+      c.strokeStyle = "rgba(60,40,30,.6)"; c.lineWidth = 2; [[.15, .22], [.2, .25], [.82, .3]].forEach(([x, y]) => { c.beginPath(); c.moveTo(S * x - 10, S * y - 5); c.quadraticCurveTo(S * x - 4, S * y - 8, S * x, S * y); c.quadraticCurveTo(S * x + 4, S * y - 8, S * x + 10, S * y - 5); c.stroke(); });
+      for (let i = 0; i < 70; i++) { const x = i < 35 ? r() * S * .22 : S * (.8 + r() * .2), h = S * (.12 + r() * .2); c.strokeStyle = r() < .5 ? "#2f5131" : "#4a7040"; c.lineWidth = 2 + r() * 2; c.beginPath(); c.moveTo(x, S); c.quadraticCurveTo(x + (r() - .5) * 30, S - h * .6, x + (r() - .5) * 40, S - h); c.stroke(); if (r() < .3) { c.fillStyle = "#5a3a22"; c.fillRect(x + (r() - .5) * 40 - 3, S - h - 14, 7, 16); } }
+    } },
+    { title: "Apricot Spring", meta: "Valley orchard under snow peaks", n: 3, par: 44, draw(c, S, r) {
+      c.fillStyle = grad(c, 0, S * .55, ["#7cc4f2", "#bfe4fb", "#eaf6ff"]); c.fillRect(0, 0, S, S);
+      c.fillStyle = "rgba(255,255,255,.85)"; [[.25, .12], [.7, .08]].forEach(([x, y]) => { c.beginPath(); c.ellipse(S * x, S * y, S * .09, S * .03, 0, 0, 7); c.ellipse(S * x + S * .05, S * y - S * .02, S * .05, S * .03, 0, 0, 7); c.fill(); });
+      const peaks = [[0, .5], [.12, .3], [.22, .42], [.38, .18], [.52, .38], [.66, .24], [.8, .4], [.92, .28], [1, .45]];
+      c.fillStyle = "#6c80a8"; c.beginPath(); c.moveTo(0, S * .6); peaks.forEach(([x, y]) => c.lineTo(S * x, S * y)); c.lineTo(S, S * .6); c.fill();
+      c.fillStyle = "#f8fbff"; peaks.slice(1, -1).forEach(([x, y], i) => { if (i % 2) return; c.beginPath(); c.moveTo(S * x, S * y); c.lineTo(S * x - S * .05, S * y + S * .08); c.lineTo(S * x - S * .015, S * y + S * .06); c.lineTo(S * x + S * .02, S * y + S * .09); c.lineTo(S * x + S * .055, S * y + S * .07); c.closePath(); c.fill(); });
+      hills(c, S, S * .58, S * .03, "#4f6b8c", r, 9);
+      ["#a8d46f", "#8cc152", "#79b347", "#9ccc65", "#6aa84f"].forEach((col, i) => { hills(c, S, S * (.62 + i * .075), S * .012, col, r, 4 + i); });
+      c.strokeStyle = "#7ec8e3"; c.lineWidth = S * .018; c.beginPath(); c.moveTo(S * .05, S); c.bezierCurveTo(S * .2, S * .85, S * .1, S * .75, S * .35, S * .66); c.stroke();
+      c.fillStyle = "#c9b79a"; c.fillRect(S * .2, S * .62, S * .1, S * .06); c.fillStyle = "#7a5a3a"; c.fillRect(S * .19, S * .61, S * .12, S * .015); c.fillStyle = "#4a3a2a"; c.fillRect(S * .24, S * .645, S * .02, S * .035);
+      c.strokeStyle = "#5a3b28"; c.lineCap = "round";
+      const br = (x, y, a, l, w, d) => { const x2 = x + Math.cos(a) * l, y2 = y + Math.sin(a) * l; c.lineWidth = w; c.beginPath(); c.moveTo(x, y); c.lineTo(x2, y2); c.stroke(); if (d > 0) { br(x2, y2, a - .45 - r() * .3, l * .72, w * .65, d - 1); br(x2, y2, a + .4 + r() * .3, l * .7, w * .65, d - 1); } else { for (let k = 0; k < 26; k++) { c.fillStyle = r() < .6 ? "#ffc4d6" : r() < .5 ? "#fff3f6" : "#ff9fbf"; c.beginPath(); c.arc(x2 + (r() - .5) * S * .09, y2 + (r() - .5) * S * .07, 2 + r() * S * .008, 0, 7); c.fill(); } } };
+      br(S * .74, S, -Math.PI / 2, S * .2, S * .03, 4);
+    } },
+    { title: "Desert Moon", meta: "Caravan crossing the dunes at night", n: 4, par: 120, draw(c, S, r) {
+      c.fillStyle = grad(c, 0, S * .6, ["#0a1a44", "#26306e", "#6a4a7e"]); c.fillRect(0, 0, S, S);
+      for (let i = 0; i < 160; i++) { c.fillStyle = `rgba(255,255,240,${.3 + r() * .7})`; c.fillRect(r() * S, r() * S * .55, 1 + r() * 2, 1 + r() * 2); }
+      const mg = c.createRadialGradient(S * .3, S * .24, 0, S * .3, S * .24, S * .22); mg.addColorStop(0, "rgba(255,248,220,.6)"); mg.addColorStop(1, "rgba(255,248,220,0)"); c.fillStyle = mg; c.fillRect(0, 0, S, S);
+      c.fillStyle = "#fbf3d8"; c.beginPath(); c.arc(S * .3, S * .24, S * .085, 0, 7); c.fill(); c.fillStyle = "rgba(200,190,160,.5)"; [[-.02, -.02, .015], [.03, .02, .02], [-.03, .035, .01]].forEach(([x, y, rr]) => { c.beginPath(); c.arc(S * (.3 + x), S * (.24 + y), S * rr, 0, 7); c.fill(); });
+      const dune = (y, amp, col, hi, f) => { c.fillStyle = col; c.beginPath(); c.moveTo(0, S); c.lineTo(0, y); for (let x = 0; x <= S; x += S / 50) c.lineTo(x, y - Math.sin(x / S * f + 1) * amp); c.lineTo(S, S); c.fill(); c.strokeStyle = hi; c.lineWidth = 3; c.beginPath(); for (let x = 0; x <= S; x += S / 50) { const yy = y - Math.sin(x / S * f + 1) * amp; x ? c.lineTo(x, yy) : c.moveTo(x, yy); } c.stroke(); };
+      dune(S * .6, S * .05, "#6e4a6e", "rgba(255,200,170,.25)", 4); dune(S * .68, S * .06, "#9a5d4a", "rgba(255,210,170,.35)", 3);
+      c.fillStyle = "#2a1626";
+      [[.5, .565], [.58, .56], [.66, .57]].forEach(([x, y], i) => { const X = S * x, Y = S * y, k = S * .045; c.beginPath(); c.ellipse(X, Y - k * .5, k * .7, k * .32, 0, 0, 7); c.fill(); c.beginPath(); c.arc(X - k * .1, Y - k * .82, k * .22, Math.PI, 0); c.fill(); c.fillRect(X - k * .55, Y - k * .5, k * .1, k * .75); c.fillRect(X + k * .4, Y - k * .5, k * .1, k * .75); c.beginPath(); c.moveTo(X + k * .6, Y - k * .6); c.quadraticCurveTo(X + k * .95, Y - k * .9, X + k * .95, Y - k * 1.2); c.lineWidth = k * .16; c.strokeStyle = "#2a1626"; c.stroke(); c.beginPath(); c.ellipse(X + k * 1.02, Y - k * 1.22, k * .17, k * .1, 0, 0, 7); c.fill(); if (i === 0) { c.fillRect(X - k * .2, Y - k * 1.3, k * .14, k * .35); c.beginPath(); c.arc(X - k * .13, Y - k * 1.36, k * .1, 0, 7); c.fill(); } });
+      dune(S * .8, S * .07, "#c47f4c", "rgba(255,225,180,.5)", 2.4); dune(S * .92, S * .04, "#e0a56f", "rgba(255,240,200,.6)", 3.6);
+      const fg = c.createRadialGradient(S * .8, S * .88, 0, S * .8, S * .88, S * .14); fg.addColorStop(0, "rgba(255,190,90,.8)"); fg.addColorStop(1, "rgba(255,150,60,0)"); c.fillStyle = fg; c.fillRect(0, 0, S, S);
+      c.fillStyle = "#ffcf6b"; c.beginPath(); c.moveTo(S * .8, S * .83); c.quadraticCurveTo(S * .825, S * .87, S * .81, S * .9); c.lineTo(S * .79, S * .9); c.quadraticCurveTo(S * .775, S * .87, S * .8, S * .83); c.fill();
+    } },
+    { title: "Sea Breeze", meta: "Kites over the beach at sunset", n: 4, par: 130, draw(c, S, r) {
+      c.fillStyle = grad(c, 0, S * .55, ["#ff8a65", "#ffb27a", "#ffe0b0"]); c.fillRect(0, 0, S, S);
+      c.fillStyle = "#fff1c9"; c.beginPath(); c.arc(S * .5, S * .55, S * .1, Math.PI, 0); c.fill();
+      c.fillStyle = grad(c, S * .55, S * .78, ["#3f86b0", "#2a618c", "#1d4a70"]); c.fillRect(0, S * .55, S, S * .23);
+      c.strokeStyle = "rgba(255,240,210,.6)"; c.lineWidth = 2; for (let i = 0; i < 40; i++) { const x = r() * S, y = S * (.57 + r() * .2); c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo(x + 10, y - 4, x + 20 + r() * 20, y); c.stroke(); }
+      c.fillStyle = "#f2d29f"; c.beginPath(); c.moveTo(0, S * .8); for (let x = 0; x <= S; x += S / 30) c.lineTo(x, S * .78 + Math.sin(x / S * 9) * S * .01); c.lineTo(S, S); c.lineTo(0, S); c.fill();
+      c.strokeStyle = "rgba(255,255,255,.85)"; c.lineWidth = 4; c.beginPath(); for (let x = 0; x <= S; x += S / 30) { const y = S * .78 + Math.sin(x / S * 9) * S * .01; x ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke();
+      [[.18, .2, "#e8338a", "#ffd23f"], [.38, .12, "#129a9a", "#fff"], [.7, .18, "#3949ab", "#ff7a1a"], [.86, .32, "#1f9d55", "#ffd23f"]].forEach(([x, y, a, b], i) => {
+        const X = S * x, Y = S * y, k = S * .05; c.strokeStyle = "rgba(60,40,40,.5)"; c.lineWidth = 1; c.beginPath(); c.moveTo(X, Y + k); c.quadraticCurveTo(X + S * .05, S * .6, S * (.3 + i * .15), S * .9); c.stroke();
+        c.save(); c.translate(X, Y); c.rotate((i - 1.5) * .15); c.fillStyle = a; c.beginPath(); c.moveTo(0, -k); c.lineTo(k * .8, 0); c.lineTo(0, k); c.lineTo(-k * .8, 0); c.fill(); c.fillStyle = b; c.beginPath(); c.moveTo(0, -k); c.lineTo(k * .8, 0); c.lineTo(0, 0); c.fill(); c.restore(); });
+      const X = S * .66, Y = S * .86, k = S * .07; c.fillStyle = "#6b4630";
+      c.beginPath(); c.ellipse(X, Y - k * .5, k * .75, k * .35, 0, 0, 7); c.fill(); c.beginPath(); c.arc(X - k * .1, Y - k * .82, k * .25, Math.PI, 0); c.fill();
+      [[-.55], [-.3], [.3], [.5]].forEach(([d]) => c.fillRect(X + k * d, Y - k * .5, k * .1, k * .78));
+      c.lineWidth = k * .17; c.strokeStyle = "#6b4630"; c.beginPath(); c.moveTo(X + k * .6, Y - k * .6); c.quadraticCurveTo(X + k * .95, Y - k * .95, X + k * .95, Y - k * 1.25); c.stroke(); c.beginPath(); c.ellipse(X + k * 1.04, Y - k * 1.27, k * .19, k * .1, 0, 0, 7); c.fill();
+      c.fillStyle = "#d7263d"; c.fillRect(X - k * .4, Y - k * 1.1, k * .6, k * .2); ["#ffd23f", "#129a9a", "#e8338a", "#fff"].forEach((col, i) => { c.fillStyle = col; c.beginPath(); c.arc(X - k * .35 + i * k * .17, Y - k * .82, k * .06, 0, 7); c.fill(); });
+    } },
+    { title: "Domes at Dusk", meta: "Old city skyline as the lamps come on", n: 5, par: 260, draw(c, S, r) {
+      c.fillStyle = grad(c, 0, S * .75, ["#271a4a", "#6b2f6a", "#c4506a", "#f6a65a"]); c.fillRect(0, 0, S, S);
+      c.fillStyle = "#fff3d6"; c.beginPath(); c.arc(S * .8, S * .16, S * .05, 0, 7); c.fill(); c.fillStyle = "#3a2056"; c.beginPath(); c.arc(S * .82, S * .145, S * .045, 0, 7); c.fill();
+      for (let i = 0; i < 50; i++) { c.fillStyle = `rgba(255,255,255,${r() * .7})`; c.fillRect(r() * S, r() * S * .35, 1.5, 1.5); }
+      c.strokeStyle = "rgba(40,20,40,.7)"; c.lineWidth = 2; for (let i = 0; i < 9; i++) { const x = S * (.2 + r() * .4), y = S * (.15 + r() * .15); c.beginPath(); c.moveTo(x - 7, y - 3); c.quadraticCurveTo(x - 3, y - 6, x, y); c.quadraticCurveTo(x + 3, y - 6, x + 7, y - 3); c.stroke(); }
+      const city = (base, col, win, scale) => {
+        c.fillStyle = col; let x = -20;
+        while (x < S + 20) {
+          const k = r(), w = S * (.06 + r() * .08) * scale, h = S * (.08 + r() * .1) * scale;
+          if (k < .3) { c.fillRect(x, base - h, w, h + S); c.beginPath(); c.ellipse(x + w / 2, base - h, w * .42, w * .5, 0, Math.PI, 0); c.fill(); c.fillRect(x + w / 2 - 1.5, base - h - w * .5 - 12, 3, 12); }
+          else if (k < .45) { const mh = h * 2.2; c.fillRect(x, base - mh, w * .25, mh + S); c.beginPath(); c.ellipse(x + w * .125, base - mh, w * .2, w * .26, 0, Math.PI, 0); c.fill(); c.fillRect(x - w * .05, base - mh * .7, w * .35, 5); }
+          else c.fillRect(x, base - h * .7, w, h + S);
+          if (win) { c.fillStyle = win; for (let wy = base - h * .6; wy < base - 8; wy += 14 * scale) for (let wx = x + 6; wx < x + w - 6; wx += 12 * scale) if (r() < .35) c.fillRect(wx, wy, 4 * scale, 6 * scale); c.fillStyle = col; }
+          x += w + 4;
+        }
+      };
+      city(S * .62, "#5a3060", null, .8); city(S * .74, "#3a1d44", "rgba(255,200,110,.85)", 1); city(S * .9, "#210f28", "rgba(255,210,120,.95)", 1.25);
+      c.fillStyle = "#1a0a1f"; c.fillRect(0, S * .9, S, S * .1); for (let x = 0; x < S; x += 26) c.fillRect(x, S * .88, 16, S * .02);
+      [[.2, .87], [.5, .87], [.8, .87]].forEach(([x, y]) => { const lg = c.createRadialGradient(S * x, S * y, 0, S * x, S * y, S * .06); lg.addColorStop(0, "rgba(255,200,100,.9)"); lg.addColorStop(1, "rgba(255,160,60,0)"); c.fillStyle = lg; c.fillRect(S * x - S * .06, S * y - S * .06, S * .12, S * .12); c.fillStyle = "#ffd27a"; c.fillRect(S * x - 5, S * y - 8, 10, 14); });
+    } },
+    { title: "Lotus Pond", meta: "Lilies and koi in still water", n: 5, par: 280, draw(c, S, r) {
+      c.fillStyle = grad(c, 0, S, ["#1d5c63", "#2a7f7a", "#1b4f5c"]); c.fillRect(0, 0, S, S);
+      c.strokeStyle = "rgba(220,255,250,.18)"; c.lineWidth = 2; for (let i = 0; i < 14; i++) { const x = r() * S, y = r() * S; for (let k = 1; k < 4; k++) { c.beginPath(); c.ellipse(x, y, k * S * .025, k * S * .012, 0, 0, 7); c.stroke(); } }
+      const koi = (x, y, a, col) => { c.save(); c.translate(x, y); c.rotate(a); c.fillStyle = col; c.beginPath(); c.ellipse(0, 0, S * .05, S * .018, 0, 0, 7); c.fill(); c.beginPath(); c.moveTo(-S * .045, 0); c.lineTo(-S * .075, -S * .02); c.lineTo(-S * .075, S * .02); c.fill(); c.fillStyle = "#fff"; c.beginPath(); c.ellipse(S * .01, 0, S * .015, S * .01, 0, 0, 7); c.fill(); c.restore(); };
+      koi(S * .3, S * .35, .6, "#ff7a2a"); koi(S * .62, S * .62, -2.4, "#ffd2a0"); koi(S * .78, S * .3, 2.2, "#ff5a3a");
+      for (let i = 0; i < 16; i++) { const x = r() * S, y = r() * S, rr = S * (.04 + r() * .06), a = r() * 6; c.fillStyle = r() < .5 ? "#3f8f4a" : "#57a85a"; c.beginPath(); c.moveTo(x, y); c.arc(x, y, rr, a + .25, a + Math.PI * 2 - .25); c.closePath(); c.fill(); c.strokeStyle = "rgba(20,60,30,.4)"; c.lineWidth = 1.2; for (let k = 0; k < 6; k++) { c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a + k) * rr * .9, y + Math.sin(a + k) * rr * .9); c.stroke(); } }
+      [[.22, .7], [.5, .22], [.74, .78], [.88, .5], [.12, .18]].forEach(([x, y], i) => {
+        const X = S * x, Y = S * y, k = S * (.035 + (i % 2) * .012);
+        for (let p = 0; p < 8; p++) { const a = p / 8 * Math.PI * 2; c.fillStyle = p % 2 ? "#ff9fc0" : "#ffd0e0"; c.save(); c.translate(X, Y); c.rotate(a); c.beginPath(); c.ellipse(0, -k * .7, k * .35, k * .8, 0, 0, 7); c.fill(); c.restore(); }
+        c.fillStyle = "#ffd23f"; c.beginPath(); c.arc(X, Y, k * .3, 0, 7); c.fill();
+      });
+    } }
+  ];
+  function paint(i, S) {
+    const cv = document.createElement("canvas"); cv.width = S; cv.height = S;
+    const c = cv.getContext("2d"), r = rng(101 + i * 7919);
+    PAINTINGS[i].draw(c, S, r);
+    // brush strokes sampled from the picture
+    try {
+      const data = c.getImageData(0, 0, S, S).data, n = Math.round(S * S / 260);
+      for (let k = 0; k < n; k++) {
+        const x = (r() * S) | 0, y = (r() * S) | 0, o = (y * S + x) * 4, a = r() * Math.PI;
+        c.strokeStyle = `rgba(${data[o]},${data[o + 1]},${data[o + 2]},.55)`; c.lineWidth = 1 + r() * S / 260; c.lineCap = "round";
+        const l = 3 + r() * S / 90; c.beginPath(); c.moveTo(x - Math.cos(a) * l, y - Math.sin(a) * l); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke();
+      }
+    } catch (e) { /* canvas not readable */ }
+    c.globalAlpha = .05; c.strokeStyle = "#000"; c.lineWidth = 1;
+    for (let k = 0; k < S; k += 4) { c.beginPath(); c.moveTo(k, 0); c.lineTo(k, S); c.stroke(); }
+    c.globalAlpha = 1;
+    const v = c.createRadialGradient(S / 2, S / 2, S * .35, S / 2, S / 2, S * .75); v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(40,20,0,.28)"); c.fillStyle = v; c.fillRect(0, 0, S, S);
+    return cv;
+  }
+
+  // ---------- state ----------
+  const board = $("board");
+  const progress = store.get("frescoshift-progress", { open: 1, stars: [] });
+  const st = { mode: "demo", paused: false, idx: 0, n: 3, moves: 0, secs: 0, started: false, done: false, score: 0, total: 0, best: store.get("frescoshift-best", 0), peeks: 0 };
+  let pos = [], tiles = [], gap = 0, history = [], demoQ = [], demoT = 0, lastNow = performance.now(), gameId = 0, imgUrl = "";
+
+  function setImage(i) {
+    const cv = paint(i, 760);
+    let url = ""; try { url = cv.toDataURL("image/jpeg", .9); } catch (e) { url = ""; }
+    imgUrl = url;
+    board.style.setProperty("--img", url ? `url("${url}")` : "none");
+  }
+  function buildBoard(n) {
+    tiles.forEach((t) => t.remove()); tiles = [];
+    board.style.setProperty("--n", n);
+    for (let id = 0; id < n * n; id++) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "tile"; b.tabIndex = -1; b.dataset.id = id;
+      const hc = id % n, hr = (id / n) | 0;
+      b.style.setProperty("--bx", n > 1 ? (hc / (n - 1) * 100) + "%" : "0"); b.style.setProperty("--by", n > 1 ? (hr / (n - 1) * 100) + "%" : "0");
+      b.innerHTML = `<span class="num" aria-hidden="true">${id + 1}</span>`;
+      b.addEventListener("animationend", () => b.classList.remove("fly"));
+      if (id === n * n - 1) { b.classList.add("ghost"); b.setAttribute("aria-hidden", "true"); }
+      board.appendChild(b); tiles.push(b);
+    }
+    pos = tiles.map((_, i) => i); gap = n * n - 1;
+    layoutTiles(true);
+  }
+  function layoutTiles(intro) {
+    const n = st.n;
+    pos.forEach((id, cell) => {
+      const t = tiles[id]; t.style.setProperty("--c", cell % n); t.style.setProperty("--r", (cell / n) | 0);
+      if (id !== n * n - 1) t.setAttribute("aria-label", `Tile ${id + 1}, row ${((cell / n) | 0) + 1}, column ${cell % n + 1}`);
+      if (intro && !reduced) { t.style.setProperty("--fx", (Math.random() * 300 - 150) + "px"); t.style.setProperty("--fy", (Math.random() * 300 - 150) + "px"); t.style.setProperty("--fr", (Math.random() * 40 - 20) + "deg"); t.style.animationDelay = (cell * 28) + "ms"; t.classList.remove("fly"); void t.offsetWidth; t.classList.add("fly"); }
+    });
+  }
+  function neighbors(cell) { const n = st.n, r = (cell / n) | 0, c = cell % n, out = []; if (r > 0) out.push(cell - n); if (r < n - 1) out.push(cell + n); if (c > 0) out.push(cell - 1); if (c < n - 1) out.push(cell + 1); return out; }
+  function swapWithGap(cell) { const id = pos[cell]; pos[gap] = id; pos[cell] = st.n * st.n - 1; const from = gap; gap = cell; return from; }
+
+  function scramble(k) {
+    history = []; let prev = -1;
+    for (let i = 0; i < k; i++) {
+      const opts = neighbors(gap).filter((c) => c !== prev);
+      const c = opts[(Math.random() * opts.length) | 0];
+      prev = gap; swapWithGap(c); history.push(prev);
+    }
+    if (pos.every((id, i) => id === i)) return scramble(k);
+    layoutTiles(false);
+  }
+
+  // ---------- moves ----------
+  function tryCell(cell, byAI) {
+    if (st.done || st.paused || !st.ready) return false;
+    const n = st.n, gr = (gap / n) | 0, gc = gap % n, r = (cell / n) | 0, c = cell % n;
+    if (cell === gap || (r !== gr && c !== gc)) { if (!byAI) wiggle(cell); return false; }
+    const step = r === gr ? (c > gc ? 1 : -1) : (r > gr ? n : -n);
+    let moved = 0;
+    while (gap !== cell) { swapWithGap(gap + step); moved++; }
+    if (!byAI) { st.moves += moved; if (!st.started) st.started = true; }
+    layoutTiles(false); sync();
+    if (pos.every((id, i) => id === i)) solved();
+    return true;
+  }
+  function slideDir(dx, dy) { // move the tile on the opposite side of the gap into it
+    const n = st.n, gr = (gap / n) | 0, gc = gap % n, r = gr - dy, c = gc - dx;
+    if (r < 0 || c < 0 || r >= n || c >= n) { wiggleBoard(); return; }
+    tryCell(r * n + c, false);
+  }
+  function wiggle(cell) { const id = pos[cell]; const t = tiles[id]; if (!t || reduced) return; t.animate && t.animate([{ filter: "brightness(1.3)" }, { filter: "none" }], { duration: 250 }); }
+  function wiggleBoard() { if (reduced || !board.animate) return; board.animate([{ transform: "translateX(0)" }, { transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "translateX(0)" }], { duration: 200 }); }
+
+  function solved() {
+    st.done = true; board.classList.add("done"); $("stamp").classList.add("on"); confetti();
+    const P = PAINTINGS[st.idx];
+    if (st.mode === "demo") { say(""); const id = gameId; setTimeout(() => { if (id === gameId) nextDemo(); }, 2600); return; }
+    const stars = st.moves <= P.par ? 3 : st.moves <= P.par * 1.6 ? 2 : 1;
+    const pts = Math.round(P.n * P.n * 40 + Math.max(0, P.par * 2 - st.moves) * 6 + Math.max(0, P.n * P.n * 12 - st.secs) * 3 + stars * 50);
+    st.score += pts; st.total += pts;
+    progress.stars[st.idx] = Math.max(progress.stars[st.idx] || 0, stars);
+    progress.open = Math.max(progress.open, Math.min(PAINTINGS.length, st.idx + 2));
+    store.set("frescoshift-progress", progress);
+    if (st.total > st.best) { st.best = st.total; store.set("frescoshift-best", st.best); }
+    sync(); buildStrip();
+    const last = st.idx >= PAINTINGS.length - 1;
+    say(`Restored ${P.title} in ${st.moves} moves and ${fmt(st.secs)}. ${stars} star${stars === 1 ? "" : "s"}, ${pts} points.`);
+    const id = gameId;
+    setTimeout(() => {
+      if (id !== gameId) return;
+      $("ovKicker").textContent = last ? "Gallery complete" : "Restored";
+      $("ovTitle").textContent = P.title; $("ovStars").textContent = "★".repeat(stars) + "☆".repeat(3 - stars);
+      $("ovText").textContent = `${st.moves} moves (par ${P.par}) in ${fmt(st.secs)}. +${pts} points, ${st.total} this visit.${last ? " Every painting in the gallery is whole again." : ` Next: ${PAINTINGS[st.idx + 1].title}, ${PAINTINGS[st.idx + 1].n} × ${PAINTINGS[st.idx + 1].n}.`}`;
+      $("ovGo").textContent = last ? "Start the gallery again" : "Next painting";
+      overlayAction = () => { hideOverlay(); loadPainting(last ? 0 : st.idx + 1, "play"); };
+      $("overlay").hidden = false;
+      setTimeout(() => { if (!$("overlay").hidden) try { $("ovGo").focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 50);
+    }, reduced ? 300 : 1500);
+  }
+
+  // ---------- flow ----------
+  let overlayAction = null;
+  function hideOverlay() {
+    const wasOpen = !$("overlay").hidden;
+    $("overlay").hidden = true; overlayAction = null;
+    const a = document.activeElement;
+    if (wasOpen || (a && a.tagName === "BUTTON" && !["themeBtn", "peekBtn", "numBtn"].includes(a.id) && !a.classList.contains("tile"))) { try { board.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  }
+  function loadPainting(i, mode) {
+    gameId++; hideOverlay();
+    st.mode = mode; st.idx = i; st.ready = false; history = []; demoQ = []; st.n = PAINTINGS[i].n; st.moves = 0; st.secs = 0; st.started = false; st.done = false; st.paused = false; st.peeks = 0;
+    board.classList.remove("done", "paused", "peeking"); $("stamp").classList.remove("on");
+    $("pauseBtn").textContent = "Pause"; $("pauseBtn").setAttribute("aria-pressed", "false");
+    $("demo").classList.toggle("gone", mode !== "demo");
+    setImage(i); buildBoard(st.n);
+    const k = mode === "demo" ? (st.n === 3 ? 22 : 34) : st.n === 3 ? 70 : st.n === 4 ? 180 : 320;
+    const id = gameId;
+    setTimeout(() => { if (id !== gameId) return; scramble(k); st.ready = true; if (mode === "demo") { demoQ = history.slice().reverse(); demoT = .9; } }, reduced ? 50 : 650);
+    const P = PAINTINGS[i];
+    $("paintNo").textContent = `No. ${i + 1} of ${PAINTINGS.length} · ${P.n} × ${P.n}`;
+    $("paintTitle").textContent = P.title; $("paintMeta").textContent = P.meta; $("par").textContent = P.par;
+    $("roomName").textContent = i < 2 ? "Rivers & Mountains" : i < 4 ? "Sand & Sea" : "Night & Water";
+    sync(); buildStrip();
+    if (mode === "play") say(`${P.title}, ${P.n} by ${P.n}. Slide tiles into the gap with the arrow keys, a click or a swipe. Par is ${P.par} moves.`);
+  }
+  function startGame(i) { st.total = 0; loadPainting(i || 0, "play"); }
+  function nextDemo() { loadPainting((st.idx + 1) % 2, "demo"); }
+
+  function buildStrip() {
+    const s = $("strip");
+    if (!s.children.length) {
+      PAINTINGS.forEach((P, i) => {
+        const b = document.createElement("button"); b.type = "button"; b.className = "thumb"; b.dataset.i = i;
+        const cv = document.createElement("canvas"); cv.width = 184; cv.height = 140;
+        const src = paint(i, 184); try { cv.getContext("2d").drawImage(src, 0, 22, 184, 140, 0, 0, 184, 140); } catch (e) { /* ignore */ }
+        b.append(cv); b.insertAdjacentHTML("beforeend", `<b></b><span>${P.title}</span>`);
+        b.addEventListener("click", () => { if (i < progress.open) loadPainting(i, "play"); else { say(`${P.title} is still locked. Restore the painting before it first.`); wiggleBoard(); } });
+        s.append(b);
+      });
+    }
+    [...s.children].forEach((b, i) => {
+      const locked = i >= progress.open; b.classList.toggle("locked", locked); b.classList.toggle("cur", i === st.idx && st.mode === "play");
+      const n = progress.stars[i] || 0; b.querySelector("b").textContent = n ? "★".repeat(n) + "☆".repeat(3 - n) : locked ? "locked" : "";
+      b.setAttribute("aria-label", `${PAINTINGS[i].title}${locked ? ", locked" : n ? `, ${n} stars` : ""}`);
+    });
+  }
+
+  // ---------- sizing ----------
+  function size() {
+    const wall = $("wall").getBoundingClientRect();
+    const phone = innerWidth <= 820;
+    const avW = (phone ? innerWidth - 32 : wall.width) - (phone ? 40 : 72);
+    const avH = phone ? 9999 : innerHeight - 362;
+    const bs = Math.floor(clamp(Math.min(avW, avH, 620), 240, 620));
+    board.style.setProperty("--bs", bs + "px");
+  }
+
+  // ---------- confetti ----------
+  const cf = $("confetti"), cfx = cf.getContext("2d"); let flakes = [];
+  function confetti() {
+    if (reduced) return;
+    const r = board.getBoundingClientRect();
+    for (let i = 0; i < 90; i++) flakes.push({ x: r.left + Math.random() * r.width, y: r.top + Math.random() * r.height * .3, vx: (Math.random() - .5) * 220, vy: -Math.random() * 260 - 60, rot: Math.random() * 6, vr: (Math.random() - .5) * 10, s: 4 + Math.random() * 6, life: 1.6 + Math.random(), age: 0, c: ["#e6c47a", "#b8893b", "#f6dc9a", "#fff3c8"][(Math.random() * 4) | 0] });
+  }
+  function drawFlakes(s) {
+    if (!flakes.length) { if (cf.width) { cfx.clearRect(0, 0, cf.width, cf.height); } return; }
+    const d = Math.min(2, devicePixelRatio || 1);
+    if (cf.width !== Math.round(innerWidth * d)) { cf.width = Math.round(innerWidth * d); cf.height = Math.round(innerHeight * d); }
+    cfx.setTransform(d, 0, 0, d, 0, 0); cfx.clearRect(0, 0, innerWidth, innerHeight);
+    flakes = flakes.filter((f) => { f.age += s; f.vy += 380 * s; f.vx *= .99; f.x += f.vx * s; f.y += f.vy * s; f.rot += f.vr * s; cfx.save(); cfx.translate(f.x, f.y); cfx.rotate(f.rot); cfx.globalAlpha = Math.max(0, 1 - f.age / f.life); cfx.fillStyle = f.c; cfx.fillRect(-f.s / 2, -f.s / 4, f.s, f.s / 2 * Math.abs(Math.cos(f.rot * 2))); cfx.restore(); return f.age < f.life; });
+  }
+
+  // ---------- HUD ----------
+  const fmt = (s) => `${(s / 60) | 0}:${String((s | 0) % 60).padStart(2, "0")}`;
+  function sync() {
+    $("moves").textContent = st.moves; $("time").textContent = fmt(st.secs); $("score").textContent = st.total; $("bestTop").textContent = st.best;
+    $("eyebrow").textContent = st.mode === "demo" ? "Room three · a restorer at work" : `Room three · painting ${st.idx + 1} of ${PAINTINGS.length}`;
+    $("playBtn").lastChild.textContent = st.mode === "demo" ? "Start restoring" : "Start this painting again";
+  }
+  let sayT = 0;
+  function say(t) { clearTimeout(sayT); sayT = setTimeout(() => { $("live").textContent = t; }, 40); }
+
+  // ---------- loop ----------
+  let secT = 0;
+  function frame(now) {
+    const s = Math.min(.05, (now - lastNow) / 1000); lastNow = now;
+    if (st.mode === "play" && st.started && !st.done && !st.paused && $("overlay").hidden) { st.secs += s; secT += s; if (secT > .25) { secT = 0; $("time").textContent = fmt(st.secs); } }
+    if (st.mode === "demo" && !st.done && demoQ.length) { demoT -= s; if (demoT <= 0) { tryCell(demoQ.shift(), true); demoT = reduced ? .5 : .32; } }
+    drawFlakes(s);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- input ----------
+  function takeOver() { if (st.mode === "demo") { startGame(0); return true; } return false; }
+  board.addEventListener("click", (e) => {
+    const t = e.target.closest(".tile"); if (!t) return;
+    if (takeOver()) return;
+    if (st.paused) { togglePause(); return; }
+    tryCell(pos.indexOf(+t.dataset.id), false);
+  });
+  let sw = null;
+  board.addEventListener("pointerdown", (e) => { sw = { x: e.clientX, y: e.clientY }; });
+  board.addEventListener("pointerup", (e) => {
+    if (!sw) return; const dx = e.clientX - sw.x, dy = e.clientY - sw.y; sw = null;
+    if (Math.hypot(dx, dy) < 30) return;
+    if (takeOver()) return;
+    if (Math.abs(dx) > Math.abs(dy)) slideDir(Math.sign(dx), 0); else slideDir(0, Math.sign(dy));
+    board.dataset.swiped = "1"; setTimeout(() => { delete board.dataset.swiped; }, 50);
+  });
+  board.addEventListener("click", (e) => { if (board.dataset.swiped) e.stopImmediatePropagation(); }, true);
+  function togglePause() {
+    if (st.mode !== "play" || st.done) return;
+    st.paused = !st.paused; board.classList.toggle("paused", st.paused);
+    $("pauseBtn").textContent = st.paused ? "Resume" : "Pause"; $("pauseBtn").setAttribute("aria-pressed", String(st.paused));
+    say(st.paused ? "Paused, the painting is covered." : "Cloth lifted. Carry on.");
+  }
+  function peek(on) { board.classList.toggle("peeking", on); if (on && st.mode === "play") st.peeks++; }
+  function toggleNums() { const on = !board.classList.contains("nums"); board.classList.toggle("nums", on); $("numBtn").setAttribute("aria-pressed", String(on)); }
+  const pk = $("peekBtn");
+  pk.addEventListener("pointerdown", () => peek(true));
+  ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => pk.addEventListener(ev, () => peek(false)));
+  pk.addEventListener("click", (e) => { if (e.detail === 0) { peek(true); setTimeout(() => peek(false), 1200); } });
+  $("numBtn").addEventListener("click", toggleNums);
+  $("playBtn").addEventListener("click", () => { if (st.mode === "demo") startGame(0); else if (st.paused) togglePause(); else if (st.done && overlayAction) overlayAction(); else loadPainting(st.idx, "play"); });
+  $("takeBtn").addEventListener("click", () => startGame(0));
+  $("pauseBtn").addEventListener("click", () => { if (takeOver()) return; togglePause(); });
+  $("shuffleBtn").addEventListener("click", () => loadPainting(st.mode === "demo" ? 0 : st.idx, "play"));
+  $("ovGo").addEventListener("click", () => { if (overlayAction) overlayAction(); });
+  $("ovAlt").addEventListener("click", () => loadPainting(st.idx, "play"));
+  $("themeBtn").addEventListener("click", () => { root.setAttribute("data-theme", isDark() ? "light" : "dark"); });
+  const DIRS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1], a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1] };
+  document.addEventListener("keydown", (e) => {
+    const tag = (e.target && e.target.tagName) || "";
+    const onBtn = (tag === "BUTTON" && !e.target.classList.contains("tile")) || tag === "A" || tag === "INPUT";
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if ((k === " " || k === "Enter") && onBtn) return;
+    if (!$("overlay").hidden) { if (k === "Enter" || k === " ") { e.preventDefault(); if (overlayAction) overlayAction(); } return; }
+    if (DIRS[k]) { e.preventDefault(); if (takeOver()) return; if (st.paused) return; slideDir(DIRS[k][0], DIRS[k][1]); }
+    else if (k === "h" && !e.repeat) peek(true);
+    else if (k === "n") toggleNums();
+    else if (k === "p" || k === "Escape") { e.preventDefault(); togglePause(); }
+    else if (k === "r") { e.preventDefault(); loadPainting(st.mode === "demo" ? 0 : st.idx, "play"); }
+    else if (k === " " || k === "Enter") { e.preventDefault(); if (!takeOver() && st.paused) togglePause(); }
+  });
+  document.addEventListener("keyup", (e) => { if (e.key.toLowerCase() === "h") peek(false); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden && st.mode === "play" && st.started && !st.paused && !st.done) togglePause(); });
+  let rT = 0;
+  window.addEventListener("resize", () => { clearTimeout(rT); rT = setTimeout(size, 80); });
+
+  size(); loadPainting(0, "demo");
+  requestAnimationFrame((n) => { lastNow = n; requestAnimationFrame(frame); });
+})();
+</script>
+</body>
+</html>

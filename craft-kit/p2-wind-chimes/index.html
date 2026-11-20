@@ -1,0 +1,461 @@
+<!doctype html>
+<!-- Chill & Craft · Wind Chimes · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wind Chimes · a porch chime that plays in the breeze</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL wins over the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    --page: #f2eef6; --page2: #e3dcef; --ink: #261f33; --muted: #6f6581; --line: rgba(38, 31, 51, 0.12);
+    --chip: rgba(255, 255, 255, 0.82); --btn: #5b3fa0; --btnInk: #fbf7ff; --on: #2f7d6b; --onInk: #f3fff9; --focus: #d9480f;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0b0a16; --page2: #1d1834; --ink: #f1edfa; --muted: #ada4c2; --line: rgba(255, 255, 255, 0.1);
+      --chip: rgba(28, 24, 46, 0.84); --btn: #c9b6ff; --btnInk: #1e1440; --on: #7fe0c3; --onInk: #0d2a22; --focus: #ffb35c;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #0b0a16; --page2: #1d1834; --ink: #f1edfa; --muted: #ada4c2; --line: rgba(255, 255, 255, 0.1);
+    --chip: rgba(28, 24, 46, 0.84); --btn: #c9b6ff; --btnInk: #1e1440; --on: #7fe0c3; --onInk: #0d2a22; --focus: #ffb35c;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; overflow-x: clip;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(110% 70% at 50% 0%, var(--page2), transparent 70%), var(--page);
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; overflow-x: clip; }
+  .cap, .scene { width: min(500px, 100%, calc((100vh - 306px) * 0.8)); min-width: 260px; }
+  .controls, .row2 { width: min(520px, 100%); }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0 4px; font-size: 13px; color: var(--muted); }
+  .cap b { font-size: 15px; color: var(--ink); }
+  .cap span { font-variant-numeric: tabular-nums; text-align: right; }
+  .scene {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 26px; overflow: hidden; isolation: isolate; touch-action: none; cursor: pointer;
+    background: #d9cfe8;
+    box-shadow: 0 30px 60px -24px rgba(40, 25, 70, 0.55), 0 10px 22px -12px rgba(40, 25, 70, 0.35), inset 0 0 0 1px var(--line);
+  }
+  .scene:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Controls ---------- */
+  .controls, .row2 { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 10px 16px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--chip); color: var(--ink); font: 600 14px/1 system-ui, sans-serif;
+    box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.4); transition: transform 0.18s cubic-bezier(.3, 1.6, .5, 1), background 0.25s, color 0.25s;
+  }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(1px) scale(0.97); }
+  .btn.main { background: var(--btn); color: var(--btnInk); border-color: transparent; }
+  .btn[aria-pressed="true"] { background: var(--on); color: var(--onInk); border-color: transparent; }
+  .btn:focus-visible, .seg input:focus-visible + span, input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .seg { display: inline-flex; padding: 4px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip); }
+  .seg label { position: relative; }
+  .seg input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  .seg span { display: block; padding: 9px 12px; border-radius: 999px; font: 600 13px/1 system-ui, sans-serif; color: var(--muted); transition: background 0.25s, color 0.25s; }
+  .seg input:checked + span { background: var(--btn); color: var(--btnInk); }
+  .bz { display: inline-flex; align-items: center; gap: 8px; font: 600 13px/1 system-ui, sans-serif; color: var(--muted); }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 120px; height: 28px; background: transparent; margin: 0; cursor: pointer; border-radius: 8px; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 6px; background: linear-gradient(90deg, #cfc4e6, #5b3fa0); }
+  input[type="range"]::-moz-range-track { height: 6px; border-radius: 6px; background: linear-gradient(90deg, #cfc4e6, #5b3fa0); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: #fff; border: 3px solid #5b3fa0; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); }
+  input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid #5b3fa0; }
+  .status { margin: 0; min-height: 1.4em; font-size: 14px; font-weight: 600; text-align: center; max-width: 500px; }
+  .hint { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); text-align: center; max-width: 500px; }
+  @media (max-height: 720px) { .hint { display: none; } }
+  @media (max-width: 420px) { .btn { padding: 10px 12px; font-size: 13px; gap: 6px; } .seg span { padding: 9px 9px; } input[type="range"] { width: 92px; } }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Wind Chimes: a porch wind chime that swings and plays notes in the breeze and when you wave your pointer</h1>
+  <div class="cap"><b>Wind Chimes</b><span id="readout">Notes 0</span></div>
+  <div class="scene" id="scene" tabindex="0" role="application" aria-label="A wind chime on a porch. Move your pointer across it to make wind, tap a tube to ring it, or press the number keys 1 to 6." aria-describedby="hint">
+    <canvas id="cv" aria-hidden="true"></canvas>
+  </div>
+  <div class="controls">
+    <button class="btn main" id="gust" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h10a3 3 0 1 0 -3 -3M3 12h15a3 3 0 1 1 -3 3M3 16h7"/></svg>Gust</button>
+    <button class="btn" id="sound" type="button" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10z"/><path id="waves" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg><span id="soundLabel">Sound on</span></button>
+    <div class="seg" role="radiogroup" aria-label="Tuning">
+      <label><input type="radio" name="tune" value="dusk" checked><span>Dusk</span></label>
+      <label><input type="radio" name="tune" value="bright"><span>Bright</span></label>
+      <label><input type="radio" name="tune" value="night"><span>Night</span></label>
+    </div>
+  </div>
+  <div class="row2"><label class="bz" for="breeze">Breeze <input id="breeze" type="range" min="0" max="100" value="35"></label></div>
+  <p class="status" id="status" aria-live="polite">A soft breeze. Wave your pointer across the porch to stir the chime.</p>
+  <p class="hint" id="hint">Tap a tube to ring it, or press 1 to 6. Ring all six close together for a full chord. Sound starts after your first tap.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var W = 400, H = 500, TAU = Math.PI * 2;
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  var darkQ = matchMedia("(prefers-color-scheme: dark)");
+  function isDark() { var t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : darkQ.matches; }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  var scene = $("scene"), cv = $("cv"), ctx = cv.getContext("2d"), statusEl = $("status");
+  function say(m) { statusEl.textContent = m; }
+
+  /* ---------- 1. Tunings: pentatonic sets, longest tube = lowest note ---------- */
+  var TUNES = {
+    dusk: { notes: ["A4", "C5", "D5", "E5", "G5", "A5"], metal: ["#6b4f1c", "#c9a253", "#fff1c0"] },
+    bright: { notes: ["C5", "D5", "E5", "G5", "A5", "C6"], metal: ["#5d6773", "#c3ccd6", "#ffffff"] },
+    night: { notes: ["D4", "F4", "G4", "A4", "C5", "D5"], metal: ["#5a2a18", "#b26e4a", "#ffd2b0"] }
+  };
+  var SEMI = { C: -9, D: -7, E: -5, F: -4, G: -2, A: 0, B: 2 };
+  function freq(n) { return 440 * Math.pow(2, (SEMI[n[0]] + (+n[1] - 4) * 12) / 12); }
+  var tune = "dusk", metal = TUNES.dusk.metal.slice();
+  var NOTE_COLS = ["#ff8fab", "#ffb86b", "#ffe066", "#8ce99a", "#74c0fc", "#b197fc"];
+
+  /* ---------- 2. The chime: six tubes round a disc, a striker and a sail in the middle ---------- */
+  var DISC = { x: 200, y: 96, r: 64 }, HOOK = { x: 200, y: 34 };
+  var tubes = [];
+  for (var k = 0; k < 6; k++) {
+    var th = -Math.PI / 2 + k / 6 * TAU + 0.26, L = 150 - k * 14;
+    tubes.push({ k: k, ax: Math.cos(th) * 56, az: Math.sin(th) * 56, L: L, dx: 0, dz: 0, vx: 0, vz: 0, w2: 1100 / L, r: 6.5, gleam: 0, last: -9 });
+  }
+  var striker = { dx: 0, dz: 0, vx: 0, vz: 0, w2: 6.5, r: 36, y: 196 };
+  var sway = 0, swayV = 0;
+  // where a tube sits at the striker's height, in the horizontal plane
+  function tubeAt(tb) { var h = clamp((striker.y - (DISC.y + 16)) / tb.L, 0, 1); return { x: tb.ax + tb.dx * h, z: tb.az + tb.dz * h, h: h }; }
+
+  /* ---------- 3. Sound: struck metal tubes with inharmonic partials and a soft echo ---------- */
+  var audio = null, master = null, soundOn = true;
+  function ensureAudio() {
+    if (audio || !soundOn) return;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      audio = new AC(); master = audio.createGain(); master.gain.value = 0.55;
+      var delay = audio.createDelay(1), fb = audio.createGain(), lp = audio.createBiquadFilter();
+      delay.delayTime.value = 0.27; fb.gain.value = 0.28; lp.type = "lowpass"; lp.frequency.value = 2600;
+      master.connect(audio.destination); master.connect(delay); delay.connect(lp); lp.connect(fb); fb.connect(delay); lp.connect(audio.destination);
+    } catch (err) { audio = null; }
+  }
+  function ping(k, vel) {
+    if (!audio || !soundOn) return;
+    if (audio.state === "suspended") audio.resume();
+    var f = freq(TUNES[tune].notes[k]), now = audio.currentTime, v = clamp(vel, 0.05, 1) * 0.22;
+    [[1, 1, 3.6], [2.76, 0.42, 1.6], [5.4, 0.2, 0.8], [8.93, 0.08, 0.4]].forEach(function (p, j) {
+      var o = audio.createOscillator(), g = audio.createGain();
+      o.type = "sine"; o.frequency.value = f * p[0] * (1 + (j ? rnd(-0.003, 0.003) : 0));
+      g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(v * p[1], now + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, now + p[2]);
+      o.connect(g); g.connect(master); o.start(now); o.stop(now + p[2] + 0.05);
+    });
+  }
+
+  /* ---------- 4. Scenery: sky, garden, porch beam, vines, bokeh and fireflies ---------- */
+  var sc = 1, back = document.createElement("canvas");
+  var stars = [], bokeh = [], flies = [], leaves = [], vine = [], notes = [], ripples = [], sparks = [], i;
+  for (i = 0; i < 60; i++) stars.push({ x: rnd(0, W), y: rnd(0, 300), r: rnd(0.4, 1.4), ph: rnd(0, 6) });
+  for (i = 0; i < 14; i++) bokeh.push({ x: rnd(0, W), y: rnd(220, 460), r: rnd(6, 20), ph: rnd(0, 6) });
+  for (i = 0; i < 14; i++) flies.push({ x: rnd(20, 380), y: rnd(240, 470), ph: rnd(0, 6), sp: rnd(0.3, 0.8) });
+  [[14, 1], [386, -1]].forEach(function (v) { for (var j = 0; j < 9; j++) vine.push({ side: v[1], x: v[0] + v[1] * (j % 2 ? 8 : -2), y: 44 + j * 17, a: 0, s: rnd(0.8, 1.2), ph: rnd(0, 6) }); });
+  function paintBack() {
+    back.width = cv.width; back.height = cv.height;
+    var g = back.getContext("2d"), dark = isDark();
+    g.setTransform(sc, 0, 0, sc, 0, 0);
+    var sg = g.createLinearGradient(0, 0, 0, H);
+    if (dark) { sg.addColorStop(0, "#0b1030"); sg.addColorStop(0.55, "#2a2352"); sg.addColorStop(1, "#3b2a4a"); }
+    else { sg.addColorStop(0, "#c9def3"); sg.addColorStop(0.55, "#f3d6e4"); sg.addColorStop(1, "#fbe6cf"); }
+    g.fillStyle = sg; g.fillRect(0, 0, W, H);
+    if (dark) { g.fillStyle = "#f4efdc"; g.beginPath(); g.arc(318, 120, 16, 0, TAU); g.fill(); g.fillStyle = "#0e1336"; g.beginPath(); g.arc(325, 115, 15, 0, TAU); g.fill(); }
+    else { var sun = g.createRadialGradient(320, 150, 0, 320, 150, 90); sun.addColorStop(0, "rgba(255,244,214,0.95)"); sun.addColorStop(1, "rgba(255,244,214,0)"); g.fillStyle = sun; g.fillRect(200, 40, 220, 220); }
+    // far garden: rounded trees and a hedge
+    g.fillStyle = dark ? "#1d1b38" : "#b9c9b4";
+    for (var x = -20; x < 430; x += 46) { g.beginPath(); g.arc(x, 360 + Math.sin(x) * 10, 40 + (x * 7 % 13), 0, TAU); g.fill(); }
+    g.fillStyle = dark ? "#16152c" : "#9db59a"; g.fillRect(0, 380, W, 120);
+    for (x = -10; x < 420; x += 22) { g.beginPath(); g.arc(x, 384, 18, Math.PI, 0); g.fill(); }
+    // porch rail and floor
+    g.fillStyle = dark ? "#2b2233" : "#e9dccb"; g.fillRect(0, 430, W, 70);
+    g.fillStyle = dark ? "#3a2f45" : "#d8c6b0"; g.fillRect(0, 424, W, 8);
+    g.fillStyle = dark ? "#231b2a" : "#cdb79e"; for (x = 8; x < W; x += 30) g.fillRect(x, 432, 9, 68);
+    g.fillStyle = dark ? "#463a54" : "#f4ead9"; g.fillRect(0, 420, W, 6);
+    // the eave beam at the top with a hook
+    var bg = g.createLinearGradient(0, 0, 0, 40); bg.addColorStop(0, dark ? "#2a1c17" : "#6d4428"); bg.addColorStop(1, dark ? "#3d2a21" : "#8a5a36");
+    g.fillStyle = bg; g.fillRect(0, 0, W, 34); g.fillStyle = "rgba(0,0,0,0.25)"; g.fillRect(0, 34, W, 4);
+    g.strokeStyle = "rgba(255,255,255,0.08)"; g.lineWidth = 1; for (x = 0; x < W; x += 3) { if (Math.sin(x * 0.7) > 0.6) { g.beginPath(); g.moveTo(x, 4); g.lineTo(x + 30, 30); g.stroke(); } }
+    g.strokeStyle = dark ? "#9aa0ab" : "#5a5f69"; g.lineWidth = 2.2; g.beginPath(); g.moveTo(200, 34); g.lineTo(200, 38); g.stroke(); g.beginPath(); g.arc(200, 42.5, 4.2, 0, Math.PI * 2); g.stroke(); // a screw eye under the beam
+  }
+  function resize() {
+    var r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.max(2, Math.round(r.width * dpr)); cv.height = Math.max(2, Math.round(r.height * dpr)); sc = cv.width / W;
+    paintBack();
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(scene); else window.addEventListener("resize", resize);
+  darkQ.addEventListener && darkQ.addEventListener("change", paintBack);
+  resize();
+
+  /* ---------- 5. Wind: breeze, gusts and your pointer ---------- */
+  var breeze = 0.35, gustT = 0, gustDir = 1, pwx = 0, pwz = 0, windX = 0, windZ = 0, rustle = 0;
+  function gust(dir) {
+    gustDir = dir || (Math.random() < 0.5 ? -1 : 1); gustT = 1.6; rustle = 1;
+    say("A gust comes through: the leaves rustle first, then the chime swings.");
+  }
+  function windAt(t) {
+    var n1 = Math.sin(t * 0.73) * 0.6 + Math.sin(t * 1.91 + 1) * 0.3 + Math.sin(t * 3.7 + 2) * 0.1;
+    var n2 = Math.sin(t * 0.57 + 3) * 0.6 + Math.sin(t * 1.43) * 0.4;
+    var g = 0;
+    if (gustT > 0) { var k = 1.6 - gustT; g = (k < 0.35 ? 0 : Math.sin(Math.min(1, (k - 0.35) / 1.1) * Math.PI)) * 190; } // a short lull before the push: anticipation
+    return { x: breeze * 90 * n1 + g * gustDir + pwx, z: breeze * 60 * n2 + g * 0.4 + pwz };
+  }
+
+  /* ---------- 6. Physics with sub-steps; collisions ring the tubes ---------- */
+  var hits = 0, chordT = -9;
+  function ring(tb, vel, src) {
+    var now = performance.now() / 1000;
+    if (now - tb.last < 0.07) return;
+    tb.last = now; tb.gleam = 1; hits++;
+    ping(tb.k, vel);
+    var p = tubeScreen(tb);
+    ripples.push({ x: p.mx, y: p.my, r: 6, life: 1, c: NOTE_COLS[tb.k] });
+    notes.push({ x: 44 + tb.k * 62.4, y: 470, vy: -38 - vel * 30, life: 1.8, k: tb.k, n: TUNES[tune].notes[tb.k] });
+    $("readout").textContent = "Notes " + hits;
+    // all six within a short window: a full chord
+    if (tubes.every(function (x) { return now - x.last < 2.4; }) && now - chordT > 4) {
+      chordT = now; glow = 1;
+      for (var j = 0; j < (reduce.matches ? 10 : 40); j++) { var a = rnd(0, TAU), v = rnd(40, 140); sparks.push({ x: 200, y: 200, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.8, 1.6), c: NOTE_COLS[j % 6] }); }
+      say("Full chord! All six tubes rang together.");
+    } else if (src === "tap") say("Rang " + TUNES[tune].notes[tb.k] + ".");
+  }
+  var glow = 0;
+  function physics(dt, t) {
+    var w = windAt(t);
+    windX = w.x; windZ = w.z;
+    var STEPS = 4, h = dt / STEPS, damp = 0.45;
+    for (var s = 0; s < STEPS; s++) {
+      // the striker and sail catch most of the wind
+      striker.vx += (-striker.w2 * striker.dx - damp * striker.vx + w.x * 1.3) * h;
+      striker.vz += (-striker.w2 * striker.dz - damp * striker.vz + w.z * 1.3) * h;
+      striker.dx += striker.vx * h; striker.dz += striker.vz * h;
+      tubes.forEach(function (tb) {
+        tb.vx += (-tb.w2 * tb.dx - damp * 0.6 * tb.vx + w.x * 0.03) * h; tb.vz += (-tb.w2 * tb.dz - damp * 0.6 * tb.vz + w.z * 0.03) * h;
+        tb.dx += tb.vx * h; tb.dz += tb.vz * h;
+        var p = tubeAt(tb), nx = p.x - striker.dx, nz = p.z - striker.dz, d = Math.hypot(nx, nz), min = striker.r + tb.r;
+        if (d < min && d > 0.001) {
+          nx /= d; nz /= d;
+          var vtx = tb.vx * p.h, vtz = tb.vz * p.h, rel = (vtx - striker.vx) * nx + (vtz - striker.vz) * nz;
+          if (rel < 0) {
+            var J = -1.8 * rel / 2;
+            striker.vx -= J * nx; striker.vz -= J * nz;
+            tb.vx += J * nx / Math.max(0.3, p.h); tb.vz += J * nz / Math.max(0.3, p.h);
+            ring(tb, Math.min(1, -rel / 60), "wind");
+          }
+          var push = (min - d) / 2;
+          striker.dx -= nx * push; striker.dz -= nz * push;
+          tb.dx += nx * push / Math.max(0.3, p.h); tb.dz += nz * push / Math.max(0.3, p.h);
+        }
+        // tubes knock each other lightly too
+      });
+    }
+    // the whole chime sways a little from its hook
+    swayV += (-sway * 3 - swayV * 1.2 + w.x * 0.004) * dt; sway += swayV * dt;
+    tubes.forEach(function (tb) { tb.gleam = Math.max(0, tb.gleam - dt * 1.4); });
+    pwx *= Math.pow(0.08, dt); pwz *= Math.pow(0.08, dt);
+    if (gustT > 0) gustT -= dt;
+    rustle = Math.max(rustle - dt * 0.6, Math.min(1, Math.abs(w.x) / 90));
+  }
+
+  /* ---------- 7. Drawing the chime in 3D (back tubes first) ---------- */
+  function proj(x, y, z) { var s = 1 + z * 0.0025; return { x: DISC.x + sway * 40 + x * s, y: y + z * 0.22, s: s }; }
+  function tubeScreen(tb) {
+    var top = proj(tb.ax, DISC.y + 16, tb.az), bot = proj(tb.ax + tb.dx, DISC.y + 16 + tb.L, tb.az + tb.dz);
+    return { tx: top.x, ty: top.y, bx: bot.x, by: bot.y, s: top.s, mx: (top.x + bot.x) / 2, my: (top.y + bot.y) / 2 };
+  }
+  function drawTube(tb) {
+    var p = tubeScreen(tb), r = tb.r * p.s, ang = Math.atan2(p.bx - p.tx, p.by - p.ty), len = Math.hypot(p.bx - p.tx, p.by - p.ty);
+    var dTop = proj(tb.ax * 0.93, DISC.y, tb.az * 0.93);
+    ctx.strokeStyle = "rgba(60,50,60,0.7)"; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(dTop.x, dTop.y); ctx.lineTo(p.tx, p.ty); ctx.stroke();
+    ctx.save(); ctx.translate(p.tx, p.ty); ctx.rotate(-ang);
+    var g = ctx.createLinearGradient(-r, 0, r, 0);
+    g.addColorStop(0, metal[0]); g.addColorStop(0.32, metal[2]); g.addColorStop(0.5, metal[1]); g.addColorStop(1, metal[0]);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-r, 0, r * 2, len, r * 0.6) : ctx.rect(-r, 0, r * 2, len); ctx.fill();
+    if (tb.gleam > 0) { // a flash of light that runs down the tube when it rings
+      var gy = (1 - tb.gleam) * len, gg = ctx.createLinearGradient(0, gy - 40, 0, gy + 40);
+      gg.addColorStop(0, "rgba(255,255,255,0)"); gg.addColorStop(0.5, "rgba(255,255,255," + (0.85 * tb.gleam).toFixed(3) + ")"); gg.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = gg; ctx.fillRect(-r, 0, r * 2, len);
+    }
+    ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(0, len, r, r * 0.3, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = metal[2]; ctx.globalAlpha = 0.7; ctx.fillRect(-r * 0.45, 3, r * 0.22, len - 6); ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+  function drawDisc() {
+    var c = proj(0, DISC.y, 0);
+    ctx.strokeStyle = "rgba(60,50,60,0.8)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(HOOK.x, HOOK.y + 12); ctx.lineTo(c.x - 30, c.y - 4); ctx.moveTo(HOOK.x, HOOK.y + 12); ctx.lineTo(c.x + 30, c.y - 4); ctx.moveTo(HOOK.x, HOOK.y + 12); ctx.lineTo(c.x, c.y - 8); ctx.stroke();
+    ctx.fillStyle = "#5a3520"; ctx.beginPath(); ctx.ellipse(c.x, c.y + 5, DISC.r + 4, 16, 0, 0, TAU); ctx.fill();
+    var g = ctx.createLinearGradient(c.x - DISC.r, 0, c.x + DISC.r, 0); g.addColorStop(0, "#7a4a2a"); g.addColorStop(0.4, "#c98a55"); g.addColorStop(1, "#6b3f22");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c.x, c.y, DISC.r + 4, 15, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = "rgba(60,30,15,0.35)"; ctx.beginPath(); ctx.ellipse(c.x, c.y, DISC.r - 14, 9, 0, 0, TAU); ctx.stroke();
+  }
+  function drawStriker(t) {
+    var top = proj(0, DISC.y, 0), sp = proj(striker.dx, striker.y, striker.dz);
+    var sail = proj(striker.dx * 1.9, striker.y + 110, striker.dz * 1.9);
+    ctx.strokeStyle = "rgba(60,50,60,0.8)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.lineTo(sp.x, sp.y); ctx.lineTo(sail.x, sail.y - 54); ctx.stroke();
+    // the striker puck
+    ctx.fillStyle = "#4a2a16"; ctx.beginPath(); ctx.ellipse(sp.x, sp.y + 4, striker.r * sp.s, 7 * sp.s, 0, 0, TAU); ctx.fill();
+    var g = ctx.createLinearGradient(sp.x - striker.r, 0, sp.x + striker.r, 0); g.addColorStop(0, "#6b3f22"); g.addColorStop(0.4, "#d39a62"); g.addColorStop(1, "#5a331c");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sp.x, sp.y, striker.r * sp.s, 6.5 * sp.s, 0, 0, TAU); ctx.fill();
+    // the sail: a carved wooden leaf that catches the wind
+    var ang = Math.atan2(sail.x - sp.x, sail.y - sp.y), tw = Math.sin(t * 1.3) * 0.15 + windX * 0.002;
+    ctx.save(); ctx.translate(sail.x, sail.y - 54); ctx.rotate(-ang * 0.6 + tw);
+    var lw = 26 * Math.abs(Math.cos(tw * 3 + windZ * 0.01)) + 6;
+    var lg = ctx.createLinearGradient(-lw, 0, lw, 0); lg.addColorStop(0, "#6b3f22"); lg.addColorStop(0.45, "#e0aa70"); lg.addColorStop(1, "#5a331c");
+    ctx.fillStyle = lg; ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(lw * 1.2, 20, lw, 70, 0, 96); ctx.bezierCurveTo(-lw, 70, -lw * 1.2, 20, 0, 0); ctx.fill();
+    ctx.strokeStyle = "rgba(70,35,15,0.5)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(0, 90);
+    for (var j = 1; j < 5; j++) { ctx.moveTo(0, j * 18); ctx.lineTo(lw * 0.6, j * 18 - 8); ctx.moveTo(0, j * 18); ctx.lineTo(-lw * 0.6, j * 18 - 8); }
+    ctx.stroke(); ctx.restore();
+  }
+  function draw(t) {
+    var dark = isDark(), j;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(back, 0, 0); ctx.setTransform(sc, 0, 0, sc, 0, 0);
+    if (dark) for (j = 0; j < stars.length; j++) { var st = stars[j]; ctx.globalAlpha = 0.4 + 0.4 * Math.sin(t * 1.5 + st.ph); ctx.fillStyle = "#fff"; ctx.fillRect(st.x, st.y, st.r, st.r); }
+    // soft out-of-focus lights in the garden
+    bokeh.forEach(function (b) { ctx.globalAlpha = (dark ? 0.16 : 0.22) * (0.7 + 0.3 * Math.sin(t * 0.8 + b.ph)); ctx.fillStyle = dark ? "#ffd27a" : "#ffffff"; ctx.beginPath(); ctx.arc(b.x + Math.sin(t * 0.2 + b.ph) * 6, b.y, b.r, 0, TAU); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    if (dark) flies.forEach(function (f) { var fx = f.x + Math.sin(t * f.sp + f.ph) * 30 + windX * 0.1, fy = f.y + Math.cos(t * f.sp * 1.3 + f.ph) * 16, a = 0.5 + 0.5 * Math.sin(t * 3 + f.ph * 2); var fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, 9); fg.addColorStop(0, "rgba(220,255,140," + a.toFixed(3) + ")"); fg.addColorStop(1, "rgba(220,255,140,0)"); ctx.fillStyle = fg; ctx.fillRect(fx - 9, fy - 9, 18, 18); });
+    // vines hanging from the beam
+    vine.forEach(function (v, n) {
+      var a = Math.sin(t * 1.6 + v.ph) * (0.15 + rustle * 0.5) + windX * 0.003 * (reduce.matches ? 0.3 : 1);
+      ctx.save(); ctx.translate(v.x, v.y); ctx.rotate(a * v.side);
+      ctx.fillStyle = n % 3 ? (dark ? "#2f5a45" : "#6fa36b") : (dark ? "#3f7458" : "#86bd7c");
+      ctx.beginPath(); ctx.ellipse(v.side * 6, 4, 9 * v.s, 5 * v.s, v.side * 0.5, 0, TAU); ctx.fill();
+      ctx.restore();
+    });
+    ctx.strokeStyle = dark ? "#2f5a45" : "#5d8f59"; ctx.lineWidth = 1.6;
+    [14, 386].forEach(function (x) { ctx.beginPath(); ctx.moveTo(x, 36); ctx.quadraticCurveTo(x + Math.sin(t) * 4 * rustle, 120, x, 200); ctx.stroke(); });
+    // falling leaves carried on the wind
+    leaves.forEach(function (l) { ctx.save(); ctx.translate(l.x, l.y); ctx.rotate(l.r); ctx.fillStyle = l.c; ctx.beginPath(); ctx.ellipse(0, 0, 5, 2.4, 0, 0, TAU); ctx.fill(); ctx.restore(); });
+    // the chime: back tubes, disc, striker and sail, then front tubes
+    if (glow > 0) { var gg = ctx.createRadialGradient(200, 190, 10, 200, 190, 190); gg.addColorStop(0, "rgba(255,240,200," + (0.5 * glow).toFixed(3) + ")"); gg.addColorStop(1, "rgba(255,240,200,0)"); ctx.fillStyle = gg; ctx.fillRect(0, 0, W, H); }
+    var order = tubes.slice().sort(function (a, b) { return (a.az + a.dz) - (b.az + b.dz); });
+    order.forEach(function (tb) { if (tb.az + tb.dz < striker.dz) drawTube(tb); });
+    drawDisc();
+    drawStriker(t);
+    order.forEach(function (tb) { if (tb.az + tb.dz >= striker.dz) drawTube(tb); });
+    // rings in the air, rising note bubbles, sparkles
+    ripples.forEach(function (r) { ctx.strokeStyle = r.c; ctx.globalAlpha = r.life * 0.7; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, TAU); ctx.stroke(); });
+    ctx.globalAlpha = 1;
+    ctx.font = "800 10px system-ui, sans-serif"; ctx.textAlign = "center";
+    notes.forEach(function (n) {
+      var a = Math.min(1, n.life);
+      ctx.globalAlpha = a; ctx.fillStyle = NOTE_COLS[n.k];
+      ctx.beginPath(); ctx.arc(n.x, n.y, 12, 0, TAU); ctx.fill();
+      ctx.fillStyle = "#261f33"; ctx.fillText(n.n, n.x, n.y + 3.5);
+    });
+    sparks.forEach(function (p) { ctx.globalAlpha = Math.min(1, p.life * 1.5); ctx.fillStyle = p.c; ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3); });
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- 8. Main loop ---------- */
+  var last = performance.now();
+  function frame(now) {
+    var dt = Math.min(0.033, (now - last) / 1000), t = now / 1000; last = now;
+    physics(dt, t);
+    if (!reduce.matches && Math.random() < dt * (0.4 + Math.abs(windX) / 40)) leaves.push({ x: windX >= 0 ? -10 : 410, y: rnd(60, 380), vx: 0, vy: rnd(5, 20), r: rnd(0, 6), vr: rnd(-3, 3), life: 8, c: ["#c9a253", "#8fbf6a", "#e98a6a"][Math.floor(Math.random() * 3)] });
+    for (var j = leaves.length - 1; j >= 0; j--) { var l = leaves[j]; l.life -= dt; l.vx += (windX * 1.6 - l.vx) * dt; l.x += l.vx * dt; l.y += (l.vy + Math.sin(l.life * 3) * 10) * dt; l.r += l.vr * dt; if (l.life <= 0 || l.x < -20 || l.x > 420 || l.y > 520) leaves.splice(j, 1); }
+    for (j = ripples.length - 1; j >= 0; j--) { var r = ripples[j]; r.r += 70 * dt; r.life -= dt * 1.3; if (r.life <= 0) ripples.splice(j, 1); }
+    for (j = notes.length - 1; j >= 0; j--) { var n = notes[j]; n.life -= dt; n.y += n.vy * dt; n.vy *= 0.98; if (n.life <= 0) notes.splice(j, 1); }
+    for (j = sparks.length - 1; j >= 0; j--) { var p = sparks[j]; p.life -= dt; p.vy += 50 * dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.life <= 0) sparks.splice(j, 1); }
+    if (glow > 0) glow = Math.max(0, glow - dt * 0.6);
+    draw(t);
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- 9. Input ---------- */
+  function logical(e) { var rc = scene.getBoundingClientRect(); return { x: (e.clientX - rc.left) / rc.width * W, y: (e.clientY - rc.top) / rc.height * H }; }
+  var lastP = null;
+  scene.addEventListener("pointermove", function (e) {
+    var p = logical(e), now = performance.now();
+    if (lastP) { var dtp = Math.max(8, now - lastP.t) / 1000; pwx = clamp(pwx + (p.x - lastP.x) / dtp * 0.12, -170, 170); pwz = clamp(pwz + (p.y - lastP.y) / dtp * 0.06, -90, 90); }
+    lastP = { x: p.x, y: p.y, t: now };
+  });
+  scene.addEventListener("pointerleave", function () { lastP = null; });
+  function strike(k, dir) {
+    var tb = tubes[k];
+    tb.vx += (dir || (Math.random() < 0.5 ? -1 : 1)) * 55; tb.vz += rnd(-20, 20);
+    ring(tb, 0.8, "tap");
+  }
+  scene.addEventListener("pointerdown", function (e) {
+    ensureAudio();
+    var p = logical(e), best = -1, bd = 14;
+    tubes.forEach(function (tb, k) {
+      var s = tubeScreen(tb), vx = s.bx - s.tx, vy = s.by - s.ty, l2 = vx * vx + vy * vy, u = clamp(((p.x - s.tx) * vx + (p.y - s.ty) * vy) / l2, 0, 1);
+      var d = Math.hypot(p.x - (s.tx + vx * u), p.y - (s.ty + vy * u));
+      if (d < bd) { bd = d; best = k; }
+    });
+    if (best >= 0) { var s2 = tubeScreen(tubes[best]); strike(best, p.x < s2.mx ? 1 : -1); return; }
+    // anywhere else: a little push of air from where you pressed
+    pwx += (p.x < 200 ? 1 : -1) * 60; rustle = 1;
+  });
+  scene.addEventListener("keydown", function (e) {
+    var n = parseInt(e.key, 10);
+    if (n >= 1 && n <= 6) { ensureAudio(); strike(n - 1); }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); ensureAudio(); pwx += e.key === "ArrowLeft" ? -70 : 70; }
+  });
+  $("gust").addEventListener("click", function () { ensureAudio(); gust(); });
+  $("sound").addEventListener("click", function () {
+    soundOn = !soundOn;
+    $("sound").setAttribute("aria-pressed", soundOn ? "true" : "false"); $("soundLabel").textContent = soundOn ? "Sound on" : "Sound off";
+    $("waves").style.opacity = soundOn ? 1 : 0;
+    if (soundOn) ensureAudio();
+    if (audio && master) master.gain.value = soundOn ? 0.55 : 0;
+    say(soundOn ? "Sound on. Listen to the breeze." : "Sound off. The chime still swings and glows.");
+  });
+  document.querySelectorAll('input[name="tune"]').forEach(function (r) {
+    r.addEventListener("change", function () {
+      tune = r.value;
+      var from = metal.slice(), to = TUNES[tune].metal, k0 = 0;
+      var iv = setInterval(function () { k0 = Math.min(1, k0 + 0.1); metal = from.map(function (c, i) { return mixHex(c, to[i], k0); }); if (k0 >= 1) clearInterval(iv); }, 30);
+      say((tune === "dusk" ? "Dusk: warm brass, " : tune === "bright" ? "Bright: silver tubes, " : "Night: deep copper, ") + TUNES[tune].notes.join(" "));
+    });
+  });
+  function mixHex(a, b, k) {
+    function p(c) { if (c[0] === "#") return [1, 3, 5].map(function (i) { return parseInt(c.substr(i, 2), 16); }); return c.match(/\d+/g).slice(0, 3).map(Number); }
+    var x = p(a), y = p(b); return "rgb(" + x.map(function (v, i) { return Math.round(v + (y[i] - v) * k); }).join(",") + ")";
+  }
+  $("breeze").addEventListener("input", function (e) { breeze = e.target.value / 100; });
+  window.addEventListener("pointerdown", function (e) { if (e.isTrusted) ensureAudio(); }, { capture: true });
+
+  /* ---------- 10. Auto demo until the visitor takes over ---------- */
+  var demoOn = true, timers = [];
+  function at(ms, fn) { timers.push(setTimeout(function () { if (demoOn) fn(); }, ms)); }
+  function demo() {
+    if (!demoOn) return;
+    at(300, function () { gust(1); });
+    at(3600, function () { strike(2, 1); });
+    at(4200, function () { strike(4, -1); });
+    at(4800, function () { strike(0, 1); });
+    at(6500, function () { gust(-1); });
+    at(10500, demo);
+  }
+  function stopDemo(e) { if (!e.isTrusted || !demoOn) return; demoOn = false; timers.forEach(clearTimeout); }
+  ["pointerdown", "keydown", "wheel"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  requestAnimationFrame(frame);
+  demo();
+})();
+</script>
+</body>
+</html>

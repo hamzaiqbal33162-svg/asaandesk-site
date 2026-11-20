@@ -1,0 +1,431 @@
+<!doctype html>
+<!-- Chill & Craft · Sand Timer · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sand Timer · a real hourglass timer on your desk</title>
+<script>
+  // Theme: ?theme=light or ?theme=dark in the URL wins over the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    --page: #f6f0e8; --page2: #ecdcc6; --ink: #2a2017; --muted: #7a6a58; --line: rgba(42, 32, 23, 0.12);
+    --chip: rgba(255, 255, 255, 0.84); --btn: #7a4a22; --btnInk: #fff6ea; --on: #2f6f63; --onInk: #effff9; --focus: #3b5bdb;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0e0c10; --page2: #221b24; --ink: #f3ece4; --muted: #b3a597; --line: rgba(255, 255, 255, 0.1);
+      --chip: rgba(34, 27, 34, 0.86); --btn: #e9b863; --btnInk: #2a1a06; --on: #7fd1b9; --onInk: #0f2a23; --focus: #9fb3ff;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #0e0c10; --page2: #221b24; --ink: #f3ece4; --muted: #b3a597; --line: rgba(255, 255, 255, 0.1);
+    --chip: rgba(34, 27, 34, 0.86); --btn: #e9b863; --btnInk: #2a1a06; --on: #7fd1b9; --onInk: #0f2a23; --focus: #9fb3ff;
+    color-scheme: dark;
+  }
+
+  /* ---------- Page and stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; overflow-x: clip;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(110% 70% at 50% 0%, var(--page2), transparent 70%), var(--page);
+  }
+  .stage { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; overflow-x: clip; }
+  .cap, .scene { width: min(500px, 100%, calc((100vh - 256px) * 0.8)); min-width: 260px; }
+  .controls { width: min(520px, 100%); }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0 4px; font-size: 13px; color: var(--muted); }
+  .cap b { font-size: 15px; color: var(--ink); }
+  .cap span { font-variant-numeric: tabular-nums; text-align: right; }
+  .scene {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 26px; overflow: hidden; isolation: isolate; touch-action: none; cursor: grab;
+    background: #e8dccb;
+    box-shadow: 0 30px 60px -24px rgba(60, 40, 20, 0.5), 0 10px 22px -12px rgba(60, 40, 20, 0.3), inset 0 0 0 1px var(--line);
+  }
+  .scene:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 10px 16px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--chip); color: var(--ink); font: 600 14px/1 system-ui, sans-serif;
+    box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.4); transition: transform 0.18s cubic-bezier(.3, 1.6, .5, 1), background 0.25s, color 0.25s;
+  }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(1px) scale(0.97); }
+  .btn.main { background: var(--btn); color: var(--btnInk); border-color: transparent; }
+  .btn[aria-pressed="true"] { background: var(--on); color: var(--onInk); border-color: transparent; }
+  .btn:focus-visible, .seg input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .seg { display: inline-flex; padding: 4px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip); }
+  .seg label { position: relative; }
+  .seg input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  .seg span { display: block; padding: 9px 11px; border-radius: 999px; font: 600 13px/1 system-ui, sans-serif; color: var(--muted); transition: background 0.25s, color 0.25s; white-space: nowrap; }
+  .seg input:checked + span { background: var(--btn); color: var(--btnInk); }
+  .status { margin: 0; min-height: 1.4em; font-size: 14px; font-weight: 600; text-align: center; max-width: 500px; }
+  .hint { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); text-align: center; max-width: 500px; }
+  @media (max-height: 720px) { .hint { display: none; } }
+  @media (max-width: 420px) { .btn { padding: 10px 12px; font-size: 13px; gap: 6px; } .seg span { padding: 9px 8px; font-size: 12.5px; } }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 class="sr">Sand Timer: a working hourglass timer. Flip it to start, lay it on its side to pause.</h1>
+  <div class="cap"><b>Sand Timer</b><span id="readout" aria-live="off">Ready · 1:00</span></div>
+  <div class="scene" id="scene" tabindex="0" role="application" aria-label="An hourglass on a desk. Drag it sideways to tilt the sand, tap it to knock it. Left and right arrows tilt it." aria-describedby="hint">
+    <canvas id="cv" aria-hidden="true"></canvas>
+  </div>
+  <div class="controls">
+    <button class="btn main" id="flip" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10M7 21h10M8 3c0 5 8 6 8 9s-8 4 -8 9M16 3c0 5 -8 6 -8 9s8 4 8 9"/></svg>Flip</button>
+    <button class="btn" id="pause" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12h18M6 8v8M18 8v8"/></svg><span id="pauseLabel">Lay down</span></button>
+    <div class="seg" role="radiogroup" aria-label="Timer length">
+      <label><input type="radio" name="len" value="60" checked><span>1 min</span></label>
+      <label><input type="radio" name="len" value="180"><span>3 min</span></label>
+      <label><input type="radio" name="len" value="300"><span>5 min</span></label>
+      <label><input type="radio" name="len" value="600"><span>10 min</span></label>
+    </div>
+  </div>
+  <p class="status" id="status" aria-live="polite">Pick a length and press Flip to start.</p>
+  <p class="hint" id="hint">Lay it on its side to pause. Drag it sideways to tilt the sand, tap the glass to knock it.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var W = 400, H = 500, TAU = Math.PI * 2;
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  var darkQ = matchMedia("(prefers-color-scheme: dark)");
+  function isDark() { var t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : darkQ.matches; }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function lerp(a, b, k) { return a + (b - a) * k; }
+  var scene = $("scene"), cv = $("cv"), ctx = cv.getContext("2d"), statusEl = $("status");
+  function say(m) { statusEl.textContent = m; }
+
+  /* ---------- 1. The glass as a grid of 2 px cells; sand is a falling-sand automaton ---------- */
+  var GW = 64, GH = 136, NECK = GH / 2, CELL = 2;
+  var mask = new Uint8Array(GW * GH), cells = new Uint8Array(GW * GH), stamp = new Uint8Array(GW * GH), hwRow = new Float32Array(GH);
+  for (var y = 0; y < GH; y++) {
+    var t = Math.abs(y + 0.5 - NECK) / NECK;
+    var body = Math.pow(Math.sin(Math.min(1, t * 1.22) * Math.PI / 2), 1.25), round = t > 0.8 ? Math.sqrt(Math.max(0, 1 - Math.pow((t - 0.8) / 0.2, 2))) : 1;
+    hwRow[y] = (1.1 + 29.6 * body) * (0.3 + 0.7 * round);
+    for (var x = 0; x < GW; x++) if (Math.abs(x + 0.5 - GW / 2) <= hwRow[y]) mask[y * GW + x] = 1;
+  }
+  function fillBottom(count) {
+    cells.fill(0);
+    var n = 0;
+    for (var yy = GH - 1; yy >= NECK + 2 && n < count; yy--) for (var xx = 0; xx < GW && n < count; xx++) if (mask[yy * GW + xx]) { cells[yy * GW + xx] = 1 + Math.floor(Math.random() * 4); n++; }
+    // level the top row into a soft mound
+  }
+  var GRAINS = 1750;
+  fillBottom(GRAINS);
+  function mirror() { var c = new Uint8Array(GW * GH); for (var yy = 0; yy < GH; yy++) c.set(cells.subarray((GH - 1 - yy) * GW, (GH - yy) * GW), yy * GW); cells = c; }
+  function countTop() { var n = 0; for (var i = 0; i < NECK * GW; i++) if (cells[i]) n++; return n; }
+  var tokens = 0, stepId = 1, tilt = 0;
+  function simStep() {
+    stepId = stepId % 250 + 1;
+    var lr = stepId % 2;
+    for (var yy = GH - 2; yy >= 0; yy--) {
+      var gate = yy + 1 === NECK - 1; // moving down into the neck needs a token: that sets the flow rate
+      for (var k = 0; k < GW; k++) {
+        var xx = lr ? k : GW - 1 - k, i = yy * GW + xx;
+        if (!cells[i] || stamp[i] === stepId) continue;
+        var below = i + GW;
+        if (gate && tokens < 1) continue;
+        var moved = -1;
+        if (mask[below] && !cells[below]) moved = below;
+        else {
+          var dir = Math.random() < 0.5 + tilt * 1.6 ? 1 : -1;
+          for (var s = 0; s < 2 && moved < 0; s++, dir = -dir) {
+            var nx = xx + dir; if (nx < 0 || nx >= GW) continue;
+            var d = below + dir; if (mask[d] && !cells[d]) moved = d;
+          }
+          // a tilted glass lets grains slide sideways down the slope
+          if (moved < 0 && Math.abs(tilt) > 0.03 && Math.random() < Math.abs(tilt) * 2) {
+            var sx = xx + (tilt > 0 ? 1 : -1), si = yy * GW + sx;
+            if (sx >= 0 && sx < GW && mask[si] && !cells[si] && mask[si + GW] && cells[si + GW]) moved = si;
+          }
+        }
+        if (moved >= 0) { cells[moved] = cells[i]; cells[i] = 0; stamp[moved] = stepId; if (gate) tokens -= 1; }
+      }
+    }
+  }
+  function knock() { // loosen the surface: a few grains hop sideways
+    for (var n = 0; n < 220; n++) {
+      var i = Math.floor(Math.random() * GW * GH);
+      if (!cells[i]) continue;
+      var up = i - GW * (1 + Math.floor(Math.random() * 3)) + (Math.random() < 0.5 ? -1 : 1);
+      if (up > 0 && mask[up] && !cells[up] && Math.floor(up / GW) !== NECK - 1) { cells[up] = cells[i]; cells[i] = 0; }
+    }
+  }
+
+  /* ---------- 2. Timer state ---------- */
+  var length = 60, remain = 60, running = false, paused = false, demoRun = false, doneFlag = true;
+  function fmt(s) { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ":" + ("0" + s % 60).slice(-2); }
+  var hg = { ang: 0, lift: 0, px: 200, py: 258, anim: null, tiltV: 0, tiltA: 0, shake: 0 };
+  // animations run as small timelines: flip (lift, turn, land) and lay down / stand up
+  function flip(isDemo) {
+    if (hg.anim) return false;
+    var sel = document.querySelector('input[name="len"]:checked');
+    length = isDemo ? 15 : (sel ? +sel.value : 60);
+    if (paused) { paused = false; setPauseUI(); }
+    hg.anim = { kind: "flip", t: 0, dur: reduce.matches ? 0.5 : 1.25 };
+    running = false; demoRun = !!isDemo;
+    say(isDemo ? "Flipped for a 15 second demo." : "Flipped: " + fmt(length) + " on the clock. The sand is running.");
+    return true;
+  }
+  function setPause(p) {
+    if (hg.anim || !running) { if (!running) say("Flip it first to start the timer."); return; }
+    paused = p; setPauseUI();
+    hg.anim = { kind: p ? "down" : "up", t: 0, dur: reduce.matches ? 0.35 : 0.9 };
+    say(p ? "Laid on its side: paused at " + fmt(remain) + "." : "Standing again: " + fmt(remain) + " to go.");
+  }
+  function setPauseUI() { $("pause").setAttribute("aria-pressed", paused ? "true" : "false"); $("pauseLabel").textContent = paused ? "Stand up" : "Lay down"; }
+  function easeOutBack(k) { var c = 1.4; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); }
+  function easeInOut(k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }
+  function stepAnim(dt) {
+    var a = hg.anim; if (!a) return;
+    a.t += dt; var k = clamp(a.t / a.dur, 0, 1);
+    if (a.kind === "flip") {
+      // lift (anticipation) → turn half way round with overshoot → set down with a bump
+      var up = k < 0.2 ? k / 0.2 : k > 0.8 ? (1 - k) / 0.2 : 1;
+      hg.lift = -26 * easeInOut(up);
+      var turnK = clamp((k - 0.15) / 0.65, 0, 1);
+      hg.ang = 180 * (reduce.matches ? turnK : easeOutBack(turnK));
+      if (k >= 1) {
+        hg.ang = 0; hg.lift = 0; mirror(); hg.anim = null; dust(14);
+        remain = length; running = true; doneFlag = false; tokens = 0;
+      }
+    } else {
+      var dn = a.kind === "down", kk = reduce.matches ? k : (dn ? easeOutBack(k) : easeInOut(k));
+      var from = dn ? 0 : 1, to = dn ? 1 : 0, p = lerp(from, to, kk);
+      hg.ang = 90 * p; hg.py = lerp(258, 330, Math.min(1, p));
+      if (k >= 1) { hg.anim = null; hg.ang = dn ? 90 : 0; hg.py = dn ? 330 : 258; dust(8); }
+    }
+  }
+
+  /* ---------- 3. Sound: a small bell when time is up (after you have tapped once) ---------- */
+  var audio = null;
+  function ensureAudio() { if (audio) return; try { var AC = window.AudioContext || window.webkitAudioContext; if (AC) audio = new AC(); } catch (e) { audio = null; } }
+  function bell() {
+    if (!audio) return;
+    try {
+      if (audio.state === "suspended") audio.resume();
+      var now = audio.currentTime;
+      [[880, 0.22, 2.2], [1320, 0.12, 1.4], [2210, 0.05, 0.7]].forEach(function (p, j) {
+        [0, 0.45].forEach(function (off) {
+          var o = audio.createOscillator(), g = audio.createGain();
+          o.frequency.value = p[0] * (off ? 0.84 : 1); o.type = "sine";
+          g.gain.setValueAtTime(0, now + off); g.gain.linearRampToValueAtTime(p[1], now + off + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, now + off + p[2]);
+          o.connect(g); g.connect(audio.destination); o.start(now + off); o.stop(now + off + p[2] + 0.05);
+        });
+      });
+    } catch (e) { /* sound is optional */ }
+  }
+
+  /* ---------- 4. Drawing: the desk by a window, then the hourglass ---------- */
+  var sc = 1, sandC = document.createElement("canvas"); sandC.width = GW; sandC.height = GH;
+  var sctx = sandC.getContext("2d"), img = sctx.createImageData(GW, GH);
+  function resize() { var r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1); cv.width = Math.max(2, Math.round(r.width * dpr)); cv.height = Math.max(2, Math.round(r.height * dpr)); sc = cv.width / W; }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(scene); else window.addEventListener("resize", resize);
+  resize();
+  var SAND_L = [[233, 192, 118], [222, 176, 98], [242, 207, 140], [210, 160, 86]];
+  var SAND_D = [[246, 178, 150], [232, 160, 132], [252, 198, 172], [220, 146, 120]];
+  function drawRoom(t, dark) {
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    if (dark) { g.addColorStop(0, "#1b171f"); g.addColorStop(1, "#2a2128"); } else { g.addColorStop(0, "#efe3d2"); g.addColorStop(1, "#e2d1bb"); }
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // window with the sky outside
+    ctx.fillStyle = dark ? "#3a2d2a" : "#a9774c"; ctx.fillRect(34, 40, 150, 200);
+    var sky = ctx.createLinearGradient(0, 48, 0, 232);
+    if (dark) { sky.addColorStop(0, "#0b1233"); sky.addColorStop(1, "#2b2a5a"); } else { sky.addColorStop(0, "#9cc9ee"); sky.addColorStop(1, "#ffd9a8"); }
+    ctx.fillStyle = sky; ctx.fillRect(42, 48, 134, 184);
+    if (dark) { ctx.fillStyle = "#f5f0dc"; ctx.beginPath(); ctx.arc(140, 84, 10, 0, TAU); ctx.fill(); ctx.fillStyle = "rgba(255,210,120,0.8)"; for (var b = 0; b < 9; b++) ctx.fillRect(48 + b * 14, 205 - (b * 7 % 20), 6, 4); }
+    else { ctx.fillStyle = "rgba(255,255,255,0.85)"; [[78, 92, 16], [98, 86, 13], [114, 93, 11], [146, 70, 9], [158, 67, 8]].forEach(function (c) { ctx.beginPath(); ctx.ellipse(c[0] + Math.sin(t * 0.05) * 6, c[1], c[2] * 1.5, c[2] * 0.6, 0, 0, TAU); ctx.fill(); }); }
+    ctx.fillStyle = dark ? "#3a2d2a" : "#a9774c"; ctx.fillRect(106, 48, 5, 184); ctx.fillRect(42, 136, 134, 5);
+    // light from the window falls across the wall and desk (a lamp glow at night)
+    if (dark) { var lg = ctx.createRadialGradient(330, 120, 10, 300, 300, 300); lg.addColorStop(0, "rgba(255,200,120,0.32)"); lg.addColorStop(1, "rgba(255,200,120,0)"); ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#3a3f4a"; ctx.beginPath(); ctx.moveTo(312, 100); ctx.lineTo(350, 100); ctx.lineTo(360, 128); ctx.lineTo(302, 128); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#ffe7b0"; ctx.beginPath(); ctx.ellipse(331, 129, 28, 4, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = "#3a3f4a"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(331, 100); ctx.lineTo(352, 60); ctx.lineTo(372, 404); ctx.stroke(); }
+    else { ctx.fillStyle = "rgba(255,236,200,0.35)"; ctx.beginPath(); ctx.moveTo(42, 232); ctx.lineTo(176, 232); ctx.lineTo(330, 410); ctx.lineTo(150, 410); ctx.closePath(); ctx.fill(); }
+    // desk
+    var dg = ctx.createLinearGradient(0, 404, 0, H); dg.addColorStop(0, dark ? "#4a3022" : "#a8693c"); dg.addColorStop(1, dark ? "#2e1d14" : "#7a4a28");
+    ctx.fillStyle = dg; ctx.fillRect(0, 404, W, H - 404);
+    ctx.fillStyle = "rgba(255,255,255,0.12)"; ctx.fillRect(0, 404, W, 2);
+    ctx.strokeStyle = "rgba(0,0,0,0.12)"; ctx.lineWidth = 1;
+    for (var gy = 418; gy < H; gy += 13) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.bezierCurveTo(120, gy + 4, 260, gy - 4, W, gy + 2); ctx.stroke(); }
+    // a pencil on the desk
+    ctx.save(); ctx.translate(70, 452); ctx.rotate(-0.18); ctx.fillStyle = "#f2c14e"; ctx.fillRect(0, -4, 78, 8); ctx.fillStyle = "#f4d8b0"; ctx.beginPath(); ctx.moveTo(78, -4); ctx.lineTo(92, 0); ctx.lineTo(78, 4); ctx.fill(); ctx.fillStyle = "#333"; ctx.beginPath(); ctx.moveTo(88, -1.3); ctx.lineTo(92, 0); ctx.lineTo(88, 1.3); ctx.fill(); ctx.fillStyle = "#e8888a"; ctx.fillRect(-8, -4, 8, 8); ctx.fillStyle = "#b9bec6"; ctx.fillRect(-2, -4, 4, 8); ctx.restore();
+  }
+  function glassPath(g) {
+    g.beginPath();
+    for (var yy = 0; yy <= GH; yy++) { var r = (hwRow[Math.min(GH - 1, yy)] + 0.6) * CELL, py = (yy - GH / 2) * CELL; yy ? g.lineTo(r, py) : g.moveTo(r, py); }
+    for (yy = GH; yy >= 0; yy--) { var r2 = (hwRow[Math.min(GH - 1, yy)] + 0.6) * CELL, py2 = (yy - GH / 2) * CELL; g.lineTo(-r2, py2); }
+    g.closePath();
+  }
+  function cap(y, dark) {
+    var g = ctx.createLinearGradient(-90, 0, 90, 0); g.addColorStop(0, dark ? "#3c2416" : "#5e3618"); g.addColorStop(0.35, dark ? "#a2683c" : "#c78a52"); g.addColorStop(1, dark ? "#2e1b10" : "#4a2a12");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-92, y - 8, 184, 16, 6) : ctx.rect(-92, y - 8, 184, 16); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.14)"; ctx.fillRect(-88, y - 7, 176, 2);
+    ctx.fillStyle = dark ? "#c89a4a" : "#d9ac5a"; ctx.fillRect(-92, y - 1, 184, 2); // brass inlay
+  }
+  function post(x, dark) {
+    var g = ctx.createLinearGradient(x - 6, 0, x + 6, 0); g.addColorStop(0, dark ? "#3c2416" : "#5e3618"); g.addColorStop(0.4, dark ? "#a2683c" : "#c78a52"); g.addColorStop(1, dark ? "#2e1b10" : "#4a2a12");
+    ctx.fillStyle = g; ctx.fillRect(x - 4, -140, 8, 280);
+    [-110, -40, 0, 40, 110].forEach(function (by) { ctx.beginPath(); ctx.ellipse(x, by, 7, 5, 0, 0, TAU); ctx.fill(); });
+  }
+  function drawHourglass(t, dark) {
+    var shake = hg.shake > 0 && !reduce.matches ? Math.sin(t * 60) * hg.shake * 2 : 0;
+    var ang = (hg.ang + hg.tiltA) * Math.PI / 180;
+    // shadow on the desk
+    ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.beginPath(); ctx.ellipse(hg.px + 8, 410, hg.ang > 45 ? 160 : 100 - hg.lift, 10, 0, 0, TAU); ctx.fill();
+    ctx.save(); ctx.translate(hg.px + shake, hg.py + hg.lift); ctx.rotate(ang);
+    // the back post shows faintly through the glass
+    ctx.globalAlpha = 0.35; post(0, dark); ctx.globalAlpha = 1;
+    // sand: the grid painted as pixels, clipped to the glass
+    var pal = dark ? SAND_D : SAND_L, d = img.data;
+    for (var i = 0; i < cells.length; i++) { var c = cells[i], o = i * 4; if (c) { var p = pal[c - 1]; d[o] = p[0]; d[o + 1] = p[1]; d[o + 2] = p[2]; d[o + 3] = 255; } else d[o + 3] = 0; }
+    sctx.putImageData(img, 0, 0);
+    ctx.save(); glassPath(ctx); ctx.fillStyle = dark ? "rgba(200,220,255,0.06)" : "rgba(255,255,255,0.22)"; ctx.fill(); ctx.clip();
+    ctx.imageSmoothingEnabled = false; ctx.drawImage(sandC, -GW, -GH, GW * CELL, GH * CELL); ctx.imageSmoothingEnabled = true;
+    // light on the sand from the left, shade at the right
+    var sg = ctx.createLinearGradient(-64, 0, 64, 0); sg.addColorStop(0, "rgba(255,255,255,0.18)"); sg.addColorStop(0.5, "rgba(255,255,255,0)"); sg.addColorStop(1, "rgba(0,0,0,0.22)");
+    ctx.fillStyle = sg; ctx.fillRect(-64, -GH, 128, GH * 2);
+    ctx.restore();
+    // glass: rim lines and reflections
+    glassPath(ctx); ctx.strokeStyle = dark ? "rgba(220,230,255,0.45)" : "rgba(255,255,255,0.9)"; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-40, -118); ctx.quadraticCurveTo(-54, -80, -36, -40); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-36, 44); ctx.quadraticCurveTo(-54, 84, -42, 116); ctx.stroke();
+    ctx.lineWidth = 1.4; ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.beginPath(); ctx.moveTo(44, -112); ctx.quadraticCurveTo(54, -80, 40, -46); ctx.stroke();
+    // front posts and the caps
+    post(-80, dark); post(80, dark);
+    cap(-144, dark); cap(144, dark);
+    ctx.restore();
+  }
+  function drawNote(dark, t) {
+    // a paper card leaning on the desk shows the time left
+    ctx.save(); ctx.translate(326, 428); ctx.rotate(-0.08);
+    ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.fillRect(-36, -18, 76, 44);
+    ctx.fillStyle = dark ? "#efe6d6" : "#fffaf0"; ctx.fillRect(-40, -22, 76, 44);
+    ctx.fillStyle = "#e57373"; ctx.fillRect(-40, -22, 76, 4);
+    var done = !running && !doneFlag ? false : doneFlag && pulse > 0;
+    ctx.fillStyle = done ? "#c2410c" : "#2a2017"; ctx.font = "800 20px ui-monospace, Menlo, Consolas, monospace"; ctx.textAlign = "center";
+    ctx.fillText(done ? "TIME" : fmt(running ? remain : flipping() ? length : lengthSel()), -2, 8);
+    ctx.font = "700 7px system-ui, sans-serif"; ctx.fillStyle = "#7a6a58"; ctx.fillText(demoRun && (running || flipping()) ? "DEMO" : paused ? "PAUSED" : running ? "LEFT" : "READY", -2, 17);
+    ctx.restore();
+  }
+
+  /* ---------- 5. Dust and sparkles ---------- */
+  var bits = [], pulse = 0;
+  function dust(n) { if (reduce.matches) n = Math.ceil(n / 3); for (var i = 0; i < n; i++) bits.push({ x: hg.px + rnd(-90, 90), y: 404, vx: rnd(-40, 40), vy: rnd(-40, -10), life: rnd(0.5, 1), c: "rgba(230,210,180,0.7)", s: rnd(2, 4), g: 40 }); }
+  function sparkle() { var n = reduce.matches ? 10 : 46; for (var i = 0; i < n; i++) { var a = rnd(0, TAU), v = rnd(50, 160); bits.push({ x: hg.px, y: hg.py + 40, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, life: rnd(0.8, 1.6), c: ["#ffd23f", "#ffffff", "#f6a5c0", "#9fd8ff"][i % 4], s: rnd(2, 4), g: 120, star: true }); } }
+
+  /* ---------- 6. Main loop ---------- */
+  var last = performance.now(), readT = 0;
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000), t = now / 1000; last = now;
+    var dark = isDark();
+    stepAnim(dt);
+    // tilt from dragging springs back when you let go
+    if (!dragging) { hg.tiltV += (-hg.tiltA * 60 - hg.tiltV * 9) * dt; hg.tiltA += hg.tiltV * dt; }
+    tilt = clamp(hg.tiltA / 60, -0.3, 0.3);
+    if (hg.shake > 0) hg.shake = Math.max(0, hg.shake - dt * 3);
+    var upright = !hg.anim && hg.ang === 0;
+    if (running && !paused && upright) {
+      remain -= dt;
+      var top = countTop();
+      tokens = Math.min(4, tokens + (remain > 0 ? top / Math.max(0.25, remain) : 300) * dt);
+      if (remain <= 0 && top === 0 && !doneFlag) finish();
+    } else if (upright && !paused) tokens = Math.min(4, tokens + 90 * dt); // with no timer running, leftover sand just drains
+    if (upright) { var steps = 3; for (var s = 0; s < steps; s++) simStep(); }
+    for (var j = bits.length - 1; j >= 0; j--) { var b = bits[j]; b.life -= dt; if (b.life <= 0) { bits.splice(j, 1); continue; } b.vy += b.g * dt; b.x += b.vx * dt; b.y += b.vy * dt; }
+    if (pulse > 0) pulse = Math.max(0, pulse - dt * 0.25);
+    ctx.setTransform(sc, 0, 0, sc, 0, 0);
+    drawRoom(t, dark);
+    if (pulse > 0) { var pg = ctx.createRadialGradient(hg.px, hg.py, 10, hg.px, hg.py, 260); pg.addColorStop(0, "rgba(255,220,140," + (0.45 * pulse * (0.6 + 0.4 * Math.sin(t * 8))).toFixed(3) + ")"); pg.addColorStop(1, "rgba(255,220,140,0)"); ctx.fillStyle = pg; ctx.fillRect(0, 0, W, H); }
+    drawHourglass(t, dark);
+    drawNote(dark, t);
+    bits.forEach(function (b) {
+      ctx.globalAlpha = Math.min(1, b.life * 2); ctx.fillStyle = b.c;
+      if (b.star) { ctx.beginPath(); for (var q = 0; q < 8; q++) { var rr = q % 2 ? b.s * 0.35 : b.s, a = q * Math.PI / 4; ctx.lineTo(b.x + Math.cos(a) * rr, b.y + Math.sin(a) * rr); } ctx.fill(); }
+      else { ctx.beginPath(); ctx.arc(b.x, b.y, b.s, 0, TAU); ctx.fill(); }
+    });
+    ctx.globalAlpha = 1;
+    readT -= dt;
+    if (readT <= 0) { readT = 0.25; $("readout").textContent = (flipping() ? (demoRun ? "Demo · " : "Starting · ") + fmt(length) : running ? (paused ? "Paused · " : demoRun ? "Demo · " : "Running · ") + fmt(remain) : doneFlag && pulse > 0 ? "Time is up" : "Ready · " + fmt(lengthSel())); }
+    requestAnimationFrame(frame);
+  }
+  function lengthSel() { var s = document.querySelector('input[name="len"]:checked'); return s ? +s.value : 60; }
+  function flipping() { return !!(hg.anim && hg.anim.kind === "flip"); }
+  function finish() {
+    doneFlag = true; running = false; pulse = 1; sparkle(); bell();
+    say(demoRun ? "Demo done. Pick a length and press Flip." : "Time is up! " + fmt(length) + " went by. Flip it to go again.");
+    demoRun = false;
+    if (demoOn) demoCycle(3200);
+  }
+
+  /* ---------- 7. Input ---------- */
+  var dragging = false, downX = 0, downT = 0, moved = false;
+  function logical(e) { var r = scene.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; }
+  scene.addEventListener("pointerdown", function (e) {
+    ensureAudio();
+    var p = logical(e);
+    if (Math.abs(p.x - hg.px) > 110 || p.y < 90 || p.y > 420) return;
+    dragging = true; moved = false; downX = p.x; downT = performance.now();
+    try { scene.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  });
+  scene.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    var p = logical(e), dx = p.x - downX;
+    if (Math.abs(dx) > 4) moved = true;
+    hg.tiltA = clamp(dx * 0.35, -20, 20); hg.tiltV = 0;
+  });
+  ["pointerup", "pointercancel"].forEach(function (ev) {
+    scene.addEventListener(ev, function () {
+      if (!dragging) return;
+      dragging = false;
+      if (!moved && performance.now() - downT < 350) { hg.shake = 1; knock(); say("Knock knock: the grains jump."); }
+      else if (moved) say("Tilted: the sand slides to one side.");
+    });
+  });
+  scene.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); hg.tiltA = clamp(hg.tiltA + (e.key === "ArrowLeft" ? -6 : 6), -20, 20); }
+    if (e.key === "k" || e.key === "K") { hg.shake = 1; knock(); }
+  });
+  $("flip").addEventListener("click", function () { ensureAudio(); if (!flip(false)) say("Hold on, it is still moving."); });
+  $("pause").addEventListener("click", function () { ensureAudio(); setPause(!paused); });
+  document.querySelectorAll('input[name="len"]').forEach(function (r) { r.addEventListener("change", function () { say(fmt(+r.value) + " chosen. Press Flip to start" + (running ? " again." : ".")); }); });
+
+  /* ---------- 8. Auto demo: a 15 second run, a pause, and a finish ---------- */
+  var demoOn = true, timers = [];
+  function at(ms, fn) { timers.push(setTimeout(function () { if (demoOn) fn(); }, ms)); }
+  function stopDemo(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false; timers.forEach(clearTimeout);
+    if (demoRun && running) { running = false; demoRun = false; doneFlag = true; say("Demo stopped. Pick a length and press Flip."); }
+  }
+  ["pointerdown", "keydown", "wheel"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  function demoCycle(delay) {
+    at(delay, function () { flip(true); });
+    at(delay + 6500, function () { if (running) setPause(true); });
+    at(delay + 8300, function () { if (paused) setPause(false); });
+  }
+  requestAnimationFrame(frame);
+  demoCycle(500);
+})();
+</script>
+</body>
+</html>
