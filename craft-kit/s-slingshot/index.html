@@ -1,0 +1,588 @@
+<!doctype html>
+<!-- Chill & Craft · Slingshot · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Slingshot · Pull back to send a note</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --sky1: #bfe4ff;
+    --sky2: #f3fbff;
+    --sun: #ffe08a;
+    --cloud: #ffffff;
+    --hill1: #9bdc8f;
+    --hill2: #6cc278;
+    --card: #ffffff;
+    --ink: #13324a;
+    --muted: #5d7a8f;
+    --line: rgba(19, 50, 74, 0.12);
+    --pebble: #ffd23f;
+    --pebble-dark: #e0a800;
+    --band: #9b2c3c;
+    --wood: #a86a3d;
+    --wood-dark: #7a4724;
+    --ring1: #ef476f;
+    --ring2: #fff7f0;
+    --ok: #12a37a;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --sky1: #08182a;
+    --sky2: #16344f;
+    --sun: #f4f1de;
+    --cloud: #2a4a66;
+    --hill1: #1d4a3a;
+    --hill2: #143728;
+    --card: #10263a;
+    --ink: #e8f3fb;
+    --muted: #8eaac0;
+    --line: rgba(232, 243, 251, 0.12);
+    --pebble: #ffd23f;
+    --pebble-dark: #d19a00;
+    --band: #d9485f;
+    --wood: #b97a4b;
+    --wood-dark: #84522c;
+    --ring1: #ef476f;
+    --ring2: #fbeee6;
+    --ok: #3ad29f;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: linear-gradient(var(--sky1), var(--sky2) 70%); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Stage: sky, sun or moon, drifting clouds and hills ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 18px 16px 10px; overflow: hidden; isolation: isolate; }
+  .sun { position: absolute; z-index: -3; right: 12%; top: 9%; width: 90px; height: 90px; border-radius: 50%; background: var(--sun); box-shadow: 0 0 60px 20px color-mix(in srgb, var(--sun) 45%, transparent); }
+  :root[data-theme="dark"] .sun { width: 60px; height: 60px; box-shadow: 0 0 40px 6px rgba(244, 241, 222, 0.25), inset -14px -6px 0 rgba(0, 0, 0, 0.12); }
+  .stars { position: absolute; inset: 0; z-index: -3; opacity: 0; background-image: radial-gradient(1.5px 1.5px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 28% 42%, #fff, transparent), radial-gradient(1.5px 1.5px at 44% 12%, #fff, transparent), radial-gradient(1px 1px at 63% 30%, #fff, transparent), radial-gradient(1.5px 1.5px at 78% 46%, #fff, transparent), radial-gradient(1px 1px at 88% 14%, #fff, transparent), radial-gradient(1px 1px at 8% 56%, #fff, transparent), radial-gradient(1.5px 1.5px at 54% 52%, #fff, transparent); animation: twinkle 4s ease-in-out infinite alternate; }
+  :root[data-theme="dark"] .stars { opacity: 1; }
+  @keyframes twinkle { to { opacity: 0.45; } }
+  .cloud { position: absolute; z-index: -2; height: 34px; border-radius: 999px; background: var(--cloud); opacity: 0.85; animation: cloud linear infinite; }
+  .cloud::before, .cloud::after { content: ""; position: absolute; bottom: 10px; border-radius: 50%; background: inherit; }
+  .cloud::before { left: 18%; width: 46px; height: 46px; }
+  .cloud::after { left: 46%; width: 34px; height: 34px; }
+  .c1 { top: 14%; width: 130px; animation-duration: 60s; animation-delay: -20s; }
+  .c2 { top: 30%; width: 90px; animation-duration: 80s; animation-delay: -55s; opacity: 0.6; }
+  .c3 { top: 8%; width: 70px; animation-duration: 95s; animation-delay: -5s; opacity: 0.5; }
+  @keyframes cloud { from { transform: translateX(-30vw); } to { transform: translateX(130vw); } }
+  .hills { position: absolute; z-index: -1; left: 0; right: 0; bottom: 0; width: 100%; height: 34vh; min-height: 160px; }
+
+  /* ---------- Column ---------- */
+  .col { width: min(420px, 100%); display: grid; justify-items: center; gap: 14px; }
+
+  /* Target */
+  .target { position: relative; display: grid; justify-items: center; gap: 6px; }
+  .board { position: relative; width: 104px; height: 104px; animation: sway 5s ease-in-out infinite; transform-origin: 50% 100%; }
+  @keyframes sway { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+  .board svg { width: 104px; height: 104px; overflow: visible; filter: drop-shadow(0 10px 10px rgba(0, 30, 60, 0.18)); }
+  .tlabel { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; background: var(--card); box-shadow: 0 0 0 1px var(--line); font-size: 0.78rem; font-weight: 700; }
+  .tlabel b { color: var(--ring1); font-variant-numeric: tabular-nums; }
+  .flag { position: absolute; left: 50%; top: -34px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: var(--ok); color: #fff; font-size: 0.74rem; font-weight: 800; white-space: nowrap; transform: translateX(-50%) scale(0); transition: transform 0.5s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .flag svg { width: 13px; height: 13px; }
+  .flag.show { transform: translateX(-50%) scale(1); }
+  .pin { position: absolute; width: 22px; height: 17px; margin: -8px 0 0 -11px; border-radius: 3px; background: #fff linear-gradient(transparent 6px, #cfd8e3 6px 7.5px, transparent 7.5px 10px, #cfd8e3 10px 11.5px, transparent 11.5px) no-repeat 4px 0 / 14px 100%; box-shadow: 0 0 0 1px rgba(19, 50, 74, 0.25), 0 3px 6px rgba(0, 0, 0, 0.35); pointer-events: none; transform: rotate(-8deg); }
+  .pin::after { content: ""; position: absolute; left: 50%; top: -4px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: #13324a; box-shadow: inset -1px -1px 0 rgba(255, 255, 255, 0.35); }
+  .ripple { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; border: 3px solid var(--pebble); pointer-events: none; }
+
+  /* Message card */
+  .note { width: 100%; padding: 12px 14px 10px; border-radius: 20px; background: var(--card); box-shadow: 0 24px 40px -30px rgba(0, 30, 60, 0.6), 0 0 0 1px var(--line); }
+  .note .to { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-size: 0.78rem; color: var(--muted); }
+  .note .to b { color: var(--ink); }
+  .note textarea { display: block; width: 100%; height: 3.3em; resize: none; border: 0; outline: none; background: transparent; color: var(--ink); font: inherit; font-size: 0.98rem; line-height: 1.6; padding: 0; }
+  .note textarea::placeholder { color: var(--muted); }
+  .note:focus-within { box-shadow: 0 24px 40px -30px rgba(0, 30, 60, 0.6), 0 0 0 2px var(--pebble-dark); }
+  .note .foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; min-height: 1.3em; font-size: 0.74rem; color: var(--muted); }
+  .note .foot .ok { color: var(--ok); font-weight: 700; }
+  .note.empty { animation: nudge 0.42s; }
+  @keyframes nudge { 20% { transform: translateX(-7px); } 45% { transform: translateX(6px); } 70% { transform: translateX(-3px); } }
+
+  /* Slingshot */
+  .sling { position: relative; width: 200px; height: 190px; touch-action: none; }
+  .sling svg { position: absolute; inset: 0; width: 200px; height: 190px; overflow: visible; }
+  .band { fill: none; stroke: var(--band); stroke-linecap: round; stroke-linejoin: round; }
+  .power { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 3 6; opacity: 0; transition: opacity 0.25s; }
+  .sling.pulling .power { opacity: 0.6; }
+  .pebble {
+    position: absolute;
+    left: 73px;
+    top: 17px;
+    width: 54px;
+    height: 54px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    cursor: grab;
+    z-index: 2;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pebble:active { cursor: grabbing; }
+  .pebble:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
+  .face { position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center; color: #4a3500; background: radial-gradient(circle at 35% 30%, #fff3b0, var(--pebble) 45%, var(--pebble-dark)); box-shadow: inset -4px -6px 0 rgba(0, 0, 0, 0.12), 0 8px 14px -6px rgba(90, 60, 0, 0.6); }
+  .face svg { width: 24px; height: 24px; transition: opacity 0.2s, transform 0.3s; }
+  .face .i-note { position: absolute; opacity: 0; transform: scale(0.4) rotate(-30deg); }
+  .pebble.loaded .i-send { opacity: 0; transform: scale(0.4); }
+  .pebble.loaded .i-note { opacity: 1; transform: none; }
+  .pebble.idle .face { animation: bob 2.4s ease-in-out infinite; }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px) rotate(-4deg); } }
+  .dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--pebble); pointer-events: none; }
+  .hint { margin: -4px 0 0; min-height: 1.3em; font-size: 0.8rem; font-weight: 600; color: var(--muted); text-align: center; }
+  .hint.warn { color: var(--ring1); }
+  .ghost { position: fixed; z-index: 30; max-width: 260px; padding: 6px 10px; border-radius: 10px; background: #fff7d6; color: #4a3500; font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; box-shadow: 0 8px 16px -8px rgba(0, 0, 0, 0.5); }
+  .spark { position: fixed; z-index: 31; width: 7px; height: 7px; border-radius: 50%; pointer-events: none; }
+
+  @media (max-height: 640px) {
+    .col { gap: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cloud, .board, .stars, .pebble.idle .face, .note.empty { animation: none; }
+    .flag, .power { transition-duration: 0.01s; }
+    .dot, .spark, .ghost, .ripple { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <div class="stars" aria-hidden="true"></div>
+    <div class="sun" aria-hidden="true"></div>
+    <div class="cloud c1" aria-hidden="true"></div>
+    <div class="cloud c2" aria-hidden="true"></div>
+    <div class="cloud c3" aria-hidden="true"></div>
+    <svg class="hills" viewBox="0 0 1440 300" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 150C220 70 420 80 640 140s420 70 800-30V300H0Z" style="fill:var(--hill1)" />
+      <path d="M0 220c260-60 520-40 760 10s460 30 680-40V300H0Z" style="fill:var(--hill2)" />
+    </svg>
+
+    <div class="col">
+      <div class="target" id="target">
+        <span class="flag" id="flag" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10" /></svg>Delivered</span>
+        <div class="board" id="board">
+          <svg viewBox="0 0 104 104" aria-hidden="true">
+            <circle cx="52" cy="52" r="50" style="fill:var(--ring1)" />
+            <circle cx="52" cy="52" r="40" style="fill:var(--ring2)" />
+            <circle cx="52" cy="52" r="30" style="fill:var(--ring1)" />
+            <circle cx="52" cy="52" r="20" style="fill:var(--ring2)" />
+            <circle cx="52" cy="52" r="10" style="fill:var(--ring1)" />
+          </svg>
+        </div>
+        <span class="tlabel">Team inbox · <b id="score">3</b> notes</span>
+      </div>
+
+      <div class="note" id="note">
+        <div class="to"><span>To <b>Karachi crew</b></span><span id="chars">0 / 120</span></div>
+        <label class="sr-only" for="msg">Your note</label>
+        <textarea id="msg" maxlength="120" placeholder="Write a quick thank-you…">Thank you for staying late for the launch!</textarea>
+        <div class="foot" id="foot" aria-live="polite"><span>Pull the pebble back to send</span></div>
+      </div>
+
+      <div class="sling" id="sling">
+        <svg viewBox="0 0 200 190" aria-hidden="true">
+          <circle class="power" cx="100" cy="44" r="96" />
+          <!-- handle and fork -->
+          <path d="M91 190 93 132q7-10 14 0l2 58Z" style="fill:var(--wood)" />
+          <path d="M100 136C92 112 60 104 54 50" fill="none" style="stroke:var(--wood)" stroke-width="15" stroke-linecap="round" />
+          <path d="M100 136c8-24 40-32 46-86" fill="none" style="stroke:var(--wood)" stroke-width="15" stroke-linecap="round" />
+          <path d="M98 128C90 108 64 100 58 58M102 128c8-20 34-28 40-70" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="3" stroke-linecap="round" />
+          <g style="stroke:var(--wood-dark)" stroke-width="3" stroke-linecap="round"><path d="M92 152h16M92 160h16M92 168h16M92 176h16" /></g>
+          <!-- elastic band behind the pebble -->
+          <path class="band" id="band" d="" />
+          <circle cx="54" cy="48" r="5" style="fill:var(--wood-dark)" />
+          <circle cx="146" cy="48" r="5" style="fill:var(--wood-dark)" />
+        </svg>
+        <button class="pebble idle" id="pebble" type="button" aria-label="Send note (or drag back and let go)" aria-describedby="hint">
+          <span class="face">
+            <svg class="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+            <svg class="i-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h10l4 4v12H5Z" fill="#fff7d6" /><path d="M8 11h8M8 15h6" /></svg>
+          </span>
+        </button>
+      </div>
+      <p class="hint" id="hint">Pull back and let go, or press the pebble</p>
+    </div>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </main>
+
+<script>
+  // ---------- Slingshot: pull the pebble back, let go, and the note flies into the target ----------
+  const $ = (s) => document.querySelector(s);
+  const sling = $("#sling");
+  const band = $("#band");
+  const pebble = $("#pebble");
+  const face = pebble.querySelector(".face");
+  const hint = $("#hint");
+  const msg = $("#msg");
+  const note = $("#note");
+  const foot = $("#foot");
+  const chars = $("#chars");
+  const board = $("#board");
+  const flag = $("#flag");
+  const score = $("#score");
+  const status = $("#status");
+
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  function play(el, frames, opts) {
+    if (calm() || !el || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  const say = (t) => { status.textContent = t; };
+
+  // Geometry (slingshot SVG units = CSS px)
+  const REST = { x: 100, y: 44 };
+  const TIP_L = { x: 54, y: 48 };
+  const TIP_R = { x: 146, y: 48 };
+  const R = 27;
+  const MAX = 96;
+
+  // Draw the band from each prong tip around the back of the pebble at offset o
+  function setBand(o) {
+    const cx = REST.x + o.x, cy = REST.y + o.y;
+    const len = Math.hypot(o.x, o.y);
+    const dx = len > 4 ? o.x / len : 0, dy = len > 4 ? o.y / len : 1;
+    const px = -dy, py = dx;
+    const sL = { x: cx + px * R * 0.92, y: cy + py * R * 0.92 };
+    const sR = { x: cx - px * R * 0.92, y: cy - py * R * 0.92 };
+    const back = { x: cx + dx * R * 0.95, y: cy + dy * R * 0.95 };
+    // keep the left tip joined to the side nearest it
+    const a = Math.hypot(sL.x - TIP_L.x, sL.y - TIP_L.y) < Math.hypot(sR.x - TIP_L.x, sR.y - TIP_L.y) ? [sL, sR] : [sR, sL];
+    band.setAttribute("d", "M" + TIP_L.x + " " + TIP_L.y + "L" + a[0].x.toFixed(1) + " " + a[0].y.toFixed(1) + "Q" + back.x.toFixed(1) + " " + back.y.toFixed(1) + " " + a[1].x.toFixed(1) + " " + a[1].y.toFixed(1) + "L" + TIP_R.x + " " + TIP_R.y);
+    band.style.strokeWidth = (7 - Math.min(1, len / MAX) * 3.5).toFixed(2);
+  }
+  function placePebble(o, squash) {
+    pebble.style.transform = "translate(" + o.x + "px," + o.y + "px)";
+    const len = Math.hypot(o.x, o.y);
+    if (squash && len > 2) {
+      const ang = Math.atan2(o.y, o.x) * 180 / Math.PI;
+      const s = Math.min(1, len / MAX);
+      face.style.transform = "rotate(" + ang + "deg) scale(" + (1 + s * 0.16) + "," + (1 - s * 0.1) + ") rotate(" + -ang + "deg)";
+    } else face.style.transform = "";
+  }
+  setBand({ x: 0, y: 0 });
+
+  // Spring the band (and optionally the pebble) back to rest with a damped wobble
+  let springRaf = 0;
+  function spring(from, withPebble) {
+    cancelAnimationFrame(springRaf);
+    return new Promise((resolve) => {
+      let x = from.x, y = from.y, vx = 0, vy = 0, last = performance.now();
+      if (calm()) { setBand({ x: 0, y: 0 }); if (withPebble) placePebble({ x: 0, y: 0 }); resolve(); return; }
+      function step(t) {
+        const dt = Math.min(0.032, (t - last) / 1000);
+        last = t;
+        vx += (-430 * x - 10 * vx) * dt;
+        vy += (-430 * y - 10 * vy) * dt;
+        x += vx * dt;
+        y += vy * dt;
+        setBand({ x, y });
+        if (withPebble) placePebble({ x, y }, false);
+        if (Math.abs(x) + Math.abs(y) + (Math.abs(vx) + Math.abs(vy)) * 0.01 < 0.4) {
+          setBand({ x: 0, y: 0 });
+          if (withPebble) placePebble({ x: 0, y: 0 });
+          resolve();
+          return;
+        }
+        springRaf = requestAnimationFrame(step);
+      }
+      springRaf = requestAnimationFrame(step);
+    });
+  }
+
+  // ---------- Loading the note into the pebble ----------
+  function hasNote() { return msg.value.trim().length > 0; }
+  function refuse() {
+    note.classList.remove("empty");
+    void note.offsetWidth;
+    note.classList.add("empty");
+    hint.textContent = "Write a note first";
+    hint.classList.add("warn");
+    say("Write a note first");
+    play(face, [{ transform: "rotate(0)" }, { transform: "rotate(-16deg)" }, { transform: "rotate(12deg)" }, { transform: "rotate(-6deg)" }, { transform: "rotate(0)" }], { duration: 420 });
+  }
+  function load() {
+    if (pebble.classList.contains("loaded")) return;
+    pebble.classList.add("loaded");
+    pebble.classList.remove("idle");
+    hint.classList.remove("warn");
+    if (calm()) return;
+    // the text lifts out of the card as a paper slip and drops into the pebble
+    const a = msg.getBoundingClientRect();
+    const b = pebble.getBoundingClientRect();
+    const g = document.createElement("span");
+    g.className = "ghost";
+    g.textContent = msg.value.trim();
+    g.style.left = a.left + "px";
+    g.style.top = a.top + "px";
+    document.body.appendChild(g);
+    const dx = b.left + b.width / 2 - a.left - g.offsetWidth / 2;
+    const dy = b.top + b.height / 2 - a.top - g.offsetHeight / 2;
+    g.animate([
+      { transform: "translate(0,0) scale(1)", opacity: 1 },
+      { transform: "translate(" + dx * 0.5 + "px," + (dy * 0.4 - 10) + "px) scale(.7) rotate(-6deg)", opacity: 1, offset: 0.45 },
+      { transform: "translate(" + dx + "px," + dy + "px) scale(.1) rotate(10deg)", opacity: 0.2 }
+    ], { duration: 520, easing: "cubic-bezier(.45,.05,.35,1)" }).onfinish = () => g.remove();
+  }
+
+  // ---------- Drag to pull ----------
+  let state = "ready"; // ready | pulling | flying
+  let drag = null;
+  let justDragged = false;
+  let offset = { x: 0, y: 0 };
+  function clampPull(dx, dy) {
+    dy = Math.max(-12, dy);
+    const len = Math.hypot(dx, dy);
+    if (len > MAX) { dx = (dx / len) * MAX; dy = (dy / len) * MAX; }
+    return { x: dx, y: dy };
+  }
+  function showPower(o) {
+    const p = Math.round(Math.min(1, Math.hypot(o.x, o.y) / MAX) * 100);
+    hint.classList.remove("warn");
+    hint.textContent = o.y > 26 ? "Power " + p + "% · let go to send" : "Pull further back";
+  }
+  pebble.addEventListener("pointerdown", (e) => {
+    if (state !== "ready") return;
+    drag = { x: e.clientX, y: e.clientY, moved: false, id: e.pointerId };
+    pebble.setPointerCapture(e.pointerId);
+  });
+  pebble.addEventListener("pointermove", (e) => {
+    if (!drag || state === "flying") return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+    if (!drag.moved) {
+      if (!hasNote()) { drag = null; refuse(); return; }
+      drag.moved = true;
+      state = "pulling";
+      sling.classList.add("pulling");
+      load();
+    }
+    offset = clampPull(dx, dy);
+    setBand(offset);
+    placePebble(offset, true);
+    showPower(offset);
+  });
+  async function release() {
+    if (!drag) return;
+    const moved = drag.moved;
+    drag = null;
+    if (!moved) return; // a plain tap: the click handler pulls for you
+    justDragged = true;
+    setTimeout(() => { justDragged = false; }, 0);
+    sling.classList.remove("pulling");
+    if (offset.y > 26) launch(offset);
+    else {
+      hint.textContent = "Pull a bit further back";
+      state = "ready";
+      await spring(offset, true);
+      offset = { x: 0, y: 0 };
+    }
+  }
+  pebble.addEventListener("pointerup", release);
+  pebble.addEventListener("pointercancel", release);
+
+  // Tap, click, Enter or Space: the slingshot pulls itself back, then fires
+  pebble.addEventListener("click", () => {
+    if (justDragged || state !== "ready") return;
+    autoPull(-14, 84, 650);
+  });
+  async function autoPull(tx, ty, ms) {
+    if (state !== "ready") return;
+    if (!hasNote()) { refuse(); return; }
+    state = "pulling";
+    sling.classList.add("pulling");
+    load();
+    const t0 = performance.now();
+    await new Promise((resolve) => {
+      (function step(t) {
+        const k = calm() ? 1 : Math.min(1, (t - t0) / ms);
+        const e = 1 - Math.pow(1 - k, 3);
+        // a tiny tremble while the band is at full stretch
+        const shake = k > 0.85 ? Math.sin(t / 18) * 0.8 : 0;
+        offset = { x: tx * e + shake, y: ty * e };
+        setBand(offset);
+        placePebble(offset, true);
+        showPower(offset);
+        if (k < 1) requestAnimationFrame(step);
+        else resolve();
+      })(t0);
+    });
+    await wait(calm() ? 0 : 220);
+    sling.classList.remove("pulling");
+    launch(offset);
+  }
+
+  // ---------- Launch, flight and hit ----------
+  async function launch(o) {
+    state = "flying";
+    say("Sending note");
+    hint.textContent = "Whoosh…";
+    const text = msg.value.trim();
+    // The band snaps back on its own spring while the pebble flies
+    spring(o, false);
+    const sr = sling.getBoundingClientRect();
+    const br = board.getBoundingClientRect();
+    const restPage = { x: sr.left + REST.x, y: sr.top + REST.y };
+    // aim drifts opposite to a sideways pull, but always lands on the board
+    const aim = { x: Math.max(-26, Math.min(26, -o.x * 0.5)), y: Math.max(-18, Math.min(18, (84 - o.y) * 0.25)) };
+    const T = { x: br.left + br.width / 2 + aim.x - restPage.x, y: br.top + br.height / 2 + aim.y - restPage.y };
+    const C = { x: T.x * 0.35, y: T.y * 0.55 - 70 };
+    const power = Math.min(1, Math.hypot(o.x, o.y) / MAX);
+    const dur = calm() ? 1 : 760 - power * 180;
+    const t0 = performance.now();
+    let spin = 0;
+    let n = 0;
+    await new Promise((resolve) => {
+      (function step(t) {
+        const k = Math.min(1, (t - t0) / dur);
+        let x, y, s;
+        if (k < 0.1) {
+          // whip forward through the rest point
+          const u = k / 0.1;
+          x = o.x * (1 - u);
+          y = o.y * (1 - u);
+          s = 1;
+        } else {
+          const u = 1 - Math.pow(1 - (k - 0.1) / 0.9, 1.6);
+          x = 2 * (1 - u) * u * C.x + u * u * T.x;
+          y = 2 * (1 - u) * u * C.y + u * u * T.y;
+          s = 1 - 0.62 * u;
+        }
+        spin += 14;
+        pebble.style.transform = "translate(" + x + "px," + y + "px) scale(" + s + ")";
+        face.style.transform = "rotate(" + spin + "deg)";
+        if (!calm() && n++ % 2 === 0 && k > 0.05) trail(REST.x + x, REST.y + y, s);
+        if (k < 1) requestAnimationFrame(step);
+        else resolve();
+      })(t0);
+    });
+    hit(aim, text);
+  }
+  function trail(x, y, s) {
+    const d = document.createElement("i");
+    d.className = "dot";
+    d.style.left = x + "px";
+    d.style.top = y + "px";
+    sling.appendChild(d);
+    d.animate([{ transform: "scale(" + s + ")", opacity: 0.8 }, { transform: "scale(0)", opacity: 0 }], { duration: 420, easing: "ease-out" }).onfinish = () => d.remove();
+  }
+
+  async function hit(aim, text) {
+    // the pebble vanishes into the board, which wobbles; a ripple and a pinned note mark the spot
+    pebble.style.opacity = "0";
+    pebble.classList.remove("loaded");
+    play(board, [{ transform: "rotate(0) scale(1)" }, { transform: "rotate(" + (aim.x > 0 ? 7 : -7) + "deg) scale(1.08, .94)" }, { transform: "rotate(" + (aim.x > 0 ? -4 : 4) + "deg) scale(.97, 1.03)" }, { transform: "rotate(1deg)" }, { transform: "rotate(0) scale(1)" }], { duration: 700, easing: "ease-out" });
+    const rp = document.createElement("i");
+    rp.className = "ripple";
+    rp.style.left = 52 + aim.x + "px";
+    rp.style.top = 52 + aim.y + "px";
+    board.appendChild(rp);
+    rp.animate([{ transform: "scale(.4)", opacity: 1 }, { transform: "scale(4)", opacity: 0 }], { duration: 650, easing: "ease-out" }).onfinish = () => rp.remove();
+    const pin = document.createElement("i");
+    pin.className = "pin";
+    pin.style.left = 52 + aim.x + "px";
+    pin.style.top = 52 + aim.y + "px";
+    board.appendChild(pin);
+    play(pin, [{ transform: "scale(2.2) rotate(-30deg)", opacity: 0 }, { transform: "scale(1) rotate(-8deg)", opacity: 1 }], { duration: 380, easing: "cubic-bezier(.3,1.6,.5,1)" });
+    const r = board.getBoundingClientRect();
+    sparks(r.left + 52 + aim.x, r.top + 52 + aim.y);
+    flag.classList.add("show");
+    score.textContent = String(Number(score.textContent) + 1);
+    play(score, [{ transform: "scale(1.6)" }, { transform: "none" }], { duration: 420, easing: "cubic-bezier(.3,1.6,.5,1)" });
+    const time = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    foot.innerHTML = '<span class="ok">Delivered to Karachi crew · ' + time + "</span>";
+    say("Note delivered to Karachi crew");
+    hint.textContent = "Bullseye! Write another note";
+    play(msg, [{ transform: "none", opacity: 1 }, { transform: "translateY(-10px)", opacity: 0 }], { duration: 260, easing: "ease-in" }).then(() => { msg.value = ""; countChars(); });
+    if (calm()) { msg.value = ""; countChars(); }
+
+    // a fresh pebble drops into the band from above
+    await wait(650);
+    pebble.style.transform = "";
+    face.style.transform = "";
+    pebble.style.opacity = "";
+    await play(pebble, [{ transform: "translateY(-150px)", opacity: 0 }, { transform: "translateY(10px)", opacity: 1, offset: 0.55 }, { transform: "translateY(-6px)", offset: 0.75 }, { transform: "translateY(0)" }], { duration: 620, easing: "ease-in" });
+    spring({ x: 0, y: 14 }, false);
+    pebble.classList.add("idle");
+    state = "ready";
+    offset = { x: 0, y: 0 };
+    await wait(1600);
+    flag.classList.remove("show");
+    if (pin.isConnected) play(pin, [{ opacity: 1 }, { opacity: 0, transform: "scale(.5)" }], { duration: 300 }).then(() => pin.remove());
+    if (calm()) pin.remove();
+    if (demoOn) queueDemo(1400);
+  }
+
+  function sparks(x, y) {
+    if (calm()) return;
+    const cols = ["#ffd23f", "#ef476f", "#12a37a", "#ffffff", "#ff9f1c"];
+    for (let i = 0; i < 20; i++) {
+      const s = document.createElement("i");
+      s.className = "spark";
+      s.style.left = x - 3.5 + "px";
+      s.style.top = y - 3.5 + "px";
+      s.style.background = cols[i % cols.length];
+      if (i % 3 === 0) s.style.borderRadius = "1px";
+      document.body.appendChild(s);
+      const a = (i / 20) * Math.PI * 2 + Math.random() * 0.3;
+      const d = 30 + Math.random() * 46;
+      s.animate([
+        { transform: "translate(0,0) scale(1.2)", opacity: 1 },
+        { transform: "translate(" + Math.cos(a) * d + "px," + Math.sin(a) * d + "px) rotate(160deg)", opacity: 1, offset: 0.6 },
+        { transform: "translate(" + Math.cos(a) * d * 1.1 + "px," + (Math.sin(a) * d + 26) + "px) scale(.3)", opacity: 0 }
+      ], { duration: 800 + Math.random() * 300, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = () => s.remove();
+    }
+  }
+
+  // Character count + reset of the footer when typing again
+  function countChars() { chars.textContent = msg.value.length + " / 120"; }
+  msg.addEventListener("input", () => {
+    countChars();
+    if (hint.classList.contains("warn")) { hint.classList.remove("warn"); hint.textContent = "Pull back and let go, or press the pebble"; }
+    if (foot.querySelector(".ok")) foot.innerHTML = "<span>Pull the pebble back to send</span>";
+  });
+  countChars();
+
+  // ---------- Auto-demo: the slingshot pulls itself back and fires; then a new note is typed ----------
+  let demoOn = true;
+  let demoTimer = 0;
+  let demoRound = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) => window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  function queueDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(runDemo, ms); }
+  const NOTES = ["Chai on me tomorrow, team!", "The stall looked amazing today", "Great work on the new menu", "Thank you for staying late for the launch!"];
+  async function runDemo() {
+    if (!demoOn || state !== "ready") return;
+    if (!hasNote()) {
+      const t = NOTES[demoRound++ % NOTES.length];
+      for (const ch of t) {
+        if (!demoOn) return;
+        msg.value += ch;
+        countChars();
+        await wait(calm() ? 6 : 22 + Math.random() * 20);
+      }
+      foot.innerHTML = "<span>Pull the pebble back to send</span>";
+      await wait(300);
+    }
+    if (!demoOn) return;
+    const side = [-14, 22, -30, 8][demoRound % 4];
+    autoPull(side, 84, 720);
+  }
+  queueDemo(380);
+</script>
+</body>
+</html>

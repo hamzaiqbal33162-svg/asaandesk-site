@@ -1,0 +1,443 @@
+<!doctype html>
+<!-- Chill & Craft · Glowcore · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Glowcore · Hold-to-power toggle</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg: #e7eef3;
+    --grid: rgba(20, 60, 90, 0.07);
+    --panel: #f9fbfc;
+    --ink: #0f2230;
+    --muted: #63788a;
+    --line: rgba(15, 40, 60, 0.1);
+    --well: #e9f0f4;
+    --btn-a: #ffffff;
+    --btn-b: #dfe7ed;
+    --tick: rgba(15, 40, 60, 0.16);
+    --glow: #00b8d9;
+    --glow-soft: rgba(0, 184, 217, 0.35);
+    --hot: #ffb020;
+    --icon-off: #9fb1bf;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #04070c;
+    --grid: rgba(80, 220, 255, 0.05);
+    --panel: #0b1219;
+    --ink: #e4f6ff;
+    --muted: #7d93a6;
+    --line: rgba(120, 220, 255, 0.1);
+    --well: #070d13;
+    --btn-a: #18222e;
+    --btn-b: #0b1118;
+    --tick: rgba(120, 220, 255, 0.14);
+    --glow: #35e3ff;
+    --glow-soft: rgba(53, 227, 255, 0.35);
+    --hot: #ffc24a;
+    --icon-off: #3c5163;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+
+  /* ---------- Stage: a blueprint grid ---------- */
+  .stage { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 26px 16px; overflow: hidden;
+    background: linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 28px 28px, linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 28px 28px, var(--bg); }
+  .stage::before { content: ""; position: absolute; width: 520px; height: 520px; border-radius: 50%; background: radial-gradient(var(--glow-soft), transparent 65%); opacity: 0; transition: opacity 1.2s; pointer-events: none; }
+  .stage.on::before { opacity: 0.55; }
+
+  /* ---------- Panel ---------- */
+  .panel { position: relative; width: min(420px, 100%); padding: 18px 18px 16px; border-radius: 26px; background: var(--panel); box-shadow: 0 1px 0 var(--line), 0 30px 70px -40px rgba(0, 30, 50, 0.6); }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .top h1 { margin: 0; font-size: 1.05rem; letter-spacing: -0.01em; }
+  .top p { margin: 2px 0 0; font-size: 0.76rem; color: var(--muted); }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; background: var(--well); font-size: 0.74rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
+  .chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--icon-off); }
+  .on .chip { color: var(--ink); }
+  .on .chip i { background: var(--glow); box-shadow: 0 0 0 0 var(--glow-soft); animation: ping 1.6s ease-out infinite; }
+  @keyframes ping { 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 4px; }
+  .stat { padding: 9px 10px; border-radius: 14px; background: var(--well); }
+  .stat small { display: block; font-size: 0.68rem; color: var(--muted); font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; }
+  .stat b { display: block; margin-top: 3px; font-size: 1.02rem; font-variant-numeric: tabular-nums; color: var(--muted); transition: color 0.3s; white-space: nowrap; }
+  .on .stat b { color: var(--ink); }
+
+  /* ---------- Power button with tick ring ---------- */
+  .core-wrap { position: relative; width: 196px; height: 196px; margin: 4px auto 0; }
+  .ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .ring line { stroke: var(--tick); stroke-width: 3.4; stroke-linecap: round; transition: stroke 0.25s; transform-box: fill-box; transform-origin: center; }
+  .ring line.lit { stroke: var(--glow); }
+  .ring .arc { fill: none; stroke: var(--glow); stroke-width: 2; stroke-linecap: round; opacity: 0.8; }
+  .wave { position: absolute; left: 50%; top: 50%; width: 140px; height: 140px; margin: -70px 0 0 -70px; border-radius: 50%; border: 2px solid var(--glow); opacity: 0; pointer-events: none; }
+  .power {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 128px;
+    height: 128px;
+    margin: -64px 0 0 -64px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, var(--btn-a), var(--btn-b));
+    box-shadow: 0 14px 26px -12px rgba(0, 20, 40, 0.55), inset 0 2px 2px rgba(255, 255, 255, 0.35), inset 0 -4px 8px rgba(0, 0, 0, 0.12);
+    cursor: pointer;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    will-change: transform;
+  }
+  .power:focus-visible { outline: 3px solid var(--glow); outline-offset: 8px; }
+  .power svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .orb { opacity: 0; transform-origin: 64px 64px; }
+  .plasma ellipse { fill: none; stroke: var(--glow); stroke-width: 1.4; opacity: 0.7; transform-origin: 64px 64px; }
+  .on .plasma .p1 { animation: spin 3.2s linear infinite; }
+  .on .plasma .p2 { animation: spin 4.6s linear infinite reverse; }
+  .on .plasma .p3 { animation: spin 2.4s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .icon { fill: none; stroke: var(--icon-off); stroke-width: 6; stroke-linecap: round; transition: stroke 0.3s; }
+  .on .icon { stroke: #ffffff; }
+  .hint { margin: 6px 0 10px; text-align: center; font-size: 0.76rem; color: var(--muted); font-weight: 600; min-height: 1.2em; }
+
+  /* ---------- Wires and appliances ---------- */
+  .wires { display: block; width: 100%; height: 26px; overflow: visible; }
+  .wires path { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .wires .base { stroke: var(--line); }
+  .wires .flow { stroke: var(--glow); stroke-dasharray: 3 7; opacity: 0; transition: opacity 0.5s; }
+  .on .wires .flow { opacity: 0.8; animation: flow 0.9s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -20; } }
+  .wires .packet { stroke: var(--glow); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 10 200; stroke-dashoffset: 10; opacity: 0; }
+  .things { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .thing { display: grid; justify-items: center; gap: 4px; padding: 10px 6px 9px; border-radius: 16px; background: var(--well); transition: box-shadow 0.4s; }
+  .thing svg { width: 38px; height: 38px; overflow: visible; }
+  .thing b { font-size: 0.78rem; }
+  .thing small { font-size: 0.68rem; color: var(--muted); font-weight: 650; }
+  .thing.live { box-shadow: inset 0 0 0 1.5px var(--glow-soft); }
+  .thing .st { stroke: var(--icon-off); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: stroke 0.3s; }
+  .thing .fl { fill: var(--icon-off); transition: fill 0.3s; }
+  .thing.live .st { stroke: var(--glow); }
+  .thing.live .fl { fill: var(--glow); }
+  .thing.live .bulb { fill: var(--hot); stroke: var(--hot); }
+  .rays { opacity: 0; transition: opacity 0.4s; }
+  .thing.live .rays { opacity: 1; animation: rays 1.8s ease-in-out infinite; }
+  @keyframes rays { 50% { opacity: 0.45; } }
+  .blades { transform-origin: 19px 17px; }
+  .thing.live .blades { animation: spin 0.6s linear infinite; }
+  .led { fill: var(--icon-off); }
+  .thing.live .led { fill: #39e58c; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* roomy screens (full-screen view): draw the piece larger */
+  @media (min-width: 1100px) and (min-height: 780px) { .panel { scale: 1.22; } }
+  @media (prefers-reduced-motion: reduce) {
+    .on .plasma ellipse, .on .chip i, .on .wires .flow, .thing.live .blades, .thing.live .rays { animation: none; }
+    .stage::before, .ring line, .icon { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage" id="stage">
+    <section class="panel" id="panel" aria-labelledby="ttl">
+      <div class="top">
+        <div><h1 id="ttl">Home backup</h1><p>Inverter · 3 kW · Gulberg flat</p></div>
+        <span class="chip"><i></i><span id="chip">Standby</span></span>
+      </div>
+      <div class="stats">
+        <div class="stat"><small>Output</small><b id="out">0 W</b></div>
+        <div class="stat"><small>Battery</small><b id="bat">86%</b></div>
+        <div class="stat"><small>Runtime</small><b id="rt">–</b></div>
+      </div>
+
+      <div class="core-wrap" id="wrap">
+        <svg class="ring" id="ring" viewBox="-100 -100 200 200" aria-hidden="true">
+          <circle class="arc" id="arc" r="76" transform="rotate(-90)" stroke-dasharray="0 478" />
+        </svg>
+        <span class="wave" id="w1" aria-hidden="true"></span><span class="wave" id="w2" aria-hidden="true"></span>
+        <button class="power" id="power" type="button" role="switch" aria-checked="false" aria-label="Power" aria-describedby="hint">
+          <svg viewBox="0 0 128 128" aria-hidden="true">
+            <defs>
+              <radialGradient id="orbg"><stop offset="0" stop-color="#f2feff" /><stop offset="0.35" style="stop-color: var(--glow)" /><stop offset="1" style="stop-color: var(--glow)" stop-opacity="0" /></radialGradient>
+            </defs>
+            <g class="orb" id="orb">
+              <circle cx="64" cy="64" r="60" fill="url(#orbg)" />
+              <g class="plasma">
+                <ellipse class="p1" cx="64" cy="64" rx="44" ry="16" />
+                <ellipse class="p2" cx="64" cy="64" rx="16" ry="42" />
+                <ellipse class="p3" cx="64" cy="64" rx="36" ry="28" transform="rotate(35 64 64)" />
+              </g>
+            </g>
+            <g id="glyph"><path class="icon" d="M47.5 44.5 A26 26 0 1 0 80.5 44.5" /><path class="icon" d="M64 34 V62" /></g>
+            <circle id="flash" cx="64" cy="64" r="64" fill="#fff" opacity="0" />
+          </svg>
+        </button>
+      </div>
+      <p class="hint" id="hint">Press and hold to switch on</p>
+
+      <svg class="wires" viewBox="0 0 300 26" preserveAspectRatio="none" aria-hidden="true">
+        <path class="base" d="M150 0 V12 M50 12 H250 M50 12 V26 M150 12 V26 M250 12 V26" />
+        <path class="flow" d="M150 0 V12 H50 V26 M150 12 V26 M150 12 H250 V26" />
+        <path class="packet" id="k0" pathLength="100" d="M150 0 V12 H50 V26" />
+        <path class="packet" id="k1" pathLength="100" d="M150 0 V12 V26" />
+        <path class="packet" id="k2" pathLength="100" d="M150 0 V12 H250 V26" />
+      </svg>
+      <div class="things">
+        <div class="thing" id="t0">
+          <svg viewBox="0 0 38 38" aria-hidden="true"><g class="blades"><path class="fl" d="M19 17 C15 9 18 4 21 5 C24 7 22 13 19 17Z" /><path class="fl" d="M19 17 C27 15 31 19 29 22 C27 25 22 21 19 17Z" /><path class="fl" d="M19 17 C15 24 10 25 9 22 C8 19 14 17 19 17Z" /></g><circle class="fl" cx="19" cy="17" r="2.6" /><path class="st" d="M19 20 V33 M13 34 H25" /></svg>
+          <b>Ceiling fan</b><small id="s0">Off</small>
+        </div>
+        <div class="thing" id="t1">
+          <svg viewBox="0 0 38 38" aria-hidden="true"><g class="rays"><path class="st" style="stroke: var(--hot)" d="M19 2 V5 M5 15 H8 M30 15 H33 M9 6 l2 2 M29 6 l-2 2" /></g><path class="st bulb" d="M13 22 C9 18 10 9 19 9 C28 9 29 18 25 22 C24 24 24 25 24 27 H14 C14 25 14 24 13 22Z" /><path class="st" d="M15 31 H23 M16 35 H22" /></svg>
+          <b>Lights</b><small id="s1">Off</small>
+        </div>
+        <div class="thing" id="t2">
+          <svg viewBox="0 0 38 38" aria-hidden="true"><rect class="st" x="10" y="3" width="18" height="32" rx="3.5" /><path class="st" d="M10 15 H28 M14 8 V11 M14 19 V24" /><circle class="led" cx="24" cy="31" r="1.8" /></svg>
+          <b>Fridge</b><small id="s2">Off</small>
+        </div>
+      </div>
+    </section>
+    <p class="sr" id="status" role="status" aria-live="polite"></p>
+  </main>
+
+<script>
+  // Glowcore: a hold-to-power switch for a home backup inverter.
+  // Hold = the button sinks and the tick ring fills (anticipation and charge) → ignition flash, shock waves and a
+  // plasma orb (main) → power packets run down the wires and each appliance switches on in turn (progress) →
+  // readouts flicker on and count up, the core hums (finish). Hold again to power down in reverse.
+  (function () {
+    "use strict";
+    var $ = function (id) { return document.getElementById(id); };
+    var NS = "http://www.w3.org/2000/svg";
+    var stage = $("stage"), ring = $("ring"), arc = $("arc"), power = $("power"), orb = $("orb"), flash = $("flash");
+    var hint = $("hint"), chip = $("chip"), status = $("status");
+    var calm = matchMedia("(prefers-reduced-motion: reduce)");
+    var TICKS = 30, HOLD = 950, HOLD_OFF = 650, CIRC = 2 * Math.PI * 76;
+    var on = false, run = 0, holding = false, progress = 0, holdStart = 0, busy = false;
+
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    // ---------- Tick ring ----------
+    var ticks = [];
+    for (var i = 0; i < TICKS; i++) {
+      var a = (i / TICKS) * Math.PI * 2 - Math.PI / 2;
+      var l = document.createElementNS(NS, "line");
+      l.setAttribute("x1", (Math.cos(a) * 86).toFixed(2)); l.setAttribute("y1", (Math.sin(a) * 86).toFixed(2));
+      l.setAttribute("x2", (Math.cos(a) * 95).toFixed(2)); l.setAttribute("y2", (Math.sin(a) * 95).toFixed(2));
+
+      ring.appendChild(l);
+      ticks.push(l);
+    }
+    var litCount = 0;
+    function lightTo(n, pop) {
+      n = Math.max(0, Math.min(TICKS, n));
+      for (var k = 0; k < TICKS; k++) {
+        var want = k < n, has = ticks[k].classList.contains("lit");
+        if (want !== has) {
+          ticks[k].classList.toggle("lit", want);
+          if (want && pop && !calm.matches) ticks[k].animate([{ transform: "scale(1)" }, { transform: "scale(1.5)" }, { transform: "scale(1)" }], { duration: 260, easing: "ease-out" });
+        }
+      }
+      litCount = n;
+    }
+    function setArc(p) { arc.setAttribute("stroke-dasharray", (p * CIRC).toFixed(1) + " " + CIRC.toFixed(1)); }
+
+    // ---------- Holding: charge the ring; letting go early drains it ----------
+    var raf = 0;
+    function startHold() {
+      if (holding || busy) return;
+      holding = true; holdStart = performance.now() - progress * (on ? HOLD_OFF : HOLD);
+      hint.textContent = on ? "Keep holding to switch off" : "Keep holding…";
+      if (!calm.matches) power.animate([{ transform: "scale(1)" }, { transform: "scale(0.92)" }], { duration: 160, easing: "ease-out", fill: "forwards" });
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(charge);
+    }
+    function charge(now) {
+      if (!holding) return;
+      var need = on ? HOLD_OFF : HOLD;
+      progress = Math.min(1, (now - holdStart) / need);
+      var e = progress * progress * (3 - 2 * progress);
+      if (on) { lightTo(Math.round(TICKS * (1 - e)), false); setArc(1 - e); }
+      else { lightTo(Math.round(TICKS * e), true); setArc(e); orb.style.opacity = (e * 0.35).toFixed(2); }
+      // a nervous little shake as the charge builds
+      if (!calm.matches && !on) power.style.translate = ((Math.random() - 0.5) * e * 2.4).toFixed(2) + "px " + ((Math.random() - 0.5) * e * 2.4).toFixed(2) + "px";
+      if (progress >= 1) { holding = false; power.style.translate = ""; progress = 0; release(true); if (on) powerDown(); else ignite(); return; }
+      raf = requestAnimationFrame(charge);
+    }
+    function endHold() {
+      if (!holding) return;
+      holding = false;
+      power.style.translate = "";
+      release(false);
+      // drain back with a wobble
+      var from = progress, t0 = performance.now();
+      hint.textContent = on ? "Hold to switch off" : "Hold a little longer";
+      (function drain(now) {
+        if (holding) return;
+        var t = Math.min(1, Math.max(0, now - t0) / 380), back = from * (1 - t) + Math.sin(t * Math.PI * 2) * 0.04 * (1 - t);
+        progress = Math.max(0, back);
+        if (on) { lightTo(Math.round(TICKS * (1 - progress)), false); setArc(1 - progress); }
+        else { lightTo(Math.round(TICKS * progress), false); setArc(progress); orb.style.opacity = (progress * 0.35).toFixed(2); }
+        if (t < 1) requestAnimationFrame(drain); else progress = 0;
+      })(t0);
+    }
+    function release(done) {
+      power.getAnimations().forEach(function (an) { an.cancel(); });
+      if (!calm.matches && !done) power.animate([{ transform: "scale(0.92)" }, { transform: "scale(1.04)" }, { transform: "scale(1)" }], { duration: 360, easing: "ease-out" });
+    }
+
+    // ---------- Number tween ----------
+    function countTo(el, to, fmt, ms) {
+      var t0 = performance.now();
+      if (calm.matches) { el.textContent = fmt(to); return; }
+      (function f(now) { var t = Math.min(1, Math.max(0, now - t0) / ms), e = 1 - Math.pow(1 - t, 3); el.textContent = fmt(to * e); if (t < 1) requestAnimationFrame(f); })(t0);
+    }
+    function flicker(el, delay) {
+      if (calm.matches) return;
+      el.animate([{ opacity: 0 }, { opacity: 1, offset: 0.15 }, { opacity: 0.2, offset: 0.3 }, { opacity: 1, offset: 0.45 }, { opacity: 0.55, offset: 0.6 }, { opacity: 1 }], { duration: 520, delay: delay, easing: "linear", fill: "backwards" });
+    }
+
+    // ---------- Power on ----------
+    async function ignite() {
+      var id = ++run;
+      busy = true;
+      on = true;
+      power.setAttribute("aria-checked", "true");
+      status.textContent = "Power on. Fan, lights and fridge running.";
+      hint.textContent = "Hold to switch off";
+      if (calm.matches) { setOnState(); busy = false; return; }
+      // 1. Ignition: flash, two shock waves, the orb blooms
+      lightTo(TICKS, false); setArc(1);
+      stage.classList.add("on"); $("panel").classList.add("on");
+      flash.animate([{ opacity: 0.95 }, { opacity: 0 }], { duration: 420, easing: "ease-out" });
+      power.animate([{ transform: "scale(0.92)" }, { transform: "scale(1.1)", offset: 0.35 }, { transform: "scale(0.97)", offset: 0.7 }, { transform: "scale(1)" }], { duration: 620, easing: "ease-out" });
+      orb.style.opacity = "1";
+      orb.animate([{ transform: "scale(0.2)", opacity: 0.4 }, { transform: "scale(1.15)", opacity: 1, offset: 0.55 }, { transform: "scale(1)", opacity: 1 }], { duration: 640, easing: "cubic-bezier(0.2, 0.8, 0.3, 1)" });
+      ["w1", "w2"].forEach(function (w, k) {
+        $(w).animate([{ transform: "scale(0.9)", opacity: 0.9, borderWidth: "3px" }, { transform: "scale(" + (2.6 + k * 0.5) + ")", opacity: 0, borderWidth: "1px" }], { duration: 900, delay: k * 140, easing: "cubic-bezier(0.2, 0.7, 0.3, 1)" });
+      });
+      ticks.forEach(function (t, k) { t.animate([{ transform: "scale(1)" }, { transform: "scale(1.6)" }, { transform: "scale(1)" }], { duration: 300, delay: k * 12, easing: "ease-out" }); });
+      chip.textContent = "Running";
+      // 2. Readouts flicker on like neon and count up
+      flicker($("out"), 120); flicker($("bat"), 220); flicker($("rt"), 320);
+      countTo($("out"), 1840, function (v) { return Math.round(v).toLocaleString("en-US") + " W"; }, 1400);
+      countTo($("rt"), 4.2, function (v) { return v.toFixed(1) + " h"; }, 1400);
+      await wait(300);
+      // 3. Power packets run down the wires; each appliance switches on as one arrives
+      for (var k = 0; k < 3; k++) {
+        if (id !== run) return;
+        var pk = $("k" + k);
+        pk.animate([{ strokeDashoffset: 10, opacity: 1 }, { strokeDashoffset: -92, opacity: 1, offset: 0.92 }, { strokeDashoffset: -100, opacity: 0 }], { duration: 420, easing: "cubic-bezier(0.5, 0, 0.6, 1)" });
+        (function (n) { setTimeout(function () { if (id === run) applianceOn(n); }, 380); })(k);
+        await wait(220);
+      }
+      await wait(500);
+      if (id === run) busy = false;
+    }
+    function applianceOn(n) {
+      var t = $("t" + n);
+      t.classList.add("live");
+      $("s" + n).textContent = "On";
+      if (calm.matches) return;
+      t.animate([{ transform: "scale(1)" }, { transform: "scale(1.07)", offset: 0.35 }, { transform: "scale(0.98)", offset: 0.7 }, { transform: "scale(1)" }], { duration: 480, easing: "ease-out" });
+      t.querySelector("svg").animate([{ filter: "drop-shadow(0 0 0 transparent)" }, { filter: "drop-shadow(0 0 8px " + getComputedStyle(t).getPropertyValue("--glow").trim() + ")" }, { filter: "drop-shadow(0 0 0 transparent)" }], { duration: 700, easing: "ease-out" });
+    }
+    function setOnState() {
+      lightTo(TICKS, false); setArc(1);
+      stage.classList.add("on"); $("panel").classList.add("on");
+      orb.style.opacity = "1";
+      chip.textContent = "Running";
+      $("out").textContent = "1,840 W"; $("rt").textContent = "4.2 h";
+      for (var k = 0; k < 3; k++) { $("t" + k).classList.add("live"); $("s" + k).textContent = "On"; }
+    }
+
+    // ---------- Power off: appliances drop out in reverse, the orb collapses like an old screen ----------
+    async function powerDown() {
+      var id = ++run;
+      busy = true;
+      on = false;
+      power.setAttribute("aria-checked", "false");
+      status.textContent = "Power off. Back on standby.";
+      hint.textContent = "Press and hold to switch on";
+      chip.textContent = "Standby";
+      if (calm.matches) { setOffState(); busy = false; return; }
+      power.animate([{ transform: "scale(0.92)" }, { transform: "scale(1.05)", offset: 0.5 }, { transform: "scale(1)" }], { duration: 420, easing: "ease-out" });
+      for (var k = 2; k >= 0; k--) {
+        var t = $("t" + k);
+        t.classList.remove("live");
+        $("s" + k).textContent = "Off";
+        t.animate([{ transform: "scale(1)" }, { transform: "scale(0.95)" }, { transform: "scale(1)" }], { duration: 260, easing: "ease-out" });
+        await wait(110);
+        if (id !== run) return;
+      }
+      $("out").textContent = "0 W"; $("rt").textContent = "–";
+      await orb.animate([{ transform: "scale(1, 1)", opacity: 1 }, { transform: "scale(1.15, 0.04)", opacity: 1, offset: 0.55 }, { transform: "scale(0, 0.02)", opacity: 0.6 }], { duration: 420, easing: "cubic-bezier(0.5, 0, 0.7, 1)" }).finished.catch(function () {});
+      orb.style.opacity = "0";
+      stage.classList.remove("on"); $("panel").classList.remove("on");
+      setArc(0);
+      for (var j = TICKS; j >= 0; j--) { lightTo(j, false); await wait(9); }
+      if (id === run) busy = false;
+    }
+    function setOffState() {
+      lightTo(0, false); setArc(0);
+      stage.classList.remove("on"); $("panel").classList.remove("on");
+      orb.style.opacity = "0";
+      $("out").textContent = "0 W"; $("rt").textContent = "–";
+      for (var k = 0; k < 3; k++) { $("t" + k).classList.remove("live"); $("s" + k).textContent = "Off"; }
+    }
+
+    // ---------- Input: pointer hold, keyboard hold, and a plain click from assistive tech ----------
+    power.addEventListener("pointerdown", function (e) { if (e.button !== 0) return; power.setPointerCapture(e.pointerId); startHold(); });
+    power.addEventListener("pointerup", endHold);
+    power.addEventListener("pointercancel", endHold);
+    power.addEventListener("lostpointercapture", endHold);
+    power.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+    power.addEventListener("keydown", function (e) {
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (!e.repeat) startHold(); }
+    });
+    power.addEventListener("keyup", function (e) { if (e.key === " " || e.key === "Enter") { e.preventDefault(); endHold(); } });
+    power.addEventListener("blur", endHold);
+    // A click with no pointer press and no key (screen reader activation) switches straight away
+    var pressed = false;
+    power.addEventListener("pointerdown", function () { pressed = true; setTimeout(function () { pressed = false; }, 2000); });
+    power.addEventListener("click", function (e) {
+      if (pressed || holding || busy || e.detail > 0) return;
+      if (on) powerDown(); else ignite();
+    });
+
+    // ---------- Auto demo: a held press, power on, then hold to power off, until a real input ----------
+    var demoOn = !calm.matches, timer = 0;
+    function stopDemo(e) { if (e.isTrusted && demoOn) { demoOn = false; clearTimeout(timer); if (holding) endHold(); } }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, stopDemo, { capture: true, passive: true }); });
+    function demo() {
+      if (!demoOn) return;
+      startHold();
+      timer = setTimeout(function () {
+        if (holding) endHold();
+        timer = setTimeout(demo, on ? 4600 : 2400);
+      }, (on ? HOLD_OFF : HOLD) + 140);
+    }
+    if (demoOn) timer = setTimeout(demo, 360);
+  })();
+</script>
+</body>
+</html>

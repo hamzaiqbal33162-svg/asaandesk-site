@@ -1,0 +1,632 @@
+<!doctype html>
+<!-- Chill & Craft · Metro Steps · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metro Steps · booking stepper with a little train</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: a transit map with a tangerine line and a cobalt train ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --bg: #f3efe6;
+    --card: #ffffff;
+    --ink: #1c2230;
+    --muted: #697186;
+    --line: #e8e2d4;
+    --soft: #f7f4ee;
+    --route: #ff6a2b;
+    --train: #3a4ee0;
+    --train2: #6f7ff0;
+    --ok: #17a26a;
+    --bad: #d93d2e;
+    --shadow: rgba(40, 30, 10, .18);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d1016;
+    --card: #161b24;
+    --ink: #edf0f6;
+    --muted: #98a1b5;
+    --line: #283041;
+    --soft: #1c2230;
+    --route: #ff7d45;
+    --train: #7d8cff;
+    --train2: #a9b4ff;
+    --ok: #3fd28f;
+    --bad: #ff6e60;
+    --shadow: rgba(0, 0, 0, .6);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    overflow-x: hidden;
+  }
+  .map {
+    position: relative;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 14px;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  /* faint other lines of the city map in the background */
+  .map > svg.city { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; opacity: .5; }
+  .city path { fill: none; stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; opacity: .16; }
+  .city circle { fill: var(--bg); stroke-width: 3; opacity: .3; }
+
+  .card {
+    position: relative;
+    width: min(100%, 520px);
+    padding: 18px 18px 16px;
+    border-radius: 26px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 30px 60px -36px var(--shadow), 0 6px 16px -12px var(--shadow);
+  }
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  h1 { margin: 0; font-size: clamp(19px, 5vw, 22px); letter-spacing: -.01em; }
+  .count { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---------- The metro line ---------- */
+  .metro { display: block; width: 100%; height: auto; margin: 8px 0 6px; overflow: visible; }
+  .rail { fill: none; stroke: var(--line); stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; }
+  .prog { fill: none; stroke: var(--route); stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; }
+  .sleepers { fill: none; stroke: var(--card); stroke-width: 2; stroke-dasharray: 1.5 9; opacity: .8; }
+  .buffer { fill: var(--muted); }
+  .stn circle.dot { fill: var(--card); stroke: var(--line); stroke-width: 4; transition: stroke .3s, fill .3s; }
+  .stn.past circle.dot, .stn.here circle.dot { stroke: var(--route); }
+  .stn.past circle.dot { fill: var(--route); }
+  .stn path.tick { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 14; stroke-dashoffset: 14; transition: stroke-dashoffset .35s ease .1s; }
+  .stn.past path.tick { stroke-dashoffset: 0; }
+  .stn g.pin { transform-box: fill-box; transform-origin: 50% 50%; }
+  .stn.arrive g.pin { animation: arrive .6s cubic-bezier(.34, 1.8, .64, 1); }
+  @keyframes arrive { 35% { transform: scale(1.45); } }
+  .stn circle.pulse { fill: none; stroke: var(--route); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; }
+  .stn.here circle.pulse { animation: pulse 1.8s ease-out infinite; }
+  @keyframes pulse { 0% { opacity: .8; transform: scale(1); } 100% { opacity: 0; transform: scale(2.3); } }
+  .stn text { font: 700 13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--muted); transition: fill .3s; }
+  .stn.here text, .stn.past text { fill: var(--ink); }
+  .car rect.shell { fill: var(--train); }
+  .car rect.win { fill: rgba(255, 255, 255, .85); }
+  [data-theme="dark"] .car rect.win { fill: #11151f; }
+  .car .lamp { fill: #ffe27a; }
+  .beam { fill: url(#gBeam); opacity: 0; transition: opacity .3s; }
+  .moving .beam { opacity: 1; }
+  .puff { fill: color-mix(in srgb, var(--muted) 55%, var(--card)); opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; }
+
+  /* ---------- Panels ---------- */
+  .view { position: relative; height: 262px; overflow: hidden; margin: 0 -4px; }
+  .track { display: flex; height: 100%; transition: transform .65s cubic-bezier(.65, 0, .35, 1); }
+  .panel { flex: 0 0 100%; height: 100%; padding: 2px 4px 0; }
+  /* the arriving panel's parts rise in one after another */
+  .panel.enter > * { animation: rise .55s cubic-bezier(.34, 1.4, .64, 1) .12s backwards; }
+  .panel.enter > *:nth-child(2) { animation-delay: .2s; }
+  .panel.enter > *:nth-child(3) { animation-delay: .28s; }
+  .panel.enter > *:nth-child(4) { animation-delay: .36s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(16px); } }
+  h2 { margin: 0 0 10px; font-size: 16px; }
+  .sub { margin: -6px 0 10px; font-size: 13px; color: var(--muted); }
+
+  /* service cards */
+  .opts { display: grid; gap: 8px; }
+  .opt { position: relative; display: block; cursor: pointer; }
+  .opt input { position: absolute; opacity: 0; pointer-events: none; }
+  .opt .box {
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 12px;
+    border-radius: 16px;
+    border: 1.5px solid var(--line);
+    background: var(--soft);
+    transition: border-color .25s, background .25s, transform .4s cubic-bezier(.34, 1.56, .64, 1), box-shadow .25s;
+  }
+  .opt:hover .box { transform: translateY(-1px); border-color: color-mix(in srgb, var(--route) 45%, var(--line)); }
+  .opt input:checked + .box { border-color: var(--route); background: color-mix(in srgb, var(--route) 9%, var(--card)); box-shadow: 0 10px 20px -16px var(--route); transform: scale(1.015); }
+  .opt input:focus-visible + .box { outline: 3px solid var(--train); outline-offset: 2px; }
+  .ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--train) 13%, transparent); color: var(--train); }
+  .ico svg { width: 22px; height: 22px; }
+  .opt b { display: block; font-size: 14.5px; }
+  .opt small { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .opt .price { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* day and time chips */
+  .lbl { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .days { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 12px; }
+  .times { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .chip { position: relative; cursor: pointer; }
+  .chip input { position: absolute; opacity: 0; pointer-events: none; }
+  .chip span {
+    display: grid;
+    place-items: center;
+    min-height: 40px;
+    padding: 6px 4px;
+    border-radius: 13px;
+    border: 1.5px solid var(--line);
+    background: var(--soft);
+    font-size: 13.5px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+    transition: all .3s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .chip span small { display: block; font-size: 10.5px; font-weight: 700; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
+  .chip input:checked + span { border-color: var(--train); background: var(--train); color: #fff; transform: translateY(-2px); box-shadow: 0 10px 18px -12px var(--train); }
+  [data-theme="dark"] .chip input:checked + span { color: #0c1020; }
+  .chip input:checked + span small { color: inherit; opacity: .8; }
+  .chip input:focus-visible + span { outline: 3px solid var(--route); outline-offset: 2px; }
+  .chip input:disabled + span { opacity: .45; text-decoration: line-through; cursor: not-allowed; }
+
+  /* address fields */
+  .fields { display: grid; gap: 9px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .f label { display: block; margin: 0 0 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .f input, .f select {
+    width: 100%;
+    height: 42px;
+    padding: 0 12px;
+    border-radius: 12px;
+    border: 1.5px solid var(--line);
+    background: var(--soft);
+    color: var(--ink);
+    font: 15px/1 var(--ff);
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .f input:focus, .f select:focus { border-color: var(--train); box-shadow: 0 0 0 4px color-mix(in srgb, var(--train) 18%, transparent); }
+  .f.bad input { border-color: var(--bad); animation: shake .4s; }
+  .f .err { display: block; min-height: 0; margin-top: 3px; font-size: 11.5px; color: var(--bad); }
+  @keyframes shake { 25% { transform: translateX(-5px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
+
+  /* summary */
+  .sum { margin: 0; padding: 4px 14px; border-radius: 16px; background: var(--soft); border: 1px solid var(--line); }
+  .sum div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
+  .sum div:last-child { border: 0; }
+  .sum dt { color: var(--muted); }
+  .sum dd { margin: 0; font-weight: 600; text-align: right; }
+  .total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; padding: 0 4px; font-size: 14px; }
+  .total b { font-size: 22px; font-variant-numeric: tabular-nums; }
+  .msg { min-height: 18px; margin: 6px 0 0; font-size: 12.5px; color: var(--bad); }
+
+  /* the ticket that prints when booked */
+  .ticket {
+    position: relative;
+    margin: 4px auto 0;
+    max-width: 330px;
+    padding: 16px 18px 14px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--route) 14%, var(--card)), var(--card) 60%);
+    border: 1.5px solid color-mix(in srgb, var(--route) 40%, var(--line));
+    -webkit-mask: radial-gradient(circle 11px at 0 64%, transparent 98%, #000), radial-gradient(circle 11px at 100% 64%, transparent 98%, #000);
+    -webkit-mask-composite: source-in;
+    mask: radial-gradient(circle 11px at 0 64%, transparent 98%, #000), radial-gradient(circle 11px at 100% 64%, transparent 98%, #000);
+    mask-composite: intersect;
+  }
+  .panel.enter .ticket { animation: print 1s cubic-bezier(.5, 0, .2, 1) both; }
+  @keyframes print { from { clip-path: inset(0 0 100% 0); transform: translateY(-20px); } to { clip-path: inset(0 0 0 0); transform: none; } }
+  .ticket .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .ticket h3 { margin: 0; font-size: 18px; }
+  .code { font: 700 13px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--route); letter-spacing: .08em; }
+  .ticket p { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+  .perf { margin: 12px -6px 10px; border-top: 2px dashed color-mix(in srgb, var(--route) 35%, var(--line)); }
+  .stamp {
+    display: inline-block;
+    padding: 4px 10px;
+    border: 2.5px solid var(--ok);
+    border-radius: 8px;
+    color: var(--ok);
+    font: 800 13px/1 var(--ff);
+    letter-spacing: .14em;
+    transform: rotate(-8deg);
+  }
+  .panel.enter .stamp { animation: stamp .5s cubic-bezier(.34, 1.8, .64, 1) .85s both; }
+  @keyframes stamp { from { opacity: 0; transform: rotate(-20deg) scale(2.2); } }
+
+  /* ---------- Nav buttons ---------- */
+  .nav { display: flex; gap: 8px; margin-top: 10px; }
+  .btn {
+    height: 48px;
+    padding: 0 18px;
+    border-radius: 15px;
+    border: 1.5px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    font: 700 14.5px/1 var(--ff);
+    cursor: pointer;
+    transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), opacity .25s, filter .2s;
+  }
+  .btn.main { flex: 1; border: 0; background: var(--route); color: #fff; box-shadow: 0 14px 24px -16px var(--route); }
+  [data-theme="dark"] .btn.main { color: #1f0b00; }
+  .btn.main:hover { filter: brightness(1.06); }
+  .btn:active, .btn.press { transform: scale(.95); }
+  .btn:disabled { opacity: .35; cursor: default; }
+  .btn:focus-visible { outline: 3px solid var(--train); outline-offset: 2px; }
+  .confetti { position: absolute; z-index: 5; width: 8px; height: 12px; border-radius: 2px; pointer-events: none; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 400px) {
+    .card { padding: 16px 13px 14px; border-radius: 22px; }
+    .days { gap: 4px; }
+    .chip span { font-size: 12.5px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="map">
+  <svg class="city" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <path d="M-40 160 H300 C380 160 400 260 480 260 H1240" stroke="#2bb3a0"/>
+    <path d="M200 -40 V300 C200 380 300 400 300 480 V840" stroke="#8b5cf6"/>
+    <path d="M-40 640 H520 C600 640 620 540 700 540 H1240" stroke="#e4a11b"/>
+    <path d="M980 -40 V220 C980 300 880 320 880 400 V840" stroke="#e0457b"/>
+    <circle cx="200" cy="160" r="12" stroke="#2bb3a0"/><circle cx="300" cy="480" r="12" stroke="#8b5cf6"/>
+    <circle cx="880" cy="540" r="12" stroke="#e4a11b"/><circle cx="980" cy="260" r="12" stroke="#e0457b"/>
+  </svg>
+
+  <section class="card" aria-labelledby="title">
+    <header class="head">
+      <h1 id="title">Book a home clean</h1>
+      <p class="count" id="count" aria-live="polite">Step 1 of 4</p>
+    </header>
+    <ol class="sr" id="steps"></ol>
+
+    <svg class="metro" id="metro" viewBox="0 0 400 100" aria-hidden="true">
+      <defs>
+        <linearGradient id="gBeam" x1="0" x2="1"><stop offset="0" stop-color="#ffe27a" stop-opacity=".7"/><stop offset="1" stop-color="#ffe27a" stop-opacity="0"/></linearGradient>
+      </defs>
+      <path class="rail" id="route" d="M4 66 H52 C84 66 88 34 120 34 H152 C184 34 188 66 220 66 H252 C284 66 288 34 320 34 H388"/>
+      <path class="prog" id="prog" d="M4 66 H52 C84 66 88 34 120 34 H152 C184 34 188 66 220 66 H252 C284 66 288 34 320 34 H388"/>
+      <path class="sleepers" d="M4 66 H52 C84 66 88 34 120 34 H152 C184 34 188 66 220 66 H252 C284 66 288 34 320 34 H388"/>
+      <rect class="buffer" x="388" y="25" width="5" height="18" rx="2"/>
+      <g id="stns"></g>
+      <g id="puffs"></g>
+      <g class="car" id="car2"><rect class="shell" x="-13" y="-7.5" width="26" height="15" rx="6"/><rect class="win" x="-8" y="-4" width="6" height="5" rx="1.5"/><rect class="win" x="1" y="-4" width="6" height="5" rx="1.5"/></g>
+      <g class="car" id="car1"><path class="beam" d="M16 -3 L48 -12 L48 12 L16 3 Z"/><rect class="shell" x="-15" y="-7.5" width="31" height="15" rx="7.5"/><rect class="win" x="-10" y="-4" width="6" height="5" rx="1.5"/><rect class="win" x="-1" y="-4" width="6" height="5" rx="1.5"/><rect class="win" x="8" y="-4" width="5" height="5" rx="2"/><circle class="lamp" cx="14" cy="3" r="1.6"/></g>
+    </svg>
+
+    <div class="view">
+      <div class="track" id="track">
+        <!-- Step 1 -->
+        <div class="panel" data-step="0">
+          <h2>Choose a service</h2>
+          <div class="opts" role="radiogroup" aria-label="Service">
+            <label class="opt"><input type="radio" name="svc" value="Standard clean" data-price="3500"><span class="box"><span class="ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z"/><path d="M19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9z" opacity=".6"/></svg></span><span><b>Standard clean</b><small>2 hours · 1 cleaner</small></span><span class="price">PKR 3,500</span></span></label>
+            <label class="opt"><input type="radio" name="svc" value="Deep clean" data-price="6000"><span class="box"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h14l-1.5 11h-11z"/><path d="M8 9a4 4 0 0 1 8 0"/><path d="M10 13v4M14 13v4"/></svg></span><span><b>Deep clean</b><small>4 hours · 2 cleaners</small></span><span class="price">PKR 6,000</span></span></label>
+            <label class="opt"><input type="radio" name="svc" value="Sofa and carpet" data-price="4800"><span class="box"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V8a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v3"/><path d="M2 12a2 2 0 0 1 4 0v2h12v-2a2 2 0 0 1 4 0v5H2z"/><path d="M5 17v2M19 17v2"/></svg></span><span><b>Sofa and carpet</b><small>3 hours · steam wash</small></span><span class="price">PKR 4,800</span></span></label>
+          </div>
+          <p class="msg" id="m0" aria-live="polite"></p>
+        </div>
+        <!-- Step 2 -->
+        <div class="panel" data-step="1">
+          <h2>Pick a time</h2>
+          <p class="lbl" id="dayLbl">Day</p>
+          <div class="days" id="days" role="radiogroup" aria-labelledby="dayLbl"></div>
+          <p class="lbl" id="timeLbl">Arrival time</p>
+          <div class="times" role="radiogroup" aria-labelledby="timeLbl">
+            <label class="chip"><input type="radio" name="time" value="9:00 AM"><span>9:00 AM</span></label>
+            <label class="chip"><input type="radio" name="time" value="11:30 AM"><span>11:30 AM</span></label>
+            <label class="chip"><input type="radio" name="time" value="2:00 PM" disabled><span>2:00 PM · full</span></label>
+            <label class="chip"><input type="radio" name="time" value="4:30 PM"><span>4:30 PM</span></label>
+          </div>
+          <p class="msg" id="m1" aria-live="polite"></p>
+        </div>
+        <!-- Step 3 -->
+        <div class="panel" data-step="2">
+          <h2>Where should we come?</h2>
+          <div class="fields">
+            <div class="f" id="fName"><label for="name">Your name</label><input id="name" autocomplete="name" aria-describedby="eName"><span class="err" id="eName"></span></div>
+            <div class="two">
+              <div class="f" id="fPhone"><label for="phone">Mobile number</label><input id="phone" inputmode="tel" autocomplete="tel" placeholder="03xx xxxxxxx" aria-describedby="ePhone"><span class="err" id="ePhone"></span></div>
+              <div class="f"><label for="area">Area, Karachi</label><select id="area"><option>DHA</option><option>Clifton</option><option>Gulshan</option><option>PECHS</option><option>Bahria Town</option></select></div>
+            </div>
+          </div>
+        </div>
+        <!-- Step 4 -->
+        <div class="panel" data-step="3">
+          <h2>Check and book</h2>
+          <dl class="sum" id="sum"></dl>
+          <div class="total"><span>Total with PKR 300 visit fee</span><b id="total">PKR 0</b></div>
+        </div>
+        <!-- Done -->
+        <div class="panel" data-step="4">
+          <div class="ticket" id="ticket">
+            <div class="row"><h3>You are booked</h3><span class="stamp">PAID</span></div>
+            <p id="tText"></p>
+            <div class="perf"></div>
+            <div class="row"><span class="code" id="tCode">CL-0000</span><span class="code" id="tTotal"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav">
+      <button class="btn" id="back" type="button" disabled>Back</button>
+      <button class="btn main" id="next" type="button">Next: time</button>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduceMq = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var fmt = function (n) { return "PKR " + n.toLocaleString("en-US"); };
+  var NS = "http://www.w3.org/2000/svg";
+  var NAMES = ["Service", "Time", "Address", "Book"];
+  var NEXT = ["Next: time", "Next: address", "Next: check", "Book now"];
+
+  var route = $("#route"), prog = $("#prog"), metro = $("#metro"), car1 = $("#car1"), car2 = $("#car2"), puffs = $("#puffs");
+  var track = $("#track"), panels = [].slice.call(document.querySelectorAll(".panel"));
+  var back = $("#back"), next = $("#next"), count = $("#count");
+  var L = route.getTotalLength();
+  prog.style.strokeDasharray = L;
+
+  // ---------- Stations: find the spot on the line under each x position ----------
+  function lenAtX(x) {
+    var lo = 0, hi = L;
+    for (var i = 0; i < 30; i++) { var m = (lo + hi) / 2; if (route.getPointAtLength(m).x < x) lo = m; else hi = m; }
+    return lo;
+  }
+  var STOP = [40, 136, 236, 336].map(lenAtX);
+  var END = lenAtX(370);
+  var stns = STOP.map(function (s, i) {
+    var p = route.getPointAtLength(s), up = p.y < 50;
+    var g = document.createElementNS(NS, "g");
+    g.setAttribute("class", "stn");
+    g.innerHTML = '<circle class="pulse" cx="' + p.x + '" cy="' + p.y + '" r="9"/><g class="pin"><circle class="dot" cx="' + p.x + '" cy="' + p.y + '" r="9"/>' +
+      '<path class="tick" d="M' + (p.x - 4) + " " + p.y + " l3 3 l5 -6\"/></g>" +
+      '<text x="' + p.x + '" y="' + (up ? p.y - 17 : p.y + 27) + '" text-anchor="middle">' + NAMES[i] + "</text>";
+    $("#stns").appendChild(g);
+    g.addEventListener("animationend", function (e) { if (e.animationName === "arrive") g.classList.remove("arrive"); });
+    return g;
+  });
+  // screen-reader list of the steps
+  $("#steps").innerHTML = NAMES.map(function (n, i) { return '<li id="st' + i + '">' + n + "</li>"; }).join("");
+
+  // ---------- The train: two cars follow the curve, the line fills behind them ----------
+  var at = STOP[0];
+  function place(g, s) {
+    s = Math.max(0, Math.min(L, s));
+    var p = route.getPointAtLength(s), q = route.getPointAtLength(Math.min(L, s + 2)), o = route.getPointAtLength(Math.max(0, s - 2));
+    var ang = Math.atan2(q.y - o.y, q.x - o.x) * 180 / Math.PI;
+    g.setAttribute("transform", "translate(" + p.x.toFixed(2) + " " + p.y.toFixed(2) + ") rotate(" + ang.toFixed(2) + ")");
+  }
+  function draw(s, bob) {
+    place(car1, s);
+    place(car2, s - 32);
+    if (bob) { car1.setAttribute("transform", car1.getAttribute("transform") + " translate(0 " + bob.toFixed(2) + ")"); }
+    prog.style.strokeDashoffset = L - s;
+  }
+  var driveId = 0;
+  function drive(to) {
+    var id = ++driveId, from = at, dist = Math.abs(to - from);
+    var ms = reduceMq.matches ? 1 : Math.max(650, Math.min(1500, dist * 7));
+    var t0 = performance.now(), lastPuff = 0;
+    metro.classList.add("moving");
+    return new Promise(function (done) {
+      (function step(t) {
+        if (id !== driveId) return done();
+        var k = Math.min(1, (t - t0) / ms);
+        var e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; // speed up, cruise, brake
+        at = from + (to - from) * e;
+        draw(at, reduceMq.matches ? 0 : Math.sin(t / 45) * .5 * (1 - Math.abs(2 * k - 1)));
+        var ps = to > from ? at - 46 : at + 20;
+        if (!reduceMq.matches && t - lastPuff > 90 && k < .85 && ps > 12 && ps < L - 12) { lastPuff = t; puff(ps); }
+        if (k < 1) requestAnimationFrame(step);
+        else { metro.classList.remove("moving"); done(); }
+      })(t0);
+    });
+  }
+  function puff(s) {
+    var p = route.getPointAtLength(Math.max(0, s));
+    var c = document.createElementNS(NS, "circle");
+    c.setAttribute("class", "puff");
+    c.setAttribute("cx", p.x); c.setAttribute("cy", p.y - 4); c.setAttribute("r", 3);
+    puffs.appendChild(c);
+    c.animate([{ opacity: .35, transform: "translate(0,0) scale(1)" }, { opacity: 0, transform: "translate(-6px,-10px) scale(2.4)" }], { duration: 700, easing: "ease-out" }).onfinish = function () { c.remove(); };
+  }
+
+  // ---------- Day chips: the next five days from today ----------
+  var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var dayHtml = "";
+  for (var d = 1; d <= 5; d++) {
+    var day = new Date(); day.setDate(day.getDate() + d);
+    var label = DAYS[day.getDay()] + " " + day.getDate() + " " + MONTHS[day.getMonth()];
+    dayHtml += '<label class="chip"><input type="radio" name="day" value="' + label + '" aria-label="' + label + '"><span><small>' + DAYS[day.getDay()] + "</small>" + day.getDate() + "</span></label>";
+  }
+  $("#days").innerHTML = dayHtml;
+
+  // ---------- Steps ----------
+  var step = 0, booking = false;
+  function val(name) { var r = document.querySelector('input[name="' + name + '"]:checked'); return r ? r.value : ""; }
+  function price() { var r = document.querySelector('input[name="svc"]:checked'); return r ? +r.dataset.price : 0; }
+  function show(i) {
+    step = i;
+    track.style.transform = "translateX(" + -i * 100 + "%)";
+    panels.forEach(function (p, j) { p.classList.remove("enter"); p.inert = j !== i; });
+    void track.offsetWidth;
+    panels[i].classList.add("enter");
+    stns.forEach(function (g, j) {
+      g.classList.toggle("past", j < i);
+      g.classList.toggle("here", j === i);
+    });
+    [].forEach.call(document.querySelectorAll("#steps li"), function (li, j) { if (j === i) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current"); });
+    back.disabled = i === 0 || i === 4;
+    next.textContent = i === 4 ? "Book another clean" : i === 3 ? "Book now · " + fmt(price() + 300) : NEXT[i];
+    count.innerHTML = i === 4 ? "Booked" : "Step " + (i + 1) + ' of 4<span class="sr">: ' + NAMES[i] + "</span>";
+  }
+  function arrive(i) {
+    var g = stns[i];
+    if (!g) return;
+    g.classList.remove("arrive"); void g.getBoundingClientRect(); g.classList.add("arrive");
+  }
+  function check(i) {
+    var ok = true;
+    if (i === 0 && !val("svc")) { $("#m0").textContent = "Pick a service to continue."; ok = false; }
+    if (i === 1) {
+      var miss = !val("day") ? "a day" : !val("time") ? "an arrival time" : "";
+      if (miss) { $("#m1").textContent = "Pick " + miss + " to continue."; ok = false; }
+    }
+    if (i === 2) {
+      var name = $("#name").value.trim(), phone = $("#phone").value.replace(/\D/g, "");
+      var nOk = name.length >= 2, pOk = /^03\d{9}$/.test(phone);
+      setErr("fName", "eName", nOk ? "" : "Please type your name.");
+      setErr("fPhone", "ePhone", pOk ? "" : "Use 11 digits starting with 03.");
+      if (!nOk) $("#name").focus(); else if (!pOk) $("#phone").focus();
+      ok = nOk && pOk;
+    }
+    return ok;
+  }
+  function setErr(f, e, text) {
+    var box = $("#" + f);
+    $("#" + e).textContent = text;
+    box.classList.remove("bad");
+    if (text) { void box.offsetWidth; box.classList.add("bad"); }
+    box.querySelector("input").setAttribute("aria-invalid", text ? "true" : "false");
+  }
+  document.addEventListener("change", function (e) {
+    if (e.target.name === "svc") { $("#m0").textContent = ""; }
+    if (e.target.name === "day" || e.target.name === "time") $("#m1").textContent = "";
+  });
+  function summary() {
+    var rows = [["Service", val("svc")], ["When", val("day") + ", " + val("time")], ["Name", $("#name").value.trim()], ["Address", $("#area").value + ", Karachi"]];
+    $("#sum").innerHTML = rows.map(function (r) { return "<div><dt>" + r[0] + "</dt><dd>" + r[1].replace(/</g, "&lt;") + "</dd></div>"; }).join("");
+    $("#total").textContent = fmt(price() + 300);
+  }
+
+  async function goNext() {
+    if (booking) return;
+    if (step === 4) { return restart(); }
+    if (!check(step)) return;
+    if (step === 3) return book();
+    if (step === 2) summary();
+    var to = step + 1;
+    show(to);
+    await drive(STOP[to]);
+    arrive(to);
+  }
+  async function goBack() {
+    if (step === 0 || step === 4 || booking) return;
+    var to = step - 1;
+    show(to);
+    await drive(STOP[to]);
+    arrive(to);
+  }
+  async function book() {
+    booking = true;
+    next.disabled = true;
+    next.textContent = "Booking…";
+    stns[3].classList.add("past");
+    await drive(END);
+    var code = "CL-" + (4000 + Math.floor(Math.random() * 5000));
+    $("#tCode").textContent = code;
+    $("#tTotal").textContent = fmt(price() + 300);
+    $("#tText").textContent = val("svc") + " on " + val("day") + " at " + val("time") + " in " + $("#area").value + ". We will call " + $("#name").value.trim() + " 30 minutes before.";
+    show(4);
+    confetti();
+    count.textContent = "Booked: " + code;
+    next.disabled = false;
+    booking = false;
+  }
+  async function restart() {
+    document.querySelectorAll("input[type=radio]").forEach(function (r) { r.checked = false; });
+    $("#name").value = ""; $("#phone").value = ""; $("#area").selectedIndex = 0;
+    setErr("fName", "eName", ""); setErr("fPhone", "ePhone", "");
+    show(0);
+    await drive(STOP[0]);
+    arrive(0);
+  }
+  next.addEventListener("click", goNext);
+  back.addEventListener("click", goBack);
+  // Enter in a field moves on, like a real form
+  [$("#name"), $("#phone")].forEach(function (inp) { inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); goNext(); } }); });
+  // typing clears the error under that field
+  $("#name").addEventListener("input", function () { if ($("#eName").textContent) setErr("fName", "eName", ""); });
+  $("#phone").addEventListener("input", function () { if ($("#ePhone").textContent) setErr("fPhone", "ePhone", ""); });
+
+  function confetti() {
+    if (reduceMq.matches) return;
+    var card = $(".card"), cr = card.getBoundingClientRect(), mr = metro.getBoundingClientRect();
+    var x0 = mr.left - cr.left + mr.width * (380 / 400), y0 = mr.top - cr.top + mr.height * .34;
+    var cols = ["var(--route)", "var(--train)", "var(--ok)", "#ffd23f", "#e0457b"];
+    for (var i = 0; i < 34; i++) {
+      var c = document.createElement("i");
+      c.className = "confetti";
+      c.style.left = x0 + "px"; c.style.top = y0 + "px";
+      c.style.background = cols[i % cols.length];
+      card.appendChild(c);
+      var ang = -Math.PI / 2 + (Math.random() - .5) * 2.4, sp = 90 + Math.random() * 130;
+      var dx = Math.cos(ang) * sp - 40, dy = Math.sin(ang) * sp;
+      c.animate([
+        { transform: "translate(0,0) rotate(0deg) scale(.6)", opacity: 1 },
+        { transform: "translate(" + dx + "px," + dy + "px) rotate(" + (Math.random() * 360) + "deg) scale(1)", opacity: 1, offset: .35 },
+        { transform: "translate(" + (dx * 1.3) + "px," + (dy + 260) + "px) rotate(" + (Math.random() * 900) + "deg) scale(.9)", opacity: 0 }
+      ], { duration: 1500 + Math.random() * 700, easing: "cubic-bezier(.2,.6,.4,1)" }).onfinish = (function (el) { return function () { el.remove(); }; })(c);
+    }
+  }
+
+  show(0);
+  draw(at, 0);
+  // idle: the head lamp blinks and the train breathes on its spot
+  setInterval(function () { if (!metro.classList.contains("moving") && !reduceMq.matches) { car1.querySelector(".lamp").animate([{ opacity: 1 }, { opacity: .2 }, { opacity: 1 }], { duration: 600 }); } }, 2400);
+
+  // ---------- Auto demo: plays on load and every few seconds until someone touches it ----------
+  var demoOn = true;
+  function stopDemo(e) { if (e.isTrusted) demoOn = false; }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  async function press(btn) { btn.classList.add("press"); await pause(140); btn.classList.remove("press"); btn.click(); }
+  async function pick(sel) { var r = document.querySelector(sel); r.checked = true; r.dispatchEvent(new Event("change", { bubbles: true })); }
+  async function type(inp, s) { inp.value = ""; for (var i = 0; i < s.length; i++) { inp.value += s[i]; await pause(45); } }
+  async function demo() {
+    try {
+      await pause(300);
+      while (demoOn) {
+        pick('input[name="svc"][value="Deep clean"]'); await pause(350);
+        await press(next); await pause(1300);
+        pick('#days label:nth-child(2) input'); await pause(380);
+        pick('input[name="time"][value="11:30 AM"]'); await pause(450);
+        await press(next); await pause(1200);
+        await type($("#name"), "Sana Rauf"); await pause(150);
+        await type($("#phone"), "0300 1234567"); await pause(200);
+        $("#area").selectedIndex = 1; await pause(500);
+        await press(next); await pause(1500);
+        await press(next); await pause(3600);
+        await press(next); await pause(2200);
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,474 @@
+<!doctype html>
+<!-- Chill & Craft · Purl · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Purl · knitting progress loader</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: oatmeal wool, plum yarn, mustard and rose stripes ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --bg: #f1e8dc;
+    --bg2: #faf4ea;
+    --card: #fffaf3;
+    --ink: #3a1f33;
+    --muted: #8a6d7f;
+    --line: #eedfd0;
+    --plum: #6e2a5e;
+    --mustard: #e0a526;
+    --rose: #e46b7a;
+    --cream: #f4e3c6;
+    --wood: #c99a62;
+    --ok: #2e9a68;
+    --shadow: rgba(90, 40, 60, .2);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #150d14;
+    --bg2: #22141f;
+    --card: #211520;
+    --ink: #f7e6f0;
+    --muted: #c0a2b4;
+    --line: #3a2636;
+    --plum: #c45aa8;
+    --mustard: #f2bd45;
+    --rose: #ff8a98;
+    --cream: #f1dcc0;
+    --wood: #dcb27c;
+    --ok: #4fd598;
+    --shadow: rgba(0, 0, 0, .6);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    overflow-x: hidden;
+  }
+  .stage {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 14px;
+    /* a soft knit texture: rows of tiny Vs */
+    background:
+      linear-gradient(135deg, transparent 46%, color-mix(in srgb, var(--plum) 6%, transparent) 47% 53%, transparent 54%) 0 0 / 14px 12px,
+      linear-gradient(45deg, transparent 46%, color-mix(in srgb, var(--plum) 6%, transparent) 47% 53%, transparent 54%) 0 0 / 14px 12px,
+      radial-gradient(75% 65% at 50% 40%, var(--bg2), var(--bg));
+  }
+  .card {
+    position: relative;
+    width: min(100%, 400px);
+    padding: 18px 18px 16px;
+    border-radius: 28px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 30px 60px -36px var(--shadow), 0 8px 18px -14px var(--shadow);
+    text-align: center;
+  }
+  .file { display: flex; align-items: center; gap: 11px; text-align: left; }
+  .thumb {
+    flex: none;
+    position: relative;
+    width: 40px;
+    height: 46px;
+    border-radius: 8px 12px 8px 8px;
+    background: linear-gradient(160deg, var(--rose), var(--plum));
+    box-shadow: 0 8px 14px -8px var(--plum);
+  }
+  .thumb::before { content: ""; position: absolute; inset: 8px 8px 16px; border-radius: 4px; background: rgba(255, 255, 255, .85); }
+  .thumb::after { content: ""; position: absolute; left: 8px; right: 14px; bottom: 8px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .7); }
+  h1 { margin: 0; font-size: 16.5px; }
+  .meta { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .loom { position: relative; height: 236px; margin: 8px 0 4px; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .badge {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: grid;
+    place-items: center;
+    width: 58px;
+    height: 58px;
+    margin: -29px 0 0 -29px;
+    border-radius: 50%;
+    background: var(--ok);
+    color: #fff;
+    box-shadow: 0 12px 24px -10px var(--ok), 0 0 0 6px color-mix(in srgb, var(--ok) 20%, transparent);
+    opacity: 0;
+    transform: scale(.2) rotate(-40deg);
+    pointer-events: none;
+  }
+  [data-theme="dark"] .badge { color: #06281a; }
+  .badge svg { width: 28px; height: 28px; }
+  .badge path { stroke-dasharray: 30; stroke-dashoffset: 30; }
+  .done .badge { animation: badge .7s cubic-bezier(.34, 1.7, .64, 1) .5s forwards; }
+  .done .badge path { animation: draw .4s ease .9s forwards; }
+  @keyframes badge { to { opacity: 1; transform: translateY(-38px) scale(1); } }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+
+  .pct { display: flex; justify-content: center; align-items: baseline; gap: 2px; margin: 0; font-size: 40px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .pct small { font-size: 18px; color: var(--muted); }
+  .phase { min-height: 20px; margin: 6px 0 10px; font-size: 14px; color: var(--muted); }
+  .phase b { color: var(--plum); }
+  .phase.swap { animation: swap .45s cubic-bezier(.34, 1.4, .64, 1); }
+  @keyframes swap { from { opacity: 0; transform: translateY(8px); } }
+  .bar { height: 8px; border-radius: 8px; background: color-mix(in srgb, var(--plum) 12%, transparent); overflow: hidden; }
+  .bar span {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: repeating-linear-gradient(-45deg, var(--plum) 0 8px, color-mix(in srgb, var(--plum) 78%, var(--rose)) 8px 16px);
+    background-size: 23px 100%;
+    animation: stripes .8s linear infinite;
+  }
+  .paused .bar span, .idle .bar span { animation-play-state: paused; }
+  .done .bar span { background: var(--ok); }
+  @keyframes stripes { to { background-position: 23px 0; } }
+
+  .btns { display: flex; gap: 8px; margin-top: 14px; }
+  .btn {
+    height: 48px;
+    padding: 0 18px;
+    border-radius: 15px;
+    border: 1.5px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    font: 700 14.5px/1 var(--ff);
+    cursor: pointer;
+    transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), opacity .25s, filter .2s;
+  }
+  .btn.main { flex: 1; border: 0; background: var(--plum); color: #fff; box-shadow: 0 14px 24px -16px var(--plum); }
+  [data-theme="dark"] .btn.main { color: #2a0b22; }
+  .btn.main:hover { filter: brightness(1.08); }
+  .btn:active, .btn.press { transform: scale(.95); }
+  .btn:disabled { opacity: .35; cursor: default; }
+  .btn:focus-visible { outline: 3px solid var(--mustard); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card idle" id="card" aria-labelledby="title">
+    <div class="file">
+      <span class="thumb" aria-hidden="true"></span>
+      <div>
+        <h1 id="title">Hunza trip photo book</h1>
+        <p class="meta" id="meta">48 pages · 23.4 MB PDF</p>
+      </div>
+    </div>
+
+    <div class="loom">
+      <canvas id="cv" aria-hidden="true"></canvas>
+      <span class="badge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+    </div>
+
+    <p class="pct" aria-hidden="true"><span id="pct">0</span><small>%</small></p>
+    <p class="phase" id="phase"><b id="phName">Ready</b><span id="phMore"> to knit your PDF</span></p>
+    <div class="bar" role="progressbar" aria-label="Preparing the photo book" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="bar"><span id="fill"></span></div>
+    <div class="btns">
+      <button class="btn main" id="main" type="button">Start knitting</button>
+      <button class="btn" id="cancel" type="button" disabled>Cancel</button>
+    </div>
+    <p class="sr" id="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduceMq = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var card = $("#card"), cv = $("#cv"), ctx = cv.getContext("2d");
+  var pctEl = $("#pct"), phaseEl = $("#phase"), bar = $("#bar"), fill = $("#fill"), mainBtn = $("#main"), cancelBtn = $("#cancel"), status = $("#status"), metaEl = $("#meta");
+
+  // ---------- Knitting pattern ----------
+  var COLS = 9, ROWS = 12, TOTAL = COLS * ROWS;
+  var STRIPES = "PPMPPPPPPRPM"; // P plum, M mustard, R rose (row 0 is the first row knitted)
+  var HEART = ["..XX.XX..", ".XXXXXXX.", ".XXXXXXX.", "..XXXXX..", "...XXX...", "....X...."];
+  var HEART_TOP = 3; // the heart sits on rows 3 to 8 (counted from the first row)
+  var col = {};
+  function readColours() {
+    var cs = getComputedStyle(document.documentElement);
+    ["plum", "mustard", "rose", "cream", "wood", "ink"].forEach(function (k) { col[k] = cs.getPropertyValue("--" + k).trim(); });
+  }
+  function shade(hex, f) { // lighten (f > 0) or darken (f < 0) a #rrggbb colour
+    var n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+    var m = function (c) { return Math.round(f > 0 ? c + (255 - c) * f : c * (1 + f)); };
+    return "rgb(" + m(r) + "," + m(g) + "," + m(b) + ")";
+  }
+  function rowColour(r) { return { P: col.plum, M: col.mustard, R: col.rose }[STRIPES[r]]; }
+
+  // ---------- State ----------
+  var state = "idle", p = 0, heartK = 0, doneAt = 0, ballSpin = 0, knit = 0, jabAmt = 0, phaseName = "";
+  var W = 300, H = 236, dpr = 1, S = 1;
+  function size() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    S = Math.min(1.1, W / 300, H / 236);
+    readColours();
+  }
+
+  // ---------- Drawing ----------
+  // One knit stitch: two plump, slanted loops that meet at the bottom like a V (x = column centre, y = top)
+  function vStitch(x, y, w, h, c, alpha) {
+    var rx = w * .26, ry = h * .64, dx = w * .21, cy = y + h * .52, dark = shade(c, -.3), light = shade(c, .32);
+    ctx.globalAlpha = alpha;
+    for (var sgn = -1; sgn <= 1; sgn += 2) {
+      ctx.save();
+      ctx.translate(x + sgn * dx, cy);
+      ctx.rotate(sgn * .6); // left loop leans in from the top left, right loop from the top right
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.ellipse(0, 1.2 * S, rx, ry, 0, 0, 6.283); ctx.fill();
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, 6.283); ctx.fill();
+      ctx.fillStyle = light;
+      ctx.beginPath(); ctx.ellipse(-rx * .28, -ry * .22, rx * .32, ry * .5, 0, 0, 6.283); ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+  function draw(t) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    var sw = 18 * S, sh = 12 * S, cx = W * .43, ny = 40 * S;
+    var stitches = Math.floor(p * TOTAL), rowsFull = Math.floor(stitches / COLS), part = stitches % COLS;
+    var frac = p * TOTAL - stitches; // how far the next stitch has formed
+    var rowsShown = rowsFull + (part ? 1 : 0);
+    var x0 = cx - (COLS - 1) * sw / 2;
+    var calm = reduceMq.matches ? 0 : 1;
+    var wave = state === "done" ? 1 : .35;
+
+    // the knitted strip: newest row right under the needle, older rows hang below and sway a little
+    for (var k = 0; k < rowsShown; k++) {
+      var r = rowsShown - 1 - k;              // r = row number from the first one
+      var y = ny + 6 * S + k * sh;
+      var sway = calm * Math.sin(t / 700 + k * .32) * k * .22 * wave * S;
+      var n = r === rowsFull ? part : COLS;   // the row being knitted is partly done
+      var forming = r === rowsFull && state === "run" && n < COLS ? 1 : 0; // plus the stitch being formed
+      for (var i = 0; i < n + forming; i++) {
+        var ci = r % 2 ? COLS - 1 - i : i;    // rows go back and forth like real knitting
+        var c = rowColour(r);
+        var hr = r - HEART_TOP, heartRow = HEART[HEART.length - 1 - hr];
+        if (heartK > 0 && heartRow && heartRow[ci] === "X" && (hr + 1) / HEART.length <= heartK + .01) c = col.cream;
+        var fresh = i === n ? frac * .85 : 1;
+        vStitch(x0 + ci * sw + sway, y, sw, sh, c, fresh);
+      }
+    }
+    var bottom = ny + 6 * S + rowsShown * sh;
+
+    // tassels once it is finished
+    if (state === "done" && rowsShown) {
+      var drop = Math.min(1, (t - doneAt) / 500);
+      ctx.lineCap = "round";
+      for (var i2 = 0; i2 < COLS; i2++) {
+        var bx = x0 + i2 * sw + calm * Math.sin(t / 700 + rowsShown * .32) * rowsShown * .22 * S;
+        var len = (12 + (i2 % 3) * 3) * S * drop;
+        var swing = calm * Math.sin(t / 380 + i2) * 3 * S;
+        ctx.strokeStyle = i2 % 2 ? col.mustard : col.rose;
+        ctx.lineWidth = 2.6 * S;
+        ctx.beginPath(); ctx.moveTo(bx, bottom + 2 * S); ctx.quadraticCurveTo(bx + swing * .3, bottom + len * .6, bx + swing, bottom + len + 2 * S); ctx.stroke();
+      }
+    }
+
+    // needles: the left one holds the work, the right one jabs in for every stitch
+    var j = calm * jabAmt * Math.pow(Math.sin(knit), 2) * 7 * S;
+    var bob = calm * Math.sin(t / 900) * 1.5 * S;
+    needle(x0 - 34 * S, ny + bob - 4 * S, x0 + (COLS - 1) * sw + 26 * S, ny + bob + 2 * S, 1);
+    var tipX = x0 + (COLS - 1) * sw + 4 * S - j, tipY = ny + 8 * S + j * .6;
+    needle(x0 + (COLS - 1) * sw + 70 * S, ny - 30 * S + bob, tipX, tipY, -1);
+
+    // yarn ball (shrinks as the yarn is used, spins while knitting) and the yarn line to the needle
+    var br = (31 - 13 * p) * S, bx2 = W - 40 * S, by = H - 38 * S;
+    var sag = 18 * S + calm * Math.sin(t / 500) * 4 * S;
+    ctx.strokeStyle = col.plum; ctx.lineWidth = 2.2 * S; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.quadraticCurveTo((tipX + bx2) / 2 + 10 * S, Math.max(tipY, by) + sag, bx2 - br * .5, by - br * .7); ctx.stroke();
+    ctx.save();
+    ctx.translate(bx2, by);
+    ctx.fillStyle = "rgba(0,0,0,.12)";
+    ctx.beginPath(); ctx.ellipse(0, br + 4 * S, br * .9, 4 * S, 0, 0, 6.283); ctx.fill();
+    ctx.rotate(ballSpin);
+    var g = ctx.createRadialGradient(-br * .35, -br * .4, br * .1, 0, 0, br);
+    g.addColorStop(0, shade(col.plum, .3)); g.addColorStop(1, shade(col.plum, -.2));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, br, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = shade(col.plum, .45); ctx.lineWidth = 1.4 * S; ctx.globalAlpha = .7;
+    for (var w = 0; w < 5; w++) {
+      ctx.beginPath(); ctx.ellipse(0, 0, br * .95, br * (.25 + w * .14), w * .62, 0, 6.283); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+  function needle(x1, y1, x2, y2, knobAt) {
+    ctx.lineCap = "round";
+    ctx.strokeStyle = shade(col.wood, -.25); ctx.lineWidth = 6 * S;
+    ctx.beginPath(); ctx.moveTo(x1, y1 + 1.5 * S); ctx.lineTo(x2, y2 + 1.5 * S); ctx.stroke();
+    ctx.strokeStyle = col.wood; ctx.lineWidth = 5 * S;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.strokeStyle = shade(col.wood, .45); ctx.lineWidth = 1.4 * S;
+    ctx.beginPath(); ctx.moveTo(x1, y1 - 1.2 * S); ctx.lineTo(x2, y2 - 1.2 * S); ctx.stroke();
+    var kx = knobAt > 0 ? x1 : x1, ky = knobAt > 0 ? y1 : y1;
+    ctx.fillStyle = col.mustard;
+    ctx.beginPath(); ctx.arc(kx, ky, 5.5 * S, 0, 6.283); ctx.fill();
+    ctx.fillStyle = shade(col.mustard, .5);
+    ctx.beginPath(); ctx.arc(kx - 1.6 * S, ky - 1.6 * S, 1.8 * S, 0, 6.283); ctx.fill();
+  }
+
+  // ---------- The simulated job ----------
+  var PHASES = [[0, "Casting on"], [.08, "Knitting pages"], [.72, "Adding the pattern"], [.93, "Binding off"]];
+  var hiccup = 0;
+  function phaseOf(v) { var n = PHASES[0][1]; PHASES.forEach(function (ph) { if (v >= ph[0]) n = ph[1]; }); return n; }
+  // The phase name springs in when it changes; the page counter beside it just updates
+  var phName = $("#phName"), phMore = $("#phMore");
+  function setPhase(name, more, plain) {
+    if (phMore.textContent !== more) phMore.textContent = more;
+    if (phName.textContent === name) return;
+    phName.textContent = name;
+    phaseEl.classList.remove("swap"); void phaseEl.offsetWidth; phaseEl.classList.add("swap");
+    if (plain) status.textContent = plain;
+  }
+  function readout() {
+    var pc = Math.floor(p * 100);
+    pctEl.textContent = pc;
+    fill.style.width = (p * 100).toFixed(1) + "%";
+    bar.setAttribute("aria-valuenow", pc);
+    if (state === "run" || state === "pause") {
+      var name = phaseOf(p), page = Math.min(48, Math.max(1, Math.ceil(p * 48)));
+      if (name !== phaseName) { phaseName = name; status.textContent = name + "…"; }
+      setPhase(name, " · page " + page + " of 48" + (state === "pause" ? " · paused" : ""));
+      metaEl.textContent = (p * 23.4).toFixed(1) + " of 23.4 MB · 48 pages";
+    }
+  }
+
+  var last = performance.now();
+  function frame(t) {
+    var dt = Math.min(60, t - last);
+    last = t;
+    if (state === "run") {
+      // uneven speed, with the odd short stall, like a real export
+      if (hiccup > 0) hiccup -= dt;
+      else {
+        var rate = p < .08 ? .00009 : p < .72 ? .00017 : p < .93 ? .00012 : .0001;
+        p = Math.min(1, p + dt * rate * (.7 + .6 * Math.abs(Math.sin(t / 530))));
+        if (Math.random() < .004) hiccup = 260;
+      }
+      ballSpin += dt * .004;
+      knit += dt * .011;                      // the right needle jabs in about twice a second
+      if (p >= 1) finish(t);
+    } else if (state === "unravel") {
+      p = Math.max(0, p - dt * .0011);
+      ballSpin -= dt * .012;
+      knit -= dt * .03;
+      if (p <= 0) { p = 0; toIdle("Cancelled. Nothing was saved."); }
+    }
+    jabAmt += ((state === "run" || state === "unravel" ? 1 : 0) - jabAmt) * Math.min(1, dt / 160);
+    if (state === "done" && heartK < 1) heartK = Math.min(1, (t - doneAt - 300) / 900);
+    readout();
+    draw(t);
+    requestAnimationFrame(frame);
+  }
+
+  function start() {
+    state = "run"; heartK = 0; phaseName = "";
+    card.classList.remove("idle", "paused", "done");
+    mainBtn.textContent = "Pause";
+    cancelBtn.disabled = false;
+  }
+  function pause() {
+    state = "pause";
+    card.classList.add("paused");
+    mainBtn.textContent = "Resume";
+    status.textContent = "Paused at " + Math.floor(p * 100) + "%.";
+  }
+  function finish(t) {
+    state = "done"; doneAt = t; p = 1;
+    card.classList.add("done");
+    card.classList.remove("paused");
+    mainBtn.textContent = "Knit another";
+    cancelBtn.disabled = true;
+    setPhase("Ready!", " Your photo book is knitted", "Done. Your photo book is ready.");
+    metaEl.textContent = "48 pages · 23.4 MB PDF · ready";
+  }
+  function unravel() {
+    state = "unravel";
+    card.classList.remove("paused");
+    mainBtn.disabled = true; cancelBtn.disabled = true;
+    setPhase("Unravelling", " · putting the yarn back", "Cancelling…");
+  }
+  function toIdle(msg) {
+    state = "idle"; p = 0; heartK = 0;
+    card.classList.remove("paused", "done");
+    card.classList.add("idle");
+    mainBtn.disabled = false;
+    mainBtn.textContent = "Start knitting";
+    cancelBtn.disabled = true;
+    setPhase(msg ? "Cancelled." : "Ready", msg ? " Nothing was saved." : " to knit your PDF", msg);
+    metaEl.textContent = "48 pages · 23.4 MB PDF";
+  }
+  mainBtn.addEventListener("click", function () {
+    if (state === "idle") start();
+    else if (state === "run") pause();
+    else if (state === "pause") start();
+    else if (state === "done") { toIdle(); start(); }
+  });
+  cancelBtn.addEventListener("click", function () { if (state === "run" || state === "pause") unravel(); });
+
+  size();
+  addEventListener("resize", size);
+  var schemeMq = window.matchMedia("(prefers-color-scheme: dark)");
+  if (schemeMq.addEventListener) schemeMq.addEventListener("change", function () { setTimeout(readColours, 0); });
+  requestAnimationFrame(frame);
+
+  // ---------- Auto demo: plays on load and every few seconds until someone touches it ----------
+  var demoOn = true;
+  function stopDemo(e) { if (e.isTrusted) demoOn = false; }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause2(ms) { await wait(ms); if (!demoOn) throw 0; }
+  async function press(b) { b.classList.add("press"); await pause2(140); b.classList.remove("press"); b.click(); }
+  async function demo() {
+    try {
+      await pause2(350);
+      while (demoOn) {
+        if (state !== "idle") toIdle();
+        await press(mainBtn);
+        while (state !== "done") await pause2(200);
+        await pause2(3400);
+        toIdle(); await pause2(400);
+        await press(mainBtn); await pause2(2600);
+        await press(cancelBtn);
+        while (state !== "idle") await pause2(200);
+        await pause2(1600);
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,416 @@
+<!doctype html>
+<!-- Chill & Craft · Tilework · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tilework · resumable download</title>
+<script>
+  // Theme: ?theme=light|dark overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #f8efe2;
+    --bg2: #e3cfb2;
+    --card: #fffaf2;
+    --edge: #eadcc6;
+    --ink: #2a1d12;
+    --soft: #7a6550;
+    --blank: #f0e4d0;
+    --blank2: #e6d6bd;
+    --fill: rgba(31, 122, 114, .42);
+    --gold: #e0a526;
+    --terra: #c8553d;
+    --teal: #1f7a72;
+    --indigo: #2b3a67;
+    --plum: #8e4a6a;
+    --bad: #d93a2b;
+    --ok: #1f8a57;
+    --btn: #2b3a67;
+    --focus: #e0a526;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg1: #1f1811;
+      --bg2: #070504;
+      --card: #1d1610;
+      --edge: #33281d;
+      --ink: #f5e9d8;
+      --soft: #b39d84;
+      --blank: #2e251b;
+      --blank2: #3a2f23;
+      --fill: rgba(64, 196, 182, .45);
+      --gold: #f0b93a;
+      --terra: #e06a50;
+      --teal: #2fa79b;
+      --indigo: #5468b0;
+      --plum: #b86a8e;
+      --bad: #ff6b57;
+      --ok: #3fcf86;
+      --btn: #f0b93a;
+      --focus: #f0b93a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #1f1811;
+    --bg2: #070504;
+    --card: #1d1610;
+    --edge: #33281d;
+    --ink: #f5e9d8;
+    --soft: #b39d84;
+    --blank: #2e251b;
+    --blank2: #3a2f23;
+    --fill: rgba(64, 196, 182, .45);
+    --gold: #f0b93a;
+    --terra: #e06a50;
+    --teal: #2fa79b;
+    --indigo: #5468b0;
+    --plum: #b86a8e;
+    --bad: #ff6b57;
+    --ok: #3fcf86;
+    --btn: #f0b93a;
+    --focus: #f0b93a;
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  body, .stage { grid-template-columns: minmax(0, 1fr); } /* fixed-width cards never widen the page */
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 20% 20%, rgba(224, 165, 38, .12), transparent 40%),
+      radial-gradient(120% 90% at 50% 0%, var(--bg1), var(--bg2) 90%);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .stage { width: 100%; padding: 22px 16px; display: grid; place-items: center; }
+  .card { position: relative; width: 540px; max-width: 100%; padding: 18px; border-radius: 26px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 30px 60px -36px rgba(60, 30, 5, .75); }
+
+  .file { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .ficon { flex: none; width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(150deg, var(--terra), #9c3a26); box-shadow: 0 8px 14px -8px rgba(150, 50, 20, .9); }
+  .ficon svg { width: 24px; height: 24px; fill: none; stroke: #fff4e4; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .fname { min-width: 0; flex: 1; }
+  .fname b { display: block; font-size: 16px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fname span { font-size: 12.5px; color: var(--soft); font-variant-numeric: tabular-nums; }
+  .pct { font-size: 34px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .pct small { font-size: 16px; color: var(--soft); }
+
+  /* ---------- The mosaic of chunks ---------- */
+  .wall { position: relative; display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; padding: 8px; border-radius: 16px; background: var(--blank2); transition: box-shadow .5s; overflow: hidden; }
+  .wall.done { box-shadow: 0 0 0 3px var(--gold), 0 0 30px -4px var(--gold); }
+  .tile { display: block; aspect-ratio: 1; perspective: 300px; }
+  .flip { display: block; position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .7s var(--spring); }
+  .tile.got .flip { transform: rotateY(180deg); }
+  .face { display: block; position: absolute; inset: 0; border-radius: 6px; backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden; }
+  .front { background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, .06) 0 2px, transparent 2.5px), var(--blank); }
+  .front::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--f, 0) * 100%); background: var(--fill); transition: height .12s linear, background .3s; }
+  .tile.hot .front { box-shadow: inset 0 0 0 2px var(--teal); }
+  .tile.lost .front { box-shadow: inset 0 0 0 2px var(--bad); }
+  .tile.lost .front::after { background: rgba(217, 58, 43, .35); }
+  .back { transform: rotateY(180deg); background: var(--c); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .15), inset 0 2px 0 rgba(255, 255, 255, .2); }
+  .back::before { content: ""; position: absolute; inset: 22%; background: rgba(255, 255, 255, .28); clip-path: var(--shape); }
+  .gloss { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%); transform: translateX(-120%); }
+  .ribbon { position: absolute; left: 50%; top: 50%; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 30px; background: var(--card); color: var(--ink); font-weight: 750; font-size: 14.5px; box-shadow: 0 16px 30px -12px rgba(0, 0, 0, .55); transform: translate(-50%, -50%) scale(0); white-space: nowrap; }
+  .ribbon svg { width: 20px; height: 20px; flex: none; padding: 3px; border-radius: 50%; background: var(--ok); fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+
+  .bar { height: 6px; margin: 14px 0 12px; border-radius: 6px; background: var(--blank2); overflow: hidden; }
+  .bar i { display: block; height: 100%; transform-origin: left; transform: scaleX(var(--p, 0)); background: linear-gradient(90deg, var(--teal), var(--gold)); transition: transform .15s linear; }
+  .line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; }
+  .stats { min-width: 0; margin: 0; font-size: 13px; color: var(--soft); font-variant-numeric: tabular-nums; line-height: 1.45; }
+  .stats b { color: var(--ink); }
+  .stats .warn { color: var(--bad); font-weight: 700; }
+  .btn { padding: 11px 16px; border-radius: 14px; border: 1px solid var(--edge); background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: transform .3s var(--spring), background .2s; display: inline-flex; align-items: center; gap: 8px; }
+  .btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .btn.main { min-width: 136px; justify-content: center; background: var(--btn); border-color: var(--btn); color: var(--card); }
+  .btn:hover:not(:disabled) { transform: translateY(-1px); }
+  .btn:active:not(:disabled) { transform: scale(.96); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn[aria-pressed="true"] { border-color: var(--bad); color: var(--bad); }
+  .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  @keyframes shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+  .tile.lost { animation: shake .25s 2; }
+  .tile.idle-glint .front { animation: glint 2.4s ease-in-out; }
+  @keyframes glint { 50% { filter: brightness(1.12); } }
+
+  @media (max-width: 420px) { .wall { gap: 4px; padding: 6px; } .face { border-radius: 4px; } .pct { font-size: 28px; } }
+  @media (max-width: 500px) { .line { grid-template-columns: 1fr 1fr; } .stats { grid-column: 1 / -1; } .btn { justify-content: center; } .btn.main { min-width: 0; } }
+
+  /* Calm mode: same steps, no big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" aria-labelledby="fn">
+    <div class="file">
+      <span class="ficon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M10 9.5v5l4.5-2.5z" /></svg></span>
+      <div class="fname"><b id="fn">Hunza-trip-4K.mp4</b><span id="sub">48 MB · 50 chunks of 0.96 MB</span></div>
+      <div class="pct" aria-hidden="true"><span id="pct">0</span><small>%</small></div>
+    </div>
+    <div class="wall" id="wall" aria-hidden="true">
+      <span class="gloss" id="gloss"></span>
+    </div>
+    <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+    <div class="line">
+      <p class="stats" id="stats">Ready. Pause any time; it carries on from the last byte.</p>
+      <button class="btn" type="button" id="net" aria-pressed="false" disabled>
+        <svg viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0" /><circle cx="12" cy="19.5" r="1" /></svg><span id="netTxt">Drop Wi-Fi</span>
+      </button>
+      <button class="btn main" type="button" id="main"><svg viewBox="0 0 24 24" id="mainIco"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" /></svg><span id="mainTxt">Download</span></button>
+    </div>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+  // ---------- Tilework: a resumable download shown as a mosaic of chunks ----------
+  const $ = (s) => document.querySelector(s);
+  const wall = $("#wall"), gloss = $("#gloss"), bar = $("#bar"), pctEl = $("#pct"), stats = $("#stats"), statusEl = $("#status");
+  const mainBtn = $("#main"), mainTxt = $("#mainTxt"), mainIco = $("#mainIco"), netBtn = $("#net"), netTxt = $("#netTxt");
+  const COLS = 10, ROWS = 5, N = COLS * ROWS, TOTAL = 48, CHUNK = TOTAL / N, LANES = 3;
+  const SPRING = "cubic-bezier(.34, 1.56, .64, 1)";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const play = (el, frames, opts) => (calm() || !el.animate ? Promise.resolve() : el.animate(frames, opts).finished.catch(() => {}));
+  const ICONS = {
+    down: '<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" />',
+    pause: '<path d="M8 5v14M16 5v14" />',
+    play: '<path d="M7 4.5v15l12-7.5z" />',
+    again: '<path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.5h4.5" />'
+  };
+
+  // ---------- Build the mosaic: each tile's colour comes from a diamond pattern ----------
+  const SHAPES = ["polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%)", "circle(40%)", "polygon(50% 0, 100% 50%, 50% 100%, 0 50%)"];
+  const tiles = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const d = Math.abs(c - 4.5) + Math.abs(r - 2) * 1.5;
+      const color = d < 1.6 ? "var(--gold)" : d < 3 ? "var(--terra)" : d < 4.4 ? "var(--teal)" : d < 5.6 ? "var(--indigo)" : "var(--plum)";
+      const t = document.createElement("span");
+      t.className = "tile";
+      t.innerHTML = '<span class="flip"><span class="face front"></span><span class="face back"></span></span>';
+      const back = t.querySelector(".back");
+      back.style.setProperty("--c", color);
+      back.style.setProperty("--shape", SHAPES[(c + r) % 3]);
+      wall.insertBefore(t, gloss);
+      tiles.push({ el: t, front: t.querySelector(".front"), got: 0, done: false, c, r });
+    }
+  }
+
+  // ---------- Download state ----------
+  const STOP = new Error("stopped");
+  let runId = 0, mode = "idle";              // idle | running | paused | offline | done | resetting
+  let next = 0, active = [], recent = [], t0 = 0;
+  const sleep = (ms, id) => new Promise((res, rej) => setTimeout(() => (id === runId ? res() : rej(STOP)), ms));
+  const gotMB = () => tiles.reduce((s, t) => s + t.got, 0);
+
+  function setMain(icon, text, disabled) {
+    mainIco.innerHTML = ICONS[icon];
+    mainTxt.textContent = text;
+    mainBtn.disabled = !!disabled;
+  }
+  function setMode(m) {
+    mode = m;
+    netBtn.disabled = !(m === "running" || m === "offline");
+    netBtn.setAttribute("aria-pressed", m === "offline" ? "true" : "false");
+    netTxt.textContent = m === "offline" ? "Reconnect" : "Drop Wi-Fi";
+    if (m === "idle") setMain("down", "Download");
+    if (m === "running") setMain("pause", "Pause");
+    if (m === "paused") setMain("play", "Resume");
+    if (m === "offline") setMain("play", "Resume", true);
+    if (m === "done" || m === "resetting") setMain("again", "Again", m === "resetting");
+  }
+
+  function paintStats(speed) {
+    const got = gotMB(), p = got / TOTAL;
+    pctEl.textContent = Math.floor(p * 100);
+    bar.style.setProperty("--p", p.toFixed(4));
+    const doneN = tiles.filter((t) => t.done).length;
+    if (mode === "running") {
+      const eta = speed > 0 ? Math.ceil((TOTAL - got) / speed) : 0;
+      stats.innerHTML = `<b>${got.toFixed(1)} of ${TOTAL} MB</b> · ${doneN}/${N} chunks<br>${speed.toFixed(1)} MB/s · ${eta} s left`;
+    } else if (mode === "paused") {
+      stats.innerHTML = `<b>Paused at ${Math.floor(p * 100)}%</b> · ${got.toFixed(1)} MB kept<br>Resume carries on from the last byte.`;
+    }
+  }
+
+  // ---------- The download loop: three chunks at a time ----------
+  async function download(id) {
+    setMode("running");
+    statusEl.textContent = "Downloading Hunza-trip-4K.mp4.";
+    play(mainBtn, [{ transform: "scale(1)" }, { transform: "scale(.92)" }, { transform: "scale(1.04)" }, { transform: "scale(1)" }], { duration: 380, easing: "ease-out" });
+    t0 = performance.now();
+    recent = [];
+    let demoStep = 0;
+    while (true) {
+      await sleep(80, id);
+      if (mode !== "running") continue;
+      // fill free lanes with the next chunks
+      while (active.length < LANES && next < N) { const t = tiles[next++]; t.el.classList.add("hot"); active.push(t); }
+      if (!active.length) break;
+      let added = 0;
+      active.forEach((t) => {
+        const step = Math.min(CHUNK - t.got, .09 + Math.random() * .1);
+        t.got += step; added += step;
+        t.front.style.setProperty("--f", (t.got / CHUNK).toFixed(3));
+        if (t.got >= CHUNK - 1e-6) {
+          t.got = CHUNK; t.done = true;
+          t.el.classList.remove("hot");
+          t.el.classList.add("got");
+        }
+      });
+      active = active.filter((t) => !t.done);
+      recent.push(added); if (recent.length > 12) recent.shift();
+      const speed = recent.reduce((s, x) => s + x, 0) / (recent.length * .08);
+      paintStats(speed);
+
+      // the demo shows off the two tricks: losing the connection, and pausing
+      const p = gotMB() / TOTAL;
+      if (demoKind === 1 && demoStep === 0 && p > .36) { demoStep = 1; goOffline(id); }
+      if (demoKind === 2 && demoStep === 0 && p > .52) {
+        demoStep = 1; pause();
+        setTimeout(() => { if (id === runId && mode === "paused" && demoKind) resume(); }, 1500);
+      }
+    }
+    await finish(id);
+  }
+
+  function pause() {
+    if (mode !== "running") return;
+    setMode("paused");
+    paintStats(0);
+    statusEl.textContent = "Paused. " + gotMB().toFixed(1) + " MB kept.";
+  }
+  function resume() {
+    if (mode !== "paused" && mode !== "offline") return;
+    active.forEach((t) => t.el.classList.remove("lost"));
+    setMode("running");
+    statusEl.textContent = "Resumed from " + gotMB().toFixed(1) + " MB.";
+  }
+
+  // Lose the connection: the chunks in flight turn red but keep their bytes, then it reconnects by itself
+  async function goOffline(id) {
+    if (mode !== "running") return;
+    setMode("offline");
+    active.forEach((t) => t.el.classList.add("lost"));
+    statusEl.textContent = "Connection lost. Partial chunks are kept.";
+    const kept = gotMB().toFixed(1);
+    for (let s = 3; s > 0; s--) {
+      if (mode !== "offline") return;
+      stats.innerHTML = `<span class="warn">Offline</span> · ${kept} MB kept<br>Retrying in ${s} s…`;
+      try { await sleep(1000, id); } catch (e) { return; }
+    }
+    if (mode === "offline") {
+      stats.innerHTML = `<b>Back online</b> · resuming from ${kept} MB`;
+      resume();
+    }
+  }
+
+  // ---------- Finish: shimmer wave, gloss sweep and a ribbon ----------
+  async function finish(id) {
+    setMode("done");
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    pctEl.textContent = "100";
+    bar.style.setProperty("--p", 1);
+    stats.innerHTML = `<b>Saved to Downloads</b> · ${TOTAL} MB<br>Every chunk checked · ${secs} s`;
+    statusEl.textContent = "Download complete. Hunza-trip-4K.mp4 saved.";
+    wall.classList.add("done");
+    tiles.forEach((t) => play(t.el, [{ transform: "scale(1)" }, { transform: "scale(1.16)" }, { transform: "scale(1)" }], { duration: 520, delay: (t.c + t.r) * 45, easing: SPRING }));
+    play(gloss, [{ transform: "translateX(-120%)" }, { transform: "translateX(120%)" }], { duration: 1100, delay: 250, easing: "ease-in-out" });
+    const rib = document.createElement("div");
+    rib.className = "ribbon";
+    rib.innerHTML = '<svg viewBox="0 0 20 20"><path d="M4.5 10.5l3.8 3.8 7.2-8" /></svg>Saved to Downloads';
+    wall.appendChild(rib);
+    if (calm()) rib.style.transform = "translate(-50%,-50%) scale(1)";
+    else rib.animate([{ transform: "translate(-50%,-50%) scale(0) rotate(-8deg)" }, { transform: "translate(-50%,-50%) scale(1) rotate(0)" }], { duration: 600, delay: 450, easing: SPRING, fill: "forwards" });
+  }
+
+  // ---------- Reset: tiles flip back in a reverse wave ----------
+  async function reset(id) {
+    setMode("resetting");
+    const rib = wall.querySelector(".ribbon");
+    if (rib) await play(rib, [{ transform: "translate(-50%,-50%) scale(1)", opacity: 1 }, { transform: "translate(-50%,-50%) scale(.6)", opacity: 0 }], { duration: 240, easing: "ease-in" });
+    rib && rib.remove();
+    wall.classList.remove("done");
+    tiles.slice().reverse().forEach((t, i) => setTimeout(() => {
+      t.el.classList.remove("got", "hot", "lost");
+      t.front.style.setProperty("--f", 0);
+    }, calm() ? 0 : (COLS - 1 - t.c + ROWS - 1 - t.r) * 40));
+    tiles.forEach((t) => { t.got = 0; t.done = false; });
+    next = 0; active = [];
+    pctEl.textContent = "0";
+    bar.style.setProperty("--p", 0);
+    stats.textContent = "Ready. Pause any time; it carries on from the last byte.";
+    await sleep(calm() ? 50 : 1000, id);
+    setMode("idle");
+  }
+
+  // demoKind: 0 = the visitor's own run, 1 = demo with a lost connection, 2 = demo with a pause
+  let demoKind = 0;
+  async function start(kind) {
+    const id = ++runId;
+    demoKind = kind;
+    try {
+      await download(id);
+      if (demoKind) {
+        await sleep(2400, id);
+        if (!demoKind) return;                  // the visitor took over: keep the finished state
+        await reset(id);
+        scheduleDemo(1600);
+      }
+    } catch (e) { if (e !== STOP) throw e; }
+  }
+
+  // ---------- Buttons ----------
+  mainBtn.addEventListener("click", async () => {
+    if (mode === "idle") start(0);
+    else if (mode === "running") pause();
+    else if (mode === "paused") resume();
+    else if (mode === "done") { const id = ++runId; try { await reset(id); start(0); } catch (e) { if (e !== STOP) throw e; } }
+  });
+  netBtn.addEventListener("click", () => {
+    if (mode === "running") goOffline(runId);
+    else if (mode === "offline") { stats.innerHTML = "<b>Back online</b> · resuming"; resume(); }
+  });
+
+  // Idle: a soft glint wanders over the blank tiles so the card feels alive
+  setInterval(() => {
+    if (mode !== "idle" || calm()) return;
+    const t = tiles[Math.floor(Math.random() * N)];
+    t.el.classList.remove("idle-glint"); void t.el.offsetWidth; t.el.classList.add("idle-glint");
+  }, 260);
+
+  // ---------- Auto demo until the visitor takes over ----------
+  let demoOn = true, demoTimer = 0, demoCount = 0;
+  function scheduleDemo(ms) {
+    clearTimeout(demoTimer);
+    if (demoOn) demoTimer = setTimeout(() => { if (demoOn && mode === "idle") start(demoCount++ % 2 + 1); else scheduleDemo(1500); }, ms);
+  }
+  // The visitor takes over: a running demo simply becomes their download (no scripted pause or drop)
+  function takeOver(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false;
+    demoKind = 0;
+    clearTimeout(demoTimer);
+  }
+  ["pointerdown", "keydown"].forEach((t) => addEventListener(t, takeOver, true));
+  scheduleDemo(350);
+</script>
+</body>
+</html>

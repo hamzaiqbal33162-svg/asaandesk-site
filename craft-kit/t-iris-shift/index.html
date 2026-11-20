@@ -1,0 +1,509 @@
+<!doctype html>
+<!-- Chill & Craft · Iris Shift · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Iris Shift · Camera iris theme switch</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var dark = pick === "light" || pick === "dark" ? pick === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+  })();
+</script>
+<style>
+  /* ---------- Colours (the switch changes data-theme on <html>) ---------- */
+  :root {
+    --bg: #efe8dc;
+    --bg-glow: #fff7ea;
+    --mark: rgba(60, 48, 30, 0.35);
+    --card: #fffdf8;
+    --ink: #22201c;
+    --muted: #6f675c;
+    --line: rgba(60, 48, 30, 0.12);
+    --track-a: #f6f1e8;
+    --track-b: #e3d9c8;
+    --track-ink: #8b7f6c;
+    --accent: #e0702f;
+    --blade-a: #2b2d36;
+    --blade-b: #343742;
+    --blade-edge: rgba(255, 255, 255, 0.22);
+    --glow-1: #fffbe9;
+    --glow-2: #ffd27a;
+    --glow-3: #f0843c;
+    /* scene */
+    --sky-1: #8ccaf7;
+    --sky-2: #fff0d4;
+    --orb: #fff6dc;
+    --halo: rgba(255, 220, 140, 0.55);
+    --far: #a9b9d8;
+    --mid: #6e86b8;
+    --near: #3c5a8f;
+    --snow: #ffffff;
+    --lake-1: #63c2cf;
+    --lake-2: #2a86a2;
+    --star: 0;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #100f1a;
+    --bg-glow: #221d3d;
+    --mark: rgba(200, 190, 255, 0.35);
+    --card: #191729;
+    --ink: #f1eeff;
+    --muted: #a49fc4;
+    --line: rgba(200, 190, 255, 0.12);
+    --track-a: #1d1b31;
+    --track-b: #2a2747;
+    --track-ink: #9c95d6;
+    --accent: #a895ff;
+    --blade-a: #15141f;
+    --blade-b: #1d1b2b;
+    --blade-edge: rgba(190, 175, 255, 0.28);
+    --glow-1: #efe9ff;
+    --glow-2: #9b84ff;
+    --glow-3: #3a2a8a;
+    --sky-1: #0e0c26;
+    --sky-2: #3b2d6e;
+    --orb: #ebe8ff;
+    --halo: rgba(170, 150, 255, 0.35);
+    --far: #2f2c5c;
+    --mid: #24224a;
+    --near: #18173a;
+    --snow: #bdb8ee;
+    --lake-1: #262f63;
+    --lake-2: #12163a;
+    --star: 1;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  /* The theme wipe uses a View Transition: we animate the new view ourselves */
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+  ::view-transition-new(root) { clip-path: inset(50%); } /* hidden until the wipe starts, so no flash */
+
+  /* ---------- Stage with viewfinder corners ---------- */
+  .stage {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 28px 16px;
+    overflow: hidden;
+    background: radial-gradient(120% 90% at 50% 40%, var(--bg-glow), var(--bg) 70%);
+  }
+  .frame { position: relative; padding: 26px; width: min(540px, 100%); }
+  .corner { position: absolute; width: 26px; height: 26px; border: 2px solid var(--mark); animation: focus 3.2s ease-in-out infinite; }
+  .corner.tl { left: 0; top: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 6px; }
+  .corner.tr { right: 0; top: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 6px; }
+  .corner.bl { left: 0; bottom: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 6px; }
+  .corner.br { right: 0; bottom: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 6px; }
+  .corner.tl, .corner.br { --dx: 4px; }
+  .corner.tr, .corner.bl { --dx: -4px; }
+  @keyframes focus { 50% { transform: translate(var(--dx), calc(var(--dx) * (0.6))); opacity: 0.6; } }
+  .hud { position: absolute; top: 4px; left: 36px; right: 36px; display: flex; justify-content: space-between; font: 600 10.5px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 0.08em; color: var(--muted); }
+  .hud b { color: var(--accent); font-weight: 700; }
+
+  /* ---------- Card ---------- */
+  .card { border-radius: 22px; background: var(--card); box-shadow: 0 1px 0 var(--line), 0 34px 70px -40px rgba(20, 14, 40, 0.6); overflow: hidden; }
+  .photo { position: relative; display: block; width: 100%; height: auto; }
+  .photo svg { display: block; width: 100%; height: auto; }
+  .info { display: flex; align-items: center; justify-content: space-between; gap: 14px 18px; flex-wrap: wrap; padding: 16px 18px 18px; }
+  .info h1 { margin: 0; font-size: 1.12rem; letter-spacing: -0.01em; }
+  .readout { margin: 6px 0 0; display: flex; gap: 6px; align-items: center; color: var(--muted); font: 600 0.78rem/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .readout .dot { opacity: 0.5; }
+  .roll { position: relative; display: inline-block; overflow: hidden; height: 1.2em; vertical-align: bottom; }
+  .roll > span { display: block; white-space: nowrap; }
+  #mode { color: var(--accent); }
+
+  /* ---------- The iris switch ---------- */
+  .iris {
+    position: relative;
+    width: 172px;
+    height: 78px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--track-a), var(--track-b));
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.16), inset 0 -1px 0 rgba(255, 255, 255, 0.4), 0 1px 0 var(--line);
+    cursor: pointer;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    flex: none;
+  }
+  .iris:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+  /* aperture ring scale that slides slower than the knob */
+  .scale { position: absolute; left: 0; top: 50%; display: flex; gap: 14px; align-items: center; padding-left: 86px; transform-origin: left center; white-space: nowrap; font: 700 10px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--track-ink); margin-top: -12px; pointer-events: none; }
+  .scale i { font-style: normal; display: grid; justify-items: center; gap: 6px; }
+  .scale i::after { content: ""; width: 2px; height: 7px; border-radius: 2px; background: currentColor; opacity: 0.6; }
+  .scale i.hot { color: var(--accent); }
+  .knob { position: absolute; left: 7px; top: 7px; width: 64px; height: 64px; border-radius: 50%; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.28)); will-change: transform; pointer-events: none; }
+  .knob svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .blade.a { fill: var(--blade-a); }
+  .blade.b { fill: var(--blade-b); }
+  .edge { stroke: var(--blade-edge); stroke-width: 0.7; fill: none; }
+  .flash { position: absolute; left: 7px; top: 7px; width: 64px; height: 64px; border-radius: 50%; border: 3px solid var(--glow-2); opacity: 0; pointer-events: none; }
+
+  /* scene parts */
+  .stars circle { fill: #fff; opacity: var(--star); transition: opacity 0.6s; }
+  .ripple { stroke: rgba(255, 255, 255, 0.55); stroke-width: 1.4; stroke-linecap: round; animation: shimmer 4s ease-in-out infinite; }
+  .ripple:nth-child(2) { animation-delay: -1.3s; }
+  .ripple:nth-child(3) { animation-delay: -2.6s; }
+  @keyframes shimmer { 50% { transform: translateX(10px); opacity: 0.35; } }
+  .boat { animation: bob 3.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+  @keyframes bob { 50% { transform: translateY(1.5px) rotate(-3deg); } }
+  .bite { transition: transform 0.9s cubic-bezier(0.3, 1.4, 0.5, 1); transform: translate(34px, -16px); }
+  :root[data-theme="dark"] .bite { transform: translate(9px, -6px); }
+  .ghost { opacity: 0; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 420px) {
+    .frame { padding: 22px 12px; }
+    .corner { width: 18px; height: 18px; }
+    .hud { left: 26px; right: 26px; }
+  }
+  /* roomy screens (full-screen view): draw the piece larger */
+  @media (min-width: 1100px) and (min-height: 780px) { .frame { scale: 1.3; } }
+  @media (prefers-reduced-motion: reduce) {
+    .corner, .ripple, .boat { animation: none; }
+    .bite, .stars circle { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <div class="frame">
+      <span class="corner tl" aria-hidden="true"></span><span class="corner tr" aria-hidden="true"></span>
+      <span class="corner bl" aria-hidden="true"></span><span class="corner br" aria-hidden="true"></span>
+      <div class="hud" aria-hidden="true"><span>AF·S <b id="iso">ISO 100</b></span><span id="frames">36 left</span></div>
+
+      <article class="card">
+        <!-- Drawn scene: a turquoise lake between mountains. Colours come from the theme variables. -->
+        <div class="photo" id="photo">
+          <svg viewBox="0 0 400 210" role="img" aria-label="Drawing of a mountain lake that changes from day to night with the theme">
+            <defs>
+              <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" style="stop-color: var(--sky-1)" />
+                <stop offset="1" style="stop-color: var(--sky-2)" />
+              </linearGradient>
+              <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" style="stop-color: var(--lake-1)" />
+                <stop offset="1" style="stop-color: var(--lake-2)" />
+              </linearGradient>
+              <radialGradient id="halo"><stop offset="0" style="stop-color: var(--halo)" /><stop offset="1" stop-color="#fff" stop-opacity="0" /></radialGradient>
+              <mask id="crescent"><circle cx="292" cy="58" r="20" fill="#fff" /><circle class="bite" cx="292" cy="58" r="18" fill="#000" /></mask>
+            </defs>
+            <rect width="400" height="210" fill="url(#sky)" />
+            <g class="stars" id="stars">
+              <circle cx="40" cy="30" r="1.4" /><circle cx="88" cy="58" r="1" /><circle cx="130" cy="22" r="1.6" /><circle cx="176" cy="48" r="1" />
+              <circle cx="214" cy="18" r="1.3" /><circle cx="246" cy="64" r="0.9" /><circle cx="340" cy="26" r="1.5" /><circle cx="372" cy="70" r="1" />
+            </g>
+            <circle cx="292" cy="58" r="44" fill="url(#halo)" />
+            <circle cx="292" cy="58" r="20" style="fill: var(--orb)" mask="url(#crescent)" />
+            <path d="M0 132 L52 84 L86 108 L134 62 L178 104 L214 80 L262 118 L310 76 L356 110 L400 88 V150 H0 Z" style="fill: var(--far)" />
+            <path d="M118 78 L134 62 L150 80 L141 76 L134 83 L126 76 Z M300 86 L310 76 L322 90 L314 86 L308 92 Z" style="fill: var(--snow)" opacity="0.85" />
+            <path d="M0 150 L40 112 L72 132 L118 96 L160 136 L196 116 L238 146 L282 108 L330 140 L368 120 L400 136 V160 H0 Z" style="fill: var(--mid)" />
+            <path d="M104 108 L118 96 L130 110 L121 106 L114 113 Z" style="fill: var(--snow)" opacity="0.7" />
+            <path d="M0 160 Q60 140 120 156 T240 152 T400 156 V168 H0 Z" style="fill: var(--near)" />
+            <rect y="160" width="400" height="50" fill="url(#lake)" />
+            <g><line class="ripple" x1="60" y1="176" x2="120" y2="176" /><line class="ripple" x1="200" y1="186" x2="270" y2="186" /><line class="ripple" x1="300" y1="198" x2="350" y2="198" /></g>
+            <g class="boat"><path d="M150 179 h26 l-4 6 h-18 z" style="fill: var(--near)" /><path d="M162 179 v-14 l9 12 z" style="fill: var(--snow)" opacity="0.9" /></g>
+            <!-- lens flare ghosts, shown for a moment when daylight returns -->
+            <g id="flare" fill="#fff">
+              <polygon class="ghost" points="0,-9 8,-4.5 8,4.5 0,9 -8,4.5 -8,-4.5" transform="translate(250 96)" />
+              <polygon class="ghost" points="0,-6 5,-3 5,3 0,6 -5,3 -5,-3" transform="translate(212 130)" />
+              <polygon class="ghost" points="0,-13 11,-6.5 11,6.5 0,13 -11,6.5 -11,-6.5" transform="translate(170 166)" />
+            </g>
+          </svg>
+        </div>
+        <div class="info">
+          <div>
+            <h1>Attabad Lake, Hunza</h1>
+            <p class="readout" aria-hidden="true">
+              <span class="roll" id="mode"><span>Daylight</span></span><span class="dot">·</span>
+              <span class="roll" id="fstop"><span>f/2.8</span></span><span class="dot">·</span>
+              <span class="roll" id="shutter"><span>1/500 s</span></span>
+            </p>
+          </div>
+          <button class="iris" id="sw" type="button" role="switch" aria-checked="false" aria-label="Dark mode">
+            <span class="scale" id="scale" aria-hidden="true"><i class="hot">1.8</i><i>2.8</i><i>4</i><i>5.6</i><i>8</i><i>11</i><i class="hot">16</i></span>
+            <span class="flash" id="flash" aria-hidden="true"></span>
+            <span class="knob" id="knob" aria-hidden="true">
+              <svg viewBox="-32 -32 64 64">
+                <defs>
+                  <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#f4f5f7" /><stop offset="0.35" stop-color="#9aa1ab" /><stop offset="0.55" stop-color="#e6e8ec" /><stop offset="1" stop-color="#6d737d" />
+                  </linearGradient>
+                  <radialGradient id="glow" cx="0.45" cy="0.42" r="0.6">
+                    <stop offset="0" style="stop-color: var(--glow-1)" /><stop offset="0.45" style="stop-color: var(--glow-2)" /><stop offset="1" style="stop-color: var(--glow-3)" />
+                  </radialGradient>
+                  <clipPath id="lens"><circle r="24.5" /></clipPath>
+                </defs>
+                <circle r="31.5" fill="url(#metal)" />
+                <circle r="29" fill="none" stroke="#1d1f26" stroke-opacity="0.35" stroke-width="3" stroke-dasharray="1 1.7" />
+                <circle r="26.3" fill="#0b0b12" />
+                <circle r="24.5" fill="url(#glow)" />
+                <g id="blades" clip-path="url(#lens)"></g>
+                <circle r="24.5" fill="none" stroke="#000" stroke-opacity="0.45" stroke-width="1.2" />
+                <g id="glare"><path d="M-17 -10 A20 20 0 0 1 -4 -19.5" fill="none" stroke="#fff" stroke-opacity="0.55" stroke-width="2.4" stroke-linecap="round" /><circle cx="12" cy="13" r="1.8" fill="#fff" opacity="0.45" /></g>
+              </svg>
+            </span>
+          </button>
+        </div>
+      </article>
+    </div>
+    <p class="sr" id="status" role="status" aria-live="polite"></p>
+  </main>
+
+<script>
+  // Iris Shift: a theme switch built like a camera lens.
+  // Toggle = squash (anticipation) → knob springs across while the iris closes or opens (slower) and the
+  // aperture scale slides (slower still) → shutter flash → the new theme spreads out in a turning heptagon
+  // → the photo "develops", stars twinkle in or a lens flare passes → idle breathing.
+  (function () {
+    "use strict";
+    var $ = function (id) { return document.getElementById(id); };
+    var root = document.documentElement;
+    var sw = $("sw"), knob = $("knob"), scale = $("scale"), bladesG = $("blades"), glare = $("glare");
+    var flash = $("flash"), photo = $("photo"), status = $("status"), iso = $("iso"), frames = $("frames");
+    var calm = matchMedia("(prefers-reduced-motion: reduce)");
+    var NS = "http://www.w3.org/2000/svg";
+    var N = 7; // seven aperture blades
+    var run = 0, hover = false, userTouched = false, shotsLeft = 36;
+
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    function isDark() { return root.dataset.theme === "dark"; }
+    function checked() { return sw.getAttribute("aria-checked") === "true"; }
+
+    // ---------- Aperture blades ----------
+    // The opening is a regular heptagon. Each blade is the wedge between one side's extension and the next,
+    // which gives the classic pinwheel. Rotating the heptagon while it shrinks makes the blades swirl.
+    var blades = [], edges = [];
+    for (var i = 0; i < N; i++) {
+      var b = document.createElementNS(NS, "path");
+      b.setAttribute("class", "blade " + (i % 2 ? "b" : "a"));
+      bladesG.appendChild(b);
+      blades.push(b);
+    }
+    for (i = 0; i < N; i++) {
+      var e = document.createElementNS(NS, "path");
+      e.setAttribute("class", "edge");
+      bladesG.appendChild(e);
+      edges.push(e);
+    }
+    function drawIris(open) {
+      var a = 3.5 + open * 22; // radius of the opening
+      var rot = (1 - open) * 1.5 - 0.4;
+      var V = [], k;
+      for (k = 0; k < N; k++) {
+        var ang = rot + (k * 2 * Math.PI) / N;
+        V.push([a * Math.cos(ang), a * Math.sin(ang)]);
+      }
+      for (k = 0; k < N; k++) {
+        var p = V[(k + N - 1) % N], c = V[k], n = V[(k + 1) % N];
+        var ex = n[0] - c[0], ey = n[1] - c[1], el = Math.hypot(ex, ey) || 1;
+        var px = c[0] - p[0], py = c[1] - p[1], pl = Math.hypot(px, py) || 1;
+        var L = 90;
+        var f1 = [n[0] + (ex / el) * L, n[1] + (ey / el) * L];
+        var f2 = [c[0] + (px / pl) * L, c[1] + (py / pl) * L];
+        blades[k].setAttribute("d", "M" + c[0].toFixed(2) + " " + c[1].toFixed(2) + "L" + f1[0].toFixed(2) + " " + f1[1].toFixed(2) + "L" + f2[0].toFixed(2) + " " + f2[1].toFixed(2) + "Z");
+        edges[k].setAttribute("d", "M" + c[0].toFixed(2) + " " + c[1].toFixed(2) + "L" + f1[0].toFixed(2) + " " + f1[1].toFixed(2));
+      }
+    }
+
+    // ---------- Physics: three springs that move at different speeds ----------
+    // x = knob (fast, overshoots), o = iris opening (slower), s = aperture scale (slowest), q = squash
+    var S = { x: 0, vx: 0, tx: 0, o: 1, vo: 0, to: 1, s: 0, vs: 0, q: 0, vq: 0, tq: 0 };
+    var travel = 94, last = performance.now();
+    function measure() { travel = sw.clientWidth - knob.offsetWidth - 14; }
+    function targets() {
+      var d = sw.getAttribute("aria-checked") === "true";
+      var lean = hover ? 0.08 : 0;
+      S.tx = d ? 1 - lean : lean;
+      S.to = d ? 0.1 + lean * 1.6 : 0.74 - lean * 1.6;
+    }
+    function step(now) {
+      var dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      if (calm.matches) {
+        S.x = S.tx; S.o = S.to; S.s = S.tx; S.q = 0; S.vx = S.vo = S.vs = S.vq = 0;
+      } else {
+        S.vx += (-190 * (S.x - S.tx) - 15 * S.vx) * dt; S.x += S.vx * dt;
+        S.vo += (-70 * (S.o - S.to) - 11 * S.vo) * dt; S.o += S.vo * dt;
+        S.vs += (-38 * (S.s - S.x) - 9 * S.vs) * dt; S.s += S.vs * dt;
+        S.vq += (-260 * (S.q - S.tq) - 13 * S.vq) * dt; S.q += S.vq * dt;
+      }
+      var breathe = calm.matches ? 0 : Math.sin(now / 820) * 0.03;
+      var stretch = Math.min(0.2, Math.abs(S.vx) * 0.045);
+      var sx = 1 + stretch - S.q * 0.16, sy = 1 - stretch * 0.6 + S.q * 0.1;
+      knob.style.transform = "translateX(" + (S.x * travel).toFixed(2) + "px) scale(" + sx.toFixed(3) + "," + sy.toFixed(3) + ")";
+      flash.style.transform = "translateX(" + (S.x * travel).toFixed(2) + "px)";
+      scale.style.transform = "translate(" + (-S.s * 150).toFixed(2) + "px, 0)";
+      drawIris(Math.max(0.02, Math.min(1.04, S.o + breathe)));
+      glare.setAttribute("transform", "rotate(" + (S.x * 70 - 10 + S.vx * 3).toFixed(1) + ")");
+      requestAnimationFrame(step);
+    }
+
+    // ---------- Text that rolls up or down ----------
+    function roll(box, text, up, delay) {
+      // a quick second change: finish the half-done roll first and keep only the newest text
+      while (box.children.length > 1) box.removeChild(box.firstElementChild);
+      var old = box.firstElementChild;
+      old.getAnimations().forEach(function (an) { an.cancel(); });
+      box.getAnimations().forEach(function (an) { an.cancel(); });
+      old.style.position = "";
+      box.style.width = "";
+      if (old.textContent === text) return;
+      var next = document.createElement("span");
+      next.textContent = text;
+      if (calm.matches) { box.replaceChild(next, old); return; }
+      box.style.width = Math.max(old.offsetWidth, 10) + "px";
+      next.style.position = "absolute"; next.style.left = "0"; next.style.top = "0";
+      box.appendChild(next);
+      var d = up ? 1 : -1;
+      var w = next.offsetWidth;
+      box.animate([{ width: old.offsetWidth + "px" }, { width: w + "px" }], { duration: 380, delay: delay, easing: "cubic-bezier(0.3, 1.3, 0.5, 1)", fill: "forwards" });
+      old.animate([{ transform: "translateY(0)", opacity: 1 }, { transform: "translateY(" + -110 * d + "%)", opacity: 0 }], { duration: 220, delay: delay, easing: "ease-in", fill: "forwards" });
+      next.animate([{ transform: "translateY(" + 110 * d + "%)" }, { transform: "translateY(-12%)", offset: 0.7 }, { transform: "translateY(0)" }], { duration: 420, delay: delay, easing: "cubic-bezier(0.2, 0.8, 0.3, 1)", fill: "backwards" })
+        .finished.then(function () {
+          if (old.parentNode) old.remove();
+          next.style.position = "";
+          box.getAnimations().forEach(function (an) { an.cancel(); });
+          box.style.width = "";
+        }).catch(function () {});
+    }
+    function readout(dark) {
+      roll($("mode"), dark ? "Night" : "Daylight", dark, 0);
+      roll($("fstop"), dark ? "f/16" : "f/2.8", dark, 70);
+      roll($("shutter"), dark ? "8 s" : "1/500 s", dark, 140);
+      iso.textContent = dark ? "ISO 3200" : "ISO 100";
+    }
+
+    // ---------- Theme wipe: a turning heptagon that grows from the knob ----------
+    function hepta(cx, cy, r, rot) {
+      var pts = [];
+      for (var k = 0; k < N; k++) {
+        var a = rot + (k * 2 * Math.PI) / N - Math.PI / 2;
+        pts.push((cx + r * Math.cos(a)).toFixed(1) + "px " + (cy + r * Math.sin(a)).toFixed(1) + "px");
+      }
+      return "polygon(" + pts.join(",") + ")";
+    }
+    function applyTheme(dark) { root.dataset.theme = dark ? "dark" : "light"; }
+    function wipeTheme(dark, id) {
+      if (!document.startViewTransition || calm.matches) { applyTheme(dark); return Promise.resolve(); }
+      var r = knob.getBoundingClientRect();
+      var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      var far = Math.hypot(Math.max(cx, innerWidth - cx), Math.max(cy, innerHeight - cy)) * 1.16;
+      var vt = document.startViewTransition(function () { applyTheme(dark); });
+      return vt.ready.then(function () {
+        var kf = [];
+        for (var k = 0; k <= 16; k++) {
+          var t = k / 16, ease = 1 - Math.pow(1 - t, 2.6);
+          kf.push({ clipPath: hepta(cx, cy, 4 + ease * far, t * 1.8) });
+        }
+        return root.animate(kf, { duration: 880, easing: "linear", pseudoElement: "::view-transition-new(root)" }).finished;
+      }).catch(function () { if (id === run) applyTheme(dark); });
+    }
+
+    // ---------- Finishing touches ----------
+    function develop() {
+      photo.animate([
+        { filter: "brightness(1.7) saturate(0.2) blur(3px)" },
+        { filter: "brightness(1.15) saturate(0.8) blur(0.6px)", offset: 0.45 },
+        { filter: "brightness(1) saturate(1) blur(0)" }
+      ], { duration: 900, easing: "ease-out" });
+    }
+    function twinkle() {
+      [].forEach.call($("stars").children, function (s, k) {
+        s.animate([{ transform: "scale(0)", opacity: 0 }, { transform: "scale(2.2)", opacity: 1, offset: 0.5 }, { transform: "scale(1)", opacity: 1 }], { duration: 520, delay: 160 + k * 70, easing: "ease-out", fill: "backwards" });
+        s.style.transformBox = "fill-box"; s.style.transformOrigin = "center";
+      });
+    }
+    function flare() {
+      [].forEach.call($("flare").children, function (g, k) {
+        g.animate([{ opacity: 0 }, { opacity: 0.55 - k * 0.1, offset: 0.35 }, { opacity: 0 }], { duration: 1100, delay: 120 + k * 90, easing: "ease-in-out" });
+      });
+    }
+    function shutterFlash() {
+      flash.animate([{ opacity: 0.9, transform: flash.style.transform + " scale(0.8)" }, { opacity: 0, transform: flash.style.transform + " scale(1.9)" }], { duration: 520, easing: "cubic-bezier(0.2, 0.8, 0.3, 1)" });
+    }
+
+    // ---------- The toggle ----------
+    async function toggle(dark) {
+      var id = ++run;
+      sw.setAttribute("aria-checked", String(dark));
+      status.textContent = dark ? "Dark mode on." : "Light mode on.";
+      shotsLeft = shotsLeft > 1 ? shotsLeft - 1 : 36;
+      frames.textContent = shotsLeft + " left";
+      if (calm.matches) { targets(); applyTheme(dark); readout(dark); return; }
+      // 1. Anticipation: the knob squashes and the iris flinches the other way
+      S.tq = 1;
+      S.to = dark ? 0.86 : 0.02;
+      await wait(130);
+      if (id !== run) return;
+      // 2. Main move: knob springs across, the iris follows more slowly, the scale slides slowest
+      S.tq = 0;
+      targets();
+      readout(dark);
+      await wait(380);
+      if (id !== run) return;
+      // 3. Shutter: flash ring, then the theme spreads out of the lens
+      shutterFlash();
+      await wipeTheme(dark, id);
+      if (id !== run) return;
+      // 4. Finish: the photo develops, stars or a lens flare
+      develop();
+      if (dark) twinkle(); else flare();
+    }
+
+    sw.addEventListener("click", function () { userTouched = true; toggle(!checked()); });
+    sw.addEventListener("pointerenter", function (e) { if (e.isTrusted) { hover = true; targets(); } });
+    sw.addEventListener("pointerleave", function () { hover = false; targets(); });
+    sw.addEventListener("focus", function () { if (sw.matches(":focus-visible")) { hover = true; targets(); } });
+    sw.addEventListener("blur", function () { hover = false; targets(); });
+
+    // Follow the system setting until someone uses the switch (a ?theme= in the URL also stays put)
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    var pinned = /[?&]theme=(light|dark)/.test(location.search);
+    if (mq.addEventListener) mq.addEventListener("change", function () { if (!pinned && !userTouched && mq.matches !== isDark()) toggle(mq.matches); });
+
+    // ---------- Start ----------
+    sw.setAttribute("aria-checked", String(isDark()));
+    targets();
+    S.x = S.tx; S.o = S.to; S.s = S.x;
+    readout(isDark());
+    measure();
+    addEventListener("resize", measure);
+    requestAnimationFrame(step);
+
+    // ---------- Auto demo: a peek, then a full toggle every few seconds, until a real input ----------
+    var demoOn = !calm.matches, timers = [];
+    function later(fn, ms) { timers.push(setTimeout(function () { if (demoOn) fn(); }, ms)); }
+    function stopDemo(e) {
+      if (!e.isTrusted || !demoOn) return;
+      demoOn = false;
+      timers.forEach(clearTimeout);
+      if (hover) { hover = false; targets(); }
+    }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, stopDemo, { capture: true, passive: true }); });
+    function demo() {
+      hover = true; targets();               // peek: the knob leans, the iris half turns
+      later(function () { hover = false; targets(); }, 900);
+      later(function () { toggle(!checked()); }, 1500);
+      later(function () { hover = true; targets(); }, 4300);
+      later(function () { hover = false; targets(); }, 4900);
+      later(function () { toggle(!checked()); }, 5400);
+      later(demo, 8800);
+    }
+    if (demoOn) later(demo, 380);
+  })();
+</script>
+</body>
+</html>

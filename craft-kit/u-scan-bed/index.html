@@ -1,0 +1,549 @@
+<!doctype html>
+<!-- Chill & Craft · Scan Bed · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scan Bed · file drop zone</title>
+<script>
+  // Theme: ?theme=light|dark overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #eef2f8;
+    --bg2: #cdd7e6;
+    --panel: rgba(255, 255, 255, .86);
+    --edge: #d3dcea;
+    --bed: #0e1829;
+    --bed2: #15233a;
+    --grid: rgba(120, 255, 170, .07);
+    --laser: #3dff8f;
+    --laser2: #b6ff3c;
+    --ink: #13203a;
+    --soft: #5a6a84;
+    --row: #f3f6fb;
+    --ok: #12a150;
+    --focus: #f97316;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg1: #0c1424;
+      --bg2: #03060c;
+      --panel: rgba(13, 21, 34, .9);
+      --edge: #1d2b40;
+      --bed: #050b15;
+      --bed2: #0b1626;
+      --ink: #e3ebf8;
+      --soft: #8d9cb5;
+      --row: #111d2f;
+      --ok: #3ddc84;
+      --focus: #fdba74;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #0c1424;
+    --bg2: #03060c;
+    --panel: rgba(13, 21, 34, .9);
+    --edge: #1d2b40;
+    --bed: #050b15;
+    --bed2: #0b1626;
+    --ink: #e3ebf8;
+    --soft: #8d9cb5;
+    --row: #111d2f;
+    --ok: #3ddc84;
+    --focus: #fdba74;
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  body, .stage { grid-template-columns: minmax(0, 1fr); } /* fixed-width cards never widen the page */
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    color: var(--ink);
+    background: radial-gradient(110% 90% at 30% 10%, var(--bg1), var(--bg2) 90%);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .stage { width: 100%; padding: 24px 16px; display: grid; place-items: center; }
+  .panel {
+    width: 700px;
+    max-width: 100%;
+    padding: 18px;
+    border-radius: 26px;
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    box-shadow: 0 30px 60px -36px rgba(10, 25, 50, .7);
+    backdrop-filter: blur(8px);
+  }
+  .head { display: flex; align-items: center; gap: 10px; margin: 0 4px 14px; font-size: 12px; font-weight: 800; letter-spacing: .14em; color: var(--soft); }
+  .led { width: 9px; height: 9px; border-radius: 50%; background: #64748b; box-shadow: 0 0 0 3px rgba(100, 116, 139, .18); transition: background .3s, box-shadow .3s; }
+  .led.busy { background: var(--laser); box-shadow: 0 0 10px var(--laser); animation: blink .6s steps(2) infinite; }
+  .led.ok { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+  .head .state { margin-left: auto; letter-spacing: .04em; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .grid2 { display: grid; grid-template-columns: 310px 1fr; gap: 18px; }
+
+  /* ---------- The bed (drop zone) ---------- */
+  .bed {
+    position: relative;
+    height: 300px;
+    border-radius: 18px;
+    overflow: hidden;
+    isolation: isolate;
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 22px 22px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 22px 22px,
+      radial-gradient(90% 80% at 50% 40%, var(--bed2), var(--bed));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06), inset 0 20px 40px rgba(0, 0, 0, .35);
+    transition: box-shadow .3s;
+  }
+  .bed[data-drag="on"] { box-shadow: inset 0 0 0 2px var(--laser), inset 0 0 40px rgba(61, 255, 143, .25); }
+  .corner { position: absolute; width: 26px; height: 26px; border: 3px solid var(--laser); opacity: .7; transition: transform .5s var(--spring), opacity .3s; filter: drop-shadow(0 0 4px rgba(61, 255, 143, .6)); }
+  .corner.tl { left: 14px; top: 14px; border-right: 0; border-bottom: 0; border-radius: 8px 0 0 0; }
+  .corner.tr { right: 14px; top: 14px; border-left: 0; border-bottom: 0; border-radius: 0 8px 0 0; }
+  .corner.bl { left: 14px; bottom: 14px; border-right: 0; border-top: 0; border-radius: 0 0 0 8px; }
+  .corner.br { right: 14px; bottom: 14px; border-left: 0; border-top: 0; border-radius: 0 0 8px 0; }
+  .bed:not([data-state="idle"]) .corner, .bed[data-drag="on"] .corner { opacity: 1; }
+  .bed:not([data-state="idle"]) .tl, .bed[data-drag="on"] .tl { transform: translate(34px, 26px); }
+  .bed:not([data-state="idle"]) .tr, .bed[data-drag="on"] .tr { transform: translate(-34px, 26px); }
+  .bed:not([data-state="idle"]) .bl, .bed[data-drag="on"] .bl { transform: translate(34px, -26px); }
+  .bed:not([data-state="idle"]) .br, .bed[data-drag="on"] .br { transform: translate(-34px, -26px); }
+  .bed[data-state="idle"] .corner { animation: breathe 2.8s ease-in-out infinite; }
+
+  .prompt { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #dbe7f7; text-align: center; padding: 20px; transition: opacity .3s, transform .4s var(--spring); }
+  .bed:not([data-state="idle"]) .prompt { opacity: 0; transform: scale(.94); pointer-events: none; }
+  .prompt svg { width: 44px; height: 44px; fill: none; stroke: var(--laser); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; animation: bob 2.4s ease-in-out infinite; }
+  .prompt strong { font-size: 17px; }
+  .prompt small { font-size: 12.5px; color: #8fa3bf; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .btn {
+    padding: 9px 15px;
+    border-radius: 12px;
+    border: 1px solid rgba(61, 255, 143, .5);
+    background: rgba(61, 255, 143, .12);
+    color: #d9ffe9;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .2s, transform .3s var(--spring);
+  }
+  .btn:hover { background: rgba(61, 255, 143, .22); transform: translateY(-1px); }
+  .btn:focus-visible, .act:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .btn.ghost { border-color: rgba(255, 255, 255, .2); background: transparent; color: #b8c6da; }
+
+  /* the file on the glass */
+  .card {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 150px;
+    height: 186px;
+    margin: -93px 0 0 -75px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fbfcff;
+    box-shadow: 0 18px 30px -14px rgba(0, 0, 0, .8);
+    opacity: 0;
+    transform: translateY(-30px) scale(1.12);
+  }
+  .card.on { opacity: 1; transform: none; transition: transform .6s var(--spring), opacity .25s; }
+  .card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card .tag { position: absolute; left: 10px; top: 10px; padding: 3px 7px; border-radius: 5px; background: #2563eb; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .06em; }
+  .card pre { margin: 0; padding: 36px 10px 10px; font: 600 8.6px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #33415c; white-space: pre; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, #000 78%, transparent); mask-image: linear-gradient(90deg, #000 78%, transparent); }
+  .scanned { position: absolute; left: 0; right: 0; top: 0; height: 100%; transform-origin: top; transform: scaleY(0); background: linear-gradient(180deg, rgba(61, 255, 143, 0), rgba(61, 255, 143, .1) 70%, rgba(61, 255, 143, .26)); mix-blend-mode: screen; pointer-events: none; }
+  .laser { position: absolute; left: 6%; right: 6%; top: 0; height: 3px; border-radius: 3px; background: linear-gradient(90deg, transparent, var(--laser2), var(--laser), var(--laser2), transparent); box-shadow: 0 0 14px 3px rgba(61, 255, 143, .65), 0 0 40px 8px rgba(61, 255, 143, .25); opacity: 0; z-index: 3; }
+  .stamp {
+    position: absolute;
+    right: 34px;
+    bottom: 44px;
+    z-index: 4;
+    padding: 6px 12px;
+    border: 3px solid var(--ok);
+    border-radius: 10px;
+    color: var(--ok);
+    background: rgba(5, 20, 12, .82);
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: .14em;
+    transform: rotate(-12deg) scale(0);
+  }
+  .bar { position: absolute; left: 18px; right: 18px; bottom: 14px; height: 6px; border-radius: 6px; background: rgba(255, 255, 255, .1); overflow: hidden; opacity: 0; transition: opacity .3s; z-index: 3; }
+  .bar i { display: block; height: 100%; width: 100%; transform-origin: left; transform: scaleX(var(--p, 0)); background: linear-gradient(90deg, var(--laser), var(--laser2)); transition: transform .2s linear; }
+  .bed[data-state="upload"] .bar, .bed[data-state="done"] .bar { opacity: 1; }
+  .hex { position: absolute; z-index: 3; font: 700 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--laser); text-shadow: 0 0 6px rgba(61, 255, 143, .8); pointer-events: none; }
+
+  /* ---------- Read-out ---------- */
+  .facts { margin: 0; display: grid; gap: 7px; align-content: start; }
+  .fact { display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: baseline; padding: 9px 12px; border-radius: 12px; background: var(--row); opacity: .38; transition: opacity .3s, background .4s, box-shadow .4s; }
+  .fact.on { opacity: 1; }
+  .fact.ok { box-shadow: inset 0 0 0 1.5px var(--ok); }
+  .fact dt { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--soft); }
+  .fact dd { margin: 0; min-width: 0; font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; min-height: 1.3em; }
+  .fact.mono dd { font: 600 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .02em; }
+  .fact dd .yes { color: var(--ok); font-family: system-ui, sans-serif; font-weight: 800; }
+  .acts { display: flex; gap: 8px; margin-top: 4px; }
+  .act { flex: 1; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--edge); background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer; transition: background .2s, transform .3s var(--spring); }
+  .act.main { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .act:hover:not(:disabled) { transform: translateY(-1px); }
+  .act:disabled { opacity: .45; cursor: not-allowed; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  @keyframes blink { 50% { opacity: .35; } }
+  @keyframes breathe { 50% { opacity: .35; } }
+  @keyframes bob { 50% { transform: translateY(-5px); } }
+
+  @media (max-width: 700px) {
+    .grid2 { grid-template-columns: 1fr; }
+    .bed { height: 270px; }
+    .fact { grid-template-columns: 82px 1fr; }
+  }
+
+  /* Calm mode: same steps, no big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    .laser { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="panel" aria-labelledby="h">
+    <div class="head"><span class="led" id="led"></span><span id="h">SCAN BED</span><span class="state" id="stateTxt">Ready</span></div>
+    <div class="grid2">
+      <div class="bed" id="bed" data-state="idle">
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+        <div class="prompt" id="prompt">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M14 6h14l10 10v26H14z" /><path d="M28 6v10h10" /><path d="M8 28h32" /><path d="M20 22h12M20 34h8" /></svg>
+          <strong>Drop a file to scan</strong>
+          <small>We read it right here in your browser. Nothing leaves this page.</small>
+          <div class="btns">
+            <button class="btn" type="button" id="choose">Choose a file</button>
+            <button class="btn ghost" type="button" id="sample">Try a sample</button>
+          </div>
+        </div>
+        <div class="card" id="card" aria-hidden="true"></div>
+        <div class="scanned" id="scanned"></div>
+        <div class="laser" id="laser"></div>
+        <div class="stamp" id="stamp" aria-hidden="true">MATCH</div>
+        <div class="bar" aria-hidden="true"><i id="barFill"></i></div>
+      </div>
+
+      <div>
+        <dl class="facts" id="facts">
+          <div class="fact" data-k="name"><dt>Name</dt><dd>—</dd></div>
+          <div class="fact" data-k="type"><dt>Type</dt><dd>—</dd></div>
+          <div class="fact" data-k="size"><dt>Size</dt><dd>—</dd></div>
+          <div class="fact" data-k="date"><dt>Modified</dt><dd>—</dd></div>
+          <div class="fact" data-k="shape"><dt>Inside</dt><dd>—</dd></div>
+          <div class="fact mono" data-k="hash"><dt id="algo">SHA-256</dt><dd>—</dd></div>
+        </dl>
+        <div class="acts">
+          <button class="act main" type="button" id="copy" disabled>Copy fingerprint</button>
+          <button class="act" type="button" id="again" disabled>Scan another</button>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="picker" hidden>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+  // ---------- Scan Bed: reads a real file in the browser, fingerprints it and "uploads" it ----------
+  const $ = (s) => document.querySelector(s);
+  const bed = $("#bed"), card = $("#card"), laser = $("#laser"), scanned = $("#scanned"), stamp = $("#stamp");
+  const led = $("#led"), stateTxt = $("#stateTxt"), statusEl = $("#status"), barFill = $("#barFill");
+  const picker = $("#picker"), copyBtn = $("#copy"), againBtn = $("#again");
+  const rows = Object.fromEntries([...document.querySelectorAll(".fact")].map((r) => [r.dataset.k, r]));
+  const MB = 1024 * 1024;
+  const SPRING = "cubic-bezier(.34, 1.56, .64, 1)";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+
+  // ---------- Run control ----------
+  const STOP = new Error("stopped");
+  let runId = 0, state = "idle", lastHash = "", objectUrl = "";
+  const sleep = (ms, id) => new Promise((res, rej) => setTimeout(() => (id === runId ? res() : rej(STOP)), ms));
+  const play = (el, frames, opts) => (calm() || !el.animate ? Promise.resolve() : el.animate(frames, opts).finished.catch(() => {}));
+  const setState = (s, words) => { state = s; bed.dataset.state = s; if (words) stateTxt.textContent = words; };
+  const bytes = (b) => (b >= MB ? (b / MB).toFixed(2) + " MB" : b >= 1024 ? (b / 1024).toFixed(1) + " KB" : b + " B") + (b >= 1024 ? " (" + b.toLocaleString("en") + " bytes)" : "");
+
+  // ---------- Fingerprint: SHA-256 when the browser allows it, CRC-32 otherwise ----------
+  let crcTable = null;
+  function crc32(buf) {
+    if (!crcTable) {
+      crcTable = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcTable[n] = c >>> 0; }
+    }
+    let c = 0xffffffff;
+    const a = new Uint8Array(buf);
+    for (let i = 0; i < a.length; i++) c = crcTable[(c ^ a[i]) & 255] ^ (c >>> 8);
+    return ((c ^ 0xffffffff) >>> 0).toString(16).padStart(8, "0");
+  }
+  async function fingerprint(file) {
+    if (file.size > 64 * MB) return { algo: "SHA-256", hex: "" };
+    const buf = await file.arrayBuffer();
+    if (window.isSecureContext && window.crypto && crypto.subtle) {
+      const d = await crypto.subtle.digest("SHA-256", buf);
+      return { algo: "SHA-256", hex: [...new Uint8Array(d)].map((x) => x.toString(16).padStart(2, "0")).join("") };
+    }
+    return { algo: "CRC-32", hex: crc32(buf) };
+  }
+
+  // ---------- Read everything we can about the file ----------
+  async function readFile(file) {
+    const ext = (file.name.includes(".") ? file.name.split(".").pop() : "file").slice(0, 5).toUpperCase();
+    const f = { ext, name: file.name, type: file.type || "unknown (." + ext.toLowerCase() + ")", size: bytes(file.size), date: new Date(file.lastModified || Date.now()).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) };
+    const isImg = /^image\//.test(file.type);
+    const isText = /^text\/|json|xml|javascript|csv/.test(file.type) || /\.(txt|csv|md|json|html|css|js|xml|log|tsv)$/i.test(file.name);
+    if (isImg) {
+      objectUrl = URL.createObjectURL(file);
+      f.url = objectUrl;
+      try {
+        const img = new Image();
+        img.src = objectUrl;
+        await img.decode();
+        f.shape = img.naturalWidth + " × " + img.naturalHeight + " px image";
+      } catch (e) { f.shape = "image the browser cannot show"; }
+    } else if (isText && file.size <= 2 * MB) {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/);
+      f.shape = lines.length.toLocaleString("en") + " lines · " + (text.match(/\S+/g) || []).length.toLocaleString("en") + " words";
+      f.preview = lines.slice(0, 12).map((l) => l.slice(0, 30)).join("\n");
+    } else {
+      const head = new Uint8Array(await file.slice(0, 72).arrayBuffer());
+      const hx = [...head].map((x) => x.toString(16).padStart(2, "0"));
+      f.shape = "binary · starts " + hx.slice(0, 4).join(" ").toUpperCase();
+      f.preview = [];
+      for (let i = 0; i < hx.length; i += 6) f.preview.push(hx.slice(i, i + 6).join(" "));
+      f.preview = f.preview.join("\n");
+    }
+    const fp = await fingerprint(file);
+    f.algo = fp.algo;
+    f.hash = fp.hex;
+    return f;
+  }
+
+  // Type text into a row value a few characters at a time
+  async function typeIn(row, text, id, ms) {
+    const dd = row.querySelector("dd");
+    row.classList.add("on");
+    if (calm()) { dd.textContent = text; return; }
+    const steps = Math.max(1, Math.min(24, Math.ceil(text.length / 3)));
+    for (let i = 1; i <= steps; i++) {
+      dd.textContent = text.slice(0, Math.ceil(text.length * i / steps));
+      await sleep(ms / steps, id);
+    }
+  }
+
+  // Hex pairs float up off the card while it uploads
+  function hexBits(n) {
+    if (calm()) return;
+    for (let i = 0; i < n; i++) {
+      const h = document.createElement("span");
+      h.className = "hex";
+      h.textContent = Math.floor(Math.random() * 256).toString(16).padStart(2, "0");
+      h.style.left = 50 + (Math.random() - .5) * 46 + "%";
+      h.style.top = 52 + Math.random() * 20 + "%";
+      bed.appendChild(h);
+      h.animate([{ transform: "translateY(0)", opacity: 0 }, { opacity: 1, offset: .2 }, { transform: `translate(${(Math.random() - .5) * 40}px, -130px)`, opacity: 0 }], { duration: 1200 + Math.random() * 500, delay: i * 90, easing: "cubic-bezier(.2,.6,.4,1)" }).onfinish = () => h.remove();
+    }
+  }
+
+  // ---------- The full scan ----------
+  async function scan(file, id) {
+    setState("load", "Reading…");
+    led.className = "led busy";
+    againBtn.disabled = copyBtn.disabled = true;
+    copyBtn.textContent = "Copy fingerprint";
+    statusEl.textContent = "Scanning " + file.name + ".";
+    const facts = await readFile(file);
+    if (id !== runId) throw STOP;
+
+    // 1. Anticipation: brackets close in and the file lands on the glass
+    card.innerHTML = "";
+    if (facts.url) { const img = document.createElement("img"); img.src = facts.url; img.alt = ""; card.appendChild(img); }
+    else { const pre = document.createElement("pre"); pre.textContent = facts.preview || ""; card.appendChild(pre); }
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = facts.ext;
+    card.appendChild(tag);
+    card.classList.add("on");
+    $("#algo").textContent = facts.algo;
+    await sleep(520, id);
+
+    // 2. The laser sweeps the card while the facts type in
+    setState("scan", "Scanning…");
+    const h = bed.clientHeight;
+    const sweep = calm() ? Promise.resolve() : laser.animate([
+      { transform: "translateY(" + (h * .14) + "px)", opacity: 0 },
+      { opacity: 1, offset: .08 },
+      { transform: "translateY(" + (h * .86) + "px)", offset: .62 },
+      { transform: "translateY(" + (h * .14) + "px)", opacity: 1, offset: .96 },
+      { transform: "translateY(" + (h * .14) + "px)", opacity: 0 }
+    ], { duration: 2300, easing: "ease-in-out" }).finished.catch(() => {});
+    play(scanned, [{ transform: "scaleY(.14)" }, { transform: "scaleY(.86)", offset: .62 }, { transform: "scaleY(.86)", opacity: 1, offset: .9 }, { transform: "scaleY(.86)", opacity: 0 }], { duration: 2300, easing: "ease-in-out" });   // transform, so it stays locked to the laser
+    await typeIn(rows.name, facts.name, id, 260);
+    await typeIn(rows.type, facts.type, id, 240);
+    await typeIn(rows.size, facts.size, id, 240);
+    await typeIn(rows.date, facts.date, id, 240);
+    await typeIn(rows.shape, facts.shape, id, 260);
+    const hashText = facts.hash ? facts.hash.match(/.{1,8}/g).join(" ") : "too large to fingerprint here (64 MB max)";
+    await typeIn(rows.hash, hashText, id, 700);
+    await sweep;
+    if (id !== runId) throw STOP;
+
+    // 3. Upload: bytes float up, the bar fills
+    setState("upload", "Uploading 0%");
+    let p = 0;
+    while (p < 1) {
+      p = Math.min(1, p + .05 + Math.random() * .07);
+      barFill.style.setProperty("--p", p.toFixed(3));
+      stateTxt.textContent = "Uploading " + Math.round(p * 100) + "%";
+      hexBits(2);
+      await sleep(120, id);
+    }
+    await sleep(250, id);
+
+    // 4. Finish: the server copy matches, a stamp slams down
+    setState("done", "Verified");
+    led.className = "led ok";
+    lastHash = facts.hash;
+    const dd = rows.hash.querySelector("dd");
+    const yes = document.createElement("span");
+    yes.className = "yes";
+    yes.textContent = " ✓ server copy matches";
+    if (facts.hash) { dd.appendChild(document.createElement("br")); dd.appendChild(yes); }
+    Object.values(rows).forEach((r, i) => setTimeout(() => r.classList.add("ok"), calm() ? 0 : i * 60));
+    if (calm()) stamp.style.transform = "rotate(-12deg) scale(1)";
+    else stamp.animate([{ transform: "rotate(-30deg) scale(2.2)", opacity: 0 }, { transform: "rotate(-10deg) scale(.92)", opacity: 1, offset: .6 }, { transform: "rotate(-12deg) scale(1)", opacity: 1 }], { duration: 520, easing: "cubic-bezier(.3,.7,.3,1.2)", fill: "forwards" });
+    play(card, [{ transform: "none" }, { transform: "scale(.96)" }, { transform: "none" }], { duration: 360, delay: 260, easing: SPRING });
+    statusEl.textContent = "Scan done. " + facts.name + ", " + facts.size + ". Fingerprint " + (facts.hash ? "checked and matching." : "skipped, file too large.");
+    copyBtn.disabled = !facts.hash;
+    againBtn.disabled = false;
+  }
+
+  // ---------- Reset back to the empty bed ----------
+  async function clear(id) {
+    setState("reset", "Clearing…");
+    againBtn.disabled = copyBtn.disabled = true;
+    stamp.getAnimations().forEach((a) => a.cancel());
+    stamp.style.transform = "";
+    await play(card, [{ transform: "none", opacity: 1 }, { transform: "translateY(26px) scale(.9)", opacity: 0 }], { duration: 380, easing: "ease-in" });
+    card.classList.remove("on");
+    const list = Object.values(rows);
+    list.forEach((r, i) => setTimeout(() => { r.classList.remove("on", "ok"); r.querySelector("dd").textContent = "—"; }, calm() ? 0 : i * 50));
+    barFill.style.setProperty("--p", 0);
+    if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = ""; }
+    await sleep(calm() ? 50 : 420, id);
+    card.innerHTML = "";
+    led.className = "led";
+    picker.value = "";
+    setState("idle", "Ready");
+  }
+
+  function hardReset() {
+    [laser, scanned, stamp, card].forEach((el) => el.getAnimations().forEach((a) => a.cancel()));
+    stamp.style.transform = "";
+    card.classList.remove("on");
+    card.innerHTML = "";
+    Object.values(rows).forEach((r) => { r.classList.remove("on", "ok"); r.querySelector("dd").textContent = "—"; });
+    barFill.style.setProperty("--p", 0);
+    bed.querySelectorAll(".hex").forEach((h) => h.remove());
+    if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = ""; }
+    led.className = "led";
+    againBtn.disabled = copyBtn.disabled = true;
+    setState("idle", "Ready");
+  }
+
+  async function run(file, fromUser) {
+    const id = ++runId;
+    try {
+      if (state !== "idle") hardReset();
+      await scan(file, id);
+      if (!fromUser) { await sleep(2600, id); await clear(id); scheduleDemo(1800); }
+    } catch (e) {
+      if (e !== STOP) {
+        hardReset();
+        statusEl.textContent = stateTxt.textContent = "Could not read that file.";
+      }
+    }
+  }
+
+  // ---------- Sample files, made right here so the real reading code runs on them ----------
+  function sampleCsv() {
+    const rowsCsv = ["order,customer,city,item,qty,pkr", "1041,Ayesha Khan,Lahore,Doodh patti,2,240", "1042,Bilal Ahmed,Karachi,Kashmiri chai,1,180", "1043,Sana Malik,Islamabad,Karak chai,3,390", "1044,Usman Tariq,Multan,Green tea,2,200", "1045,Hira Javed,Peshawar,Qehwa,4,320", "1046,Zain Ali,Quetta,Sulemani,1,120"];
+    return new File([rowsCsv.join("\n") + "\n"], "chai-orders.csv", { type: "text/csv", lastModified: Date.now() - 42 * 60000 });
+  }
+  function samplePng() {
+    return new Promise((resolve) => {
+      const c = document.createElement("canvas");
+      c.width = 300; c.height = 372;
+      const g = c.getContext("2d");
+      const sky = g.createLinearGradient(0, 0, 0, 372);
+      sky.addColorStop(0, "#ff9a5a"); sky.addColorStop(.55, "#ff5e7e"); sky.addColorStop(1, "#5a2a80");
+      g.fillStyle = sky; g.fillRect(0, 0, 300, 372);
+      g.fillStyle = "#ffe08a"; g.beginPath(); g.arc(150, 170, 48, 0, Math.PI * 2); g.fill();
+      g.fillStyle = "#2a1340";                                   // domes and minarets silhouette
+      g.fillRect(0, 270, 300, 102);
+      [[150, 250, 44], [86, 262, 26], [214, 262, 26]].forEach(([x, y, r]) => { g.beginPath(); g.arc(x, y, r, Math.PI, 0); g.fill(); g.fillRect(x - r, y, r * 2, 20); });
+      [[28, 160], [272, 160]].forEach(([x, y]) => { g.fillRect(x - 7, y, 14, 112); g.beginPath(); g.arc(x, y, 9, Math.PI, 0); g.fill(); });
+      c.toBlob((b) => resolve(new File([b], "badshahi-dusk.png", { type: "image/png", lastModified: Date.now() - 3 * 86400000 })), "image/png");
+    });
+  }
+  let sampleIx = 0;
+  const nextSample = async () => (sampleIx++ % 2 === 0 ? sampleCsv() : await samplePng());
+
+  // ---------- Inputs ----------
+  $("#choose").addEventListener("click", () => picker.click());
+  $("#sample").addEventListener("click", async () => run(await nextSample(), true));
+  picker.addEventListener("change", () => { if (picker.files[0]) run(picker.files[0], true); });
+  againBtn.addEventListener("click", async () => {
+    const id = ++runId;
+    try { await clear(id); $("#choose").focus(); } catch (e) { if (e !== STOP) throw e; }
+  });
+  copyBtn.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(lastHash); copyBtn.textContent = "Copied ✓"; }
+    catch (e) { copyBtn.textContent = "Copy blocked here"; }
+    statusEl.textContent = copyBtn.textContent;
+    setTimeout(() => (copyBtn.textContent = "Copy fingerprint"), 1800);
+  });
+  bed.addEventListener("dragover", (e) => { e.preventDefault(); bed.dataset.drag = "on"; });
+  bed.addEventListener("dragleave", () => bed.removeAttribute("data-drag"));
+  bed.addEventListener("drop", (e) => {
+    e.preventDefault();
+    bed.removeAttribute("data-drag");
+    const f = e.dataTransfer && e.dataTransfer.files[0];
+    if (f) run(f, true);
+  });
+  ["dragover", "drop"].forEach((t) => document.addEventListener(t, (e) => e.preventDefault()));
+
+  // ---------- Auto demo until the visitor takes over ----------
+  let demoOn = true, demoTimer = 0;
+  function scheduleDemo(ms) {
+    clearTimeout(demoTimer);
+    if (demoOn) demoTimer = setTimeout(async () => { if (demoOn && state === "idle") run(await nextSample(), false); else scheduleDemo(1500); }, ms);
+  }
+  function takeOver(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false;
+    clearTimeout(demoTimer);
+    if (state !== "idle") { runId++; hardReset(); }
+  }
+  ["pointerdown", "keydown", "dragenter"].forEach((t) => addEventListener(t, takeOver, true));
+  scheduleDemo(300);
+</script>
+</body>
+</html>

@@ -1,0 +1,571 @@
+<!doctype html>
+<!-- Chill & Craft · Guest List · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guest List · Invite people by email</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg: #f5f0e3;
+    --orbit: rgba(31, 77, 58, 0.16);
+    --card: #fffdf7;
+    --ink: #17352a;
+    --muted: #6b7a70;
+    --line: rgba(23, 53, 42, 0.12);
+    --field: #ffffff;
+    --green: #1f4d3a;
+    --green-ink: #fffdf7;
+    --gold: #f2a541;
+    --bad: #d64545;
+    --chip: #eef3ec;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0a1510;
+    --orbit: rgba(242, 165, 65, 0.12);
+    --card: #11231a;
+    --ink: #eef5ec;
+    --muted: #93a99a;
+    --line: rgba(238, 245, 236, 0.11);
+    --field: #0c1a13;
+    --green: #f2a541;
+    --green-ink: #10221a;
+    --gold: #f2a541;
+    --bad: #f07272;
+    --chip: #1b3327;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+
+  /* ---------- Stage: dotted orbits turning slowly behind the card ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 22px 16px; overflow: hidden; isolation: isolate; }
+  .orbit { position: absolute; z-index: -1; left: 50%; top: 50%; border-radius: 50%; border: 2px dotted var(--orbit); animation: spin 80s linear infinite; }
+  .orbit::after { content: ""; position: absolute; top: -6px; left: 50%; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); opacity: 0.7; }
+  .o1 { width: 560px; height: 560px; margin: -280px 0 0 -280px; }
+  .o2 { width: 820px; height: 820px; margin: -410px 0 0 -410px; animation-duration: 120s; animation-direction: reverse; }
+  .o3 { width: 1100px; height: 1100px; margin: -550px 0 0 -550px; animation-duration: 160s; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Card ---------- */
+  .card { position: relative; width: min(470px, 100%); padding: 22px; border-radius: 26px; background: var(--card); box-shadow: 0 40px 70px -44px rgba(15, 50, 35, 0.55), 0 0 0 1px var(--line); animation: rise 0.8s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px) scale(0.97); } }
+  .top { display: flex; gap: 12px; align-items: center; }
+  .emblem { width: 46px; height: 46px; flex: none; border-radius: 14px; display: grid; place-items: center; background: var(--green); color: var(--green-ink); }
+  .emblem svg { width: 26px; height: 26px; }
+  .top h1 { margin: 0; font-size: 1.18rem; line-height: 1.2; }
+  .top p { margin: 2px 0 0; font-size: 0.84rem; color: var(--muted); }
+  .crew { display: flex; align-items: center; gap: 10px; margin: 16px 0 18px; }
+  .stack { display: flex; align-items: center; padding-left: 8px; }
+  .av { position: relative; width: 34px; height: 34px; margin-left: -8px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 0.68rem; font-weight: 800; color: #fff; border: 2.5px solid var(--card); background: var(--c); }
+  .av.pending::after { content: ""; position: absolute; right: -2px; top: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); border: 2px solid var(--card); animation: pend 1.6s ease-in-out infinite; }
+  @keyframes pend { 50% { transform: scale(0.7); } }
+  .more { width: 34px; height: 34px; margin-left: -8px; border-radius: 50%; display: none; place-items: center; font-size: 0.68rem; font-weight: 800; color: var(--ink); background: var(--chip); border: 2.5px solid var(--card); }
+  .more.show { display: grid; }
+  .crew .count { font-size: 0.82rem; color: var(--muted); }
+  .crew .count b { color: var(--ink); }
+
+  /* ---------- Chip field ---------- */
+  .lbl { display: block; margin: 0 0 7px; font-size: 0.8rem; font-weight: 700; }
+  .box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 56px; padding: 8px; border: 1.5px solid var(--line); border-radius: 16px; background: var(--field); cursor: text; transition: border-color 0.2s, box-shadow 0.2s; }
+  .box:focus-within { border-color: var(--green); box-shadow: 0 0 0 4px rgba(242, 165, 65, 0.3); }
+  .chips { display: contents; list-style: none; margin: 0; padding: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 34px; padding: 0 4px 0 4px; border-radius: 999px; background: var(--chip); font-size: 0.84rem; font-weight: 600; white-space: nowrap; }
+  .chip .ci { width: 26px; height: 26px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 0.68rem; font-weight: 800; color: #fff; background: var(--c); }
+  .chip .ce { overflow: hidden; text-overflow: ellipsis; }
+  .chip .cx { width: 24px; height: 24px; flex: none; border: 0; border-radius: 50%; display: grid; place-items: center; background: transparent; cursor: pointer; color: var(--muted); }
+  .chip .cx:hover { background: var(--line); color: var(--ink); }
+  .chip .cx:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+  .chip .cx svg { width: 12px; height: 12px; }
+  .chip.bad { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); box-shadow: inset 0 0 0 1.5px var(--bad); }
+  .chip.bad .ci { background: var(--bad); }
+  .chip.armed { box-shadow: inset 0 0 0 2px var(--ink); }
+  #entry { flex: 1 1 150px; min-width: 120px; height: 34px; border: 0; outline: none; background: transparent; color: var(--ink); font: inherit; font-size: 0.92rem; padding: 0 6px; }
+  #entry::placeholder { color: var(--muted); }
+  .help { margin: 7px 2px 0; min-height: 1.2em; font-size: 0.76rem; color: var(--muted); }
+  .help.err { color: var(--bad); font-weight: 600; }
+
+  /* Role switch */
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+  .role { position: relative; display: inline-flex; margin: 0; padding: 4px; border: 0; border-radius: 999px; background: var(--chip); }
+  .role label { position: relative; z-index: 1; cursor: pointer; }
+  .role input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .role span { display: block; padding: 7px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; color: var(--muted); transition: color 0.3s; }
+  .role input:checked + span { color: var(--green-ink); }
+  .role input:focus-visible + span { outline: 2px solid var(--green); outline-offset: 2px; }
+  .role .thumb { position: absolute; left: 4px; top: 4px; bottom: 4px; width: calc(50% - 4px); border-radius: 999px; background: var(--green); transition: transform 0.5s cubic-bezier(0.3, 1.5, 0.4, 1); }
+  .role:has(input[value="view"]:checked) .thumb { transform: translateX(100%); }
+  .sugg { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .sugg small { font-size: 0.74rem; color: var(--muted); }
+  .pick { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px 0 4px; border: 1.5px dashed var(--line); border-radius: 999px; background: transparent; cursor: pointer; font-size: 0.78rem; font-weight: 600; transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.25s; }
+  .pick:hover { border-style: solid; border-color: var(--green); }
+  .pick:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+  .pick i { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 0.6rem; font-weight: 800; color: #fff; background: var(--c); }
+  .pick[disabled] { opacity: 0.35; transform: scale(0.92); cursor: default; }
+
+  /* Send button */
+  .send {
+    position: relative;
+    width: 100%;
+    height: 54px;
+    margin-top: 18px;
+    border: 0;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    overflow: hidden;
+    background: var(--green);
+    color: var(--green-ink);
+    font-weight: 800;
+    font-size: 0.98rem;
+    cursor: pointer;
+    transition: opacity 0.3s, filter 0.3s, transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+  .send:hover { transform: translateY(-2px); }
+  .send:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+  .send.empty:not(.busy) { opacity: 0.55; filter: saturate(0.4); }
+  .send.empty .badge { display: none; }
+  .send .bar { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: var(--gold); transform: scaleX(0); transform-origin: 0 50%; transition: transform 0.4s ease; }
+  .send .badge { min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px; display: grid; place-items: center; font-size: 0.78rem; background: var(--gold); color: #10221a; }
+  :root[data-theme="dark"] .send .badge { background: #10221a; color: var(--gold); }
+  :root[data-theme="dark"] .send .bar { background: #10221a; }
+  .send .lab { display: block; height: 1.3em; line-height: 1.3; overflow: hidden; }
+  .send .lab span { display: inline-flex; align-items: center; gap: 7px; }
+  .send svg { width: 18px; height: 18px; }
+
+  /* Envelope that a chip turns into on its way to the crew */
+  .env { position: fixed; z-index: 30; display: grid; place-items: center; overflow: hidden; pointer-events: none; color: #10221a; }
+  .env svg { width: 22px; height: 22px; }
+  .spark { position: fixed; z-index: 31; width: 7px; height: 7px; border-radius: 50%; pointer-events: none; }
+
+  @media (max-width: 420px) {
+    .card { padding: 18px 14px; }
+    .row { flex-direction: column; align-items: stretch; }
+    .role { align-self: flex-start; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .orbit, .card, .av.pending::after { animation: none; }
+    .role .thumb, .pick, .send, .send .bar { transition-duration: 0.01s; }
+    .env, .spark { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <span class="orbit o1" aria-hidden="true"></span>
+    <span class="orbit o2" aria-hidden="true"></span>
+    <span class="orbit o3" aria-hidden="true"></span>
+
+    <section class="card" aria-labelledby="title">
+      <div class="top">
+        <span class="emblem" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5C6.5 4 9.5 4 12 6c2.5-2 5.5-2 8-.5V19c-2.5-1.5-5.5-1.5-8 .5-2.5-2-5.5-2-8-.5Z" /><path d="M12 6v13.5" /></svg></span>
+        <div>
+          <h1 id="title">Invite to Book Fair Crew</h1>
+          <p>Plan stalls, volunteers and the reading corner together.</p>
+        </div>
+      </div>
+
+      <div class="crew">
+        <div class="stack" id="stack" aria-hidden="true">
+          <span class="av" style="--c:#2a9d8f">AK</span>
+          <span class="av" style="--c:#e76f51">ZH</span>
+          <span class="av" style="--c:#6d597a">FN</span>
+          <span class="av" style="--c:#457b9d">UR</span>
+          <span class="more" id="more">+0</span>
+        </div>
+        <span class="count" id="crewCount"><b>4</b> members</span>
+      </div>
+
+      <label class="lbl" for="entry">Email addresses</label>
+      <div class="box" id="box">
+        <ul class="chips" id="chips" role="list" aria-label="Addresses to invite"></ul>
+        <input id="entry" type="email" inputmode="email" autocomplete="off" placeholder="Type an email, press Enter" aria-describedby="help" />
+      </div>
+      <p class="help" id="help" aria-live="polite">Paste a list or press Enter, comma or space after each address.</p>
+
+      <div class="row">
+        <fieldset class="role">
+          <legend class="sr-only">Access for new people</legend>
+          <label><input type="radio" name="role" value="edit" checked /><span>Can edit</span></label>
+          <label><input type="radio" name="role" value="view" /><span>Can view</span></label>
+          <i class="thumb" aria-hidden="true"></i>
+        </fieldset>
+        <div class="sugg" id="sugg">
+          <small>Suggested</small>
+          <button class="pick" type="button" data-email="hina.baig@example.com" style="--c:#e9a23b"><i aria-hidden="true">HB</i>Hina</button>
+          <button class="pick" type="button" data-email="omar.farooq@example.com" style="--c:#8ab17d"><i aria-hidden="true">OF</i>Omar</button>
+          <button class="pick" type="button" data-email="sana.malik@example.com" style="--c:#b5838d"><i aria-hidden="true">SM</i>Sana</button>
+        </div>
+      </div>
+
+      <button class="send empty" id="send" type="button">
+        <span class="lab" id="lab"><span>Send invites</span></span>
+        <span class="badge" id="badge" aria-hidden="true">0</span>
+        <span class="bar" id="bar" aria-hidden="true"></span>
+      </button>
+    </section>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </main>
+
+<script>
+  // ---------- Guest List: email chips that fold into envelopes and fly into the crew ----------
+  const $ = (s) => document.querySelector(s);
+  const box = $("#box");
+  const chips = $("#chips");
+  const entry = $("#entry");
+  const help = $("#help");
+  const sendBtn = $("#send");
+  const lab = $("#lab");
+  const badge = $("#badge");
+  const bar = $("#bar");
+  const stack = $("#stack");
+  const more = $("#more");
+  const crewCount = $("#crewCount");
+  const status = $("#status");
+  const picks = [...document.querySelectorAll(".pick")];
+
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const SPRING = window.CSS && CSS.supports && CSS.supports("transition-timing-function", "linear(0, 1)")
+    ? "linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077 24.3%, 1.104 27.8%, 1.107 31.2%, 1.096, 1.073 38.1%, 1.017 47.1%, 0.996 55.4%, 0.991 61.4%, 1 80%, 1)"
+    : "cubic-bezier(.34, 1.56, .64, 1)";
+  function play(el, frames, opts) {
+    if (calm() || !el || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  const say = (t) => { status.textContent = t; };
+  const HELP = "Paste a list or press Enter, comma or space after each address.";
+  const COLORS = ["#e76f51", "#2a9d8f", "#e9a23b", "#8ab17d", "#6d597a", "#457b9d", "#b5838d"];
+  const colorFor = (s) => COLORS[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
+  const valid = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
+  const initials = (v) => { const p = v.split("@")[0].split(/[._+\-]/).filter(Boolean); return ((p[0] || "?")[0] + ((p[1] || "")[0] || "")).toUpperCase(); };
+
+  // FLIP: let siblings glide to their new places after a change
+  function flip(els, change) {
+    const before = els.map((el) => el.getBoundingClientRect());
+    change();
+    els.forEach((el, i) => {
+      if (!el.isConnected) return;
+      const r = el.getBoundingClientRect();
+      const dx = before[i].left - r.left, dy = before[i].top - r.top;
+      if (Math.abs(dx) + Math.abs(dy) > 0.5) play(el, [{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], { duration: 480, easing: SPRING });
+    });
+  }
+
+  // ---------- Chips ----------
+  const list = () => [...chips.children];
+  function refresh() {
+    const n = list().length;
+    const good = list().filter((c) => !c.classList.contains("bad")).length;
+    badge.textContent = n;
+    sendBtn.classList.toggle("empty", n === 0);
+    picks.forEach((p) => { p.disabled = list().some((c) => c.dataset.email === p.dataset.email); });
+    return good;
+  }
+  function setHelp(text, err) {
+    help.textContent = text;
+    help.classList.toggle("err", !!err);
+  }
+
+  function addChip(raw) {
+    const v = raw.trim().replace(/^[<"']+|[>"',;]+$/g, "").toLowerCase();
+    if (!v) return false;
+    const dupe = list().find((c) => c.dataset.email === v);
+    if (dupe) {
+      play(dupe, [{ transform: "none" }, { transform: "translateX(-6px)" }, { transform: "translateX(5px)" }, { transform: "translateX(-3px)" }, { transform: "none" }], { duration: 400 });
+      setHelp(v + " is already on the list.", true);
+      return false;
+    }
+    if (list().length >= 8) { setHelp("Up to 8 people at a time.", true); return false; }
+    const ok = valid(v);
+    const li = document.createElement("li");
+    li.className = "chip" + (ok ? "" : " bad");
+    li.dataset.email = v;
+    li.style.setProperty("--c", colorFor(v));
+    li.innerHTML = '<span class="ci" aria-hidden="true"></span><span class="ce"></span><button class="cx" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button>';
+    li.querySelector(".ci").textContent = ok ? initials(v) : "!";
+    li.querySelector(".ce").textContent = v;
+    li.querySelector(".cx").setAttribute("aria-label", "Remove " + v);
+    li.querySelector(".cx").addEventListener("click", (e) => { e.stopPropagation(); removeChip(li, true); });
+    if (!ok) li.title = "Not a valid email address";
+    flip([entry], () => chips.appendChild(li));
+    play(li, [{ transform: "scale(.4)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 560, easing: SPRING });
+    if (!ok) {
+      play(li, [{ transform: "rotate(0)" }, { transform: "rotate(-4deg)" }, { transform: "rotate(4deg)" }, { transform: "rotate(-2deg)" }, { transform: "rotate(0)" }], { duration: 480, delay: 300 });
+      setHelp(v + " does not look like an email. Remove it or fix it.", true);
+      say("Invalid address " + v);
+    } else {
+      setHelp(HELP);
+      say("Added " + v);
+    }
+    refresh();
+    return true;
+  }
+
+  function removeChip(li, focusEntry) {
+    const v = li.dataset.email;
+    const rest = list().filter((c) => c !== li).concat(entry);
+    play(li, [{ transform: "scale(1)", opacity: 1 }, { transform: "scale(.3)", opacity: 0 }], { duration: 180, easing: "ease-in" }).then(() => {
+      flip(rest, () => li.remove());
+      refresh();
+      if (!list().some((c) => c.classList.contains("bad"))) setHelp(HELP);
+    });
+    say("Removed " + v);
+    if (focusEntry) entry.focus();
+  }
+
+  function commit() {
+    const parts = entry.value.split(/[\s,;]+/).filter(Boolean);
+    entry.value = "";
+    parts.forEach(addChip);
+  }
+
+  entry.addEventListener("keydown", (e) => {
+    const last = chips.lastElementChild;
+    if (["Enter", ",", ";", " "].includes(e.key) || (e.key === "Tab" && entry.value.trim())) {
+      if (e.key === "Enter" && !entry.value.trim()) { e.preventDefault(); sendInvites(); return; }
+      e.preventDefault();
+      commit();
+      return;
+    }
+    if (e.key === "Backspace" && !entry.value && last) {
+      // first press highlights the last chip, the second removes it
+      if (last.classList.contains("armed")) removeChip(last, false);
+      else { last.classList.add("armed"); say("Press Backspace again to remove " + last.dataset.email); }
+      e.preventDefault();
+      return;
+    }
+    if (last) last.classList.remove("armed");
+  });
+  entry.addEventListener("paste", (e) => {
+    const t = (e.clipboardData || window.clipboardData).getData("text");
+    if (/[\s,;]/.test(t.trim())) { e.preventDefault(); entry.value += t; commit(); }
+  });
+  entry.addEventListener("blur", () => { if (entry.value.trim()) commit(); });
+  box.addEventListener("click", (e) => { if (e.target === box) entry.focus(); });
+  picks.forEach((p) => p.addEventListener("click", () => {
+    play(p, [{ transform: "scale(1)" }, { transform: "scale(.85)" }, { transform: "scale(1)" }], { duration: 260 });
+    addChip(p.dataset.email);
+  }));
+
+  // ---------- Rolling label ----------
+  function roll(html) {
+    while (lab.children.length > 1) lab.firstElementChild.remove();
+    const old = lab.firstElementChild;
+    const n = document.createElement("span");
+    n.innerHTML = html;
+    lab.appendChild(n);
+    if (calm() || !old || !old.animate) { if (old) old.remove(); return; }
+    n.style.transform = old.style.transform = "translateY(-100%)";
+    Promise.all([
+      play(old, [{ transform: "none", opacity: 1 }, { transform: "translateY(-100%)", opacity: 0 }], { duration: 200, easing: "ease-in", fill: "forwards" }),
+      play(n, [{ transform: "translateY(0)", opacity: 0 }, { transform: "translateY(-100%)", opacity: 1 }], { duration: 440, easing: SPRING })
+    ]).then(() => { old.remove(); n.style.transform = ""; });
+  }
+
+  // ---------- Crew stack ----------
+  let members = 4;
+  let invited = 0;
+  let hidden = 0;
+  function updateCrew() {
+    crewCount.innerHTML = "<b>" + members + "</b> members" + (invited ? " · <b>" + invited + "</b> invited" : "");
+    more.textContent = "+" + hidden;
+    more.classList.toggle("show", hidden > 0);
+  }
+  function reserveAvatar(email) {
+    const av = document.createElement("span");
+    av.className = "av pending";
+    av.style.setProperty("--c", colorFor(email));
+    av.textContent = initials(email);
+    av.style.visibility = "hidden";
+    flip([more, crewCount], () => {
+      stack.insertBefore(av, more);
+      // keep the stack short: fold the oldest invite into the +N bubble
+      const avs = stack.querySelectorAll(".av.pending");
+      if (stack.querySelectorAll(".av").length > 8 && avs.length > 1) { avs[0].remove(); hidden++; }
+    });
+    return av;
+  }
+
+  // ---------- Send: chips fold into envelopes and fly into the crew one by one ----------
+  let busy = false;
+  async function sendInvites() {
+    if (busy) return;
+    if (entry.value.trim()) commit();
+    const all = list();
+    if (!all.length) {
+      setHelp("Add at least one email address first.", true);
+      play(sendBtn, [{ transform: "translateX(0)" }, { transform: "translateX(-8px)" }, { transform: "translateX(7px)" }, { transform: "translateX(-3px)" }, { transform: "none" }], { duration: 420 });
+      if (!demoOn) entry.focus();
+      return;
+    }
+    if (all.some((c) => c.classList.contains("bad"))) {
+      setHelp("Fix or remove the red address first.", true);
+      all.filter((c) => c.classList.contains("bad")).forEach((c) => play(c, [{ transform: "scale(1)" }, { transform: "scale(1.12)" }, { transform: "scale(1)" }], { duration: 360 }));
+      play(sendBtn, [{ transform: "translateX(0)" }, { transform: "translateX(-8px)" }, { transform: "translateX(7px)" }, { transform: "none" }], { duration: 380 });
+      return;
+    }
+    busy = true;
+    sendBtn.classList.add("busy");
+    const role = document.querySelector('input[name="role"]:checked').value === "edit" ? "can edit" : "can view";
+    const n = all.length;
+
+    // 1. Anticipation: the button squashes, the badge hops, the chips lift a little
+    play(sendBtn, [{ transform: "scale(1)" }, { transform: "scale(.96, .9)" }, { transform: "scale(1)" }], { duration: 300, easing: "ease-out" });
+    play(badge, [{ transform: "none" }, { transform: "translateY(-8px) scale(1.25)" }, { transform: "none" }], { duration: 420, easing: SPRING });
+    all.forEach((c, i) => play(c, [{ transform: "none" }, { transform: "translateY(-4px)" }, { transform: "none" }], { duration: 320, delay: i * 50 }));
+    roll("Sending 0 of " + n + "…");
+    setHelp("Sending invites…");
+    await wait(calm() ? 0 : 280);
+
+    // 2–3. Each chip folds into an envelope, then arcs into the crew stack
+    const env = (c) => {
+      const r = c.getBoundingClientRect();
+      const e = document.createElement("span");
+      e.className = "env";
+      e.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" fill="#fff7e6" /><path d="m3.5 6 8.5 7 8.5-7" /></svg>';
+      Object.assign(e.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px", borderRadius: "999px", background: getComputedStyle(c).backgroundColor });
+      document.body.appendChild(e);
+      return { e, r };
+    };
+    let landed = 0;
+    await Promise.all(all.map(async (c, i) => {
+      await wait(i * 160);
+      const { e, r } = env(c);
+      c.style.visibility = "hidden";
+      if (!calm()) {
+        // fold: the pill narrows to a square envelope
+        await e.animate([
+          { width: r.width + "px", height: r.height + "px", borderRadius: "999px", backgroundColor: getComputedStyle(c).backgroundColor, transform: "none" },
+          { width: "36px", height: "30px", borderRadius: "7px", backgroundColor: "#f2a541", transform: "translateY(2px) rotate(-6deg)" }
+        ], { duration: 320, easing: "cubic-bezier(.5,0,.3,1.2)", fill: "forwards" }).finished.catch(() => {});
+      }
+      const av = reserveAvatar(c.dataset.email);
+      const t = av.getBoundingClientRect();
+      const dx = t.left + t.width / 2 - (r.left + 18);
+      const dy = t.top + t.height / 2 - (r.top + 15);
+      if (!calm()) {
+        await e.animate([
+          { transform: "translate(0,0) rotate(-6deg) scale(1)" },
+          { transform: "translate(" + dx * 0.45 + "px," + (dy * 0.55 - 70) + "px) rotate(-18deg) scale(1.1)", offset: 0.5 },
+          { transform: "translate(" + dx + "px," + dy + "px) rotate(0) scale(.6)" }
+        ], { duration: 640, easing: "cubic-bezier(.4,.1,.3,1)", fill: "forwards" }).finished.catch(() => {});
+      }
+      e.remove();
+      av.style.visibility = "";
+      play(av, [{ transform: "scale(0)" }, { transform: "scale(1.3)", offset: 0.5 }, { transform: "none" }], { duration: 520, easing: "ease-out" });
+      sparks(t.left + t.width / 2, t.top + t.height / 2, 8, 26);
+      landed++;
+      invited++;
+      updateCrew();
+      bar.style.transform = "scaleX(" + landed / n + ")";
+      roll("Sending " + landed + " of " + n + "…");
+    }));
+
+    // 4. Finish: chips cleared, button turns into a tick, crew sparkles
+    const names = all.map((c) => c.dataset.email);
+    await wait(calm() ? 0 : 450); // let "Sending n of n" settle before the final label rolls in
+    flip([entry], () => { chips.innerHTML = ""; });
+    refresh();
+    roll('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>' + n + (n === 1 ? " invite" : " invites") + " sent");
+    const s = stack.getBoundingClientRect();
+    sparks(s.left + s.width / 2, s.top + s.height / 2, 18, 60);
+    setHelp("Invited " + names.slice(0, 2).join(", ") + (names.length > 2 ? " and " + (names.length - 2) + " more" : "") + " · " + role + ".");
+    say(n + (n === 1 ? " invite" : " invites") + " sent, " + role);
+    await wait(2400);
+
+    // 5. Reset
+    bar.style.transform = "";
+    roll("Send invites");
+    setHelp(HELP);
+    busy = false;
+    sendBtn.classList.remove("busy");
+    if (demoOn) queueDemo(2000);
+  }
+  sendBtn.addEventListener("click", sendInvites);
+
+  function sparks(x, y, count, spread) {
+    if (calm()) return;
+    const cols = ["#f2a541", "#2a9d8f", "#e76f51", "#8ab17d"];
+    for (let i = 0; i < count; i++) {
+      const s = document.createElement("i");
+      s.className = "spark";
+      s.style.left = x - 3.5 + "px";
+      s.style.top = y - 3.5 + "px";
+      s.style.background = cols[i % cols.length];
+      if (i % 3 === 0) s.style.borderRadius = "2px";
+      document.body.appendChild(s);
+      const a = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+      const d = spread * (0.6 + Math.random() * 0.5);
+      s.animate([
+        { transform: "translate(0,0) scale(1)", opacity: 1 },
+        { transform: "translate(" + Math.cos(a) * d + "px," + (Math.sin(a) * d - 6) + "px) rotate(140deg)", opacity: 1, offset: 0.65 },
+        { transform: "translate(" + Math.cos(a) * d * 1.12 + "px," + (Math.sin(a) * d + 10) + "px) scale(.3)", opacity: 0 }
+      ], { duration: 700 + Math.random() * 300, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = () => s.remove();
+    }
+  }
+
+  // ---------- Auto-demo: type an address, add a suggestion, send; every other round shows a typo fix ----------
+  let demoOn = true;
+  let demoTimer = 0;
+  let round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) => window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  function queueDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(runDemo, ms); }
+  async function type(text) {
+    for (const ch of text) {
+      if (!demoOn) return false;
+      entry.value += ch;
+      await wait(calm() ? 6 : 20 + Math.random() * 20);
+    }
+    return true;
+  }
+  const PEOPLE = ["zainab.ali@example.com", "bilal.ahmed@example.com", "ayesha.r@example.com", "usman.q@example.com"];
+  async function runDemo() {
+    if (!demoOn || busy) return;
+    const who = PEOPLE[round % PEOPLE.length];
+    if (round % 2 === 1) {
+      // a typo first: the chip turns red, gets removed with two Backspaces, then the fixed address goes in
+      if (!(await type(who.replace(".com", "")))) return;
+      commit();
+      await wait(900);
+      if (!demoOn) return;
+      const last = chips.lastElementChild;
+      if (last) { last.classList.add("armed"); await wait(380); if (!demoOn) return; removeChip(last, false); }
+      await wait(450);
+    }
+    if (!(await type(who))) return;
+    commit();
+    await wait(380);
+    if (!demoOn) return;
+    const free = picks.filter((p) => !p.disabled);
+    const p = free[round % Math.max(1, free.length)];
+    if (p) { play(p, [{ transform: "scale(1)" }, { transform: "scale(.85)" }, { transform: "scale(1)" }], { duration: 260 }); addChip(p.dataset.email); }
+    round++;
+    await wait(500);
+    if (demoOn) sendInvites();
+  }
+  queueDemo(320);
+</script>
+</body>
+</html>

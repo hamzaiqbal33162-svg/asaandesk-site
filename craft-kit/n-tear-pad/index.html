@@ -1,0 +1,668 @@
+<!doctype html>
+<!-- Chill & Craft · Tear Pad · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tear Pad · date picker with a tear-off calendar</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: cream paper, tomato red, pencil grey ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --desk: #efe7d8;
+    --desk2: #f8f2e6;
+    --card: #fffdf8;
+    --paper: #fffaf0;
+    --paper2: #f1e7d4;
+    --ink: #2a2520;
+    --muted: #8a7d70;
+    --line: #ebe1cf;
+    --red: #d8402b;
+    --red2: #f06a4a;
+    --ring: #8d96a3;
+    --shadow: rgba(80, 50, 20, .2);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --desk: #14100d;
+    --desk2: #1d1712;
+    --card: #1f1915;
+    --paper: #2c251f;
+    --paper2: #3a3129;
+    --ink: #f4eadb;
+    --muted: #b1a291;
+    --line: #3a3027;
+    --red: #ff6a4f;
+    --red2: #ff9271;
+    --ring: #b9c1cc;
+    --shadow: rgba(0, 0, 0, .6);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--desk);
+    overflow-x: hidden;
+  }
+  .desk {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 14px;
+    background:
+      radial-gradient(circle, color-mix(in srgb, var(--muted) 22%, transparent) 1px, transparent 1.5px) 0 0 / 22px 22px,
+      radial-gradient(80% 70% at 50% 40%, var(--desk2), var(--desk));
+  }
+  .card {
+    --pw: 122px;
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--pw) 1fr;
+    grid-template-areas: "pad info" "cal cal" "btn btn";
+    gap: 14px 16px;
+    width: min(100%, 400px);
+    padding: 18px 16px 16px;
+    border-radius: 26px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 30px 60px -36px var(--shadow), 0 8px 18px -14px var(--shadow);
+  }
+  @media (min-width: 700px) {
+    .card { --pw: 226px; width: 660px; grid-template-areas: "pad info" "pad cal" "pad btn"; gap: 12px 26px; padding: 24px; align-items: start; }
+    .pad { align-self: center; }
+  }
+
+  /* ---------- The tear-off pad ---------- */
+  .pad { grid-area: pad; position: relative; width: var(--pw); padding-top: calc(var(--pw) * .07); }
+  .rings { position: absolute; z-index: 4; left: 0; right: 0; top: 0; display: flex; justify-content: space-around; padding: 0 22%; }
+  .rings i {
+    width: calc(var(--pw) * .06);
+    height: calc(var(--pw) * .16);
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--ring), #fff 45%, var(--ring));
+    box-shadow: 0 2px 3px rgba(0, 0, 0, .3);
+  }
+  .pages {
+    position: relative;
+    height: calc(var(--pw) * 1.08);
+    border-radius: 12px;
+    /* the stack of pages under the top one */
+    box-shadow: 0 3px 0 -1px var(--paper2), 0 6px 0 -2px var(--paper), 0 9px 0 -3px var(--paper2), 0 20px 26px -14px var(--shadow);
+  }
+  .sheet {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--paper);
+    transform-origin: 100% 0;
+  }
+  .band {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: calc(var(--pw) * .085) calc(var(--pw) * .07) calc(var(--pw) * .045);
+    background: linear-gradient(var(--red2), var(--red));
+    color: #fff;
+    font-size: calc(var(--pw) * .072);
+    font-weight: 800;
+    letter-spacing: .12em;
+  }
+  [data-theme="dark"] .band { color: #2a0a03; }
+  .band::after { content: none; }
+  .perf { width: 100%; height: 5px; background: radial-gradient(circle at 50% 0, var(--paper2) 1.6px, transparent 2px) 0 0 / 7px 5px; }
+  .num {
+    position: relative;
+    margin-top: calc(var(--pw) * .04);
+    font-size: calc(var(--pw) * .4);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  .sheet.sun .num { color: var(--red); }
+  /* idle: the top page lifts at the corner now and then, as if in a draft */
+  #sheet { animation: flutter 6.5s ease-in-out 2.5s infinite; }
+  @keyframes flutter { 0%, 84%, 100% { transform: none; } 89% { transform: rotate(-1.6deg) translateY(1px); } 94% { transform: rotate(.7deg); } }
+  .wd { margin-top: calc(var(--pw) * .025); font-size: calc(var(--pw) * .085); font-weight: 600; color: var(--muted); }
+  /* how far away the day is, on a ruled foot of the page */
+  .foot {
+    width: 78%;
+    margin: auto 0 calc(var(--pw) * .07);
+    padding-top: calc(var(--pw) * .035);
+    border-top: 1.5px dashed var(--paper2);
+    text-align: center;
+    font-size: max(9.5px, calc(var(--pw) * .058));
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--red);
+  }
+  .circle {
+    position: absolute;
+    left: 50%;
+    top: 34%;
+    width: 78%;
+    height: 50%;
+    transform: translateX(-50%) rotate(-6deg);
+    overflow: visible;
+    pointer-events: none;
+  }
+  .circle path { fill: none; stroke: var(--red); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 330; stroke-dashoffset: 330; }
+  .pad.set .circle path { animation: pen .7s cubic-bezier(.6, .1, .3, 1) forwards; }
+  @keyframes pen { to { stroke-dashoffset: 0; } }
+  .stamp {
+    position: absolute;
+    right: 6%;
+    bottom: 7%;
+    padding: 3px 6px;
+    border: 2px solid var(--red);
+    border-radius: 6px;
+    color: var(--red);
+    font-size: calc(var(--pw) * .058);
+    font-weight: 800;
+    letter-spacing: .12em;
+    opacity: 0;
+    transform: rotate(-14deg) scale(2);
+  }
+  .pad.set .stamp { animation: stamp .45s cubic-bezier(.34, 1.8, .64, 1) .55s forwards; }
+  @keyframes stamp { to { opacity: .9; transform: rotate(-14deg) scale(1); } }
+  .bit { position: absolute; z-index: 5; width: 5px; height: 3px; border-radius: 1px; background: var(--paper2); pointer-events: none; }
+
+  /* ---------- Field ---------- */
+  .info { grid-area: info; align-self: center; min-width: 0; }
+  .lbl { display: block; margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .field {
+    display: flex;
+    align-items: center;
+    height: 46px;
+    padding: 0 6px 0 12px;
+    border-radius: 14px;
+    border: 1.5px solid var(--line);
+    background: var(--paper);
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .field:focus-within { border-color: var(--red); box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 16%, transparent); }
+  .field.bad { border-color: var(--red); animation: shake .4s; }
+  @keyframes shake { 25% { transform: translateX(-5px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
+  .field input { flex: 1; width: 0; min-width: 0; border: 0; outline: none; background: none; color: var(--ink); font: 600 15px/1 var(--ff); }
+  .field input::placeholder { color: var(--muted); font-weight: 500; }
+  .field svg { flex: none; width: 20px; height: 20px; color: var(--red); }
+  .hint { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.35; }
+  .hint.err { color: var(--red); font-weight: 600; }
+
+  /* ---------- Month grid ---------- */
+  .cal { grid-area: cal; min-width: 0; }
+  .mhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .mhead h2 { margin: 0; font-size: 16px; }
+  .mhead h2 span { display: inline-block; }
+  .mhead h2 span.in { animation: monthIn .45s cubic-bezier(.34, 1.4, .64, 1); }
+  @keyframes monthIn { from { opacity: 0; transform: translateY(var(--from, 10px)); } }
+  .arrows { display: flex; gap: 6px; }
+  .arrows button {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+    border: 1.5px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    transition: transform .3s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .arrows button:hover:not(:disabled) { transform: translateY(-2px); }
+  .arrows button:active { transform: scale(.9); }
+  .arrows button:disabled { opacity: .3; cursor: default; }
+  .arrows svg { width: 16px; height: 16px; }
+  .wk { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 2px; }
+  .wk span { text-align: center; font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--muted); }
+  .wk span:last-child { color: var(--red); }
+  .gridwrap { position: relative; overflow: hidden; }
+  .grid { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 38px; gap: 2px 0; }
+  .grid.slide { animation: slide .45s cubic-bezier(.34, 1.3, .64, 1); }
+  @keyframes slide { from { opacity: 0; transform: translateX(var(--dx, 30px)); } }
+  .blob {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 8px 16px -8px var(--red);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .day {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    margin: 1px auto;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--ink);
+    font: 600 14px/1 var(--ff);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: color .2s, background .2s, transform .3s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .day:hover:not([aria-disabled="true"]):not(.sel) { background: color-mix(in srgb, var(--red) 12%, transparent); }
+  .day.out { visibility: hidden; }
+  .day[aria-disabled="true"] { color: color-mix(in srgb, var(--muted) 55%, transparent); cursor: not-allowed; }
+  .day.sunday[aria-disabled="true"] { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--red) 50%, transparent); }
+  .day.today::after { content: ""; position: absolute; bottom: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--red); }
+  .day.sel { color: #fff; }
+  [data-theme="dark"] .day.sel { color: #2a0a03; }
+  .day.sel::after { background: currentColor; }
+  .day:focus-visible { outline: 2.5px solid var(--ink); outline-offset: 1px; }
+  .day.nope { animation: shake .35s; }
+
+  /* ---------- Set button ---------- */
+  .set {
+    grid-area: btn;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 48px;
+    border: 0;
+    border-radius: 15px;
+    background: var(--red);
+    color: #fff;
+    font: 700 15px/1 var(--ff);
+    cursor: pointer;
+    box-shadow: 0 14px 24px -16px var(--red);
+    transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), background .3s, opacity .2s;
+  }
+  [data-theme="dark"] .set { color: #2a0a03; }
+  .set[aria-disabled="true"] { opacity: .45; cursor: not-allowed; box-shadow: none; }
+  .set:active, .set.press { transform: scale(.96, .9); }
+  .set svg { width: 18px; height: 18px; display: none; }
+  .set.done { background: #23935d; }
+  [data-theme="dark"] .set.done { background: #43d08e; }
+  .set.done svg { display: block; animation: tick .5s cubic-bezier(.34, 1.8, .64, 1); }
+  @keyframes tick { from { transform: scale(0) rotate(-40deg); } }
+  button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="desk">
+  <section class="card" aria-labelledby="dlbl">
+    <div class="pad" id="pad" aria-hidden="true">
+      <div class="rings"><i></i><i></i></div>
+      <div class="pages" id="pages">
+        <div class="sheet" id="sheet">
+          <div class="band"><span class="m">NOV</span><span class="y">2026</span></div>
+          <div class="perf"></div>
+          <div class="num">18</div>
+          <div class="wd">Wednesday</div>
+          <div class="foot">Today</div>
+          <svg class="circle" viewBox="0 0 120 70"><path d="M98 14C84 2 34 2 16 18 0 33 8 58 46 64c34 5 66-6 70-26 3-15-14-26-36-29"/></svg>
+          <span class="stamp">DELIVERY</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="info">
+      <label class="lbl" id="dlbl" for="date">Delivery date</label>
+      <div class="field" id="field">
+        <input id="date" autocomplete="off" placeholder="DD/MM/YYYY" aria-describedby="hint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+      </div>
+      <p class="hint" id="hint">Monday to Saturday, up to 3 months ahead</p>
+    </div>
+
+    <div class="cal">
+      <div class="mhead">
+        <h2 id="mlabel" aria-live="polite"><span>November 2026</span></h2>
+        <div class="arrows">
+          <button type="button" id="prev" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <button type="button" id="nextM" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+        </div>
+      </div>
+      <div class="wk" aria-hidden="true"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
+      <div class="gridwrap"><div class="grid" id="grid" role="group" aria-labelledby="mlabel"><i class="blob" id="blob"></i></div></div>
+    </div>
+
+    <button class="set" id="set" type="button" aria-disabled="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span id="setLabel">Set delivery date</span></button>
+    <p class="sr" id="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduceMq = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  var DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  var pad = $("#pad"), pages = $("#pages"), sheet = $("#sheet"), grid = $("#grid"), blob = $("#blob");
+  var input = $("#date"), field = $("#field"), hint = $("#hint"), mlabel = $("#mlabel"), setBtn = $("#set"), setLabel = $("#setLabel"), status = $("#status");
+
+  // ---------- Dates ----------
+  function day0(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function add(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return day0(x); }
+  function same(a, b) { return a && b && a.getTime() === b.getTime(); }
+  function diffDays(a, b) { return Math.round((b - a) / 864e5); }
+  var today = day0(new Date());
+  var last = add(today, 92);
+  function allowed(d) { return d >= today && d <= last && d.getDay() !== 0; }
+  function short(d) { return DAYS[d.getDay()].slice(0, 3) + ", " + d.getDate() + " " + MONTHS[d.getMonth()].slice(0, 3) + " " + d.getFullYear(); }
+  function long(d) { return DAYS[d.getDay()] + " " + d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear(); }
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+  var sel = null, focusD = allowed(today) ? today : add(today, 1), viewY = today.getFullYear(), viewM = today.getMonth();
+  var shown = today; // the date on the top page of the pad
+
+  // ---------- Pad page content ----------
+  function paint(el, d) {
+    el.querySelector(".m").textContent = MONTHS[d.getMonth()].slice(0, 3).toUpperCase();
+    el.querySelector(".y").textContent = d.getFullYear();
+    el.querySelector(".num").textContent = d.getDate();
+    el.querySelector(".wd").textContent = DAYS[d.getDay()];
+    var n = diffDays(today, d);
+    el.querySelector(".foot").textContent = n === 0 ? "Today" : n === 1 ? "Tomorrow" : n > 1 ? "In " + n + " days" : -n + " days ago";
+    el.classList.toggle("sun", d.getDay() === 0);
+  }
+  paint(sheet, shown);
+
+  // Tear pages off (forwards) or stick them back on (backwards) until the pad shows the date
+  var tearId = 0;
+  async function flipTo(d) {
+    var id = ++tearId, n = diffDays(shown, d);
+    if (!n) return;
+    var steps = Math.min(Math.abs(n), 7);
+    for (var k = 1; k <= steps; k++) {
+      if (id !== tearId) return;
+      var next = add(shown, Math.round(n * k / steps) - Math.round(n * (k - 1) / steps));
+      if (n > 0) tear(next); else unTear(next);
+      shown = next;
+      await wait(reduceMq.matches ? 0 : Math.max(70, 210 * Math.pow(.78, k - 1)));
+    }
+  }
+  function ghost() {
+    var g = sheet.cloneNode(true);
+    g.removeAttribute("id");
+    g.querySelectorAll(".circle, .stamp").forEach(function (x) { x.remove(); });
+    g.style.zIndex = 3;
+    pages.appendChild(g);
+    return g;
+  }
+  function tear(next) {
+    if (reduceMq.matches) { paint(sheet, next); return; }
+    var g = ghost(); // the old page, torn away while the new one shows below
+    paint(sheet, next);
+    var spin = -(24 + Math.random() * 22);
+    g.animate([
+      { transform: "none", opacity: 1 },
+      { transform: "rotate(-4deg) translateY(2px)", opacity: 1, offset: .16 },
+      { transform: "translate(-12px, 18px) rotate(-12deg)", opacity: 1, offset: .38 },
+      { transform: "translate(" + (-50 - Math.random() * 40) + "px, 170%) rotate(" + spin + "deg)", opacity: 0 }
+    ], { duration: 720, easing: "cubic-bezier(.45,0,.75,.6)" }).onfinish = function () { g.remove(); };
+    bits();
+  }
+  function unTear(next) {
+    if (reduceMq.matches) { paint(sheet, next); return; }
+    var g = ghost(); // a page flies back up and sticks on top
+    paint(g, next);
+    g.animate([
+      { transform: "translate(-60px, -130%) rotate(-28deg)", opacity: 0 },
+      { transform: "translate(4px, 4px) rotate(2deg)", opacity: 1, offset: .75 },
+      { transform: "none", opacity: 1 }
+    ], { duration: 460, easing: "cubic-bezier(.3,.7,.4,1)" }).onfinish = function () { paint(sheet, next); g.remove(); };
+  }
+  function bits() {
+    var w = pages.clientWidth;
+    for (var i = 0; i < 5; i++) {
+      var b = document.createElement("i");
+      b.className = "bit";
+      b.style.left = (w * .15 + Math.random() * w * .7) + "px";
+      b.style.top = (w * .2) + "px";
+      pages.appendChild(b);
+      b.animate([
+        { transform: "translate(0,0) rotate(0deg)", opacity: 1 },
+        { transform: "translate(" + (Math.random() - .5) * 40 + "px," + (60 + Math.random() * 60) + "px) rotate(" + (Math.random() * 400) + "deg)", opacity: 0 }
+      ], { duration: 700 + Math.random() * 300, easing: "cubic-bezier(.3,.4,.6,1)" }).onfinish = (function (el) { return function () { el.remove(); }; })(b);
+    }
+  }
+
+  // ---------- Month grid ----------
+  var cells = [];
+  function render(dir) {
+    cells.forEach(function (c) { c.remove(); });
+    cells = [];
+    var first = new Date(viewY, viewM, 1), lead = (first.getDay() + 6) % 7, dim = new Date(viewY, viewM + 1, 0).getDate();
+    for (var i = 0; i < lead; i++) { var e = document.createElement("span"); e.className = "day out"; grid.appendChild(e); cells.push(e); }
+    for (var dd = 1; dd <= dim; dd++) {
+      var d = new Date(viewY, viewM, dd), b = document.createElement("button");
+      b.type = "button";
+      b.className = "day" + (d.getDay() === 0 ? " sunday" : "") + (same(d, today) ? " today" : "") + (same(d, sel) ? " sel" : "");
+      b.textContent = dd;
+      b.dataset.t = d.getTime();
+      b.tabIndex = same(d, focusD) ? 0 : -1;
+      b.setAttribute("aria-label", long(d) + (same(d, today) ? ", today" : "") + (d.getDay() === 0 ? ", no deliveries" : ""));
+      if (!allowed(d)) b.setAttribute("aria-disabled", "true");
+      if (same(d, sel)) b.setAttribute("aria-pressed", "true");
+      grid.appendChild(b);
+      cells.push(b);
+    }
+    var span = mlabel.querySelector("span");
+    span.textContent = MONTHS[viewM] + " " + viewY;
+    if (dir) {
+      span.style.setProperty("--from", dir > 0 ? "10px" : "-10px");
+      span.classList.remove("in"); void span.offsetWidth; span.classList.add("in");
+      grid.style.setProperty("--dx", dir > 0 ? "34px" : "-34px");
+      grid.classList.remove("slide"); void grid.offsetWidth; grid.classList.add("slide");
+    }
+    $("#prev").disabled = viewY === today.getFullYear() && viewM === today.getMonth();
+    $("#nextM").disabled = viewY === last.getFullYear() && viewM === last.getMonth();
+    placeBlob(false);
+  }
+  function cellFor(d) { return d ? grid.querySelector('.day[data-t="' + d.getTime() + '"]') : null; }
+
+  // The red selection blob glides between days with a little stretch
+  var blobAt = null;
+  function placeBlob(animate) {
+    var c = cellFor(sel);
+    if (!c) { blob.style.opacity = 0; blobAt = null; return; }
+    var x = c.offsetLeft, y = c.offsetTop;
+    blob.style.opacity = 1;
+    if (animate && blobAt && !reduceMq.matches) {
+      var dx = x - blobAt.x, dy = y - blobAt.y, horiz = Math.abs(dx) >= Math.abs(dy);
+      blob.animate([
+        { transform: "translate(" + blobAt.x + "px," + blobAt.y + "px) scale(1)" },
+        { transform: "translate(" + (blobAt.x + dx * .55) + "px," + (blobAt.y + dy * .55) + "px) scale(" + (horiz ? "1.35,.75" : ".8,1.3") + ")", offset: .45 },
+        { transform: "translate(" + x + "px," + y + "px) scale(.92,1.08)", offset: .8 },
+        { transform: "translate(" + x + "px," + y + "px) scale(1)" }
+      ], { duration: 520, easing: "cubic-bezier(.3,.7,.4,1)" });
+    } else if (animate && !reduceMq.matches) {
+      blob.animate([{ transform: "translate(" + x + "px," + y + "px) scale(0)" }, { transform: "translate(" + x + "px," + y + "px) scale(1.15)", offset: .6 }, { transform: "translate(" + x + "px," + y + "px) scale(1)" }], { duration: 420, easing: "ease-out" });
+    }
+    blob.style.transform = "translate(" + x + "px," + y + "px)";
+    blobAt = { x: x, y: y };
+  }
+
+  function showMonth(y, m, dir) { viewY = y; viewM = m; render(dir); }
+  function moveFocus(d) {
+    if (d < new Date(today.getFullYear(), today.getMonth(), 1) || d > last) return;
+    var dir = d.getFullYear() * 12 + d.getMonth() - (viewY * 12 + viewM);
+    focusD = d;
+    if (dir) showMonth(d.getFullYear(), d.getMonth(), dir > 0 ? 1 : -1);
+    cells.forEach(function (c) { if (c.dataset && c.dataset.t) c.tabIndex = +c.dataset.t === d.getTime() ? 0 : -1; });
+    var c = cellFor(d);
+    if (c) c.focus({ preventScroll: true });
+  }
+
+  // ---------- Choose a date ----------
+  function choose(d, from) {
+    if (!allowed(d)) {
+      var c = cellFor(d);
+      if (c) { c.classList.remove("nope"); void c.offsetWidth; c.classList.add("nope"); }
+      hint.textContent = d.getDay() === 0 ? "No deliveries on Sunday. Pick another day." : "Pick a day from today up to 3 months ahead.";
+      hint.classList.add("err");
+      status.textContent = hint.textContent;
+      return false;
+    }
+    hint.textContent = "Monday to Saturday, up to 3 months ahead";
+    hint.classList.remove("err");
+    sel = d; focusD = d;
+    if (d.getFullYear() !== viewY || d.getMonth() !== viewM) showMonth(d.getFullYear(), d.getMonth(), d > new Date(viewY, viewM, 1) ? 1 : -1);
+    cells.forEach(function (c) {
+      if (!c.dataset || !c.dataset.t) return;
+      var on = +c.dataset.t === d.getTime();
+      c.classList.toggle("sel", on);
+      c.tabIndex = on ? 0 : -1;
+      if (on) c.setAttribute("aria-pressed", "true"); else c.removeAttribute("aria-pressed");
+    });
+    placeBlob(true);
+    if (from !== "input") input.value = short(d);
+    field.classList.remove("bad");
+    unset();
+    setBtn.setAttribute("aria-disabled", "false");
+    status.textContent = "Selected " + long(d) + ".";
+    flipTo(d);
+    return true;
+  }
+  function unset() {
+    pad.classList.remove("set");
+    setBtn.classList.remove("done");
+    setLabel.textContent = "Set delivery date";
+  }
+
+  grid.addEventListener("click", function (e) {
+    var b = e.target.closest("button.day");
+    if (b) choose(new Date(+b.dataset.t));
+  });
+  grid.addEventListener("keydown", function (e) {
+    var b = e.target.closest("button.day");
+    if (!b) return;
+    var d = new Date(+b.dataset.t), dow = (d.getDay() + 6) % 7, to = null;
+    switch (e.key) {
+      case "ArrowLeft": to = add(d, -1); break;
+      case "ArrowRight": to = add(d, 1); break;
+      case "ArrowUp": to = add(d, -7); break;
+      case "ArrowDown": to = add(d, 7); break;
+      case "Home": to = add(d, -dow); break;
+      case "End": to = add(d, 6 - dow); break;
+      case "PageUp": to = new Date(d.getFullYear(), d.getMonth() - 1, Math.min(d.getDate(), 28)); break;
+      case "PageDown": to = new Date(d.getFullYear(), d.getMonth() + 1, Math.min(d.getDate(), 28)); break;
+      default: return;
+    }
+    e.preventDefault();
+    if (to < today) to = today;
+    if (to > last) to = last;
+    moveFocus(day0(to));
+  });
+  $("#prev").addEventListener("click", function () { showMonth(viewM ? viewY : viewY - 1, (viewM + 11) % 12, -1); });
+  $("#nextM").addEventListener("click", function () { showMonth(viewM === 11 ? viewY + 1 : viewY, (viewM + 1) % 12, 1); });
+
+  // Typed dates: 26/11/2026, 26-11, or 26.11
+  function parse(s) {
+    var m = s.trim().match(/^(\d{1,2})[\/.\- ](\d{1,2})(?:[\/.\- ](\d{2,4}))?$/);
+    if (!m) return null;
+    var y = m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : today.getFullYear();
+    var d = new Date(y, +m[2] - 1, +m[1]);
+    if (d.getMonth() !== +m[2] - 1) return null;
+    if (!m[3] && d < today) d = new Date(y + 1, +m[2] - 1, +m[1]);
+    return d;
+  }
+  function commitTyped() {
+    var v = input.value.trim();
+    if (!v || (sel && v === short(sel))) return;
+    var d = parse(v), eg = add(today, 3);
+    if (!d) {
+      hint.textContent = "Type the date as DD/MM/YYYY, for example " + pad2(eg.getDate()) + "/" + pad2(eg.getMonth() + 1) + "/" + eg.getFullYear() + ".";
+      hint.classList.add("err");
+      status.textContent = hint.textContent;
+    }
+    if (!d || !choose(d, "input")) { field.classList.remove("bad"); void field.offsetWidth; field.classList.add("bad"); return; }
+    input.value = short(sel);
+  }
+  input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); commitTyped(); } if (e.key === "ArrowDown") { e.preventDefault(); moveFocus(sel || focusD); } });
+  input.addEventListener("change", commitTyped);
+  input.addEventListener("focus", function () { if (sel) input.value = pad2(sel.getDate()) + "/" + pad2(sel.getMonth() + 1) + "/" + sel.getFullYear(); input.select(); });
+  input.addEventListener("blur", function () { if (sel && parse(input.value) && same(parse(input.value), sel)) input.value = short(sel); });
+  field.addEventListener("animationend", function () { field.classList.remove("bad"); });
+  grid.addEventListener("animationend", function (e) { if (e.target.classList.contains("nope")) e.target.classList.remove("nope"); });
+
+  // ---------- Set: the pen circles the day and a stamp lands ----------
+  setBtn.addEventListener("click", async function () {
+    if (!sel) {
+      hint.textContent = "Pick a delivery day first.";
+      hint.classList.add("err");
+      status.textContent = hint.textContent;
+      return;
+    }
+    if (setBtn.classList.contains("done")) return;
+    await flipTo(sel);
+    pad.classList.remove("set"); void pad.offsetWidth; pad.classList.add("set");
+    setBtn.classList.add("done");
+    setLabel.textContent = "Delivery on " + DAYS[sel.getDay()].slice(0, 3) + " " + sel.getDate() + " " + MONTHS[sel.getMonth()].slice(0, 3);
+    status.textContent = "Delivery date set for " + long(sel) + ".";
+  });
+
+  render(0);
+  addEventListener("resize", function () { placeBlob(false); });
+
+  // ---------- Auto demo: plays on load and every few seconds until someone touches it ----------
+  var demoOn = true;
+  function stopDemo(e) { if (e.isTrusted) demoOn = false; }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  function nextOk(d) { while (!allowed(d)) d = add(d, 1); return d; }
+  async function demo() {
+    try {
+      await pause(300);
+      while (demoOn) {
+        choose(nextOk(add(today, 3))); await pause(1600);
+        choose(nextOk(add(today, 11))); await pause(1700);
+        setBtn.classList.add("press"); await pause(150); setBtn.classList.remove("press");
+        setBtn.click(); await pause(2800);
+        choose(nextOk(add(today, 1))); await pause(1500);
+        sel = null; unset(); input.value = ""; setBtn.setAttribute("aria-disabled", "true");
+        showMonth(today.getFullYear(), today.getMonth(), viewM !== today.getMonth() ? -1 : 0);
+        await flipTo(today); await pause(2000);
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>

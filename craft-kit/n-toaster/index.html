@@ -1,0 +1,624 @@
+<!doctype html>
+<!-- Chill & Craft · Toaster · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toaster · toast notifications that pop</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: powder-blue kitchen, butter counter, retro toaster ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --wall: #d8e9f4;
+    --wall2: #eef6fb;
+    --tile: rgba(255, 255, 255, .55);
+    --counter: #f2cf8c;
+    --counter2: #d9a85a;
+    --ink: #1f2e3a;
+    --muted: #5d7182;
+    --card: #ffffff;
+    --card-line: rgba(31, 46, 58, .08);
+    --body1: #9fd0ec;
+    --body2: #4f93c3;
+    --chrome1: #ffffff;
+    --chrome2: #9fb0bd;
+    --ok: #23a065;
+    --info: #3b78e0;
+    --warn: #e2910f;
+    --err: #df4436;
+    --bread: #f4dca8;
+    --toast: #9a5a26;
+    --shadow: rgba(30, 60, 90, .25);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --wall: #0e1621;
+    --wall2: #172433;
+    --tile: rgba(255, 255, 255, .035);
+    --counter: #4a3420;
+    --counter2: #2b1d10;
+    --ink: #e9f0f6;
+    --muted: #93a7b8;
+    --card: #1b2734;
+    --card-line: rgba(255, 255, 255, .08);
+    --body1: #5c9cc8;
+    --body2: #2a5d85;
+    --chrome1: #dfe7ee;
+    --chrome2: #6d7f8d;
+    --ok: #3ed08a;
+    --info: #6aa0ff;
+    --warn: #ffb53d;
+    --err: #ff6b5d;
+    --bread: #e9cf98;
+    --toast: #b4703a;
+    --shadow: rgba(0, 0, 0, .55);
+  }
+
+  /* ---------- Room ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--wall);
+    overflow-x: hidden;
+  }
+  .room {
+    position: relative;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 14px 26px;
+    overflow: hidden;
+    isolation: isolate;
+    background:
+      linear-gradient(var(--tile) 1.5px, transparent 1.5px) 0 0 / 46px 46px,
+      linear-gradient(90deg, var(--tile) 1.5px, transparent 1.5px) 0 0 / 46px 46px,
+      radial-gradient(70% 60% at 50% 35%, var(--wall2), var(--wall));
+  }
+  .scene { position: relative; width: min(100%, 380px); display: flex; flex-direction: column; align-items: center; }
+
+  /* ---------- Header and the four pop buttons ---------- */
+  .top { width: 100%; text-align: center; }
+  h1 { margin: 0; font-size: clamp(20px, 5.4vw, 24px); letter-spacing: -.01em; }
+  .sub { margin: 3px 0 10px; font-size: 13.5px; color: var(--muted); }
+  .pops { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; }
+  .pops button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 11px 7px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--card-line);
+    background: var(--card);
+    color: var(--ink);
+    font: 600 12.5px/1 var(--ff);
+    cursor: pointer;
+    box-shadow: 0 6px 14px -10px var(--shadow);
+    transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), box-shadow .25s;
+  }
+  .pops button:hover { transform: translateY(-2px); box-shadow: 0 10px 18px -10px var(--shadow); }
+  .pops button:active, .pops button.press { transform: scale(.92); }
+  .pops i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
+  button:focus-visible { outline: 3px solid var(--info); outline-offset: 2px; }
+
+  /* ---------- The toast stack ---------- */
+  .stack {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 8px;
+    width: 100%;
+    height: 252px;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* an empty rack shows where the toasts will land (covered once three are up) */
+  .stack::before {
+    content: "Fresh toasts land here";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    display: grid;
+    justify-items: center;
+    padding-top: 22px;
+    border: 2px dashed color-mix(in srgb, var(--muted) 28%, transparent);
+    border-radius: 22px;
+    background: color-mix(in srgb, var(--card) 35%, transparent);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .toast {
+    --c: var(--ok);
+    --p: 0;
+    position: relative;
+    flex: none;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 0 10px;
+    padding: 11px 10px 13px 11px;
+    border-radius: 18px;
+    background: var(--card);
+    border: 1px solid var(--card-line);
+    box-shadow: 0 16px 30px -20px var(--shadow), 0 2px 5px -3px var(--shadow);
+    overflow: hidden;
+    touch-action: pan-y;
+    cursor: grab;
+    user-select: none;
+  }
+  .toast.info { --c: var(--info); }
+  .toast.warn { --c: var(--warn); }
+  .toast.err { --c: var(--err); }
+  .toast::before {
+    /* a soft wash of the toast's colour on the left */
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--c) 13%, transparent), transparent 45%);
+    pointer-events: none;
+  }
+  .ico {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+    color: #fff;
+    background: var(--c);
+    box-shadow: 0 6px 12px -6px var(--c);
+    transition: background .3s, transform .5s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  [data-theme="dark"] .ico { color: #0d1620; }
+  .ico svg { width: 18px; height: 18px; }
+  .toast.morph .ico { animation: flip .55s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes flip { 45% { transform: rotateY(90deg) scale(.8); } }
+  .txt { position: relative; min-width: 0; }
+  .txt b { display: block; font-size: 14px; line-height: 1.25; }
+  .txt span { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+  .act {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    white-space: nowrap;
+    border-radius: 999px;
+    border: 0;
+    background: color-mix(in srgb, var(--c) 16%, transparent);
+    color: color-mix(in srgb, var(--c) 75%, var(--ink));
+    font: 700 12px/1 var(--ff);
+    cursor: pointer;
+  }
+  .act em { font-style: normal; }
+  .act:hover { background: color-mix(in srgb, var(--c) 26%, transparent); }
+  .act .sp { display: none; width: 11px; height: 11px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: turn .7s linear infinite; }
+  .act.busy .sp { display: inline-block; }
+  @keyframes turn { to { transform: rotate(1turn); } }
+  .x {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    margin: 0 -3px 0 -4px;
+    border: 0;
+    border-radius: 9px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .x:hover { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--ink); }
+  .x svg { width: 14px; height: 14px; }
+  /* "toasting" timer: the strip browns from bread to toast as time runs out; pauses while you hover */
+  .crisp { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: color-mix(in srgb, var(--bread) 40%, transparent); }
+  .crisp i {
+    display: block;
+    height: 100%;
+    width: calc(var(--p) * 100%);
+    border-radius: 0 4px 4px 0;
+    background: color-mix(in srgb, var(--toast) calc(var(--p) * 100%), var(--bread));
+  }
+  .toast.paused .crisp i { opacity: .55; }
+
+  /* ---------- Toaster ---------- */
+  .base { position: relative; z-index: 2; width: 220px; margin-top: 6px; }
+  @media (min-width: 700px) { .base { width: 250px; } .scene { width: 420px; } }
+  .toaster {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    border-radius: 30px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .toaster svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .lever { transition: transform .5s cubic-bezier(.34, 1.9, .64, 1); }
+  .toaster.down .lever { transform: translateY(24px); transition: transform .22s cubic-bezier(.5, 0, .9, .5); }
+  .toaster:hover .lever { transform: translateY(3px); }
+  .toaster.down .body { animation: rattle .12s linear infinite; }
+  @keyframes rattle { 50% { transform: translate(.6px, -.4px); } }
+  .glow { opacity: 0; transition: opacity .25s; }
+  .toaster.down .glow { opacity: 1; animation: coil .3s ease-in-out infinite alternate; }
+  @keyframes coil { to { opacity: .65; } }
+  .lamp { fill: #6d3a33; transition: fill .2s; }
+  .toaster.down .lamp { fill: #ff4a3a; }
+  .dial { transform-box: fill-box; transform-origin: 50% 50%; transition: transform .6s cubic-bezier(.34, 1.56, .64, 1); }
+  .toaster.down .dial { transform: rotate(130deg); }
+  .steam path { fill: none; stroke: color-mix(in srgb, var(--muted) 45%, transparent); stroke-width: 3; stroke-linecap: round; opacity: 0; animation: steam 3.2s ease-out infinite; }
+  .steam path:nth-child(2) { animation-delay: 1.6s; }
+  @keyframes steam { 0% { opacity: 0; transform: translateY(10px); } 30% { opacity: .7; } 100% { opacity: 0; transform: translateY(-22px); } }
+  .ding {
+    position: absolute;
+    right: -8px;
+    top: -14px;
+    padding: 6px 10px;
+    border-radius: 12px 12px 12px 3px;
+    background: var(--card);
+    color: var(--warn);
+    font: 800 13px/1 var(--ff);
+    letter-spacing: .04em;
+    box-shadow: 0 8px 16px -10px var(--shadow);
+    opacity: 0;
+    transform: scale(.3) rotate(-12deg);
+    transform-origin: 0 100%;
+    pointer-events: none;
+  }
+  .ding.on { animation: ding .9s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes ding { 25% { opacity: 1; transform: scale(1.1) rotate(4deg); } 70% { opacity: 1; transform: scale(1) rotate(0); } 100% { opacity: 0; transform: translateY(-8px); } }
+  .slot { position: absolute; left: 23.3%; top: 26.7%; width: 24.2%; height: 4px; }
+  .crumb { position: absolute; z-index: 3; width: 6px; height: 4px; border-radius: 50%; background: var(--toast); pointer-events: none; }
+  /* the counter top the toaster stands on (full width, behind) */
+  .counter {
+    position: absolute;
+    z-index: -1;
+    left: 50%;
+    top: calc(100% - 9px);
+    width: 100vw;
+    height: 60vh;
+    margin-left: -50vw;
+    background: linear-gradient(var(--counter), var(--counter2));
+    box-shadow: inset 0 3px 0 rgba(255, 255, 255, .35), inset 0 10px 0 rgba(0, 0, 0, .06);
+  }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-height: 560px) { .stack { height: 200px; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="room">
+  <div class="scene">
+    <header class="top">
+      <h1>Fresh notifications</h1>
+      <p class="sub">Pop a toast, or press the toaster lever</p>
+      <div class="pops" role="group" aria-label="Pop a toast">
+        <button type="button" data-kind="ok" style="--c: var(--ok)"><i></i>Saved</button>
+        <button type="button" data-kind="info" style="--c: var(--info)"><i></i>Message</button>
+        <button type="button" data-kind="warn" style="--c: var(--warn)"><i></i>Storage</button>
+        <button type="button" data-kind="err" style="--c: var(--err)"><i></i>Payment</button>
+      </div>
+    </header>
+
+    <ol class="stack" id="stack" aria-label="Notifications" aria-live="polite"></ol>
+
+    <div class="base">
+      <span class="ding" id="ding" aria-hidden="true">DING!</span>
+      <button class="toaster" id="toaster" type="button" aria-label="Press the toaster lever to pop the next toast">
+        <svg viewBox="0 0 240 150" aria-hidden="true">
+          <defs>
+            <linearGradient id="gBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--body1)"/><stop offset="1" stop-color="var(--body2)"/></linearGradient>
+            <linearGradient id="gChrome" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--chrome1)"/><stop offset=".55" stop-color="var(--chrome2)"/><stop offset="1" stop-color="var(--chrome1)"/></linearGradient>
+            <linearGradient id="gTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--chrome1)"/><stop offset="1" stop-color="var(--body1)"/></linearGradient>
+            <radialGradient id="gGlow"><stop offset="0" stop-color="#ffd27a"/><stop offset=".6" stop-color="#ff7a2a" stop-opacity=".8"/><stop offset="1" stop-color="#ff5a1a" stop-opacity="0"/></radialGradient>
+          </defs>
+          <g class="steam"><path d="M84 34c-6-8 6-12 0-20"/><path d="M152 34c-6-8 6-12 0-20"/></g>
+          <ellipse cx="118" cy="142" rx="98" ry="6" fill="rgba(0,0,0,.18)"/>
+          <rect x="46" y="128" width="24" height="10" rx="4" fill="var(--chrome2)"/>
+          <rect x="166" y="128" width="24" height="10" rx="4" fill="var(--chrome2)"/>
+          <g class="body">
+            <rect x="24" y="44" width="188" height="88" rx="32" fill="url(#gBody)"/>
+            <rect x="28" y="30" width="180" height="32" rx="16" fill="url(#gTop)"/>
+            <rect x="56" y="40" width="58" height="10" rx="5" fill="#26313b"/>
+            <rect x="122" y="40" width="58" height="10" rx="5" fill="#26313b"/>
+            <g class="glow"><ellipse cx="85" cy="45" rx="34" ry="9" fill="url(#gGlow)"/><ellipse cx="151" cy="45" rx="34" ry="9" fill="url(#gGlow)"/></g>
+            <rect x="24" y="98" width="188" height="13" fill="url(#gChrome)"/>
+            <path d="M40 62c-6 14-6 30 0 44" stroke="rgba(255,255,255,.45)" stroke-width="6" stroke-linecap="round" fill="none"/>
+            <circle cx="70" cy="80" r="11" fill="url(#gChrome)"/>
+            <rect class="dial" x="69" y="70" width="2.5" height="9" rx="1.2" fill="#26313b"/>
+            <circle class="lamp" cx="96" cy="80" r="4.2"/>
+            <text x="150" y="85" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="2" fill="rgba(255,255,255,.75)" font-family="system-ui, sans-serif">TOASTY</text>
+            <rect x="214" y="52" width="7" height="56" rx="3.5" fill="#26313b" opacity=".75"/>
+            <g class="lever"><rect x="208" y="50" width="26" height="13" rx="6.5" fill="url(#gChrome)" stroke="rgba(0,0,0,.18)"/></g>
+          </g>
+        </svg>
+      </button>
+      <span class="slot" id="slot" aria-hidden="true"></span>
+      <div class="counter" aria-hidden="true"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduceMq = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var stack = $("#stack"), toaster = $("#toaster"), ding = $("#ding"), slot = $("#slot");
+  var MAX_SHOWN = 3;
+
+  // ---------- Icons ----------
+  var ICON = {
+    ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-6l-5 4v-4a2 2 0 0 1-2-2z"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v9M12 19h.01"/></svg>',
+    err: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>',
+    undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7L4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 0 12"/></svg>'
+  };
+  var X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+  // ---------- What each kind of toast says, and what its button does ----------
+  var KINDS = {
+    ok: { title: "Order saved", text: "Ayesha's order #4821 is in your list.", act: "Undo", life: 6500 },
+    info: { title: "New voice note", text: "Bilal sent you a 0:42 voice note.", act: "Open", life: 6500 },
+    warn: { title: "Storage 92% full", text: "4.6 of 5 GB used by old photos.", act: "Clean up", life: 9000 },
+    err: { title: "Payment declined", text: "Card ending 4417 was declined.", act: "Retry", life: 11000 }
+  };
+  var ORDER = ["ok", "info", "warn", "err"], nextKind = 0;
+
+  // ---------- Each live toast keeps its own timer (paused while hovered or focused) ----------
+  var live = [];
+  function makeToast(kind) {
+    var k = KINDS[kind];
+    var li = document.createElement("li");
+    li.className = "toast " + kind;
+    li.innerHTML = '<span class="ico" aria-hidden="true">' + ICON[kind] + '</span>' +
+      '<div class="txt"' + (kind === "err" ? ' role="alert"' : "") + '><b>' + k.title + "</b><span>" + k.text + '</span></div>' +
+      '<button class="act" type="button"><i class="sp" aria-hidden="true"></i><em>' + k.act + "</em></button>" +
+      '<button class="x" type="button" aria-label="Dismiss: ' + k.title + '">' + X + "</button>" +
+      '<span class="crisp" aria-hidden="true"><i></i></span>';
+    var t = { li: li, kind: kind, life: k.life, used: 0, hover: false, focus: false, gone: false, busy: false };
+    li.addEventListener("pointerenter", function () { t.hover = true; li.classList.add("paused"); });
+    li.addEventListener("pointerleave", function () { t.hover = false; li.classList.toggle("paused", t.focus); });
+    li.addEventListener("focusin", function () { t.focus = true; li.classList.add("paused"); });
+    li.addEventListener("focusout", function () { t.focus = false; li.classList.toggle("paused", t.hover); });
+    li.addEventListener("keydown", function (e) { if (e.key === "Escape") dismiss(t, 1); });
+    li.querySelector(".x").addEventListener("click", function () { dismiss(t, 1); });
+    li.querySelector(".act").addEventListener("click", function () { action(t); });
+    swipe(t);
+    return t;
+  }
+
+  // Positions before and after a change, then slide everything from old to new place (FLIP)
+  function snapshot() {
+    var m = new Map();
+    live.forEach(function (t) { m.set(t.li, t.li.getBoundingClientRect().top); });
+    return m;
+  }
+  function flip(before) {
+    if (reduceMq.matches) return;
+    live.forEach(function (t) {
+      var was = before.get(t.li);
+      if (was == null || t.entering) return;
+      var dy = was - t.li.getBoundingClientRect().top;
+      if (Math.abs(dy) > 1) t.li.animate([{ transform: "translateY(" + dy + "px)" }, { transform: "none" }], { duration: 520, easing: "cubic-bezier(.34,1.4,.64,1)" });
+    });
+  }
+
+  // ---------- Popping: lever down and coils glow, then the toast flies out of the slot ----------
+  var queue = [], popping = false;
+  function pop(kind) { queue.push(kind); if (!popping) run(); }
+  async function run() {
+    popping = true;
+    while (queue.length) {
+      var kind = queue.shift();
+      toaster.classList.add("down");
+      await wait(reduceMq.matches ? 60 : 460);
+      toaster.classList.remove("down");
+      ding.classList.remove("on"); void ding.offsetWidth; ding.classList.add("on");
+      launch(kind);
+      await wait(reduceMq.matches ? 60 : 380);
+    }
+    popping = false;
+  }
+  function launch(kind) {
+    var before = snapshot();
+    var t = makeToast(kind);
+    t.entering = true;
+    stack.appendChild(t.li);
+    live.push(t);
+    // keep at most three on the counter: the oldest one is eaten
+    var extra = live.filter(function (x) { return !x.gone; }).length - MAX_SHOWN;
+    live.forEach(function (x) { if (extra > 0 && !x.gone && x !== t) { extra--; dismiss(x, 0, true); } });
+    flip(before);
+    if (!reduceMq.matches) {
+      var r = t.li.getBoundingClientRect(), s = slot.getBoundingClientRect();
+      var dx = s.left + s.width / 2 - (r.left + r.width / 2), dy = s.top - r.top + 8;
+      t.li.animate([
+        { transform: "translate(" + dx + "px," + (dy + 30) + "px) scale(.36,.42) rotate(0deg)", offset: 0 },
+        { transform: "translate(" + dx * .55 + "px,-46px) scale(.9) rotate(-7deg)", offset: .36 },
+        { transform: "translate(0,9px) scale(1.03,.96) rotate(1.5deg)", offset: .66 },
+        { transform: "translate(0,-3px) scale(.99,1.01)", offset: .84 },
+        { transform: "none", offset: 1 }
+      ], { duration: 980, easing: "cubic-bezier(.3,.6,.4,1)" }).onfinish = function () { t.entering = false; };
+      crumbs();
+    } else t.entering = false;
+  }
+  function crumbs() {
+    var base = $(".base"), s = slot.getBoundingClientRect(), b = base.getBoundingClientRect();
+    for (var i = 0; i < 9; i++) {
+      var c = document.createElement("i");
+      c.className = "crumb";
+      c.style.left = (s.left - b.left + 10 + Math.random() * 80) + "px";
+      c.style.top = (s.top - b.top + 6) + "px";
+      base.appendChild(c);
+      var dx = (Math.random() - .5) * 90, up = 30 + Math.random() * 40;
+      c.animate([
+        { transform: "translate(0,0) rotate(0deg)", opacity: 1 },
+        { transform: "translate(" + dx * .6 + "px," + -up + "px) rotate(180deg)", opacity: 1, offset: .4 },
+        { transform: "translate(" + dx + "px," + 40 + "px) rotate(360deg)", opacity: 0 }
+      ], { duration: 800 + Math.random() * 300, easing: "cubic-bezier(.3,.5,.6,1)" }).onfinish = (function (el) { return function () { el.remove(); }; })(c);
+    }
+  }
+
+  // ---------- Dismiss: slide off to the right, the rest close the gap ----------
+  function dismiss(t, dir, quiet) {
+    if (t.gone) return;
+    t.gone = true;
+    var hadFocus = t.li.contains(document.activeElement);
+    var out = reduceMq.matches ? 1 : 340;
+    var a = t.li.animate([
+      { transform: getComputedStyle(t.li).transform === "none" ? "none" : getComputedStyle(t.li).transform, opacity: 1 },
+      { transform: dir ? "translateX(115%) rotate(7deg)" : "translateY(-40px) scale(.85)", opacity: 0 }
+    ], { duration: out, easing: "cubic-bezier(.5,0,.75,0)", fill: "forwards" });
+    a.onfinish = function () {
+      var before = snapshot();
+      t.li.remove();
+      live = live.filter(function (x) { return x !== t; });
+      flip(before);
+      if (hadFocus) { var nxt = live[live.length - 1]; (nxt ? nxt.li.querySelector(".x") : toaster).focus({ preventScroll: true }); }
+    };
+  }
+
+  // ---------- Each toast's button runs a small multi-step story ----------
+  function morph(t, kind, title, text, life, icon) {
+    t.li.classList.remove("ok", "info", "warn", "err", "morph");
+    void t.li.offsetWidth;
+    t.li.classList.add(kind, "morph");
+    t.li.querySelector(".ico").innerHTML = ICON[icon || kind];
+    t.li.querySelector(".txt b").textContent = title;
+    t.li.querySelector(".txt span").textContent = text;
+    var act = t.li.querySelector(".act");
+    if (act) {
+      var refocus = act === document.activeElement;
+      act.remove();
+      if (refocus) t.li.querySelector(".x").focus({ preventScroll: true });
+    }
+    t.kind = kind;
+    t.done = true;
+    t.used = 0;
+    t.life = life;
+  }
+  async function action(t) {
+    var act = t.li.querySelector(".act");
+    if (t.busy || t.gone || t.done || !act) return;
+    if (t.kind === "ok") { morph(t, "info", "Order removed", "Order #4821 is out of your list again.", 2600, "undo"); return; }
+    if (t.kind === "info") { morph(t, "ok", "Voice note opened", "Playing Bilal's message now.", 2400); return; }
+    t.busy = true;
+    act.classList.add("busy");
+    act.querySelector("em").textContent = t.kind === "warn" ? "Cleaning…" : "Paying…";
+    t.used = Math.min(t.used, t.life * .3);
+    await wait(reduceMq.matches ? 200 : 1300);
+    t.busy = false;
+    if (t.gone) return;
+    if (t.kind === "warn") morph(t, "ok", "Freed 1.2 GB", "Storage is now 68% full.", 3800);
+    else morph(t, "ok", "Payment received", "PKR 2,450 paid with card 4417.", 4200);
+  }
+
+  // ---------- Swipe a toast to the right to throw it away ----------
+  function swipe(t) {
+    var li = t.li, start = null, dx = 0;
+    li.addEventListener("pointerdown", function (e) {
+      if (e.target.closest("button") || t.gone) return;
+      start = { x: e.clientX, time: performance.now(), id: e.pointerId };
+      li.setPointerCapture(e.pointerId);
+      li.style.cursor = "grabbing";
+    });
+    li.addEventListener("pointermove", function (e) {
+      if (!start || e.pointerId !== start.id) return;
+      dx = Math.max(-30, e.clientX - start.x);
+      li.style.transform = "translateX(" + dx + "px) rotate(" + dx / 30 + "deg)";
+      li.style.opacity = String(1 - Math.max(0, dx) / 260);
+    });
+    function end(e) {
+      if (!start || e.pointerId !== start.id) return;
+      var speed = dx / Math.max(1, performance.now() - start.time);
+      start = null;
+      li.style.cursor = "";
+      if (dx > 90 || speed > .6) { dismiss(t, 1); }
+      else {
+        li.animate([{ transform: li.style.transform, opacity: li.style.opacity || 1 }, { transform: "none", opacity: 1 }], { duration: 420, easing: "cubic-bezier(.34,1.56,.64,1)" });
+      }
+      li.style.transform = ""; li.style.opacity = ""; dx = 0;
+    }
+    li.addEventListener("pointerup", end);
+    li.addEventListener("pointercancel", end);
+  }
+
+  // ---------- One clock for every toast: fill the toasting strip, pop off when done ----------
+  var last = performance.now();
+  function tick(now) {
+    var dt = Math.min(100, now - last);
+    last = now;
+    live.forEach(function (t) {
+      if (t.gone) return;
+      if (!t.hover && !t.focus && !t.busy && !document.hidden) t.used += dt;
+      var p = Math.min(1, t.used / t.life);
+      t.li.style.setProperty("--p", p.toFixed(3));
+      if (p >= 1) dismiss(t, 0);
+    });
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // ---------- Buttons ----------
+  [].forEach.call(document.querySelectorAll(".pops button"), function (b) {
+    b.addEventListener("click", function () { pop(b.dataset.kind); });
+  });
+  toaster.addEventListener("click", function () { pop(ORDER[nextKind++ % ORDER.length]); });
+
+  // ---------- Auto demo: plays on load and every few seconds until someone touches it ----------
+  var demoOn = true;
+  function stopDemo(e) { if (e.isTrusted) demoOn = false; }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  async function press(sel) {
+    var b = document.querySelector(sel);
+    b.classList.add("press"); await pause(140); b.classList.remove("press");
+    b.click();
+  }
+  async function demo() {
+    try {
+      await pause(150);
+      while (demoOn) {
+        await press('.pops [data-kind="ok"]'); await pause(900);
+        await press('.pops [data-kind="err"]'); await pause(1700);
+        await press('.pops [data-kind="info"]'); await pause(1500);
+        var err = live.filter(function (t) { return t.kind === "err" && !t.gone && !t.done; })[0];
+        if (err) { action(err); }
+        await pause(2600);
+        await press('.pops [data-kind="warn"]'); await pause(4200);
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>

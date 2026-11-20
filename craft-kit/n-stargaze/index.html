@@ -1,0 +1,657 @@
+<!doctype html>
+<!-- Chill & Craft · Stargaze · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stargaze · constellation star rating</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: a dawn sky (light) and a deep night sky (dark) ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --sky1: #f3edff;
+    --sky2: #ffe8db;
+    --glowA: rgba(160, 130, 255, .35);
+    --glowB: rgba(255, 170, 130, .35);
+    --ink: #221c4a;
+    --muted: #6b6496;
+    --panel: rgba(255, 255, 255, .62);
+    --panel-line: rgba(90, 80, 170, .16);
+    --star-off: #c9c3ea;
+    --star-on: #ffb81f;
+    --star-edge: #3b2f8f;
+    --line: #5b4fd0;
+    --chip: rgba(255, 255, 255, .7);
+    --accent: #5b4fd0;
+    --accent-ink: #ffffff;
+    --dust: 40, 30, 110;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --sky1: #07071c;
+    --sky2: #1b1248;
+    --glowA: rgba(70, 220, 200, .18);
+    --glowB: rgba(150, 90, 255, .26);
+    --ink: #f1efff;
+    --muted: #a9a3d6;
+    --panel: rgba(20, 16, 54, .55);
+    --panel-line: rgba(190, 180, 255, .16);
+    --star-off: rgba(220, 215, 255, .28);
+    --star-on: #ffd36b;
+    --star-edge: #fff2c4;
+    --line: #cfe1ff;
+    --chip: rgba(255, 255, 255, .06);
+    --accent: #ffd36b;
+    --accent-ink: #231a00;
+    --dust: 255, 255, 255;
+  }
+
+  /* ---------- Page ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--sky1);
+    overflow-x: hidden;
+  }
+  .sky {
+    position: relative;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 20px 14px;
+    overflow: hidden;
+    isolation: isolate;
+    background: linear-gradient(170deg, var(--sky1) 10%, var(--sky2));
+  }
+  /* two slow aurora clouds drifting behind everything */
+  .sky::before, .sky::after {
+    content: "";
+    position: absolute;
+    z-index: -2;
+    width: 70vmax;
+    height: 50vmax;
+    border-radius: 50%;
+    filter: blur(60px);
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+  .sky::before { left: -20vmax; top: -18vmax; background: var(--glowA); }
+  .sky::after { right: -22vmax; bottom: -20vmax; background: var(--glowB); animation-duration: 23s; }
+  @keyframes drift { to { transform: translate(8vmax, 5vmax) rotate(12deg); } }
+  canvas.dust { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; }
+
+  .wrap { width: min(100%, 460px); text-align: center; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    padding: 6px 12px 6px 7px;
+    border-radius: 999px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    font-size: 12.5px;
+    color: var(--muted);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+  .badge svg { width: 20px; height: 20px; }
+  h1 { margin: 0; font-size: clamp(22px, 6vw, 28px); letter-spacing: -.015em; }
+
+  /* ---------- The constellation ---------- */
+  fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+  .const {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 400 / 170;
+    margin: 6px 0 2px;
+  }
+  .const svg.lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .guide { stroke: var(--star-off); stroke-width: 1.4; stroke-dasharray: 2 6; stroke-linecap: round; fill: none; }
+  .seg {
+    stroke: var(--line);
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    fill: none;
+    filter: drop-shadow(0 0 4px var(--line));
+    transition: stroke-dashoffset .32s cubic-bezier(.6, 0, .3, 1);
+  }
+  .star {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    width: var(--s);
+    height: var(--s);
+    margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .star::before {
+    /* a bigger invisible hit area */
+    content: "";
+    position: absolute;
+    inset: -10px;
+  }
+  .star .flare {
+    position: absolute;
+    inset: -45%;
+    opacity: 0;
+    background:
+      linear-gradient(90deg, transparent 0 47%, var(--star-on) 50%, transparent 53% 100%),
+      linear-gradient(0deg, transparent 0 47%, var(--star-on) 50%, transparent 53% 100%);
+    -webkit-mask: radial-gradient(circle, #000 0 20%, transparent 62%);
+    mask: radial-gradient(circle, #000 0 20%, transparent 62%);
+    transition: opacity .35s, transform .5s cubic-bezier(.34, 1.56, .64, 1);
+    transform: scale(.4) rotate(0deg);
+  }
+  .star .halo {
+    position: absolute;
+    inset: -30%;
+    border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--star-on) 55%, transparent), transparent 65%);
+    opacity: 0;
+    transform: scale(.5);
+    transition: opacity .3s, transform .5s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .star svg {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    transition: transform .45s cubic-bezier(.34, 1.7, .64, 1);
+    animation: breathe 3.6s ease-in-out infinite;
+    animation-delay: var(--dl);
+  }
+  @keyframes breathe { 50% { opacity: .65; transform: scale(.94); } }
+  .star path { fill: transparent; stroke: var(--star-off); stroke-width: 1.5; stroke-linejoin: round; transition: fill .25s, stroke .25s; }
+  .star.lit svg { animation: none; transform: scale(1.12) rotate(-8deg); }
+  .star.lit path { fill: var(--star-on); stroke: var(--star-edge); }
+  .star.lit .halo { opacity: 1; transform: scale(1); }
+  .star.lit .flare { opacity: .9; transform: scale(1) rotate(45deg); animation: spin 9s linear infinite; }
+  @keyframes spin { from { transform: scale(1) rotate(45deg); } to { transform: scale(1) rotate(405deg); } }
+  .star:hover svg { transform: scale(1.22) rotate(-10deg); }
+  .star .ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid var(--star-on);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .star.flash .ring { animation: ring .7s cubic-bezier(.2, .8, .3, 1); }
+  .star.flash svg { animation: flash .6s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes ring { 0% { opacity: 1; transform: scale(.6); } 100% { opacity: 0; transform: scale(2.4); } }
+  @keyframes flash { 35% { transform: scale(1.55) rotate(18deg); } 100% { transform: scale(1.12) rotate(-8deg); } }
+  .star input:focus-visible ~ svg { outline: 3px solid var(--accent); outline-offset: 6px; border-radius: 50%; }
+  .spark {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    border-radius: 50%;
+    background: var(--star-on);
+    box-shadow: 0 0 8px var(--star-on);
+    pointer-events: none;
+  }
+
+  /* ---------- Rating words ---------- */
+  .word { height: 34px; margin: 2px 0 0; font-size: 26px; font-weight: 800; letter-spacing: -.01em; }
+  .word span { display: inline-block; }
+  .word span.pop { animation: wordIn .5s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes wordIn { from { opacity: 0; transform: translateY(10px) scale(.8); } }
+  .hint { min-height: 20px; margin: 0 0 12px; font-size: 14px; color: var(--muted); }
+
+  /* ---------- Form panel ---------- */
+  .panel {
+    position: relative;
+    padding: 14px;
+    border-radius: 22px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 24px 50px -34px rgba(20, 10, 80, .55);
+    transform-style: preserve-3d;
+  }
+  .face { transition: opacity .35s, transform .6s cubic-bezier(.34, 1.3, .64, 1); }
+  .panel.done .form { opacity: 0; transform: rotateX(70deg) translateY(-14px); pointer-events: none; }
+  .thanks {
+    position: absolute;
+    inset: 14px;
+    display: grid;
+    place-content: center;
+    gap: 6px;
+    opacity: 0;
+    transform: rotateX(-70deg) translateY(14px);
+    pointer-events: none;
+  }
+  .panel.done .thanks { opacity: 1; transform: none; pointer-events: auto; transition-delay: .12s; }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; margin-bottom: 10px; }
+  .chips button {
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--panel-line);
+    background: var(--chip);
+    color: var(--ink);
+    font: 600 12.5px/1 var(--ff);
+    cursor: pointer;
+    transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), background .25s, color .25s, box-shadow .25s;
+  }
+  .chips button:hover { transform: translateY(-2px); }
+  .chips button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; box-shadow: 0 6px 16px -8px var(--accent); }
+  .chips button[aria-pressed="true"]::before { content: "\2726  "; }
+  .note { position: relative; }
+  textarea {
+    display: block;
+    width: 100%;
+    height: 64px;
+    padding: 10px 12px 18px;
+    border-radius: 14px;
+    border: 1px solid var(--panel-line);
+    background: var(--chip);
+    color: var(--ink);
+    font: 14px/1.4 var(--ff);
+    resize: none;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  textarea::placeholder { color: var(--muted); }
+  textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .left { position: absolute; right: 10px; bottom: 5px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .post {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 48px;
+    margin-top: 10px;
+    border: 0;
+    border-radius: 15px;
+    overflow: hidden;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: 700 15px/1 var(--ff);
+    cursor: pointer;
+    box-shadow: 0 14px 28px -16px var(--accent);
+    transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), opacity .25s, filter .2s;
+  }
+  .post[aria-disabled="true"] { opacity: .45; cursor: not-allowed; box-shadow: none; }
+  .post:not([aria-disabled="true"]):hover { filter: brightness(1.08); }
+  .post:active, .post.press { transform: scale(.96, .9); }
+  .post > span { grid-area: 1 / 1; transition: opacity .2s, transform .35s cubic-bezier(.34, 1.56, .64, 1); }
+  .post .spin { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid currentColor; border-right-color: transparent; opacity: 0; transform: scale(.4); }
+  .post.sending .label { opacity: 0; transform: translateY(-12px); }
+  .post.sending .spin { opacity: 1; transform: none; animation: turn .7s linear infinite; }
+  @keyframes turn { to { transform: rotate(1turn); } }
+  button:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .thanks h2 { margin: 0; font-size: 20px; }
+  .thanks p { margin: 0; font-size: 14px; color: var(--muted); }
+  .mini { width: 150px; height: 64px; margin: 0 auto 4px; }
+  .mini line { stroke: var(--line); stroke-width: 2.5; stroke-linecap: round; }
+  .mini circle { fill: var(--star-off); }
+  .mini circle.on { fill: var(--star-on); }
+  .again {
+    justify-self: center;
+    margin-top: 8px;
+    padding: 9px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--panel-line);
+    background: var(--chip);
+    color: var(--ink);
+    font: 600 13px/1 var(--ff);
+    cursor: pointer;
+  }
+
+  /* the shooting star that carries the review away */
+  .meteor {
+    position: fixed;
+    z-index: 5;
+    left: 0;
+    top: 0;
+    width: 170px;
+    height: 3px;
+    margin-top: -1.5px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--star-on) 70%, transparent) 70%, #fff);
+    transform-origin: 100% 50%;
+    pointer-events: none;
+  }
+  .meteor::after {
+    content: "";
+    position: absolute;
+    right: -6px;
+    top: -5px;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 14px 6px var(--star-on);
+  }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="sky">
+  <canvas class="dust" id="dust" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <p class="badge">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="var(--accent)"/><path d="M5 17l4.5-7 3 4.5 2-3L19 17z" fill="var(--accent-ink)"/></svg>
+      Hunza View Inn · 2 nights · 14 to 16 Nov
+    </p>
+    <h1 id="q">How was your stay?</h1>
+
+    <fieldset>
+      <legend class="sr">Your rating, 1 to 5 stars</legend>
+      <div class="const" id="const">
+        <svg class="lines" viewBox="0 0 400 170" aria-hidden="true">
+          <polyline class="guide" id="guide" points=""></polyline>
+          <g id="segs"></g>
+        </svg>
+      </div>
+    </fieldset>
+    <p class="word" aria-hidden="true"><span id="word">Pick a star</span></p>
+    <p class="hint" id="hint">Tap a star, or use the arrow keys</p>
+
+    <div class="panel" id="panel">
+      <form class="face form" id="form" novalidate>
+        <div class="chips" role="group" aria-label="What did you like?" id="chips">
+          <button type="button" aria-pressed="false">Clean room</button>
+          <button type="button" aria-pressed="false">Friendly staff</button>
+          <button type="button" aria-pressed="false">Mountain view</button>
+          <button type="button" aria-pressed="false">Tasty food</button>
+          <button type="button" aria-pressed="false">Quiet nights</button>
+        </div>
+        <div class="note">
+          <label class="sr" for="text">Tell us more (optional)</label>
+          <textarea id="text" maxlength="160" placeholder="Tell us more (optional)"></textarea>
+          <span class="left" id="left" aria-hidden="true">160</span>
+        </div>
+        <button class="post" id="post" type="submit" aria-disabled="true"><span class="label">Post review</span><span class="spin" aria-hidden="true"></span></button>
+      </form>
+      <div class="face thanks" id="thanks" aria-hidden="true">
+        <svg class="mini" id="mini" viewBox="0 0 400 170" aria-hidden="true"></svg>
+        <h2 id="thanksTitle">Review posted</h2>
+        <p id="thanksText">Thanks for helping other travellers.</p>
+        <button class="again" id="again" type="button">Rate again</button>
+      </div>
+    </div>
+    <p class="sr" id="status" aria-live="polite"></p>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduceMq = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  // ---------- The five stars: positions in a 400 x 170 box, bigger stars for higher scores ----------
+  var PTS = [[42, 122], [124, 70], [200, 112], [282, 46], [360, 96]];
+  var SIZE = [36, 40, 44, 48, 56];
+  var WORDS = ["Poor", "Okay", "Good", "Great", "Stellar"];
+  var HINTS = ["Sorry to hear that. What went wrong?", "Thanks. What could be better?", "Good to know. Anything to add?", "Lovely! What did you enjoy?", "Wonderful! What stood out?"];
+  var STAR = "M12 1.6l3.1 6.5 7.1 1-5.2 5 1.3 7.1L12 17.8l-6.3 3.4 1.3-7.1-5.2-5 7.1-1z";
+
+  var box = $("#const"), segsG = $("#segs"), wordEl = $("#word"), hint = $("#hint"), status = $("#status");
+  var panel = $("#panel"), form = $("#form"), post = $("#post"), text = $("#text"), left = $("#left"), thanks = $("#thanks");
+  var chips = [].slice.call(document.querySelectorAll("#chips button"));
+  $("#guide").setAttribute("points", PTS.map(function (p) { return p.join(","); }).join(" "));
+
+  var stars = PTS.map(function (p, i) {
+    var lab = document.createElement("label");
+    lab.className = "star";
+    lab.style.setProperty("--x", (p[0] / 400) * 100 + "%");
+    lab.style.setProperty("--y", (p[1] / 170) * 100 + "%");
+    lab.style.setProperty("--s", SIZE[i] + "px");
+    lab.style.setProperty("--dl", (i * -0.7) + "s");
+    lab.innerHTML = '<input class="sr" type="radio" name="rating" value="' + (i + 1) + '"><span class="halo"></span><span class="flare"></span>' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + STAR + '"/></svg><span class="ring"></span><span class="sr">' + (i + 1) + (i ? " stars, " : " star, ") + WORDS[i] + "</span>";
+    box.appendChild(lab);
+    lab.addEventListener("animationend", function (e) { if (e.animationName === "ring") lab.classList.remove("flash"); });
+    return lab;
+  });
+  var radios = stars.map(function (s) { return s.querySelector("input"); });
+
+  // the bright line between star i and i+1 (drawn with a dash that shrinks to nothing)
+  var segs = PTS.slice(1).map(function (p, i) {
+    var a = PTS[i], len = Math.hypot(p[0] - a[0], p[1] - a[1]);
+    var l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    l.setAttribute("class", "seg");
+    l.setAttribute("x1", a[0]); l.setAttribute("y1", a[1]); l.setAttribute("x2", p[0]); l.setAttribute("y2", p[1]);
+    l.style.strokeDasharray = len;
+    l.style.strokeDashoffset = len;
+    l.dataset.len = len;
+    segsG.appendChild(l);
+    return l;
+  });
+
+  var rating = 0, shownN = 0;
+
+  // Light stars 1..n and the lines between them (preview on hover, or the chosen rating)
+  function light(n) {
+    var up = n > shownN;
+    stars.forEach(function (s, i) { s.classList.toggle("lit", i < n); });
+    segs.forEach(function (l, i) {
+      var on = i < n - 1;
+      // lines draw one after another going up, and all at once going down
+      l.style.transitionDelay = up && on ? Math.max(0, i - (shownN - 1)) * 0.09 + "s" : "0s";
+      l.style.strokeDashoffset = on ? 0 : l.dataset.len;
+    });
+    shownN = n;
+    setWord(n);
+  }
+  function setWord(n) {
+    var w = n ? WORDS[n - 1] : "Pick a star";
+    if (wordEl.textContent !== w) {
+      wordEl.textContent = w;
+      wordEl.classList.remove("pop"); void wordEl.offsetWidth; wordEl.classList.add("pop");
+    }
+    hint.textContent = n ? HINTS[n - 1] : "Tap a star, or use the arrow keys";
+  }
+
+  // Commit a rating: each star flashes in turn, five stars ends in a burst
+  function choose(n) {
+    rating = n;
+    light(n);
+    stars.forEach(function (s, i) {
+      if (i >= n) return;
+      setTimeout(function () { s.classList.remove("flash"); void s.offsetWidth; s.classList.add("flash"); }, reduceMq.matches ? 0 : i * 90);
+    });
+    if (n === 5) setTimeout(function () { burst(stars[4], 18); }, 420);
+    post.setAttribute("aria-disabled", "false");
+    status.textContent = n + (n > 1 ? " stars, " : " star, ") + WORDS[n - 1] + ".";
+  }
+  function burst(star, count) {
+    if (reduceMq.matches) return;
+    for (var i = 0; i < count; i++) {
+      var s = document.createElement("i");
+      s.className = "spark";
+      s.style.left = "50%"; s.style.top = "50%";
+      star.appendChild(s);
+      var a = (i / count) * Math.PI * 2, d = 30 + Math.random() * 34;
+      s.animate([
+        { transform: "translate(0,0) scale(1)", opacity: 1 },
+        { transform: "translate(" + Math.cos(a) * d + "px," + Math.sin(a) * d + "px) scale(.2)", opacity: 0 }
+      ], { duration: 650 + Math.random() * 300, easing: "cubic-bezier(.2,.8,.3,1)" }).onfinish = (function (el) { return function () { el.remove(); }; })(s);
+    }
+  }
+
+  radios.forEach(function (r, i) { r.addEventListener("change", function () { if (r.checked) choose(i + 1); }); });
+  stars.forEach(function (s, i) { s.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") light(i + 1); }); });
+  box.addEventListener("pointerleave", function () { light(rating); });
+
+  // ---------- Chips and note ----------
+  chips.forEach(function (c) {
+    c.addEventListener("click", function () { c.setAttribute("aria-pressed", String(c.getAttribute("aria-pressed") !== "true")); });
+  });
+  text.addEventListener("input", function () { left.textContent = 160 - text.value.length; });
+
+  // ---------- Posting: spinner, then a shooting star carries the review away ----------
+  var sending = false;
+  form.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    if (sending) return;
+    if (!rating) {
+      hint.textContent = "Pick a star first";
+      status.textContent = "Pick a star first.";
+      stars.forEach(function (s, i) { setTimeout(function () { s.classList.remove("flash"); void s.offsetWidth; s.classList.add("flash"); }, i * 60); });
+      return;
+    }
+    sending = true;
+    post.classList.add("sending");
+    status.textContent = "Posting your review…";
+    await wait(reduceMq.matches ? 200 : 950);
+    post.classList.remove("sending");
+    shoot();
+    await wait(reduceMq.matches ? 50 : 380);
+    drawMini();
+    var liked = chips.filter(function (c) { return c.getAttribute("aria-pressed") === "true"; }).map(function (c) { return c.textContent.toLowerCase(); });
+    $("#thanksTitle").textContent = "Your " + rating + "-star review is live";
+    $("#thanksText").textContent = liked.length ? "You loved the " + liked.slice(0, 2).join(" and ") + "." : "Thanks for helping other travellers.";
+    panel.classList.add("done");
+    form.inert = true;
+    thanks.removeAttribute("aria-hidden");
+    status.textContent = "Review posted. " + rating + " stars.";
+    sending = false;
+  });
+  function drawMini() {
+    var svg = "";
+    PTS.forEach(function (p, i) {
+      if (i && i < rating) svg += '<line x1="' + PTS[i - 1][0] + '" y1="' + PTS[i - 1][1] + '" x2="' + p[0] + '" y2="' + p[1] + '"/>';
+    });
+    PTS.forEach(function (p, i) { svg += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (9 + i * 2) + '" class="' + (i < rating ? "on" : "") + '"/>'; });
+    $("#mini").innerHTML = svg;
+  }
+  function shoot() {
+    if (reduceMq.matches) return;
+    var r = stars[rating - 1].getBoundingClientRect();
+    var x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+    var x1 = innerWidth + 200, y1 = Math.max(-200, y0 - (x1 - x0) * 0.55);
+    var ang = Math.atan2(y1 - y0, x1 - x0) * 180 / Math.PI;
+    var m = document.createElement("i");
+    m.className = "meteor";
+    document.body.appendChild(m);
+    m.animate([
+      { transform: "translate(" + (x0 - 170) + "px," + y0 + "px) rotate(" + ang + "deg) scaleX(.1)", opacity: 1 },
+      { transform: "translate(" + (x0 - 120) + "px," + (y0 - 20) + "px) rotate(" + ang + "deg) scaleX(1)", opacity: 1, offset: .25 },
+      { transform: "translate(" + (x1 - 170) + "px," + y1 + "px) rotate(" + ang + "deg) scaleX(.6)", opacity: 0 }
+    ], { duration: 1000, easing: "cubic-bezier(.5,0,.6,1)" }).onfinish = function () { m.remove(); };
+    burst(stars[rating - 1], 10);
+  }
+
+  // ---------- Rate again ----------
+  function reset() {
+    panel.classList.remove("done");
+    form.inert = false;
+    thanks.setAttribute("aria-hidden", "true");
+    radios.forEach(function (r) { r.checked = false; });
+    chips.forEach(function (c) { c.setAttribute("aria-pressed", "false"); });
+    text.value = ""; left.textContent = "160";
+    rating = 0;
+    light(0);
+    post.setAttribute("aria-disabled", "true");
+    status.textContent = "Rating cleared.";
+  }
+  $("#again").addEventListener("click", function () { reset(); radios[0].focus({ preventScroll: true }); });
+
+  // ---------- Star dust: a twinkling field drawn on a canvas, with a rare tiny meteor ----------
+  var cv = $("#dust"), ctx = cv.getContext("2d"), dots = [], W = 0, H = 0, dpr = 1, streak = null;
+  function size() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    dots = [];
+    var n = Math.round(W * H / 5200);
+    for (var i = 0; i < n; i++) dots.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.3 + .3, p: Math.random() * 6.3, s: .6 + Math.random() * 1.6 });
+    readInk();
+    if (reduceMq.matches) draw(0);
+  }
+  var rgb = "255,255,255";
+  function readInk() { rgb = getComputedStyle(document.documentElement).getPropertyValue("--dust").trim() || rgb; }
+  function draw(t) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    dots.forEach(function (d) {
+      var a = reduceMq.matches ? .6 : .35 + .45 * (0.5 + 0.5 * Math.sin(t / 1000 * d.s + d.p));
+      ctx.fillStyle = "rgba(" + rgb + "," + a.toFixed(2) + ")";
+      ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 6.283); ctx.fill();
+    });
+    if (streak) {
+      var k = (t - streak.t0) / 900;
+      if (k > 1) streak = null;
+      else {
+        var x = streak.x + k * 260, y = streak.y + k * 110;
+        var g = ctx.createLinearGradient(x - 70, y - 30, x, y);
+        g.addColorStop(0, "rgba(" + rgb + ",0)"); g.addColorStop(1, "rgba(" + rgb + "," + (1 - k).toFixed(2) + ")");
+        ctx.strokeStyle = g; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(x - 70, y - 30); ctx.lineTo(x, y); ctx.stroke();
+      }
+    }
+  }
+  var lastStreak = 0;
+  function loop(t) {
+    if (!streak && t - lastStreak > 5200) { streak = { t0: t, x: Math.random() * W * .6, y: Math.random() * H * .3 }; lastStreak = t; }
+    draw(t);
+    requestAnimationFrame(loop);
+  }
+  size();
+  addEventListener("resize", size);
+  var schemeMq = window.matchMedia("(prefers-color-scheme: dark)");
+  if (schemeMq.addEventListener) schemeMq.addEventListener("change", function () { setTimeout(size, 0); });
+  if (!reduceMq.matches) requestAnimationFrame(loop);
+
+  // ---------- Auto demo: plays on load and every few seconds until someone touches it ----------
+  var demoOn = true;
+  function stopDemo(e) { if (e.isTrusted) demoOn = false; }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  async function type(s) {
+    for (var i = 0; i < s.length; i++) { text.value += s[i]; left.textContent = 160 - text.value.length; await pause(32); }
+  }
+  async function demo() {
+    try {
+      await pause(350);
+      while (demoOn) {
+        for (var n = 1; n <= 5; n++) { light(n); await pause(150); }
+        await pause(250);
+        light(4); await pause(300);
+        radios[3].checked = true; choose(4); await pause(900);
+        chips[2].click(); await pause(260);
+        chips[1].click(); await pause(300);
+        await type("Woke up to snow peaks in the window.");
+        await pause(400);
+        post.classList.add("press"); await pause(150); post.classList.remove("press");
+        form.requestSubmit(); await pause(3600);
+        reset(); await pause(2200);
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>
