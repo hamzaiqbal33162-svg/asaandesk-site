@@ -1,0 +1,527 @@
+<!doctype html>
+<!-- Chill & Craft · Attar · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Attar · perfume card with liquid that sloshes</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* the accent colour comes from the chosen scent and fades between scents */
+  @property --accent { syntax: "<color>"; inherits: true; initial-value: #c2385e; }
+  /* ---------- Colours: blush + plum ink (light), plum velvet (dark) ---------- */
+  :root {
+    --bg: #f5e6e8; --bg-2: #fdf7f5; --ink: #2a1222; --muted: #7b5f6e; --card: #fffafa; --line: rgba(42, 18, 34, 0.1);
+    --panel-1: #f7e4e8; --panel-2: #e7c9d3; --chip: #f6eaee; --gold: #c9973f; --shadow: rgba(80, 20, 50, 0.28); --focus: #2a1222;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #12070f; --bg-2: #2a1227; --ink: #f8ecf2; --muted: #bb9aae; --card: #1d0d1a; --line: rgba(255, 230, 245, 0.09);
+    --panel-1: #3c1a37; --panel-2: #170914; --chip: #2a1426; --gold: #e2b766; --shadow: rgba(0, 0, 0, 0.65); --focus: #f3c97a;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink); -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    background: radial-gradient(80% 65% at 50% 20%, var(--bg-2), var(--bg));
+  }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 3px; }
+  .serif { font-family: Georgia, "Times New Roman", serif; }
+
+  .stage { min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 22px 14px; }
+  .card {
+    --accent: #c2385e;
+    position: relative; display: grid; grid-template-columns: 380px 1fr; width: min(860px, 100%); border-radius: 30px; overflow: hidden;
+    background: var(--card); border: 1px solid var(--line); box-shadow: 0 50px 80px -50px var(--shadow), 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+    transition: --accent 0.9s ease;
+    animation: card-in 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.12) backwards;
+  }
+  @keyframes card-in { from { opacity: 0; transform: translateY(40px) scale(0.96); } }
+
+  /* ---------- Showcase: the bottle tilts in 3D on a plinth ---------- */
+  .vitrine {
+    position: relative; min-height: 440px; display: grid; place-items: center; cursor: grab; touch-action: pan-y;
+    background: radial-gradient(70% 60% at 50% 40%, color-mix(in srgb, var(--accent) 22%, var(--panel-1)), var(--panel-2));
+    perspective: 700px;
+  }
+  .vitrine:active { cursor: grabbing; }
+  /* one flat layer tilts in 3D; depth comes from 2D parallax (--px/--py), which keeps every browser's compositor happy */
+  .rig { position: relative; width: 220px; height: 320px; transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); }
+  .plinth { position: absolute; left: 50%; bottom: 6px; width: 190px; height: 46px; margin-left: -95px; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 30%, rgba(255, 255, 255, 0.5)), transparent); transform: translateX(calc(var(--px, 0px) * -0.5)); }
+  .plinth::after { content: ""; position: absolute; inset: 8px 22px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.35); }
+  .bottle { position: absolute; left: 0; top: 0; width: 220px; height: 316px; transform: translate(var(--px, 0px), calc(var(--py, 0px) + var(--float, 0px))) rotate(var(--lean, 0deg)); transform-origin: 50% 88%; }
+  .bottle svg { width: 100%; height: 100%; overflow: visible; }
+  .hint { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 11.5px; font-weight: 650; letter-spacing: 0.08em; color: color-mix(in srgb, var(--ink) 55%, transparent); pointer-events: none; }
+  .mist { position: absolute; width: 26px; height: 26px; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, color-mix(in srgb, var(--accent) 60%, #fff), transparent 70%); filter: blur(2px); animation: mist 1.4s ease-out forwards; z-index: 4; }
+  @keyframes mist { from { opacity: 0.9; transform: translate(0, 0) scale(0.3); } to { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(2.2); } }
+
+  /* ---------- Details ---------- */
+  .info { position: relative; padding: 34px 34px 30px; display: flex; flex-direction: column; justify-content: center; gap: 14px; min-width: 0; }
+  .bag { position: absolute; right: 20px; top: 20px; width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--line); background: var(--chip); display: grid; place-items: center; color: var(--ink); }
+  .bag svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .bag b { position: absolute; right: -5px; top: -5px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; display: grid; place-items: center; background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; transform: scale(0); transition: transform 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .bag b.on { transform: scale(1); }
+  .bag.gulp { animation: gulp 0.55s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  @keyframes gulp { 30% { transform: scale(1.18) rotate(-8deg); } 60% { transform: scale(0.95) rotate(4deg); } }
+  .eyebrow { margin: 0; font-size: 11.5px; font-weight: 750; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+  .name { margin: -6px 0 0; font-size: clamp(28px, 4vw, 40px); font-weight: 700; letter-spacing: -0.01em; line-height: 1.05; min-height: 1.05em; }
+  .name span { display: inline-block; animation: letter 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) backwards; animation-delay: calc(var(--k) * 28ms); white-space: pre; }
+  @keyframes letter { from { opacity: 0; transform: translateY(12px) rotate(6deg); filter: blur(3px); } }
+  .rating { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-top: -6px; }
+  .rating svg { width: 74px; height: 14px; }
+  .desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); max-width: 400px; }
+  .notes { display: flex; flex-wrap: wrap; gap: 6px; }
+  .notes span { display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 10px; border-radius: 999px; background: var(--chip); font-size: 12.5px; font-weight: 650; animation: note-in 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) backwards; animation-delay: calc(var(--k) * 80ms + 120ms); }
+  .notes small { font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  @keyframes note-in { from { opacity: 0; transform: translateY(8px) scale(0.9); } }
+  .lbl { margin: 0 0 7px; font-size: 11px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .row { display: flex; gap: 22px; flex-wrap: wrap; }
+  .swatches { display: flex; gap: 10px; }
+  .sw { position: relative; width: 38px; height: 38px; padding: 0; border-radius: 50%; border: 0; cursor: pointer; background: radial-gradient(circle at 35% 30%, #fff 0 8%, var(--l) 30%, var(--d) 90%); box-shadow: 0 0 0 2px var(--card), 0 0 0 3px transparent; transition: transform 0.45s cubic-bezier(0.3, 1.8, 0.5, 1), box-shadow 0.3s; }
+  .sw:hover { transform: translateY(-2px); }
+  .sw[aria-checked="true"] { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--d); transform: scale(1.06); }
+  .sizes { display: flex; padding: 3px; border-radius: 12px; background: var(--chip); }
+  .sizes button { height: 34px; padding: 0 12px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; transition: background 0.3s, color 0.3s, transform 0.4s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .sizes button[aria-checked="true"] { background: var(--card); color: var(--ink); box-shadow: 0 4px 10px -6px var(--shadow); }
+  .buy { display: flex; gap: 10px; margin-top: 4px; }
+  .qty { display: flex; align-items: center; height: 50px; border-radius: 15px; border: 1px solid var(--line); }
+  .qty button { width: 38px; height: 100%; border: 0; background: none; color: var(--ink); font: inherit; font-size: 19px; font-weight: 600; cursor: pointer; border-radius: 14px; }
+  .qty button:disabled { opacity: 0.35; cursor: default; }
+  .qty output { min-width: 20px; text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .qty output.tick { animation: tick 0.35s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes tick { 40% { transform: translateY(-5px) scale(1.2); } }
+  .add {
+    position: relative; flex: 1; height: 50px; border: 0; border-radius: 15px; overflow: hidden; cursor: pointer;
+    background: var(--ink); color: var(--card); font: inherit; font-size: 15px; font-weight: 760;
+    display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform 0.45s cubic-bezier(0.3, 1.7, 0.5, 1);
+  }
+  .add::before { content: ""; position: absolute; inset: 0; width: 0; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 70%, #000), var(--accent)); transition: width 0s; }
+  .add[data-state="press"] { transform: scale(0.95); transition-duration: 0.12s; }
+  .add[data-state="work"]::before { width: 100%; transition: width 0.95s cubic-bezier(0.5, 0.1, 0.3, 1); }
+  .add[data-state="done"]::before { width: 100%; background: #1f9d6b; }
+  .add > * { position: relative; }
+  .add .price { opacity: 0.7; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .add svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 24; stroke-dashoffset: 24; display: none; }
+  .add[data-state="done"] svg { display: block; animation: draw 0.4s ease forwards 0.05s; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .drop { position: fixed; left: 0; top: 0; width: 14px; height: 18px; margin: -9px 0 0 -7px; z-index: 30; pointer-events: none; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: radial-gradient(circle at 35% 35%, #fff 0 10%, var(--accent) 45%); box-shadow: 0 4px 8px -2px rgba(0, 0, 0, 0.3); }
+
+  .ghost { position: fixed; left: 0; top: 0; z-index: 40; width: 26px; height: 26px; margin: -3px 0 0 -4px; pointer-events: none; opacity: 0; transform: translate(var(--gx, 80vw), var(--gy, 110vh)); transition: transform 0.7s cubic-bezier(0.55, 0, 0.25, 1), opacity 0.35s; }
+  .ghost.show { opacity: 1; }
+  .ghost.follow { transition: opacity 0.35s; }
+  .ghost svg { width: 100%; height: 100%; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35)); transition: transform 0.15s; }
+  .ghost.tap svg { transform: scale(0.8); }
+  .ghost::after { content: ""; position: absolute; left: -10px; top: -11px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--gold); opacity: 0; }
+  .ghost.tap::after { animation: tapring 0.5s ease-out; }
+  @keyframes tapring { from { opacity: 0.95; transform: scale(0.3); } to { opacity: 0; transform: scale(1.7); } }
+
+  /* ---------- Phones: bottle on top, details below ---------- */
+  @media (max-width: 760px) {
+    .stage { padding: 14px 12px; }
+    .card { grid-template-columns: 1fr; width: min(420px, 100%); border-radius: 26px; }
+    .vitrine { min-height: 262px; }
+    .rig { width: 160px; height: 236px; }
+    .bottle { width: 160px; height: 230px; }
+    .plinth { width: 150px; height: 36px; margin-left: -75px; bottom: 2px; }
+    .hint { bottom: 8px; }
+    .info { padding: 18px 18px 18px; gap: 11px; }
+    .bag { right: 14px; top: 14px; }
+    .name { font-size: 30px; }
+    .desc { font-size: 13.5px; }
+    .row { gap: 14px; }
+    .sw { width: 34px; height: 34px; }
+    .sizes button { height: 32px; padding: 0 10px; }
+    .qty, .add { height: 48px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; transition-delay: 0s !important; }
+    .mist, .drop { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <article class="card" id="card" aria-labelledby="pname">
+    <div class="vitrine" id="show">
+      <div class="rig" id="rig">
+        <span class="plinth" aria-hidden="true"></span>
+        <div class="bottle" id="bottle" role="img" aria-label="Attar bottle">
+          <svg viewBox="0 0 160 230" aria-hidden="true">
+            <defs>
+              <clipPath id="body-clip"><path d="M80 78C116 84 138 118 135 158c-3 40-27 58-55 58s-52-18-55-58C22 118 44 84 80 78z"/></clipPath>
+              <linearGradient id="liq-g" x1="0" y1="0" x2="0" y2="1"><stop id="s1" offset="0" stop-color="#e2577d"/><stop id="s2" offset="0.55" stop-color="#b3244a"/><stop id="s3" offset="1" stop-color="#6e0f2c"/></linearGradient>
+              <linearGradient id="glass-g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".35" stop-color="#fff" stop-opacity=".08"/><stop offset=".8" stop-color="#fff" stop-opacity=".02"/><stop offset="1" stop-color="#fff" stop-opacity=".3"/></linearGradient>
+              <radialGradient id="glare-g"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+              <linearGradient id="gold-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fbe8b0"/><stop offset=".5" stop-color="#c9973f"/><stop offset="1" stop-color="#7e5118"/></linearGradient>
+            </defs>
+            <ellipse cx="80" cy="221" rx="46" ry="6" fill="#000" opacity=".18"/>
+            <!-- glass body (back) -->
+            <path d="M80 78C116 84 138 118 135 158c-3 40-27 58-55 58s-52-18-55-58C22 118 44 84 80 78z" fill="#fff" opacity=".16"/>
+            <!-- liquid: stays level while the bottle leans, with a sloshing wave on top -->
+            <g clip-path="url(#body-clip)">
+              <g id="liq"><path id="wave" fill="url(#liq-g)"/><path id="foam" fill="none" stroke="#fff" stroke-opacity=".45" stroke-width="1.6"/></g>
+              <g id="bubbles" fill="#fff" fill-opacity=".55"></g>
+            </g>
+            <!-- glass facets and highlights (front) -->
+            <path d="M80 78C116 84 138 118 135 158c-3 40-27 58-55 58s-52-18-55-58C22 118 44 84 80 78z" fill="url(#glass-g)" stroke="#fff" stroke-opacity=".7" stroke-width="1.6"/>
+            <!-- a soft light on the glass that follows the pointer -->
+            <circle id="glare" cx="60" cy="120" r="46" fill="url(#glare-g)" clip-path="url(#body-clip)"/>
+            <path d="M80 80v134M50 96l30 30 30-30M34 150h92M44 196l36-26 36 26" stroke="#fff" stroke-opacity=".16" stroke-width="1" fill="none"/>
+            <path d="M40 120c-4 16-4 36 2 54" stroke="#fff" stroke-opacity=".75" stroke-width="4" stroke-linecap="round" fill="none"/>
+            <ellipse cx="112" cy="112" rx="4" ry="9" fill="#fff" opacity=".5" transform="rotate(-25 112 112)"/>
+            <!-- neck and collar -->
+            <rect x="70" y="58" width="20" height="24" rx="3" fill="#fff" fill-opacity=".35" stroke="#fff" stroke-opacity=".7" stroke-width="1.2"/>
+            <rect x="64" y="72" width="32" height="9" rx="4.5" fill="url(#gold-g)"/>
+            <!-- cap: twists up when the scent is refilled -->
+            <g id="cap">
+              <path d="M62 60c0-20 8-30 18-30s18 10 18 30z" fill="url(#gold-g)"/>
+              <path d="M66 58c1-12 6-20 14-22" stroke="#fff6d8" stroke-opacity=".8" stroke-width="2" fill="none" stroke-linecap="round"/>
+              <rect x="60" y="56" width="40" height="8" rx="4" fill="url(#gold-g)"/>
+              <path d="M80 8c5 7 7 12 7 16a7 7 0 0 1-14 0c0-4 2-9 7-16z" fill="url(#gold-g)"/>
+              <circle cx="78" cy="21" r="1.6" fill="#fff6d8" opacity=".9"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+      <span class="hint" aria-hidden="true">MOVE OR DRAG TO SWIRL</span>
+    </div>
+
+    <div class="info">
+      <span class="bag" id="bag" aria-label="Bag"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 12H6.2z"/><path d="M9 10V6.5a3 3 0 0 1 6 0V10"/></svg><b id="bagn">0</b></span>
+      <p class="eyebrow">Hand-blended · alcohol free</p>
+      <h1 class="name serif" id="pname">Oud Rose</h1>
+      <div class="rating"><svg viewBox="0 0 74 14" aria-hidden="true"><g fill="#e9a321"><path id="st" d="M7 1l1.8 4 4.2.4-3.2 2.8 1 4.2L7 10.2 3.2 12.4l1-4.2L1 5.4l4.2-.4z"/><use href="#st" x="15"/><use href="#st" x="30"/><use href="#st" x="45"/><use href="#st" x="60"/></g></svg><span>4.9 · 212 reviews</span></div>
+      <p class="desc" id="desc"></p>
+      <div class="notes" id="notes" aria-label="Scent notes"></div>
+      <div class="row">
+        <div>
+          <p class="lbl" id="l-scent">Scent</p>
+          <div class="swatches" role="radiogroup" aria-labelledby="l-scent" id="swatches"></div>
+        </div>
+        <div>
+          <p class="lbl" id="l-size">Size</p>
+          <div class="sizes" role="radiogroup" aria-labelledby="l-size" id="sizes"></div>
+        </div>
+      </div>
+      <div class="buy">
+        <div class="qty" role="group" aria-label="Quantity">
+          <button type="button" id="minus" aria-label="One less">−</button>
+          <output id="qty" aria-live="polite">1</output>
+          <button type="button" id="plus" aria-label="One more">+</button>
+        </div>
+        <button class="add" type="button" id="add" data-state="idle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7.5"/></svg><span id="add-l">Add to bag</span><span class="price" id="add-p"></span></button>
+      </div>
+    </div>
+    <p class="sr-only" aria-live="polite" id="status"></p>
+  </article>
+</main>
+<div class="ghost" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 2.5v17l4.6-4.3 3 6.6 3.1-1.4-3-6.4 6.3-.4z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (s) { return document.querySelector(s); };
+
+    /* ---------- Product data (made up) ---------- */
+    var SCENTS = [
+      { name: "Oud Rose", c: ["#e2577d", "#b3244a", "#6e0f2c"], accent: "#c2385e",
+        desc: "Smoky oud wrapped in Damask rose petals, warm and close to the skin for a whole evening.",
+        notes: [["Top", "Saffron"], ["Heart", "Damask rose"], ["Base", "Oud"]] },
+      { name: "Amber Saffron", c: ["#f6b648", "#d9831a", "#8c4a06"], accent: "#c9771a",
+        desc: "Golden amber and saffron threads with a soft cardamom spark, like a winter shawl.",
+        notes: [["Top", "Cardamom"], ["Heart", "Saffron"], ["Base", "Amber"]] },
+      { name: "Jasmine Night", c: ["#a98ae8", "#6e48c4", "#33196e"], accent: "#7550d0",
+        desc: "Night-blooming jasmine over clean musk, light enough for the office and bright after dark.",
+        notes: [["Top", "Bergamot"], ["Heart", "Jasmine"], ["Base", "White musk"]] }
+    ];
+    var SIZES = [{ ml: 3, p: 1450, f: 0.4 }, { ml: 6, p: 2600, f: 0.63 }, { ml: 12, p: 4800, f: 0.86 }];
+    var scent = 0, size = 1, qty = 1, inBag = 0, busy = false, adding = false;
+    var card = $("#card"), show = $("#show"), rig = $("#rig"), bottle = $("#bottle"), status = $("#status");
+    var glare = $("#glare"), wave = $("#wave"), foam = $("#foam"), liq = $("#liq"), cap = $("#cap"), bubblesG = $("#bubbles");
+
+    /* ---------- Controls ---------- */
+    var swBtns = SCENTS.map(function (s, i) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "sw"; b.setAttribute("role", "radio"); b.setAttribute("aria-label", s.name);
+      b.style.setProperty("--l", s.c[0]); b.style.setProperty("--d", s.c[2]);
+      b.addEventListener("click", function () { pickScent(i); });
+      $("#swatches").appendChild(b);
+      return b;
+    });
+    var szBtns = SIZES.map(function (s, i) {
+      var b = document.createElement("button");
+      b.type = "button"; b.setAttribute("role", "radio"); b.textContent = s.ml + " ml";
+      b.setAttribute("aria-label", s.ml + " millilitres, PKR " + s.p.toLocaleString("en-US"));
+      b.addEventListener("click", function () { pickSize(i); });
+      $("#sizes").appendChild(b);
+      return b;
+    });
+    // arrow keys move inside each radio group
+    [swBtns, szBtns].forEach(function (group) {
+      group.forEach(function (b, i) {
+        b.addEventListener("keydown", function (e) {
+          var k = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+          if (!k) return;
+          e.preventDefault();
+          var n = group[(i + k + group.length) % group.length];
+          n.focus(); n.click();
+        });
+      });
+    });
+    function syncRadios() {
+      swBtns.forEach(function (b, i) { b.setAttribute("aria-checked", String(i === scent)); b.tabIndex = i === scent ? 0 : -1; });
+      szBtns.forEach(function (b, i) { b.setAttribute("aria-checked", String(i === size)); b.tabIndex = i === size ? 0 : -1; });
+    }
+    function money(n) { return "PKR " + n.toLocaleString("en-US"); }
+    function syncPrice() {
+      $("#add-p").textContent = "· " + money(SIZES[size].p * qty);
+      $("#qty").textContent = qty;
+      $("#minus").disabled = qty <= 1;
+      $("#plus").disabled = qty >= 9;
+    }
+    function bumpQty(d) {
+      var n = Math.max(1, Math.min(9, qty + d));
+      if (n === qty) return;
+      qty = n; syncPrice();
+      var o = $("#qty"); o.classList.remove("tick"); void o.offsetWidth; o.classList.add("tick");
+    }
+    $("#minus").addEventListener("click", function () { bumpQty(-1); });
+    $("#plus").addEventListener("click", function () { bumpQty(1); });
+
+    function writeName(s) {
+      $("#pname").innerHTML = s.split("").map(function (ch, k) { return '<span style="--k:' + k + '">' + (ch === " " ? " " : ch) + "</span>"; }).join("");
+      $("#pname").setAttribute("aria-label", s);
+    }
+    function writeInfo() {
+      var s = SCENTS[scent];
+      writeName(s.name);
+      $("#desc").textContent = s.desc;
+      $("#notes").innerHTML = s.notes.map(function (n, k) { return '<span style="--k:' + k + '"><small>' + n[0] + "</small>" + n[1] + "</span>"; }).join("");
+      card.style.setProperty("--accent", s.accent);
+    }
+    function setLiquidColour(s) {
+      $("#s1").setAttribute("stop-color", s.c[0]); $("#s2").setAttribute("stop-color", s.c[1]); $("#s3").setAttribute("stop-color", s.c[2]);
+    }
+
+    /* ---------- Physics state ---------- */
+    var P = {
+      rx: 0, ry: 0, vx: 0, vy: 0, tx: 0, ty: 0,      // card tilt (deg) and its target
+      s: 0, sv: 0,                                    // liquid surface angle relative to the bottle (deg)
+      f: 0, fv: 0, ft: SIZES[size].f,                 // fill level 0..1
+      phase: 0, amp: 1.2, capY: 0, capVy: 0, capT: 0, capR: 0, capVr: 0, capTr: 0, t: 0
+    };
+    var bubbles = [];
+    for (var b = 0; b < 8; b++) {
+      var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      bubblesG.appendChild(c);
+      bubbles.push({ el: c, x: 50 + Math.random() * 60, y: 200 - Math.random() * 80, r: 0.8 + Math.random() * 1.8, v: 8 + Math.random() * 14 });
+    }
+
+    /* ---------- Scent and size ---------- */
+    function pickScent(i) {
+      if (i === scent || busy) return;
+      busy = true;
+      scent = i; syncRadios();
+      var s = SCENTS[i];
+      // anticipation: the cap twists up and the bottle lifts
+      P.capT = -14; P.capTr = -18;
+      setTimeout(function () { P.ft = 0; P.sv += 40; }, reduce.matches ? 0 : 200);         // drain
+      setTimeout(function () {                                                              // swap colour while empty
+        setLiquidColour(s); writeInfo();
+        P.ft = SIZES[size].f; P.sv -= 60;                                                   // refill with a slosh
+      }, reduce.matches ? 0 : 820);
+      setTimeout(function () { P.capT = 0; P.capTr = 0; mist(10); busy = false; }, reduce.matches ? 0 : 1600); // finish
+      status.textContent = s.name + ". " + s.desc;
+    }
+    function pickSize(i) {
+      if (i === size) return;
+      size = i; syncRadios(); syncPrice();
+      P.ft = SIZES[i].f; P.sv += (i % 2 ? -1 : 1) * 30;
+      status.textContent = SIZES[i].ml + " ml, " + money(SIZES[i].p) + ".";
+    }
+
+    /* ---------- Mist, drop and bag ---------- */
+    function capPoint() { var r = cap.getBoundingClientRect(), sr = show.getBoundingClientRect(); return { x: r.left + r.width / 2 - sr.left, y: r.top + 6 - sr.top, cx: r.left + r.width / 2, cy: r.top + 6 }; }
+    function mist(n) {
+      if (reduce.matches) return;
+      var p = capPoint();
+      for (var k = 0; k < n; k++) {
+        var m = document.createElement("span"), a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, d = 40 + Math.random() * 60;
+        m.className = "mist";
+        m.style.left = p.x - 13 + "px"; m.style.top = p.y - 13 + "px";
+        m.style.setProperty("--dx", Math.cos(a) * d + "px"); m.style.setProperty("--dy", Math.sin(a) * d + "px");
+        m.style.animationDelay = k * 30 + "ms";
+        show.appendChild(m);
+        setTimeout(m.remove.bind(m), 1600);
+      }
+    }
+    function dropToBag(done) {
+      var p = capPoint(), br = $("#bag").getBoundingClientRect(), x1 = br.left + br.width / 2, y1 = br.top + br.height / 2;
+      if (reduce.matches) { done(); return; }
+      var d = document.createElement("span"), t0 = performance.now(), ms = 720;
+      d.className = "drop"; d.style.setProperty("--accent", SCENTS[scent].accent);
+      document.body.appendChild(d);
+      (function fly(now) {
+        var k = Math.min(1, (now - t0) / ms), e = k * k * (3 - 2 * k);
+        var x = p.cx + (x1 - p.cx) * e, y = p.cy + (y1 - p.cy) * e - Math.sin(k * Math.PI) * 120;
+        d.style.transform = "translate(" + x + "px," + y + "px) rotate(" + (k * 200) + "deg) scale(" + (1 - k * 0.4) + ")";
+        if (k < 1) requestAnimationFrame(fly); else { d.remove(); done(); }
+      })(t0);
+    }
+    $("#add").addEventListener("click", function () {
+      var btn = $("#add");
+      if (adding) return;
+      adding = true;
+      btn.dataset.state = "press";                                           // anticipation
+      P.sv += 30; P.capT = -6;
+      setTimeout(function () {
+        btn.dataset.state = "work"; $("#add-l").textContent = "Adding…";      // progress: the button fills with scent
+        P.capT = 0;
+        dropToBag(function () {
+          inBag += qty;
+          var n = $("#bagn"); n.textContent = inBag; n.classList.add("on");
+          var bag = $("#bag"); bag.classList.remove("gulp"); void bag.offsetWidth; bag.classList.add("gulp");
+          bag.setAttribute("aria-label", "Bag, " + inBag + " items");
+        });
+      }, 130);
+      setTimeout(function () {                                                // finish
+        btn.dataset.state = "done"; $("#add-l").textContent = "Added"; $("#add-p").textContent = "";
+        mist(6);
+        status.textContent = qty + " × " + SCENTS[scent].name + " " + SIZES[size].ml + " ml added. " + inBag + " in your bag.";
+      }, 1150);
+      setTimeout(function () { btn.dataset.state = "idle"; $("#add-l").textContent = "Add to bag"; syncPrice(); adding = false; }, 2700); // reset
+    });
+
+    /* ---------- Tilt and swirl with the pointer ---------- */
+    var dragging = null;
+    function aim(cx, cy) {
+      var r = show.getBoundingClientRect(), nx = (cx - r.left) / r.width - 0.5, ny = (cy - r.top) / r.height - 0.5;
+      P.tx = Math.max(-1, Math.min(1, nx * 2)) * 16; P.ty = Math.max(-1, Math.min(1, ny * 2)) * -11;
+      glare.setAttribute("cx", (80 + nx * 64).toFixed(1)); glare.setAttribute("cy", (140 + ny * 70).toFixed(1)); // the light follows the pointer
+    }
+    show.addEventListener("pointermove", function (e) {
+      if (e.pointerType === "touch" && !dragging) return;
+      aim(e.clientX, e.clientY);
+      if (dragging) { P.sv += (e.clientX - dragging.x) * 1.4; dragging.x = e.clientX; }
+    });
+    show.addEventListener("pointerleave", function () { if (!dragging) { P.tx = 0; P.ty = 0; } });
+    show.addEventListener("pointerdown", function (e) {
+      dragging = { x: e.clientX };
+      try { show.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      aim(e.clientX, e.clientY);
+    });
+    function endDrag() { if (!dragging) return; dragging = null; P.tx = 0; P.ty = 0; }
+    show.addEventListener("pointerup", endDrag);
+    show.addEventListener("pointercancel", endDrag);
+
+    /* ---------- The loop ---------- */
+    var last = performance.now();
+    function frame(now) {
+      var dt = Math.min(0.033, (now - last) / 1000);
+      last = now; P.t += dt;
+      if (reduce.matches) { P.rx = P.ry = 0; P.s = 0; P.sv = 0; P.f = P.ft; P.capY = P.capT; P.capR = P.capTr; }
+      else {
+        var ax = 90 * (P.tx - P.ry) - 12 * P.vx; P.vx += ax * dt; P.ry += P.vx * dt;
+        var ay = 90 * (P.ty - P.rx) - 12 * P.vy; P.vy += ay * dt; P.rx += P.vy * dt;
+        var lean = P.ry * 0.55;
+        // the surface wants to stay level (cancel the lean) and lags behind like a real liquid
+        var as = 60 * (-lean - P.s) - 2.4 * P.sv - ax * 0.05; P.sv += as * dt; P.s += P.sv * dt;
+        P.s = Math.max(-38, Math.min(38, P.s));
+        var af = 38 * (P.ft - P.f) - 8 * P.fv; P.fv += af * dt; P.f += P.fv * dt;
+        var ac = 260 * (P.capT - P.capY) - 18 * P.capVy; P.capVy += ac * dt; P.capY += P.capVy * dt;
+        var ar = 200 * (P.capTr - P.capR) - 16 * P.capVr; P.capVr += ar * dt; P.capR += P.capVr * dt;
+      }
+      var leanDeg = P.ry * 0.55;
+      rig.style.setProperty("--rx", P.rx.toFixed(2) + "deg");
+      rig.style.setProperty("--ry", P.ry.toFixed(2) + "deg");
+      rig.style.setProperty("--px", (P.ry * 1.2).toFixed(2) + "px");
+      rig.style.setProperty("--py", (-P.rx * 1.2).toFixed(2) + "px");
+      bottle.style.setProperty("--lean", leanDeg.toFixed(2) + "deg");
+      bottle.style.setProperty("--float", reduce.matches ? "0px" : (Math.sin(P.t * 1.3) * 4).toFixed(2) + "px");
+      cap.setAttribute("transform", "translate(0 " + P.capY.toFixed(2) + ") rotate(" + P.capR.toFixed(2) + " 80 60)");
+      // liquid surface: level y from the fill, a wave whose height follows the slosh speed
+      var f = Math.max(0, Math.min(1.02, P.f)), y = 214 - f * 134;
+      P.phase += dt * (3 + Math.min(6, Math.abs(P.sv) * 0.05));
+      P.amp += ((1.2 + Math.min(5, Math.abs(P.sv) * 0.04)) - P.amp) * Math.min(1, dt * 6);
+      var d = "M-100 240 L-100 0";
+      for (var x = -100; x <= 100; x += 10) d += " L" + x + " " + (Math.sin(x * 0.07 + P.phase) * P.amp + Math.sin(x * 0.13 - P.phase * 1.3) * P.amp * 0.4).toFixed(2);
+      d += " L100 240 Z";
+      wave.setAttribute("d", f > 0.01 ? d : "");
+      foam.setAttribute("d", f > 0.01 ? d.replace("M-100 240 L-100 0", "M-100 0").replace(" L100 240 Z", "") : "");
+      liq.setAttribute("transform", "translate(80 " + y.toFixed(2) + ") rotate(" + P.s.toFixed(2) + ")");
+      // bubbles rise through the liquid and pop at the surface
+      bubbles.forEach(function (bb) {
+        if (!reduce.matches) bb.y -= bb.v * dt;
+        if (bb.y < y + 6 || f < 0.06) { bb.y = 208 - Math.random() * 10; bb.x = 50 + Math.random() * 60; }
+        bb.el.setAttribute("cx", (bb.x + Math.sin(P.t * 2 + bb.v) * 1.5).toFixed(1));
+        bb.el.setAttribute("cy", bb.y.toFixed(1));
+        bb.el.setAttribute("r", f < 0.06 ? 0 : bb.r);
+      });
+      requestAnimationFrame(frame);
+    }
+
+    /* ---------- Auto-demo ---------- */
+    var ghost = $(".ghost"), demoOn = !reduce.matches, timers = [], round = 0;
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+    function ghostAt(x, y) { ghost.style.setProperty("--gx", x + "px"); ghost.style.setProperty("--gy", y + "px"); }
+    function ghostOver(el, fx, fy) { var r = el.getBoundingClientRect(); ghost.classList.add("show"); ghostAt(r.left + r.width * fx, r.top + r.height * fy); }
+    function tap(then) { ghost.classList.add("tap"); later(function () { ghost.classList.remove("tap"); then(); }, 170); }
+    function stopDemo() { if (!demoOn) return; demoOn = false; timers.forEach(clearTimeout); ghost.classList.remove("show", "tap", "follow"); }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) {
+      addEventListener(t, function (e) { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true });
+    });
+    function demoSwirl(ms) {
+      // the pointer circles over the bottle: the card tilts and the liquid sloshes
+      var r = show.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height * 0.45, t0 = performance.now();
+      ghost.classList.add("show", "follow");
+      (function step(now) {
+        if (!demoOn) return;
+        var k = (now - t0) / ms, a = k * Math.PI * 2.4;
+        var x = cx + Math.sin(a) * r.width * 0.36, y = cy + Math.sin(a * 2) * r.height * 0.14;
+        ghostAt(x, y); aim(x, y);
+        if (k < 1) requestAnimationFrame(step);
+        else { ghost.classList.remove("follow"); P.tx = 0; P.ty = 0; }
+      })(t0);
+    }
+    function demo() {
+      if (!demoOn) return;
+      var next = (scent + 1) % SCENTS.length, sz = round % 2 ? 1 : 2;
+      round++;
+      later(function () { demoSwirl(2200); }, 0);
+      later(function () { ghostOver(swBtns[next], 0.5, 0.55); }, 2400);
+      later(function () { tap(function () { pickScent(next); }); }, 3200);
+      later(function () { ghostOver(szBtns[sz], 0.5, 0.55); }, 5000);
+      later(function () { tap(function () { pickSize(sz); }); }, 5800);
+      later(function () { ghostOver($("#add"), 0.42, 0.55); }, 6900);
+      later(function () { tap(function () { $("#add").click(); }); }, 7700);
+      later(function () { ghost.classList.remove("show"); }, 9300);
+      later(demo, 10600);
+    }
+
+    /* ---------- Start: the bottle fills up as the card arrives ---------- */
+    syncRadios(); syncPrice(); writeInfo(); setLiquidColour(SCENTS[0]);
+    P.f = reduce.matches ? P.ft : 0; P.sv = reduce.matches ? 0 : -30;
+    ghostAt(innerWidth * 0.8, innerHeight + 40);
+    requestAnimationFrame(frame);
+    if (demoOn) later(demo, 900);
+  })();
+</script>
+</body>
+</html>

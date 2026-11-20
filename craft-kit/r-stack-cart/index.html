@@ -1,0 +1,648 @@
+<!doctype html>
+<!-- Chill & Craft · Stack Cart · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stack Cart · mini cart drawer with steppers</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: night market indigo with an electric lime ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #efeeff;
+    --bg2: #d9d6ff;
+    --grid: rgba(91, 61, 245, .07);
+    --ink: #1b1740;
+    --muted: #6d68a3;
+    --app: #f7f6ff;
+    --tile: #ffffff;
+    --drawer: #ffffff;
+    --line: #e5e2fb;
+    --soft: #f1effe;
+    --indigo: #5b3df5;
+    --indigo-d: #3c22c9;
+    --lime: #b8f227;
+    --lime-d: #7fb40a;
+    --coral: #ff6b6b;
+    --focus: #f59e0b;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #1a1650;
+    --bg2: #07061a;
+    --grid: rgba(184, 242, 39, .045);
+    --ink: #eeedff;
+    --muted: #a19ddb;
+    --app: #120f33;
+    --tile: #1b1747;
+    --drawer: #1a1645;
+    --line: #2e2968;
+    --soft: #231f57;
+    --indigo: #8b74ff;
+    --indigo-d: #5b3df5;
+    --focus: #fbbf24;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 28px 28px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 28px 28px,
+      radial-gradient(800px 600px at 70% 20%, var(--bg1), var(--bg2));
+    background-color: var(--bg2);
+  }
+  .stage { width: 100%; display: grid; place-items: center; padding: 16px; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  /* ---------- The little shop window ---------- */
+  .app {
+    position: relative;
+    width: min(400px, 100%);
+    height: min(580px, calc(100vh - 32px));
+    min-height: 500px;
+    border-radius: 30px;
+    overflow: hidden;
+    background: var(--app);
+    border: 1px solid var(--line);
+    box-shadow: 0 40px 80px -40px rgba(40, 20, 140, .55), 0 0 0 6px rgba(255, 255, 255, .25);
+  }
+  :root[data-theme="dark"] .app { box-shadow: 0 40px 80px -30px rgba(0, 0, 0, .8), 0 0 0 6px rgba(255, 255, 255, .03); }
+  .shop { position: absolute; inset: 0; padding: 16px; transition: transform .6s var(--spring), filter .4s; transform-origin: 30% 50%; }
+  .app.open .shop { transform: scale(.94) translateX(-10px); filter: brightness(.75) saturate(.8); }
+  .bar { display: flex; align-items: center; justify-content: space-between; }
+  .logo { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 15px; letter-spacing: -.01em; }
+  .logo i { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: var(--indigo); box-shadow: 0 6px 14px -6px var(--indigo); }
+  .logo i::before { content: ""; width: 10px; height: 14px; border-radius: 5px 5px 3px 3px; background: var(--lime); box-shadow: 0 0 10px var(--lime); animation: flick 2.6s ease-in-out infinite; }
+  .cartBtn { position: relative; width: 42px; height: 42px; border-radius: 14px; border: 1px solid var(--line); background: var(--tile); cursor: pointer; display: grid; place-items: center; transition: transform .35s var(--spring); }
+  .cartBtn:hover { transform: translateY(-2px); }
+  .cartBtn svg { width: 22px; height: 22px; }
+  .count { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--lime); color: #1b2600; font-size: 11px; font-weight: 850; line-height: 20px; text-align: center; box-shadow: 0 0 0 2px var(--app); }
+  .hero { margin: 18px 0 14px; }
+  .hero small { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--indigo); }
+  .hero h1 { margin: 4px 0 0; font-size: 24px; line-height: 1.1; letter-spacing: -.02em; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tile { padding: 10px; border-radius: 18px; background: var(--tile); border: 1px solid var(--line); }
+  .tile .art { height: 92px; border-radius: 13px; display: grid; place-items: center; }
+  .tile .art svg { width: 64px; height: 64px; }
+  .tile b { display: block; margin-top: 8px; font-size: 13px; }
+  .tile .pr { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; font-size: 12.5px; color: var(--muted); font-weight: 650; }
+  .tile button { border: 0; border-radius: 10px; padding: 6px 10px; background: var(--soft); font-size: 12px; font-weight: 800; color: var(--indigo); cursor: pointer; transition: transform .3s var(--spring); }
+  .tile button:hover { transform: scale(1.06); }
+
+  /* ---------- Scrim and drawer ---------- */
+  .scrim { position: absolute; inset: 0; background: rgba(12, 8, 40, .35); opacity: 0; pointer-events: none; transition: opacity .4s; border: 0; padding: 0; width: 100%; cursor: pointer; }
+  .app.open .scrim { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(352px, 90%);
+    display: flex;
+    flex-direction: column;
+    background: var(--drawer);
+    border-radius: 26px 0 0 26px;
+    box-shadow: -30px 0 60px -30px rgba(30, 10, 120, .55);
+    transform: translateX(108%);
+    transition: transform .65s var(--spring);
+  }
+  .app.open .drawer { transform: none; }
+  .dhead { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px; }
+  .dhead h2 { margin: 0; font-size: 18px; letter-spacing: -.01em; }
+  .dhead span { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+  .close { width: 36px; height: 36px; border-radius: 12px; border: 1px solid var(--line); background: var(--soft); cursor: pointer; font-size: 18px; line-height: 1; transition: transform .3s var(--spring); }
+  .close:hover { transform: rotate(90deg); }
+
+  /* free delivery meter with a scooter riding the bar */
+  .meter { margin: 4px 16px 6px; padding: 10px 12px 12px; border-radius: 16px; background: var(--soft); }
+  .meter p { margin: 0 0 22px; font-size: 12.5px; font-weight: 650; min-height: 1.2em; }
+  .meter p b { color: var(--indigo); }
+  .track { position: relative; height: 8px; border-radius: 4px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 4px; background: linear-gradient(90deg, var(--indigo), #9b7dff); transition: width .7s var(--spring), background .3s; }
+  .meter.free .fill { background: linear-gradient(90deg, var(--lime-d), var(--lime)); box-shadow: 0 0 12px rgba(184, 242, 39, .7); }
+  .scooter { position: absolute; top: -21px; left: 0; width: 34px; height: 26px; margin-left: -17px; transition: left .7s var(--spring); }
+  .scooter svg { width: 100%; height: 100%; overflow: visible; transform-origin: 30% 90%; transition: transform .5s var(--spring); }
+  .meter.free .scooter svg { transform: rotate(-14deg); }
+  .wheel { transform-box: fill-box; transform-origin: center; }
+  .scooter.go .wheel { animation: spin .35s linear infinite; }
+  .scooter .body { animation: putt .5s ease-in-out infinite; }
+
+  .rows { flex: 1; list-style: none; margin: 0; padding: 6px 16px; overflow-y: auto; overflow-x: hidden; }
+  .row { display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px dashed var(--line); transition: opacity .3s, transform .45s cubic-bezier(.5, 0, .75, 0); }
+  .row:last-child { border-bottom: 0; }
+  .row.in { animation: rowIn .55s var(--spring) backwards; }
+  .row.out { opacity: 0; transform: translateX(110%); }
+  .wrap { overflow: hidden; transition: height .38s cubic-bezier(.5, 0, .2, 1); }
+  .thumb { position: relative; width: 58px; height: 58px; }
+  .layer, .face { position: absolute; inset: 0; border-radius: 15px; }
+  .layer { opacity: 0; transform: translate(0, -16px) scale(.85) rotate(0); transition: transform .5s var(--spring), opacity .25s; box-shadow: 0 4px 10px -6px rgba(20, 10, 80, .5); }
+  .layer.on { opacity: 1; }
+  .face { display: grid; place-items: center; box-shadow: 0 6px 12px -8px rgba(20, 10, 80, .6); }
+  .face svg { width: 42px; height: 42px; }
+  .info { min-width: 0; }
+  .info b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .info span { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .right { display: grid; justify-items: end; gap: 6px; }
+  .lp { font-size: 13.5px; font-weight: 800; }
+  .step { position: relative; display: flex; align-items: center; height: 32px; border-radius: 11px; background: var(--soft); border: 1px solid var(--line); }
+  .step button { width: 30px; height: 30px; border: 0; background: transparent; border-radius: 10px; cursor: pointer; display: grid; place-items: center; transition: transform .25s var(--spring), background .2s; }
+  .step button:hover { background: var(--line); }
+  .step button:active { transform: scale(.82); }
+  .step svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .step .trash { color: var(--coral); }
+  .q { min-width: 18px; text-align: center; font-weight: 850; font-size: 14px; }
+  .plus1 { position: absolute; right: 4px; top: -6px; font-size: 12px; font-weight: 900; color: var(--indigo); pointer-events: none; animation: rise .8s ease-out forwards; }
+  .plus1.neg { color: var(--coral); }
+
+  .sumBox { padding: 12px 16px 16px; border-top: 1px solid var(--line); background: linear-gradient(180deg, transparent, var(--soft)); }
+  .sumBox dl { margin: 0; display: grid; grid-template-columns: 1fr auto; row-gap: 5px; font-size: 13px; }
+  .sumBox dt { color: var(--muted); font-weight: 600; }
+  .sumBox dd { margin: 0; font-weight: 750; text-align: right; }
+  .sumBox .tot { font-size: 17px; font-weight: 850; color: var(--ink); padding-top: 4px; }
+  .freeTag { color: var(--lime-d); }
+  :root[data-theme="dark"] .freeTag { color: var(--lime); }
+  .checkout {
+    --p: 0;
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 50px;
+    margin-top: 12px;
+    border: 0;
+    border-radius: 16px;
+    background: var(--indigo);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 16px 26px -14px var(--indigo), inset 0 1px 0 rgba(255, 255, 255, .25);
+    transition: transform .35s var(--spring), background .3s;
+  }
+  .checkout::before { content: ""; position: absolute; inset: 0; transform-origin: 0 50%; transform: scaleX(var(--p)); background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, .22) 0 9px, rgba(255, 255, 255, .08) 9px 18px); background-size: 200% 100%; animation: stripes .6s linear infinite; }
+  .checkout span { position: relative; display: inline-flex; align-items: center; gap: 8px; }
+  .checkout:hover { transform: translateY(-2px); }
+  .checkout.ok { background: var(--lime-d); }
+
+  .toast { position: absolute; left: 16px; right: 16px; bottom: 178px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 10px 10px 14px; border-radius: 14px; background: var(--ink); color: var(--drawer); font-size: 12.5px; font-weight: 650; transform: translateY(20px) scale(.9); opacity: 0; visibility: hidden; transition: transform .45s var(--spring), opacity .2s, visibility 0s .45s; }
+  .toast.show { transform: none; opacity: 1; visibility: visible; transition-delay: 0s; }
+  .toast button { border: 0; border-radius: 9px; padding: 6px 10px; background: var(--lime); color: #1b2600; font-weight: 850; font-size: 12px; cursor: pointer; }
+
+  .empty { display: none; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 20px; }
+  .drawer.isEmpty .empty { display: flex; animation: rowIn .6s var(--spring) both; }
+  .drawer.isEmpty .rows, .drawer.isEmpty .sumBox, .drawer.isEmpty .meter { display: none; }
+  .empty svg { width: 110px; height: 90px; }
+  .empty b { font-size: 16px; }
+  .empty p { margin: 0; font-size: 12.5px; color: var(--muted); max-width: 220px; }
+  .empty button { margin-top: 6px; border: 0; border-radius: 13px; padding: 11px 16px; background: var(--indigo); color: #fff; font-weight: 800; font-size: 13.5px; cursor: pointer; }
+
+  /* odometer digits: each digit is a reel of 0–9 that rolls */
+  .odo { display: inline-flex; height: 1.2em; line-height: 1.2em; overflow: hidden; vertical-align: bottom; font-variant-numeric: tabular-nums; }
+  .odo .dg { display: inline-block; height: 1.2em; overflow: hidden; -webkit-mask-image: linear-gradient(transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(transparent, #000 12%, #000 88%, transparent); }
+  .odo .reel { display: block; transition: transform .5s cubic-bezier(.25, 1.25, .4, 1); }
+  .odo .reel i { display: block; height: 1.2em; font-style: normal; }
+  .odo .ch { white-space: pre; }
+
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
+
+  @keyframes flick { 0%, 100% { opacity: 1; } 45% { opacity: .75; } 50% { opacity: 1; } 55% { opacity: .8; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes putt { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1px); } }
+  @keyframes rowIn { from { opacity: 0; transform: translateX(40px); } }
+  @keyframes rise { from { opacity: 1; transform: translateY(0) scale(.8); } to { opacity: 0; transform: translateY(-22px) scale(1.15); } }
+  @keyframes stripes { to { background-position: -36px 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="app" id="app">
+    <!-- the shop page behind the drawer -->
+    <section class="shop" id="shop" aria-label="Shop">
+      <div class="bar">
+        <span class="logo"><i aria-hidden="true"></i>Lantern Lane</span>
+        <button class="cartBtn" id="cartBtn" type="button" aria-controls="drawer" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.2l2.3 11.2a1.6 1.6 0 0 0 1.6 1.3h8.2a1.6 1.6 0 0 0 1.6-1.2L20.6 8H6.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" /><circle cx="9.5" cy="20" r="1.4" fill="currentColor" /><circle cx="17" cy="20" r="1.4" fill="currentColor" /></svg>
+          <span class="count" id="count">3</span>
+          <span class="vh" id="cartBtnLabel">Open cart</span>
+        </button>
+      </div>
+      <div class="hero"><small>Night market</small><h1>Small things,<br>warm light</h1></div>
+      <div class="grid" id="grid"></div>
+    </section>
+    <button class="scrim" id="scrim" type="button" tabindex="-1" aria-label="Close cart"></button>
+
+    <!-- the mini cart drawer -->
+    <aside class="drawer" id="drawer" role="dialog" aria-modal="false" aria-labelledby="dTitle" inert>
+      <div class="dhead">
+        <div><h2 id="dTitle">Your cart</h2><span id="dCount">3 items</span></div>
+        <button class="close" id="close" type="button" aria-label="Close cart">×</button>
+      </div>
+      <div class="meter" id="meter">
+        <p id="meterTxt">Add <b>PKR 800</b> more for free delivery</p>
+        <div class="track">
+          <div class="fill" id="fill"></div>
+          <div class="scooter" id="scooter" aria-hidden="true">
+            <svg viewBox="0 0 34 26">
+              <g class="body"><path d="M6 17h15l3-7h4" fill="none" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /><rect x="5" y="7" width="11" height="9" rx="2" fill="var(--coral)" /><path d="M8 10h5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" /><circle cx="25" cy="7" r="3" fill="var(--indigo)" /></g>
+              <g class="wheel"><circle cx="8" cy="20" r="4" fill="var(--ink)" /><path d="M8 16.6v6.8M4.6 20h6.8" stroke="var(--drawer)" stroke-width="1" /></g>
+              <g class="wheel"><circle cx="26" cy="20" r="4" fill="var(--ink)" /><path d="M26 16.6v6.8M22.6 20h6.8" stroke="var(--drawer)" stroke-width="1" /></g>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <ul class="rows" id="rows"></ul>
+      <div class="empty" id="empty">
+        <svg viewBox="0 0 110 90" aria-hidden="true"><path d="M78 14a12 12 0 1 1-10-12 9 9 0 0 0 10 12z" fill="var(--lime)" /><path d="M14 40h82l-8 40H22z" fill="var(--soft)" stroke="var(--indigo)" stroke-width="2.5" stroke-linejoin="round" /><path d="M34 40l10-20M76 40L66 20" stroke="var(--indigo)" stroke-width="2.5" stroke-linecap="round" /><path d="M36 56v12M55 56v12M74 56v12" stroke="var(--line)" stroke-width="3" stroke-linecap="round" /></svg>
+        <b>Order placed, cart is empty</b>
+        <p>Your pretend order is on its way. Fill the cart again to play.</p>
+        <button id="refill" type="button">Fill the cart again</button>
+      </div>
+      <div class="sumBox" id="sumBox">
+        <dl>
+          <dt>Subtotal</dt><dd><span class="odo" id="sub" aria-hidden="true"></span><span class="vh" id="subT"></span></dd>
+          <dt>Delivery</dt><dd id="delWrap"><span class="odo" id="del" aria-hidden="true"></span><span class="vh" id="delT"></span></dd>
+          <dt class="tot">Total</dt><dd class="tot"><span class="odo" id="tot" aria-hidden="true"></span><span class="vh" id="totT"></span></dd>
+        </dl>
+        <button class="checkout" id="checkout" type="button"><span id="coTxt">Checkout</span></button>
+      </div>
+      <div class="toast" id="toast" role="status"><span id="toastTxt">Removed</span><button id="undo" type="button">Undo</button></div>
+    </aside>
+  </div>
+  <p class="vh" id="status" aria-live="polite"></p>
+</main>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<script>
+  // ---------- Stack Cart: a mini cart drawer whose thumbnails stack up as you add, with rolling-digit totals ----------
+  const $ = (id) => document.getElementById(id);
+  const FREE_AT = 6000, DELIVERY = 250;
+  const ART = {
+    mug: { bg: "#ffd9c7", layer: "#ffc4a8", svg: '<path d="M14 12h22v20a8 8 0 0 1-8 8h-6a8 8 0 0 1-8-8z" fill="#d9663a"/><path d="M36 17h3a5 5 0 0 1 0 10h-3" fill="none" stroke="#d9663a" stroke-width="3"/><path d="M14 18h22" stroke="#f3a27f" stroke-width="2"/><path d="M20 4c-2 3 2 4 0 7M27 4c-2 3 2 4 0 7" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round" opacity=".9"/>' },
+    tee: { bg: "#d8d4ff", layer: "#c3bdff", svg: '<path d="M16 6l-10 6 4 8 5-2v22h20V18l5 2 4-8-10-6c-1 4-4 6-9 6s-8-2-9-6z" fill="#3c2dbf"/><g fill="#b8f227"><circle cx="20" cy="24" r="2"/><circle cx="30" cy="24" r="2"/><circle cx="25" cy="31" r="2"/><circle cx="20" cy="36" r="1.6"/><circle cx="30" cy="36" r="1.6"/></g>' },
+    lamp: { bg: "#ffeec2", layer: "#ffe29a", svg: '<path d="M25 3v6" stroke="#a5741d" stroke-width="2"/><path d="M14 22c0-8 5-13 11-13s11 5 11 13z" fill="#d79a22"/><path d="M18 22h14l-2 14H20z" fill="#ffe08a"/><circle cx="25" cy="29" r="3" fill="#fff6c9"/><path d="M19 36h12l2 6H17z" fill="#b8801b"/>' },
+    plant: { bg: "#d6f5c6", layer: "#bdeca6", svg: '<path d="M25 30c-8-4-10-14-6-22 6 5 8 13 6 22zM25 30c7-5 13-6 18-3-4 6-11 7-18 3zM25 30c-6-2-12 0-16 4 6 3 12 2 16-4z" fill="#3f9d4a"/><path d="M15 30h20l-3 14H18z" fill="#c76b3b"/><path d="M15 30h20v3H15z" fill="#a9552b"/>' },
+  };
+  const CATALOG = [
+    { id: "mug", name: "Clay mug", sub: "Hand glazed · 350 ml", price: 850 },
+    { id: "tee", name: "Block-print tee", sub: "Cotton · size M", price: 1950 },
+    { id: "lamp", name: "Brass lamp", sub: "Warm bulb included", price: 2400 },
+    { id: "plant", name: "Snake plant", sub: "With terracotta pot", price: 1250 },
+  ];
+  const START = [["mug", 1], ["tee", 1], ["lamp", 1]];
+  const fmt = (n) => "PKR " + n.toLocaleString("en-US");
+  const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => calmQ.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 120) : ms));
+  const play = (el, frames, opts) => (calm() || !el.animate ? Promise.resolve() : el.animate(frames, opts).finished.catch(() => {}));
+
+  const app = $("app"), drawer = $("drawer"), rowsEl = $("rows"), status = $("status");
+  let cart = [];         // [{id, qty}]
+  let lastRemoved = null, toastTimer = 0, busy = false;
+
+  // ---------- Odometer: every digit rolls on its own reel ----------
+  function odo(el, text) {
+    const prev = el.dataset.v || "";
+    el.dataset.v = text;
+    const sr = el.nextElementSibling;
+    if (sr && sr.classList.contains("vh")) sr.textContent = text;
+    const shape = (s) => s.replace(/\d/g, "0");
+    if (shape(prev) !== shape(text) || !el.children.length) {
+      el.innerHTML = "";
+      const pd = prev.replace(/\D/g, "");
+      let k = text.replace(/\D/g, "").length;
+      for (const ch of text) {
+        if (/\d/.test(ch)) {
+          const d = document.createElement("span"); d.className = "dg";
+          const r = document.createElement("span"); r.className = "reel";
+          r.innerHTML = "<i>0</i><i>1</i><i>2</i><i>3</i><i>4</i><i>5</i><i>6</i><i>7</i><i>8</i><i>9</i>";
+          const from = +(pd[pd.length - k] || 0); // start from the old digit in the same place, so it rolls
+          r.style.transition = "none"; r.style.transform = `translateY(${-from * 1.2}em)`;
+          d.appendChild(r); el.appendChild(d); k--;
+        } else { const c = document.createElement("span"); c.className = "ch"; c.textContent = ch; el.appendChild(c); }
+      }
+      el.offsetWidth; // apply the start position before rolling
+      el.querySelectorAll(".reel").forEach((r) => (r.style.transition = ""));
+    }
+    const digits = text.replace(/\D/g, "");
+    el.querySelectorAll(".reel").forEach((r, i) => (r.style.transform = `translateY(${-digits[i] * 1.2}em)`));
+  }
+
+  // ---------- Shop tiles ----------
+  const grid = $("grid");
+  CATALOG.forEach((p) => {
+    grid.insertAdjacentHTML("beforeend", `<article class="tile"><div class="art" style="background:${ART[p.id].bg}"><svg viewBox="0 0 50 46" aria-hidden="true">${ART[p.id].svg}</svg></div><b>${p.name}</b><div class="pr"><span>${fmt(p.price)}</span><button type="button" data-add="${p.id}" aria-label="Add ${p.name} to cart">+ Add</button></div></article>`);
+  });
+  grid.addEventListener("click", (e) => { const b = e.target.closest("[data-add]"); if (b) addFromShop(b.dataset.add, b); });
+
+  // ---------- Rows ----------
+  const item = (id) => CATALOG.find((p) => p.id === id);
+  const ICON = {
+    minus: '<svg viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg>',
+    plus: '<svg viewBox="0 0 16 16"><path d="M3.5 8h9M8 3.5v9"/></svg>',
+    trash: '<svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5"/></svg>',
+  };
+  function rowHTML(id) {
+    const p = item(id), a = ART[id];
+    return `<div class="row" data-id="${id}">
+      <div class="thumb" aria-hidden="true">${[3, 2, 1].map((k) => `<span class="layer" data-k="${k}" style="background:${a.layer}"></span>`).join("")}<span class="face" style="background:${a.bg}"><svg viewBox="0 0 50 46">${a.svg}</svg></span></div>
+      <div class="info"><b>${p.name}</b><span>${p.sub}</span><span>${fmt(p.price)} each</span></div>
+      <div class="right"><span class="lp"><span class="odo" aria-hidden="true"></span><span class="vh"></span></span>
+        <div class="step"><button type="button" class="dec"></button><span class="q"><span class="odo" aria-hidden="true"></span><span class="vh"></span></span><button type="button" class="inc" aria-label="Add one more ${p.name}">${ICON.plus}</button></div>
+      </div></div>`;
+  }
+  function rowEl(id) { return rowsEl.querySelector(`.row[data-id="${id}"]`); }
+  function paintRow(id) {
+    const c = cart.find((x) => x.id === id), r = rowEl(id);
+    if (!c || !r) return;
+    const p = item(id);
+    odo(r.querySelector(".lp .odo"), fmt(p.price * c.qty));
+    odo(r.querySelector(".q .odo"), String(c.qty));
+    const dec = r.querySelector(".dec");
+    dec.innerHTML = c.qty === 1 ? ICON.trash : ICON.minus;
+    dec.classList.toggle("trash", c.qty === 1);
+    dec.setAttribute("aria-label", c.qty === 1 ? `Remove ${p.name}` : `One less ${p.name}`);
+    // stack: one back card per extra item (up to 3), fanned out
+    r.querySelectorAll(".layer").forEach((l) => {
+      const k = +l.dataset.k, on = k < c.qty;
+      l.classList.toggle("on", on);
+      l.style.transform = on ? `translate(${k * 6}px, ${-k * 5}px) rotate(${k * 7}deg)` : "";
+    });
+  }
+  function addRow(id, animate) {
+    const li = document.createElement("li");
+    li.className = "wrap";
+    li.innerHTML = rowHTML(id);
+    rowsEl.appendChild(li);
+    if (animate) li.firstElementChild.classList.add("in");
+    paintRow(id);
+    return li;
+  }
+  rowsEl.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const id = b.closest(".row").dataset.id;
+    if (b.classList.contains("inc")) change(id, +1, b);
+    else if (b.classList.contains("dec")) change(id, -1, b);
+  });
+
+  // ---------- Totals ----------
+  const subtotal = () => cart.reduce((a, c) => a + item(c.id).price * c.qty, 0);
+  const units = () => cart.reduce((a, c) => a + c.qty, 0);
+  let wasFree = null;
+  function paintTotals() {
+    const s = subtotal(), free = s >= FREE_AT, del = free || !s ? 0 : DELIVERY;
+    odo($("sub"), fmt(s));
+    odo($("del"), free ? "Free" : fmt(del));
+    $("delWrap").classList.toggle("freeTag", free);
+    odo($("tot"), fmt(s + del));
+    const n = units();
+    $("dCount").textContent = `${n} ${n === 1 ? "item" : "items"}`;
+    $("count").textContent = n;
+    $("cartBtnLabel").textContent = `Open cart, ${n} items`;
+    $("coTxt").textContent = `Checkout · ${fmt(s + del)}`;
+    // free delivery meter
+    const pct = Math.min(1, s / FREE_AT);
+    $("fill").style.width = pct * 100 + "%";
+    $("scooter").style.left = `calc(${pct.toFixed(4)} * (100% - 30px) + 15px)`;
+    $("meter").classList.toggle("free", free);
+    $("meterTxt").innerHTML = free ? "Free delivery unlocked" : `Add <b>${fmt(FREE_AT - s)}</b> more for free delivery`;
+    const sc = $("scooter");
+    sc.classList.add("go"); clearTimeout(sc._t); sc._t = setTimeout(() => sc.classList.remove("go"), 750);
+    if (wasFree === false && free) celebrate();
+    wasFree = free;
+  }
+  function celebrate() {
+    const r = $("fill").getBoundingClientRect();
+    confetti(r.right, r.top, 34);
+    play($("meter"), [{ transform: "scale(1)" }, { transform: "scale(1.05)", offset: .35 }, { transform: "scale(1)" }], { duration: 520, easing: "cubic-bezier(.3,1.6,.5,1)" });
+    say("Free delivery unlocked.");
+  }
+
+  // ---------- Changing quantities ----------
+  function floatTag(btn, txt, neg) {
+    if (calm()) return;
+    const t = document.createElement("span");
+    t.className = "plus1" + (neg ? " neg" : "");
+    t.textContent = txt;
+    btn.parentElement.appendChild(t);
+    setTimeout(() => t.remove(), 820);
+  }
+  function change(id, d, btn) {
+    const c = cart.find((x) => x.id === id);
+    if (!c) return;
+    if (d < 0 && c.qty === 1) { removeRow(id); return; }
+    c.qty = Math.min(9, c.qty + d);
+    floatTag(btn, d > 0 ? "+1" : "−1", d < 0);
+    const r = rowEl(id);
+    play(r.querySelector(".face"), d > 0
+      ? [{ transform: "none" }, { transform: "translateY(3px) scale(1.08, .9)", offset: .3 }, { transform: "translateY(-3px) scale(.96, 1.06)", offset: .65 }, { transform: "none" }]
+      : [{ transform: "none" }, { transform: "scale(.9)", offset: .4 }, { transform: "none" }], { duration: 460 });
+    paintRow(id);
+    paintTotals();
+    say(`${item(id).name}: ${c.qty}. Total ${fmt(subtotal() + (subtotal() >= FREE_AT ? 0 : DELIVERY))}.`);
+  }
+  async function removeRow(id) {
+    const i = cart.findIndex((x) => x.id === id), r = rowEl(id);
+    if (i < 0 || !r) return;
+    lastRemoved = { ...cart[i], at: i };
+    cart.splice(i, 1);
+    const li = r.parentElement;
+    // anticipation: a little shrink, then the row slides away and the gap closes
+    await play(r, [{ transform: "none" }, { transform: "scale(.96) translateX(-10px)", offset: .7 }, { transform: "none" }], { duration: 240 });
+    r.classList.add("out");
+    await wait(300);
+    li.style.height = li.offsetHeight + "px";
+    li.offsetHeight;
+    li.style.height = "0px";
+    await wait(380);
+    li.remove();
+    paintTotals();
+    showToast(`${item(id).name} removed`);
+    say(`${item(id).name} removed. Undo is available.`);
+    if (!cart.length) setEmpty(false);
+  }
+  function showToast(msg) {
+    $("toastTxt").textContent = msg;
+    $("toast").classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => $("toast").classList.remove("show"), 4200);
+  }
+  function undo() {
+    if (!lastRemoved) return;
+    const { id, qty, at } = lastRemoved;
+    lastRemoved = null;
+    cart.splice(Math.min(at, cart.length), 0, { id, qty });
+    const li = addRow(id, true);
+    const before = rowsEl.children[at];
+    if (before && before !== li) rowsEl.insertBefore(li, before);
+    $("toast").classList.remove("show");
+    paintTotals();
+    say(`${item(id).name} is back in the cart.`);
+  }
+  $("undo").addEventListener("click", undo);
+
+  function addFromShop(id, btn) {
+    const c = cart.find((x) => x.id === id);
+    if (drawer.classList.contains("isEmpty")) drawer.classList.remove("isEmpty");
+    if (c) { c.qty = Math.min(9, c.qty + 1); paintRow(id); } else { cart.push({ id, qty: 1 }); addRow(id, true); }
+    paintTotals();
+    play(btn.closest(".tile").querySelector(".art svg"), [{ transform: "none" }, { transform: "translateY(-12px) rotate(-8deg) scale(1.1)", offset: .4 }, { transform: "none" }], { duration: 520, easing: "cubic-bezier(.3,1.5,.5,1)" });
+    play($("cartBtn"), [{ transform: "none" }, { transform: "scale(1.15) rotate(-8deg)", offset: .4 }, { transform: "none" }], { duration: 480 });
+    play($("count"), [{ transform: "scale(1)" }, { transform: "scale(1.6)", offset: .4 }, { transform: "scale(1)" }], { duration: 480, easing: "cubic-bezier(.3,1.6,.5,1)" });
+    say(`${item(id).name} added.`);
+    setTimeout(() => setOpen(true, false), 420);
+  }
+
+  // ---------- Opening and closing ----------
+  function setOpen(open, focus) {
+    app.classList.toggle("open", open);
+    drawer.inert = !open;
+    $("cartBtn").setAttribute("aria-expanded", String(open));
+    if (open) {
+      rowsEl.querySelectorAll(".row").forEach((r, i) => { r.classList.remove("in"); r.offsetWidth; r.style.animationDelay = 120 + i * 70 + "ms"; r.classList.add("in"); });
+      if (focus) setTimeout(() => $("close").focus(), 60);
+    } else if (focus) $("cartBtn").focus();
+  }
+  $("cartBtn").addEventListener("click", () => setOpen(true, true));
+  $("close").addEventListener("click", () => setOpen(false, true));
+  $("scrim").addEventListener("click", () => setOpen(false, false));
+  addEventListener("keydown", (e) => { if (e.key === "Escape" && app.classList.contains("open")) setOpen(false, true); });
+
+  // ---------- Checkout: stripes fill, tick, confetti, rows fly out ----------
+  async function checkout() {
+    if (busy || !cart.length) return;
+    busy = true;
+    const b = $("checkout"), txt = $("coTxt");
+    const total = subtotal() + (subtotal() >= FREE_AT ? 0 : DELIVERY);
+    await play(b, [{ transform: "scale(1)" }, { transform: "scale(.95, .9)" }], { duration: 120, fill: "forwards" });
+    play(b, [{ transform: "scale(.95, .9)" }, { transform: "scale(1)" }], { duration: 420, easing: "cubic-bezier(.3,1.6,.5,1)" });
+    txt.textContent = "Placing order…";
+    say("Placing order…");
+    const t0 = performance.now();
+    await new Promise((res) => {
+      if (calm()) { b.style.setProperty("--p", 1); res(); return; }
+      (function f(now) { const k = Math.min(1, (now - t0) / 1300); b.style.setProperty("--p", (1 - Math.pow(1 - k, 2)).toFixed(3)); k < 1 ? requestAnimationFrame(f) : res(); })(t0);
+    });
+    b.classList.add("ok");
+    txt.innerHTML = '<svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Order placed';
+    const r = b.getBoundingClientRect();
+    confetti(r.left + r.width / 2, r.top, 46);
+    say(`Order placed. You paid ${fmt(total)}.`);
+    await wait(900);
+    // rows leave one after another
+    const rows = [...rowsEl.querySelectorAll(".row")];
+    rows.forEach((row, i) => setTimeout(() => row.classList.add("out"), i * 90));
+    await wait(rows.length * 90 + 420);
+    cart = [];
+    rowsEl.innerHTML = "";
+    setEmpty(true);
+    b.classList.remove("ok"); b.style.setProperty("--p", 0);
+    paintTotals();
+    busy = false;
+  }
+  $("checkout").addEventListener("click", checkout);
+  function setEmpty(placed) {
+    drawer.classList.add("isEmpty");
+    drawer.querySelector(".empty b").textContent = placed ? "Order placed, cart is empty" : "Your cart is empty";
+    drawer.querySelector(".empty p").textContent = placed ? "Your pretend order is on its way. Fill the cart again to play." : "Add something from the shop, or fill it with the sample items.";
+  }
+  function fill(animate) {
+    drawer.classList.remove("isEmpty");
+    cart = START.map(([id, qty]) => ({ id, qty }));
+    rowsEl.innerHTML = "";
+    wasFree = null;
+    cart.forEach((c) => addRow(c.id, animate));
+    paintTotals();
+  }
+  $("refill").addEventListener("click", () => { fill(true); say("Sample items are back in the cart."); });
+
+  // ---------- Confetti on a canvas ----------
+  const fx = $("fx"), ctx = fx.getContext("2d");
+  let parts = [], fxOn = false, fxLast = 0;
+  function sizeFx() { const d = Math.min(2, devicePixelRatio || 1); fx.width = innerWidth * d; fx.height = innerHeight * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+  sizeFx(); addEventListener("resize", sizeFx);
+  const COLORS = ["#b8f227", "#5b3df5", "#ff6b6b", "#ffd166", "#8b74ff"];
+  function confetti(x, y, n) {
+    if (calm()) return;
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - .5) * 2.2, v = 180 + Math.random() * 260;
+      parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0, max: 1 + Math.random() * .6, w: 4 + Math.random() * 4, h: 7 + Math.random() * 5, rot: Math.random() * 6, vr: (Math.random() - .5) * 14, c: COLORS[i % COLORS.length] });
+    }
+    if (!fxOn) { fxOn = true; fxLast = performance.now(); requestAnimationFrame(drawFx); }
+  }
+  function drawFx(now) {
+    const dt = Math.min(.04, (now - fxLast) / 1000); fxLast = now;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      p.life += dt;
+      if (p.life > p.max) { parts.splice(i, 1); continue; }
+      p.vx *= .985; p.vy = p.vy * .985 + 620 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(1, Math.cos(p.life * 9));
+      ctx.globalAlpha = Math.min(1, (p.max - p.life) * 3);
+      ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    if (parts.length) requestAnimationFrame(drawFx); else { fxOn = false; ctx.clearRect(0, 0, innerWidth, innerHeight); }
+  }
+  function say(m) { status.textContent = m; }
+
+  // ---------- Auto-demo: a short scripted shopping trip that loops until someone touches it ----------
+  const demo = { on: true, timer: 0 };
+  function stopDemo() { if (demo.on) { demo.on = false; clearTimeout(demo.timer); } }
+  addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  const btnOf = (id, cls) => rowEl(id) && rowEl(id).querySelector("." + cls);
+  const SCRIPT = [
+    [250, () => setOpen(true, false)],
+    [1000, () => change("mug", 1, btnOf("mug", "inc"))],          // crosses PKR 6,000: free delivery
+    [1200, () => change("tee", 1, btnOf("tee", "inc"))],
+    [1200, () => change("mug", 1, btnOf("mug", "inc"))],
+    [1300, () => change("tee", -1, btnOf("tee", "dec"))],
+    [1300, () => removeRow("lamp")],
+    [1700, () => undo()],
+    [1300, () => change("mug", -1, btnOf("mug", "dec"))],
+    [1100, () => change("mug", -1, btnOf("mug", "dec"))],
+    [1300, () => checkout()],
+    [3600, () => { fill(true); }],
+    [1300, () => setOpen(false, false)],
+  ];
+  let step = 0;
+  function runDemo() {
+    if (!demo.on) return;
+    const [, fn] = SCRIPT[step];
+    try { fn(); } catch (e) { /* a step can miss if the cart changed; the loop carries on */ }
+    step = (step + 1) % SCRIPT.length;
+    demo.timer = setTimeout(runDemo, SCRIPT[step][0] + (step === 0 ? 1400 : 0));
+  }
+
+  fill(false);
+  demo.timer = setTimeout(runDemo, SCRIPT[0][0]);
+</script>
+</body>
+</html>

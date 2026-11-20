@@ -1,0 +1,524 @@
+<!doctype html>
+<!-- Chill & Craft · Ringback · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ringback · code read out on a phone call</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: deep emerald, coral and cream ---------- */
+  :root {
+    color-scheme: light;
+    --stage: #e6f2ec;
+    --stage-2: #fbe6dc;
+    --card: #fffdf8;
+    --ink: #10332c;
+    --muted: #5f7f77;
+    --line: rgba(16, 51, 44, .13);
+    --em: #0e3b33;
+    --em-2: #17594c;
+    --coral: #ff7a59;
+    --coral-dk: #d9542f;
+    --cream: #fff1df;
+    --go: #2fd28a;
+    --box: #f3f7f4;
+    --shadow: rgba(14, 59, 51, .3);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --stage: #07140f;
+    --stage-2: #2a1309;
+    --card: #10231e;
+    --ink: #eaf6f1;
+    --muted: #93b3aa;
+    --line: rgba(234, 246, 241, .13);
+    --em: #06201a;
+    --em-2: #0f3f35;
+    --coral-dk: #ff8f73;
+    --box: #173129;
+    --shadow: rgba(0, 0, 0, .7);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 20px 16px;
+    overflow-x: hidden;
+    color: var(--ink);
+    background: radial-gradient(circle at 90% 0%, var(--stage-2), transparent 45%), radial-gradient(circle at 0% 100%, rgba(47, 210, 138, .16), transparent 50%), var(--stage);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  button { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .card { width: min(100%, 400px); padding: 22px 20px 18px; border-radius: 26px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 40px 60px -36px var(--shadow); }
+  h1 { margin: 0; font-size: 20px; letter-spacing: -.01em; }
+  .sub { margin: 6px 0 16px; font-size: 14px; line-height: 1.45; color: var(--muted); }
+  .sub b { color: var(--ink); white-space: nowrap; }
+
+  /* ---------- The call panel ---------- */
+  .call {
+    position: relative; padding: 14px 14px 12px; border-radius: 20px; color: var(--cream);
+    background: radial-gradient(circle at 15% 0%, rgba(47, 210, 138, .22), transparent 55%), linear-gradient(160deg, var(--em-2), var(--em));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 18px 30px -18px var(--shadow);
+    transition: background .6s;
+  }
+  [data-theme="dark"] .call { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), inset 0 0 0 1px rgba(47, 210, 138, .22), 0 18px 30px -18px var(--shadow); }
+  .call.won { background: radial-gradient(circle at 50% 40%, rgba(47, 210, 138, .5), transparent 70%), linear-gradient(160deg, #1d7a5f, var(--em)); }
+  .top { display: flex; align-items: center; gap: 12px; }
+  .avatar { position: relative; flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 241, 223, .14); }
+  .avatar i { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--go); opacity: 0; }
+  .call.ringing .avatar i { animation: ring 1.4s ease-out infinite; }
+  .call.ringing .avatar i:nth-child(2) { animation-delay: .45s; }
+  .call.ringing .avatar i:nth-child(3) { animation-delay: .9s; }
+  @keyframes ring { from { opacity: .9; transform: scale(1); } to { opacity: 0; transform: scale(1.65); } }
+  .call.ringing .avatar svg { animation: jiggle .5s ease-in-out infinite; }
+  @keyframes jiggle { 25% { transform: rotate(-14deg); } 75% { transform: rotate(14deg); } }
+  .who { flex: 1; min-width: 0; }
+  .who strong { display: block; font-size: 15px; }
+  .who span { display: block; margin-top: 2px; font-size: 12.5px; opacity: .75; font-variant-numeric: tabular-nums; }
+  .who .live { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--go); vertical-align: 1px; animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .callbtn {
+    flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; cursor: pointer; display: grid; place-items: center;
+    background: var(--go); box-shadow: 0 8px 16px -6px rgba(47, 210, 138, .7);
+    transition: background .35s, transform .45s cubic-bezier(.34, 1.56, .64, 1), box-shadow .35s;
+  }
+  .callbtn svg { transition: transform .45s cubic-bezier(.34, 1.56, .64, 1); }
+  .callbtn.hang { background: var(--coral); box-shadow: 0 8px 16px -6px rgba(255, 122, 89, .7); }
+  .callbtn.hang svg { transform: rotate(135deg); }
+  .callbtn:hover:not(:disabled) { transform: scale(1.08); }
+  .callbtn:active:not(:disabled), .callbtn.press { transform: scale(.9); }
+  .callbtn:disabled { opacity: .45; cursor: default; }
+  .callbtn:focus-visible, .mini:focus-visible, .btn:focus-visible { outline: 2px solid var(--coral); outline-offset: 3px; }
+
+  /* Waveform: bars that dance while the code is spoken */
+  .wave { position: relative; height: 56px; margin: 12px 0 4px; display: flex; align-items: center; justify-content: space-between; gap: 2px; }
+  .wave i { flex: 1; height: 100%; border-radius: 3px; background: linear-gradient(180deg, var(--coral), #ffb38f 50%, var(--coral)); transform: scaleY(.06); transform-origin: center; opacity: .9; }
+  .wave.flat i { transition: transform .35s cubic-bezier(.6, 0, .3, 1); transition-delay: calc(var(--e) * 18ms); transform: scaleY(.05) !important; }
+  .wave .okmark { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px; opacity: 0; }
+  .wave .okmark path { stroke-dasharray: 60; stroke-dashoffset: 60; }
+  .wave .okmark circle { stroke-dasharray: 176; stroke-dashoffset: 176; }
+  .wave.check i { opacity: 0; transition: opacity .25s; }
+  .wave.check .okmark { opacity: 1; }
+  .wave.check .okmark circle { animation: draw .55s ease forwards; }
+  .wave.check .okmark path { animation: draw .4s ease forwards .4s; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+
+  /* Captions: digits appear as they are read out */
+  .caption { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; margin: 0; font-size: 13px; }
+  .caption .lead { opacity: 0; transform: translateY(4px); transition: opacity .3s, transform .3s; margin-right: 4px; }
+  .caption.show .lead { opacity: .8; transform: none; }
+  .caption b { min-width: 24px; padding: 3px 0; border-radius: 8px; text-align: center; font: 800 22px/1.15 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--cream); opacity: 0; transform: scale(.4) translateY(8px); transition: opacity .25s, transform .45s cubic-bezier(.34, 1.8, .5, 1), background .3s, color .3s; }
+  .caption b.on { opacity: 1; transform: none; }
+  .caption b.now { background: var(--coral); color: #2b0f05; transform: scale(1.18); box-shadow: 0 0 18px rgba(255, 122, 89, .7); }
+  .caption.dim b.on { opacity: .55; }
+  .minis { display: flex; justify-content: center; gap: 8px; margin-top: 6px; }
+  .mini { padding: 6px 12px; border: 0; border-radius: 999px; cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--cream); background: rgba(255, 241, 223, .12); transition: background .2s, transform .25s cubic-bezier(.34, 1.56, .64, 1); }
+  .mini:hover:not(:disabled) { background: rgba(255, 241, 223, .2); transform: translateY(-1px); }
+  .mini:disabled { opacity: .4; cursor: default; }
+
+  /* ---------- Four code boxes ---------- */
+  .lbl { display: block; margin: 18px 0 8px; font-size: 13px; font-weight: 650; }
+  .boxes { display: flex; gap: 10px; }
+  .box { flex: 1; position: relative; }
+  .box input {
+    width: 100%; height: 60px; padding: 0; border: 0; border-radius: 16px; outline: none; text-align: center;
+    background: var(--box); color: var(--ink); caret-color: var(--coral);
+    font: 800 28px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    box-shadow: inset 0 0 0 1.5px var(--line), inset 0 -4px 0 rgba(16, 51, 44, .06);
+    transition: box-shadow .2s, transform .3s cubic-bezier(.34, 1.56, .64, 1), background .3s, color .3s;
+  }
+  .box input:focus, .box.cur input { box-shadow: inset 0 0 0 2px var(--coral), 0 0 0 5px rgba(255, 122, 89, .15); transform: translateY(-3px); }
+  .box.pop input { animation: pop .4s cubic-bezier(.34, 1.7, .5, 1); }
+  @keyframes pop { 40% { transform: scale(1.12) translateY(-3px); } }
+  /* a tiny level meter under each box fills as it gets a digit */
+  .box::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: 7px; height: 3px; border-radius: 3px; background: var(--coral); transform: scaleX(0); transition: transform .35s cubic-bezier(.34, 1.56, .64, 1); }
+  .box.filled::after { transform: scaleX(1); }
+  .boxes.check .box input { animation: listen .6s ease-in-out infinite alternate; animation-delay: calc(var(--i) * 90ms); }
+  @keyframes listen { to { box-shadow: inset 0 0 0 2px var(--go), 0 0 16px rgba(47, 210, 138, .45); } }
+  .boxes.ok .box input { background: var(--go); color: #06261c; box-shadow: none; animation: hop .5s cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(var(--i) * 70ms); }
+  .boxes.ok .box::after { background: #06261c; }
+  @keyframes hop { 40% { transform: translateY(-9px); } }
+  .boxes.bad { animation: shake .45s ease; }
+  .boxes.bad .box input { box-shadow: inset 0 0 0 2px var(--coral-dk); }
+  @keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+
+  .status { min-height: 21px; margin: 12px 0 4px; font-size: 14px; font-weight: 650; text-align: center; }
+  .status[data-tone="good"] { color: #13906b; }
+  [data-theme="dark"] .status[data-tone="good"] { color: var(--go); }
+  .status[data-tone="bad"] { color: var(--coral-dk); }
+  .status.pop { animation: statusIn .45s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes statusIn { from { opacity: 0; transform: translateY(6px); } }
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+  .foot b { font: 800 13px ui-monospace, Menlo, Consolas, monospace; letter-spacing: .25em; color: var(--ink); }
+  .btn { padding: 9px 15px; border: 0; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 750; color: #2b0f05; background: var(--coral); transition: transform .25s cubic-bezier(.34, 1.56, .64, 1); }
+  .btn:hover { transform: translateY(-2px); }
+
+  .fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+  .fx i { position: absolute; left: 0; top: 0; display: block; border-radius: 50%; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1 id="title">Get your code by phone call</h1>
+    <p class="sub">We will call <b>+92 321 ••• 0846</b> and read out a <span style="white-space: nowrap">4-digit</span> code.</p>
+
+    <section class="call" id="call" aria-label="Verification call">
+      <div class="top">
+        <div class="avatar" aria-hidden="true"><i></i><i></i><i></i>
+          <svg width="20" height="20" viewBox="0 0 20 20"><path d="M6.3 2.5l2 3.6c.3.5.2 1.2-.3 1.6L6.9 8.8a10.5 10.5 0 0 0 4.3 4.3l1.1-1.1c.4-.5 1.1-.6 1.6-.3l3.6 2c.6.3.8 1 .5 1.6l-.8 1.5c-.5.9-1.5 1.4-2.5 1.2C8.4 17 3 11.6 2 5.3c-.2-1 .3-2 1.2-2.5l1.5-.8c.6-.3 1.3-.1 1.6.5z" fill="#fff1df"/></svg>
+        </div>
+        <div class="who"><strong>Verification line</strong><span id="callState">Ready when you are</span></div>
+        <button type="button" class="callbtn" id="callBtn" aria-label="Call me">
+          <svg width="22" height="22" viewBox="0 0 20 20" aria-hidden="true"><path d="M6.3 2.5l2 3.6c.3.5.2 1.2-.3 1.6L6.9 8.8a10.5 10.5 0 0 0 4.3 4.3l1.1-1.1c.4-.5 1.1-.6 1.6-.3l3.6 2c.6.3.8 1 .5 1.6l-.8 1.5c-.5.9-1.5 1.4-2.5 1.2C8.4 17 3 11.6 2 5.3c-.2-1 .3-2 1.2-2.5l1.5-.8c.6-.3 1.3-.1 1.6.5z" fill="#06261c"/></svg>
+        </button>
+      </div>
+      <div class="wave" id="wave" aria-hidden="true">
+        <svg class="okmark" viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="28" stroke="#2fd28a" stroke-width="3.5" transform="rotate(-90 32 32)"/><path d="M19 33l9 9 18-20" stroke="#fff1df" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <p class="caption" id="caption" aria-hidden="true"><span class="lead">Your code is</span><b></b><b></b><b></b><b></b></p>
+      <div class="minis"><button type="button" class="mini" id="repeat" disabled>Repeat the code</button></div>
+    </section>
+    <p class="sr-only" id="spoken" aria-live="polite"></p>
+
+    <span class="lbl" id="lbl">Type the code you hear</span>
+    <div class="boxes" id="boxes" role="group" aria-labelledby="lbl">
+      <span class="box" style="--i:0"><input inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 1 of 4"></span>
+      <span class="box" style="--i:1"><input inputmode="numeric" autocomplete="off" aria-label="Digit 2 of 4"></span>
+      <span class="box" style="--i:2"><input inputmode="numeric" autocomplete="off" aria-label="Digit 3 of 4"></span>
+      <span class="box" style="--i:3"><input inputmode="numeric" autocomplete="off" aria-label="Digit 4 of 4"></span>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+    <div class="foot"><span>Demo code <b id="demo"></b></span><button type="button" class="btn" id="again" hidden>Start again</button></div>
+  </main>
+  <div class="fx" id="fx" aria-hidden="true"></div>
+
+<script>
+(function () {
+  "use strict";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (id) => document.getElementById(id);
+  const call = $("call"), callBtn = $("callBtn"), callState = $("callState"), wave = $("wave"), caption = $("caption");
+  const repeatBtn = $("repeat"), boxesEl = $("boxes"), statusEl = $("status"), againBtn = $("again");
+  const digitsEls = Array.from(caption.querySelectorAll("b"));
+  const wraps = Array.from(document.querySelectorAll(".box"));
+  const boxes = wraps.map((w) => w.querySelector("input"));
+  const LEN = 4;
+  const vals = Array(LEN).fill("");
+  let code = "", phase = "idle";   // idle | ringing | talking | open | ended
+  let busy = false, done = false, readId = 0;
+
+  // ---- Cancellable waits ----
+  const CANCEL = { cancelled: true };
+  let gen = 0;
+  function pause(ms, g, isAnim) {
+    const t = isAnim && reduce ? Math.min(ms, 140) : ms;
+    return new Promise((ok, no) => setTimeout(() => (g === gen ? ok() : no(CANCEL)), t));
+  }
+  const quiet = (p) => p.catch((e) => { if (e !== CANCEL) throw e; });
+  function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+  function say(msg, tone) { statusEl.textContent = msg; statusEl.dataset.tone = tone || ""; restart(statusEl, "pop"); }
+
+  // ---- Waveform bars driven by a "voice level" ----
+  const BARS = 34;
+  const bars = [];
+  for (let i = 0; i < BARS; i++) {
+    const b = document.createElement("i");
+    b.style.setProperty("--e", String(Math.abs(i - BARS / 2)));
+    wave.insertBefore(b, wave.firstChild);
+    bars.push(b);
+  }
+  let level = 0, target = 0;
+  function frame(now) {
+    level += (target - level) * 0.18;
+    if (!wave.classList.contains("flat")) {
+      for (let i = 0; i < BARS; i++) {
+        const x = i / (BARS - 1);
+        const env = Math.sin(Math.PI * x);                          // taller in the middle
+        const idle = 0.07 + 0.04 * Math.sin(now / 380 + i * 0.6);   // gentle ripple when quiet
+        const talk = level * env * (0.35 + 0.65 * Math.abs(Math.sin(now / 90 + i * 1.7) * Math.cos(now / 140 + i)));
+        bars[i].style.transform = "scaleY(" + Math.min(1, idle + talk).toFixed(3) + ")";
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---- A new code ----
+  function newCode() {
+    do { code = ""; for (let i = 0; i < LEN; i++) code += Math.floor(Math.random() * 10); } while (/^(\d)\1+$/.test(code));
+    $("demo").textContent = code;
+    digitsEls.forEach((b, i) => { b.textContent = code[i]; b.classList.remove("on", "now"); });
+    caption.classList.remove("show", "dim");
+  }
+
+  // ---- Call timer ----
+  let callStart = 0, clock = 0;
+  function startClock() {
+    callStart = Date.now();
+    clearInterval(clock);
+    const paint = () => {
+      const s = Math.floor((Date.now() - callStart) / 1000);
+      callState.innerHTML = '<span class="live"></span>Connected · ' + String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+    };
+    paint();
+    clock = setInterval(paint, 1000);
+  }
+
+  // ---- The call: ring, connect, read the code ----
+  async function placeCall(g) {
+    if (phase !== "idle" && phase !== "ended") return;
+    phase = "ringing";
+    call.classList.add("ringing");
+    callBtn.classList.add("hang");
+    callBtn.setAttribute("aria-label", "Hang up");
+    callState.textContent = "Calling +92 321 ••• 0846…";
+    say("Calling you now. Pick up to hear the code.");
+    await pause(1300, g, true);
+    call.classList.remove("ringing");
+    startClock();
+    repeatBtn.disabled = false;
+    say("Connected. Listen for the four digits.");
+    await readCode(g);
+  }
+  async function readCode(g) {
+    const id = ++readId;
+    const alive = () => g === gen && id === readId && (phase === "talking" || phase === "ringing" || phase === "open");
+    phase = "talking";
+    repeatBtn.disabled = true;
+    digitsEls.forEach((b) => b.classList.remove("on", "now"));
+    caption.classList.remove("dim");
+    caption.classList.add("show");
+    target = 0.85;                  // "Your code is"
+    await pause(900, g);
+    if (!alive()) return;
+    target = 0.1;
+    await pause(260, g);
+    for (let i = 0; i < LEN; i++) {
+      if (!alive()) return;
+      digitsEls.forEach((b) => b.classList.remove("now"));
+      digitsEls[i].classList.add("on", "now");
+      target = 1;
+      await pause(430, g);
+      target = 0.08;
+      await pause(300, g);
+    }
+    if (!alive()) return;
+    digitsEls.forEach((b) => b.classList.remove("now"));
+    target = 0;
+    caption.classList.add("dim");
+    $("spoken").textContent = "The code is " + code.split("").join(" ") + ".";
+    phase = "open";
+    repeatBtn.disabled = false;
+    if (!done) say("Type the four digits you heard.");
+  }
+  function hangUp(text) {
+    readId++;
+    target = 0;
+    clearInterval(clock);
+    phase = "ended";
+    call.classList.remove("ringing");
+    callBtn.classList.remove("hang");
+    callBtn.setAttribute("aria-label", "Call me again");
+    callState.textContent = text || "Call ended";
+    repeatBtn.disabled = true;
+    digitsEls.forEach((b) => b.classList.remove("now"));
+    caption.classList.add("dim");
+  }
+  callBtn.addEventListener("click", () => {
+    if (done) return;
+    if (phase === "idle" || phase === "ended") quiet(placeCall(gen));
+    else { hangUp(); say("Call ended. Press the green button to call again."); }
+  });
+  repeatBtn.addEventListener("click", () => { if (phase === "open") quiet(readCode(gen)); });
+
+  // ---- Boxes: typing, paste, backspace and arrows ----
+  function setDigit(i, d) {
+    vals[i] = d;
+    boxes[i].value = d;
+    wraps[i].classList.toggle("filled", !!d);
+    if (d) restart(wraps[i], "pop");
+  }
+  function mark(i) { wraps.forEach((w, n) => w.classList.toggle("cur", n === i && demoOn)); }
+  function focusBox(i) {
+    i = Math.max(0, Math.min(LEN - 1, i));
+    mark(i);
+    if (!demoOn) { boxes[i].focus(); boxes[i].select(); }
+  }
+  function clearBoxes() { for (let i = 0; i < LEN; i++) setDigit(i, ""); }
+  function fillFrom(start, digits) {
+    let i = start;
+    for (const d of digits) { if (i >= LEN) break; setDigit(i, d); i++; }
+    focusBox(i);
+    checkFull();
+  }
+  function checkFull() { if (!busy && !done && vals.every((v) => v)) return quiet(verify(gen)); return null; }
+  boxes.forEach((box, i) => {
+    box.addEventListener("focus", () => requestAnimationFrame(() => box.select()));
+    box.addEventListener("input", (e) => {
+      if (busy || done) { box.value = vals[i]; return; }
+      const all = box.value.replace(/\D/g, "");
+      if (e.inputType === "insertText" && e.data && e.data.length === 1) {
+        const d = e.data.replace(/\D/g, "");
+        if (!d) { box.value = vals[i]; return; }
+        setDigit(i, d); focusBox(i + 1); checkFull();
+      } else if (all.length > 1) {
+        fillFrom(all.length >= LEN ? 0 : i, all);
+      } else {
+        setDigit(i, all);
+        if (all) { focusBox(i + 1); checkFull(); }
+      }
+    });
+    box.addEventListener("keydown", (e) => {
+      if (busy || done) return;
+      switch (e.key) {
+        case "Backspace":
+          e.preventDefault();
+          if (vals[i]) setDigit(i, "");
+          else if (i > 0) { setDigit(i - 1, ""); focusBox(i - 1); }
+          break;
+        case "Delete": e.preventDefault(); setDigit(i, ""); break;
+        case "ArrowLeft": e.preventDefault(); focusBox(i - 1); break;
+        case "ArrowRight": e.preventDefault(); focusBox(i + 1); break;
+        case "Home": e.preventDefault(); focusBox(0); break;
+        case "End": e.preventDefault(); focusBox(LEN - 1); break;
+      }
+    });
+    box.addEventListener("paste", (e) => {
+      e.preventDefault();
+      if (busy || done) return;
+      const digits = (e.clipboardData ? e.clipboardData.getData("text") : "").replace(/\D/g, "");
+      if (digits) fillFrom(digits.length >= LEN ? 0 : i, digits);
+      else say("Only numbers can be pasted here.", "bad");
+    });
+  });
+
+  // ---- Verify: the wave goes flat, then draws a check ----
+  async function verify(g) {
+    busy = true;
+    mark(-1);
+    boxesEl.classList.add("check");
+    say("Checking the code…");
+    await pause(850, g, true);
+    boxesEl.classList.remove("check");
+    if (vals.join("") === code) {
+      done = true;
+      boxesEl.classList.add("ok");
+      if (phase !== "idle") hangUp("Verified · call ended");
+      else callState.textContent = "Verified";
+      wave.classList.add("flat");
+      await pause(520, g, true);
+      wave.classList.add("check");
+      call.classList.add("won");
+      say("Number confirmed. Thanks for picking up!", "good");
+      await pause(500, g, true);
+      confetti(call);
+      againBtn.hidden = false;
+      if (!demoOn) againBtn.focus();
+      busy = false;
+    } else {
+      boxes.forEach((b) => b.setAttribute("aria-invalid", "true"));
+      restart(boxesEl, "bad");
+      say(phase === "open" ? "That is not the code we read. Press Repeat to hear it again." : "That is not the code. Call to hear it.", "bad");
+      await pause(700, g, true);
+      boxesEl.classList.remove("bad");
+      boxes.forEach((b) => b.removeAttribute("aria-invalid"));
+      clearBoxes();
+      busy = false;
+      focusBox(0);
+    }
+  }
+
+  function confetti(el) {
+    if (reduce) return;
+    const r = el.getBoundingClientRect();
+    const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+    const COLORS = ["#ff7a59", "#2fd28a", "#fff1df", "#ffb38f", "#17594c"];
+    for (let n = 0; n < 42; n++) {
+      const p = document.createElement("i");
+      const s = 5 + Math.random() * 7;
+      p.style.width = p.style.height = s + "px";
+      p.style.background = COLORS[n % COLORS.length];
+      $("fx").append(p);
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 3, d = 80 + Math.random() * 150;
+      const dx = Math.cos(a) * d, dy = Math.sin(a) * d;
+      p.animate([
+        { transform: "translate(" + x0 + "px," + y0 + "px) scale(.3)", opacity: 1 },
+        { transform: "translate(" + (x0 + dx) + "px," + (y0 + dy) + "px) scale(1)", opacity: 1, offset: 0.45 },
+        { transform: "translate(" + (x0 + dx * 1.15) + "px," + (y0 + dy + 150) + "px) scale(.6)", opacity: 0 }
+      ], { duration: 1400 + Math.random() * 700, easing: "cubic-bezier(.2,.7,.4,1)" }).onfinish = () => p.remove();
+    }
+  }
+
+  // ---- Start again ----
+  function fresh() {
+    readId++;
+    clearInterval(clock);
+    done = false;
+    busy = false;
+    phase = "idle";
+    target = 0;
+    call.classList.remove("ringing", "won");
+    wave.classList.remove("flat", "check");
+    callBtn.classList.remove("hang");
+    callBtn.setAttribute("aria-label", "Call me");
+    callState.textContent = "Ready when you are";
+    repeatBtn.disabled = true;
+    boxesEl.classList.remove("ok", "check", "bad");
+    againBtn.hidden = true;
+    clearBoxes();
+    newCode();
+    $("spoken").textContent = "";
+    say("Press the green button and we will call you.");
+  }
+  againBtn.addEventListener("click", () => { fresh(); callBtn.focus(); });
+
+  function hardReset() { gen++; fresh(); mark(-1); }
+
+  // ---- Auto-demo: call, listen, type, verify ----
+  let demoOn = true, demoTimer = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); hardReset(); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) =>
+    window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  async function runDemo() {
+    const g = gen;
+    await pause(350, g);
+    callBtn.classList.add("press");
+    await pause(150, g);
+    callBtn.classList.remove("press");
+    await placeCall(g);
+    await pause(450, g);
+    for (let i = 0; i < LEN; i++) { setDigit(i, code[i]); mark(i + 1 < LEN ? i + 1 : -1); await pause(200, g); }
+    await verify(g);
+    await pause(2600, g);
+    fresh();
+    demoTimer = setTimeout(() => quiet(runDemo()), 900);
+  }
+
+  fresh();
+  demoTimer = setTimeout(() => quiet(runDemo()), 100);
+})();
+</script>
+</body>
+</html>

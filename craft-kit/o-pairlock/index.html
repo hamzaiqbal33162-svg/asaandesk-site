@@ -1,0 +1,675 @@
+<!doctype html>
+<!-- Chill & Craft · Pairlock · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pairlock · two-step sign-in setup with backup codes</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: indigo night and electric lime ---------- */
+  :root {
+    color-scheme: light;
+    --stage: #eceefe;
+    --stage-2: #dfe3ff;
+    --card: #ffffff;
+    --ink: #1b1f4f;
+    --muted: #6b6f9a;
+    --line: rgba(27, 31, 79, .12);
+    --soft: #f4f5ff;
+    --indigo: #2b2f86;
+    --lime: #c6f432;
+    --lime-dk: #6f8f00;
+    --coral: #ff6b6b;
+    --shadow: rgba(43, 47, 134, .28);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --stage: #090b1e;
+    --stage-2: #151a46;
+    --card: #141838;
+    --ink: #e9ebff;
+    --muted: #9ea3d6;
+    --line: rgba(233, 235, 255, .12);
+    --soft: #1c2150;
+    --lime-dk: #c6f432;
+    --shadow: rgba(0, 0, 0, .7);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 20px 16px;
+    overflow-x: hidden;
+    color: var(--ink);
+    background:
+      linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 28px 28px,
+      linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 28px 28px,
+      radial-gradient(circle at 50% 30%, var(--stage-2), var(--stage) 70%);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  button { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  .card {
+    position: relative;
+    width: min(100%, 430px);
+    padding: 20px 20px 18px;
+    border-radius: 26px;
+    background: var(--card);
+    box-shadow: 0 0 0 1px var(--line), 0 40px 70px -40px var(--shadow);
+    overflow: hidden;
+  }
+
+  /* ---------- Header and stepper ---------- */
+  .head { display: flex; align-items: center; gap: 12px; }
+  .shield { flex: none; width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; background: var(--indigo); box-shadow: 0 8px 16px -8px var(--shadow); }
+  .shield svg { animation: breathe 3s ease-in-out infinite; }
+  @keyframes breathe { 50% { transform: scale(1.08); } }
+  h1 { margin: 0; font-size: 17.5px; letter-spacing: -.01em; }
+  .head p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+  .steps { position: relative; display: flex; align-items: flex-start; justify-content: space-between; margin: 18px 6px 16px; padding: 0; list-style: none; }
+  .steps::before, .steps::after { content: ""; position: absolute; left: 13px; right: 13px; top: 12px; height: 3px; border-radius: 3px; background: var(--line); }
+  .steps::after { background: var(--lime); right: auto; width: calc((100% - 26px) * var(--p, 0)); transition: width .7s cubic-bezier(.6, 0, .2, 1); box-shadow: 0 0 8px rgba(198, 244, 50, .7); }
+  .steps li { position: relative; z-index: 1; display: grid; grid-template-rows: 27px auto; align-content: start; justify-items: center; gap: 5px; line-height: 1.2; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+  .steps li:nth-child(1) { justify-items: start; }
+  .steps li:nth-child(3) { justify-items: end; }
+  .dot { width: 27px; height: 27px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; background: var(--card); box-shadow: 0 0 0 2.5px var(--line); transition: background .35s, box-shadow .35s, color .35s, transform .4s cubic-bezier(.34, 1.7, .5, 1); }
+  .steps li.now { color: var(--ink); }
+  .steps li.now .dot { box-shadow: 0 0 0 2.5px var(--indigo), 0 0 0 7px rgba(43, 47, 134, .14); transform: scale(1.08); animation: ping 2s ease-out infinite; }
+  [data-theme="dark"] .steps li.now .dot { box-shadow: 0 0 0 2.5px var(--lime), 0 0 0 7px rgba(198, 244, 50, .14); }
+  @keyframes ping { 70% { box-shadow: 0 0 0 2.5px var(--indigo), 0 0 0 11px rgba(43, 47, 134, 0); } }
+  .steps li.done .dot { background: var(--lime); color: #1b1f4f; box-shadow: 0 0 0 2.5px var(--lime); }
+  .steps li.done .dot b { display: none; }
+  .steps li .dot svg { display: none; }
+  .steps li.done .dot svg { display: block; }
+
+  /* ---------- Sliding panels ---------- */
+  .viewport { position: relative; overflow: hidden; margin: 0 -20px; transition: height .6s cubic-bezier(.6, 0, .2, 1); }
+  .track { display: flex; align-items: flex-start; transition: transform .65s cubic-bezier(.7, 0, .2, 1); }
+  .panel { flex: 0 0 100%; min-width: 0; padding: 2px 20px 4px; }
+  .panel > * { transition: transform .6s cubic-bezier(.2, .9, .3, 1), opacity .5s; }
+  .panel:not(.active) > * { opacity: 0; transform: translateX(40px); }
+  .panel.active > :nth-child(2) { transition-delay: .08s; }
+  .panel.active > :nth-child(3) { transition-delay: .16s; }
+  .panel.active > :nth-child(4) { transition-delay: .24s; }
+
+  /* Panel 1: pixel code and key */
+  .scanrow { display: grid; grid-template-columns: minmax(0, 142px) 1fr; gap: 16px; align-items: center; }
+  .qr { position: relative; aspect-ratio: 1; border-radius: 16px; padding: 7px; background: #fff; box-shadow: 0 0 0 1px var(--line), 0 14px 26px -16px var(--shadow); overflow: hidden; }
+  .qr svg { display: block; width: 100%; height: 100%; }
+  .qr rect.m { transform-box: fill-box; transform-origin: center; animation: pix .45s cubic-bezier(.34, 1.7, .5, 1) both; }
+  @keyframes pix { from { transform: scale(0); opacity: 0; } }
+  .qr::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 26%; background: linear-gradient(180deg, transparent, rgba(198, 244, 50, .55) 85%, #c6f432); border-bottom: 2px solid #9cc61a; animation: beam 2.6s ease-in-out infinite; pointer-events: none; mix-blend-mode: multiply; }
+  @keyframes beam { 0% { transform: translateY(-100%); } 50% { transform: translateY(380%); } 100% { transform: translateY(-100%); } }
+  .qr.flash::after { animation: beam .5s ease-in-out 2; }
+  .qr.flash { box-shadow: 0 0 0 3px var(--lime), 0 0 26px rgba(198, 244, 50, .6); transition: box-shadow .3s; }
+  .scantext p { margin: 0 0 8px; font-size: 13.5px; line-height: 1.45; }
+  .scantext .k { display: block; margin: 4px 0 6px; font: 700 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .08em; color: var(--indigo); word-spacing: .2em; }
+  [data-theme="dark"] .scantext .k { color: var(--lime); }
+  .link { padding: 0; border: 0; background: none; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--indigo); text-decoration: underline; text-underline-offset: 3px; }
+  [data-theme="dark"] .link { color: #cfd3ff; }
+  .primary {
+    width: 100%; height: 46px; margin-top: 16px; border: 0; border-radius: 14px; cursor: pointer;
+    background: var(--indigo); color: #fff; font-size: 15px; font-weight: 750;
+    box-shadow: 0 10px 20px -10px var(--shadow), inset 0 -3px 0 rgba(0, 0, 0, .18);
+    transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), background .2s;
+  }
+  [data-theme="dark"] .primary { background: var(--lime); color: #15183a; }
+  .primary:hover { transform: translateY(-2px); }
+  .primary:active, .primary.press { transform: scale(.97); }
+  .primary:focus-visible, .link:focus-visible, .ghost:focus-visible { outline: 2px solid var(--lime-dk); outline-offset: 3px; }
+
+  /* Panel 2: the authenticator entry and the code boxes */
+  .app { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--soft); box-shadow: 0 0 0 1px var(--line); }
+  .app .av { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-weight: 900; color: #1b1f4f; background: var(--lime); }
+  .app .who { min-width: 0; flex: 1; }
+  .app .who small { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .app .totp { display: flex; gap: 1px; margin-top: 1px; font: 800 24px/1.1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .04em; color: var(--indigo); font-variant-numeric: tabular-nums; overflow: hidden; }
+  [data-theme="dark"] .app .totp { color: var(--lime); }
+  .app .totp span { display: inline-block; }
+  .app .totp span.gap { width: 9px; }
+  .app .totp.roll span { animation: rollIn .5s cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(var(--i) * 40ms); }
+  @keyframes rollIn { from { transform: translateY(100%); opacity: 0; } }
+  .ring { position: relative; flex: none; width: 36px; height: 36px; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 3.5; }
+  .ring .bg { stroke: var(--line); }
+  .ring .fg { stroke: var(--indigo); stroke-linecap: round; stroke-dasharray: 88; transition: stroke .3s; }
+  [data-theme="dark"] .ring .fg { stroke: var(--lime); }
+  .ring.low .fg { stroke: var(--coral); }
+  .ring b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .lbl { display: block; margin: 14px 0 8px; font-size: 13px; font-weight: 650; }
+  .boxes { display: flex; justify-content: space-between; gap: 6px; }
+  .boxes .sep { flex: none; width: 8px; align-self: center; height: 3px; border-radius: 2px; background: var(--line); }
+  .box { position: relative; flex: 1; max-width: 52px; }
+  .box input {
+    width: 100%; height: 54px; padding: 0; border: 0; border-radius: 14px; text-align: center; outline: none;
+    background: var(--soft); color: var(--ink); caret-color: var(--indigo);
+    font: 800 24px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    box-shadow: inset 0 0 0 1.5px var(--line); transition: box-shadow .2s, transform .3s cubic-bezier(.34, 1.56, .64, 1), background .3s;
+  }
+  .box input:focus, .box.cur input { box-shadow: inset 0 0 0 2px var(--indigo), 0 0 0 4px rgba(43, 47, 134, .14); transform: translateY(-2px); }
+  [data-theme="dark"] .box input:focus, [data-theme="dark"] .box.cur input { box-shadow: inset 0 0 0 2px var(--lime), 0 0 0 4px rgba(198, 244, 50, .14); }
+  .box.pop input { animation: pop .4s cubic-bezier(.34, 1.7, .5, 1); }
+  @keyframes pop { 40% { transform: scale(1.12); } }
+  .boxes.check .box input { animation: glow .7s ease-in-out infinite alternate; animation-delay: calc(var(--i) * 70ms); }
+  @keyframes glow { to { box-shadow: inset 0 0 0 2px var(--lime), 0 0 14px rgba(198, 244, 50, .55); } }
+  .boxes.ok .box input { background: var(--lime); color: #1b1f4f; box-shadow: none; animation: hop .5s cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(var(--i) * 60ms); }
+  @keyframes hop { 40% { transform: translateY(-9px); } }
+  .boxes.bad { animation: shake .45s ease; }
+  .boxes.bad .box input { box-shadow: inset 0 0 0 2px var(--coral); }
+  @keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+  .status { min-height: 20px; margin: 12px 0 0; font-size: 13.5px; font-weight: 650; }
+  .status[data-tone="good"] { color: var(--lime-dk); }
+  .status[data-tone="bad"] { color: var(--coral); }
+  .status.pop { animation: statusIn .45s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes statusIn { from { opacity: 0; transform: translateY(6px); } }
+  .row2 { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+
+  /* Panel 3: backup codes that print in */
+  .note { margin: 0 0 10px; font-size: 13.5px; line-height: 1.45; color: var(--muted); }
+  .note b { color: var(--ink); }
+  .codes { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 0; padding: 12px; list-style: none; border-radius: 16px; background: var(--soft); box-shadow: inset 0 0 0 1px var(--line); counter-reset: c; }
+  .codes li { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 9px; background: var(--card); font: 700 13.5px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .06em; font-variant-numeric: tabular-nums; box-shadow: 0 1px 0 var(--line); }
+  .codes li::before { counter-increment: c; content: counter(c); font-size: 10px; color: var(--muted); min-width: 10px; }
+  .codes li.in { animation: printIn .45s cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(var(--i) * 70ms); }
+  @keyframes printIn { from { opacity: 0; transform: translateY(-10px) scale(.95); } }
+  .tools { display: flex; gap: 8px; margin-top: 10px; }
+  .ghost { flex: 1; height: 40px; border: 0; border-radius: 12px; cursor: pointer; font-size: 13.5px; font-weight: 700; background: var(--soft); box-shadow: inset 0 0 0 1px var(--line); display: inline-flex; align-items: center; justify-content: center; gap: 7px; transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), background .2s; }
+  .ghost:hover { transform: translateY(-2px); }
+  .ghost.did { background: var(--lime); color: #1b1f4f; }
+
+  /* Panel 4: all set */
+  .done { display: grid; justify-items: center; text-align: center; padding-top: 6px; }
+  .bigshield { position: relative; width: 112px; height: 120px; }
+  .bigshield svg { position: relative; width: 100%; height: 100%; overflow: visible; }
+  .bigshield .outline { stroke-dasharray: 330; stroke-dashoffset: 330; }
+  .bigshield .tickp { stroke-dasharray: 60; stroke-dashoffset: 60; }
+  .bigshield .fillp { opacity: 0; transform-box: fill-box; transform-origin: center; transform: scale(.6); }
+  .panel.active .bigshield .outline { animation: draw .8s ease forwards .15s; }
+  .panel.active .bigshield .fillp { animation: fillIn .55s cubic-bezier(.34, 1.6, .5, 1) forwards .75s; }
+  .panel.active .bigshield .tickp { animation: draw .45s ease forwards 1.05s; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @keyframes fillIn { to { opacity: 1; transform: none; } }
+  .bigshield::before { content: ""; position: absolute; left: 50%; top: 50%; width: 150px; height: 150px; margin: -75px; border-radius: 50%; background: repeating-conic-gradient(rgba(198, 244, 50, .35) 0 8deg, transparent 8deg 24deg); -webkit-mask: radial-gradient(circle, transparent 38%, #000 40%, transparent 70%); mask: radial-gradient(circle, transparent 38%, #000 40%, transparent 70%); opacity: 0; }
+  .panel.active .bigshield::before { animation: rays 6s linear infinite, raysIn .6s ease forwards 1s; }
+  @keyframes rays { to { transform: rotate(360deg); } }
+  @keyframes raysIn { to { opacity: 1; } }
+  .done h2 { margin: 6px 0 4px; font-size: 19px; }
+  .done p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 300px; }
+
+  .fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+  .fx i { position: absolute; left: 0; top: 0; display: block; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 380px) {
+    .scanrow { grid-template-columns: minmax(0, 118px) 1fr; gap: 12px; }
+    .codes li { font-size: 12.5px; padding: 6px 7px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; transition-delay: 0s !important; animation-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="card" id="card">
+    <div class="head">
+      <span class="shield" aria-hidden="true"><svg width="22" height="24" viewBox="0 0 22 24" fill="none"><path d="M11 2l8 3v6c0 5.2-3.4 9.4-8 11-4.6-1.6-8-5.8-8-11V5z" stroke="#c6f432" stroke-width="2" stroke-linejoin="round"/><path d="M7.5 12l2.5 2.5 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <div><h1>Turn on two-step sign-in</h1><p>A code from your phone, every time you sign in.</p></div>
+    </div>
+
+    <ol class="steps" id="steps" aria-label="Setup progress">
+      <li class="now"><span class="dot"><b>1</b><svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 7l2.8 2.8 5.2-6" fill="none" stroke="#1b1f4f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Scan</li>
+      <li><span class="dot"><b>2</b><svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 7l2.8 2.8 5.2-6" fill="none" stroke="#1b1f4f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Verify</li>
+      <li><span class="dot"><b>3</b><svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 7l2.8 2.8 5.2-6" fill="none" stroke="#1b1f4f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Backup codes</li>
+    </ol>
+
+    <div class="viewport">
+      <div class="track" id="track">
+        <!-- 1. Scan -->
+        <section class="panel active" aria-label="Step 1: scan the code">
+          <div class="scanrow">
+            <div class="qr" id="qr" role="img" aria-label="Setup code for your authenticator app"><svg id="qrsvg" viewBox="0 0 25 25" shape-rendering="geometricPrecision"></svg></div>
+            <div class="scantext">
+              <p>Open your authenticator app and scan this code.</p>
+              <p>Can't scan? Type this key instead:<span class="k" id="key"></span><button type="button" class="link" id="copyKey">Copy key</button></p>
+            </div>
+          </div>
+          <button type="button" class="primary" id="scanned">I've scanned it</button>
+        </section>
+
+        <!-- 2. Verify -->
+        <section class="panel" aria-label="Step 2: enter the code from the app" inert>
+          <div class="app" aria-label="Your authenticator app">
+            <span class="av" aria-hidden="true">S</span>
+            <div class="who"><small>Studio · ayesha.khan@example.pk</small><div class="totp" id="totp" aria-live="off"></div></div>
+            <div class="ring" id="ring" aria-hidden="true"><svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="14"/><circle class="fg" id="ringFg" cx="18" cy="18" r="14"/></svg><b id="secs">30</b></div>
+          </div>
+          <span class="lbl" id="lbl">Type the 6-digit code shown in the app</span>
+          <div class="boxes" id="boxes" role="group" aria-labelledby="lbl">
+            <span class="box" style="--i:0"><input inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 1 of 6"></span>
+            <span class="box" style="--i:1"><input inputmode="numeric" autocomplete="off" aria-label="Digit 2 of 6"></span>
+            <span class="box" style="--i:2"><input inputmode="numeric" autocomplete="off" aria-label="Digit 3 of 6"></span>
+            <span class="sep" aria-hidden="true"></span>
+            <span class="box" style="--i:3"><input inputmode="numeric" autocomplete="off" aria-label="Digit 4 of 6"></span>
+            <span class="box" style="--i:4"><input inputmode="numeric" autocomplete="off" aria-label="Digit 5 of 6"></span>
+            <span class="box" style="--i:5"><input inputmode="numeric" autocomplete="off" aria-label="Digit 6 of 6"></span>
+          </div>
+          <p class="status" id="status" role="status" aria-live="polite"></p>
+          <div class="row2"><button type="button" class="link" id="back">Back to the code</button><span>Demo: use the code in the app</span></div>
+        </section>
+
+        <!-- 3. Backup codes -->
+        <section class="panel" aria-label="Step 3: save your backup codes" inert>
+          <p class="note"><b>Save these backup codes.</b> Each one signs you in once if you lose your phone.</p>
+          <ul class="codes" id="codes"></ul>
+          <div class="tools">
+            <button type="button" class="ghost" id="copyAll">Copy all</button>
+            <button type="button" class="ghost" id="download">Download</button>
+          </div>
+          <button type="button" class="primary" id="saved">I've saved them</button>
+        </section>
+
+        <!-- 4. All set -->
+        <section class="panel" aria-label="Two-step sign-in is on" inert>
+          <div class="done">
+            <div class="bigshield" id="bigshield" aria-hidden="true">
+              <svg viewBox="0 0 112 120" fill="none">
+                <path class="fillp" d="M56 10l38 14v28c0 26-16 46-38 56-22-10-38-30-38-56V24z" fill="#c6f432"/>
+                <path class="outline" d="M56 6l42 15v31c0 29-18 51-42 62-24-11-42-33-42-62V21z" stroke="#2b2f86" stroke-width="4" stroke-linejoin="round"/>
+                <path class="tickp" d="M38 60l13 13 25-27" stroke="#1b1f4f" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <h2>Two-step sign-in is on</h2>
+            <p>Next time you sign in, we will ask for a code from your app.</p>
+          </div>
+          <button type="button" class="primary" id="restart">Start over</button>
+        </section>
+      </div>
+    </div>
+    <p class="sr-only" id="announce" aria-live="polite"></p>
+  </main>
+  <div class="fx" id="fx" aria-hidden="true"></div>
+
+<script>
+(function () {
+  "use strict";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (id) => document.getElementById(id);
+  const track = $("track"), steps = $("steps"), qr = $("qr"), boxesEl = $("boxes"), statusEl = $("status"), announce = $("announce");
+  const panels = Array.from(document.querySelectorAll(".panel"));
+  const stepLis = Array.from(steps.children);
+  const boxWraps = Array.from(document.querySelectorAll(".box"));
+  const boxes = boxWraps.map((b) => b.querySelector("input"));
+  const LEN = 6;
+  const vals = Array(LEN).fill("");
+  let step = 0, busy = false, secret = "", backup = [];
+
+  // ---- Cancellable waits ----
+  const CANCEL = { cancelled: true };
+  let gen = 0;
+  function pause(ms, g, isAnim) {
+    const t = isAnim && reduce ? Math.min(ms, 140) : ms;
+    return new Promise((ok, no) => setTimeout(() => (g === gen ? ok() : no(CANCEL)), t));
+  }
+  const quiet = (p) => p.catch((e) => { if (e !== CANCEL) throw e; });
+  function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+  function say(msg, tone) { statusEl.textContent = msg; statusEl.dataset.tone = tone || ""; restart(statusEl, "pop"); }
+  const rnd = (n) => Math.floor(Math.random() * n);
+  const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+  // ---- Step navigation: slide the track and update the stepper ----
+  const viewport = document.querySelector(".viewport");
+  function fitHeight() { viewport.style.height = panels[step].offsetHeight + "px"; }   // the card grows or shrinks to the active step
+  window.addEventListener("resize", fitHeight);
+  function goStep(n) {
+    step = n;
+    track.style.transform = "translateX(" + -100 * n + "%)";
+    fitHeight();
+    panels.forEach((p, i) => {
+      p.classList.toggle("active", i === n);
+      if (i === n) p.removeAttribute("inert"); else p.setAttribute("inert", "");
+    });
+    stepLis.forEach((li, i) => {
+      li.classList.toggle("done", i < n);
+      li.classList.toggle("now", i === n);
+      if (i === n) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
+    });
+    steps.style.setProperty("--p", Math.min(n, 2) / 2);
+    announce.textContent = ["Step 1 of 3: scan the code.", "Step 2 of 3: type the code from the app.", "Step 3 of 3: save your backup codes.", "All done. Two-step sign-in is on."][n];
+  }
+
+  // ---- Pixel code (drawn from the secret, assembles with a pop) ----
+  function seeded(str) {
+    let h = 2166136261;
+    for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
+    return () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 1000) / 1000; };
+  }
+  function drawCode() {
+    const svg = $("qrsvg");
+    const R = seeded(secret);
+    const S = 21, off = 2;
+    const finder = (x, y) => x < 8 && y < 8 || x > S - 9 && y < 8 || x < 8 && y > S - 9 || x >= 13 && x <= 17 && y >= 13 && y <= 17;
+    // small alignment square near the bottom right, like a real scan code
+    let html = '<rect x="' + (13 + off) + '" y="' + (13 + off) + '" width="5" height="5" rx="1.2" fill="#1b1f4f"/><rect x="' + (14 + off) + '" y="' + (14 + off) + '" width="3" height="3" rx=".7" fill="#fff"/><rect class="m" x="' + (15 + off) + '" y="' + (15 + off) + '" width="1" height="1" rx=".25" fill="#2b2f86"/>';
+    for (const [fx, fy] of [[0, 0], [S - 7, 0], [0, S - 7]]) {
+      html += '<rect x="' + (fx + off) + '" y="' + (fy + off) + '" width="7" height="7" rx="1.8" fill="#1b1f4f"/>';
+      html += '<rect x="' + (fx + off + 1) + '" y="' + (fy + off + 1) + '" width="5" height="5" rx="1.2" fill="#fff"/>';
+      html += '<rect class="m" style="animation-delay:' + rnd(500) + 'ms" x="' + (fx + off + 2) + '" y="' + (fy + off + 2) + '" width="3" height="3" rx=".8" fill="#2b2f86"/>';
+    }
+    for (let y = 0; y < S; y++) {
+      for (let x = 0; x < S; x++) {
+        if (finder(x, y)) continue;
+        const timing = (x === 6 || y === 6) ? (x + y) % 2 === 0 : R() > 0.52;
+        if (!timing) continue;
+        html += '<rect class="m" style="animation-delay:' + rnd(650) + 'ms" x="' + (x + off + 0.06) + '" y="' + (y + off + 0.06) + '" width=".88" height=".88" rx=".22" fill="#1b1f4f"/>';
+      }
+    }
+    svg.innerHTML = html;
+  }
+  function newSecret() {
+    secret = "";
+    for (let i = 0; i < 16; i++) secret += B32[rnd(32)];
+    $("key").textContent = secret.match(/.{4}/g).join(" ");
+    drawCode();
+  }
+
+  // ---- The authenticator code: a new one every 30 seconds ----
+  let cur = "", prev = "", periodStart = 0;
+  const PERIOD = 30000;
+  function newTotp() {
+    prev = cur;
+    do { cur = ""; for (let i = 0; i < LEN; i++) cur += rnd(10); } while (cur === prev);
+    const el = $("totp");
+    el.innerHTML = cur.split("").map((d, i) => (i === 3 ? '<span class="gap"></span>' : "") + '<span style="--i:' + i + '">' + d + "</span>").join("");
+    el.setAttribute("aria-label", "Current code " + cur.split("").join(" "));
+    restart(el, "roll");
+    periodStart = performance.now();
+  }
+  function tickRing(now) {
+    const left = PERIOD - (now - periodStart);
+    if (left <= 0) newTotp();
+    const frac = Math.max(0, left) / PERIOD;
+    $("ringFg").style.strokeDashoffset = String(88 * (1 - frac));
+    const s = Math.ceil(Math.max(0, left) / 1000);
+    if ($("secs").textContent !== String(s)) $("secs").textContent = s;
+    $("ring").classList.toggle("low", s <= 5);
+    requestAnimationFrame(tickRing);
+  }
+
+  // ---- Code boxes: typing, paste, backspace and arrows ----
+  function setDigit(i, d) {
+    vals[i] = d;
+    boxes[i].value = d;
+    if (d) restart(boxWraps[i], "pop");
+  }
+  function mark(i) { boxWraps.forEach((b, n) => b.classList.toggle("cur", n === i && demoOn)); }
+  function focusBox(i) {
+    i = Math.max(0, Math.min(LEN - 1, i));
+    mark(i);
+    if (!demoOn) { boxes[i].focus(); boxes[i].select(); }
+  }
+  function clearBoxes() { for (let i = 0; i < LEN; i++) setDigit(i, ""); }
+  function fillFrom(start, digits) {
+    let i = start;
+    for (const d of digits) { if (i >= LEN) break; setDigit(i, d); i++; }
+    focusBox(i);
+    checkFull();
+  }
+  function checkFull() { if (!busy && vals.every((v) => v)) return quiet(verify(gen)); return null; }
+  boxes.forEach((box, i) => {
+    box.addEventListener("focus", () => requestAnimationFrame(() => box.select()));
+    box.addEventListener("input", (e) => {
+      if (busy) { box.value = vals[i]; return; }
+      const all = box.value.replace(/\D/g, "");
+      if (e.inputType === "insertText" && e.data && e.data.length === 1) {
+        const d = e.data.replace(/\D/g, "");
+        if (!d) { box.value = vals[i]; return; }
+        setDigit(i, d); focusBox(i + 1); checkFull();
+      } else if (all.length > 1) {
+        fillFrom(all.length >= LEN ? 0 : i, all);
+      } else {
+        setDigit(i, all);
+        if (all) { focusBox(i + 1); checkFull(); }
+      }
+    });
+    box.addEventListener("keydown", (e) => {
+      if (busy) return;
+      switch (e.key) {
+        case "Backspace":
+          e.preventDefault();
+          if (vals[i]) setDigit(i, "");
+          else if (i > 0) { setDigit(i - 1, ""); focusBox(i - 1); }
+          break;
+        case "Delete": e.preventDefault(); setDigit(i, ""); break;
+        case "ArrowLeft": e.preventDefault(); focusBox(i - 1); break;
+        case "ArrowRight": e.preventDefault(); focusBox(i + 1); break;
+        case "Home": e.preventDefault(); focusBox(0); break;
+        case "End": e.preventDefault(); focusBox(LEN - 1); break;
+      }
+    });
+    box.addEventListener("paste", (e) => {
+      e.preventDefault();
+      if (busy) return;
+      const digits = (e.clipboardData ? e.clipboardData.getData("text") : "").replace(/\D/g, "");
+      if (digits) fillFrom(digits.length >= LEN ? 0 : i, digits);
+      else say("Only numbers can be pasted here.", "bad");
+    });
+  });
+
+  // ---- Step 1 → 2 ----
+  async function scanned(g) {
+    if (busy) return;
+    busy = true;
+    restart(qr, "flash");
+    await pause(900, g, true);
+    qr.classList.remove("flash");
+    goStep(1);
+    clearBoxes();
+    say("");
+    busy = false;
+    await pause(500, g, true);
+    focusBox(0);
+  }
+
+  // ---- Step 2: check the code (the current or the previous 30-second code) ----
+  async function verify(g) {
+    busy = true;
+    mark(-1);
+    boxesEl.classList.add("check");
+    say("Checking with the app…");
+    await pause(800, g, true);
+    boxesEl.classList.remove("check");
+    const entry = vals.join("");
+    if (entry === cur || entry === prev) {
+      boxesEl.classList.add("ok");
+      say("Code matches. Your phone is paired.", "good");
+      await pause(900, g, true);
+      makeBackup();
+      goStep(2);
+      busy = false;
+      if (!demoOn) setTimeout(() => $("copyAll").focus(), 650);   // focus follows the slide
+    } else {
+      boxes.forEach((b) => b.setAttribute("aria-invalid", "true"));
+      restart(boxesEl, "bad");
+      say("That code did not match. Codes change every 30 seconds.", "bad");
+      await pause(700, g, true);
+      boxesEl.classList.remove("bad");
+      boxes.forEach((b) => b.removeAttribute("aria-invalid"));
+      clearBoxes();
+      busy = false;
+      focusBox(0);
+    }
+  }
+
+  // ---- Step 3: backup codes that scramble, then settle ----
+  function makeBackup() {
+    const A = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    backup = [];
+    for (let i = 0; i < 8; i++) {
+      let c = "";
+      for (let k = 0; k < 8; k++) c += A[rnd(A.length)];
+      backup.push(c.slice(0, 4) + "-" + c.slice(4));
+    }
+    const ul = $("codes");
+    ul.innerHTML = backup.map((c, i) => '<li class="in" style="--i:' + i + '"><span>' + c + "</span></li>").join("");
+    if (reduce) return;
+    Array.from(ul.querySelectorAll("span")).forEach((sp, i) => {
+      const final = backup[i];
+      const t0 = performance.now(), dur = 420 + i * 90;
+      const step = (now) => {
+        const k = (now - t0) / dur;
+        if (k >= 1) { sp.textContent = final; return; }
+        const keep = Math.floor(k * 9);
+        sp.textContent = final.split("").map((ch, j) => (ch === "-" || j < keep ? ch : A[rnd(A.length)])).join("");
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+    ["copyAll", "download"].forEach((id) => { $(id).classList.remove("did"); });
+    $("copyAll").textContent = "Copy all";
+    $("download").textContent = "Download";
+  }
+  function flashBtn(btn, text, label) {
+    btn.classList.add("did");
+    btn.textContent = text;
+    setTimeout(() => { btn.classList.remove("did"); btn.textContent = label; }, 1600);
+  }
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); return true; } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.append(ta); ta.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+      ta.remove();
+      return ok;
+    }
+  }
+  $("copyAll").addEventListener("click", async (e) => {
+    const btn = e.currentTarget; // currentTarget is null again once the await below returns
+    const ok = await copyText(backup.join("\n"));
+    flashBtn(btn, ok ? "Copied ✓" : "Select and copy", "Copy all");
+    announce.textContent = ok ? "Backup codes copied." : "Copy was blocked; select the codes to copy them.";
+  });
+  $("download").addEventListener("click", (e) => {
+    const text = "Backup codes for Studio (two-step sign-in)\n\n" + backup.join("\n") + "\n\nEach code works once.\n";
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = "backup-codes.txt";
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    flashBtn(e.currentTarget, "Saved ✓", "Download");
+    announce.textContent = "Backup codes downloaded.";
+  });
+  $("copyKey").addEventListener("click", async (e) => {
+    const btn = e.currentTarget; // currentTarget is null again once the await below returns
+    const ok = await copyText(secret);
+    btn.textContent = ok ? "Key copied" : "Copy blocked";
+    setTimeout(() => { $("copyKey").textContent = "Copy key"; }, 1500);
+  });
+
+  // ---- Step 4: all set ----
+  function finish() {
+    goStep(3);
+    setTimeout(() => confetti($("bigshield")), reduce ? 0 : 1050);
+  }
+  const fx = $("fx");
+  function confetti(el) {
+    if (reduce) return;
+    const r = el.getBoundingClientRect();
+    const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+    const COLORS = ["#c6f432", "#2b2f86", "#8b90ff", "#ffffff", "#ff6b6b"];
+    for (let n = 0; n < 48; n++) {
+      const p = document.createElement("i");
+      const w = 5 + Math.random() * 6;
+      p.style.width = w + "px";
+      p.style.height = (n % 3 ? w * 0.45 : w) + "px";
+      p.style.borderRadius = n % 3 ? "2px" : "50%";
+      p.style.background = COLORS[n % COLORS.length];
+      fx.append(p);
+      const a = Math.random() * Math.PI * 2, d = 70 + Math.random() * 150;
+      const dx = Math.cos(a) * d, dy = Math.sin(a) * d - 40, spin = (Math.random() - 0.5) * 900;
+      p.animate([
+        { transform: "translate(" + x0 + "px," + y0 + "px) scale(.3)", opacity: 1 },
+        { transform: "translate(" + (x0 + dx) + "px," + (y0 + dy) + "px) rotate(" + spin / 2 + "deg)", opacity: 1, offset: 0.4 },
+        { transform: "translate(" + (x0 + dx * 1.15) + "px," + (y0 + dy + 160) + "px) rotate(" + spin + "deg)", opacity: 0 }
+      ], { duration: 1500 + Math.random() * 800, easing: "cubic-bezier(.2,.7,.4,1)" }).onfinish = () => p.remove();
+    }
+  }
+
+  // ---- Start over ----
+  function startOver() {
+    boxesEl.classList.remove("ok", "check", "bad");
+    clearBoxes();
+    newSecret();
+    goStep(0);
+    say("");
+  }
+
+  $("scanned").addEventListener("click", () => quiet(scanned(gen)));
+  $("back").addEventListener("click", () => { if (!busy) { goStep(0); clearBoxes(); setTimeout(() => $("scanned").focus(), 400); } });
+  $("saved").addEventListener("click", () => { finish(); setTimeout(() => { if (!demoOn) $("restart").focus(); }, 500); });
+  $("restart").addEventListener("click", () => { startOver(); setTimeout(() => { if (!demoOn) $("scanned").focus(); }, 400); });
+
+  function hardReset() {
+    gen++;
+    busy = false;
+    mark(-1);
+    startOver();
+  }
+
+  // ---- Auto-demo: scan, type the app code, print backup codes, finish ----
+  let demoOn = true, demoTimer = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); hardReset(); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) =>
+    window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  async function press(id, g) {
+    $(id).classList.add("press");
+    await pause(160, g);
+    $(id).classList.remove("press");
+  }
+  async function runDemo() {
+    const g = gen;
+    await pause(700, g);
+    await press("scanned", g);
+    await scanned(g);
+    await pause(250, g);
+    for (let i = 0; i < LEN; i++) {
+      setDigit(i, cur[i]);
+      mark(i + 1 < LEN ? i + 1 : -1);
+      await pause(150, g);
+    }
+    await verify(g);
+    await pause(2000, g);
+    await press("saved", g);
+    finish();
+    await pause(3300, g);
+    startOver();
+    demoTimer = setTimeout(() => quiet(runDemo()), 900);
+  }
+
+  newSecret();
+  newTotp();
+  goStep(0);
+  requestAnimationFrame(tickRing);
+  demoTimer = setTimeout(() => quiet(runDemo()), 200);
+})();
+</script>
+</body>
+</html>

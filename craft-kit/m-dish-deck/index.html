@@ -1,0 +1,1097 @@
+<!doctype html>
+<!-- Chill & Craft · Dish Deck · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Dish Deck · swipe recipe cards to plan the week</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours (light first, dark below) ---------- */
+  :root {
+    --bg1: #fbf0d9;
+    --bg2: #f7d9a6;
+    --glow1: rgba(242, 165, 22, 0.42);
+    --glow2: rgba(216, 52, 44, 0.2);
+    --bezel: #2b1a10;
+    --bezel-edge: rgba(0, 0, 0, 0.2);
+    --screen: #fff7ea;
+    --dots: rgba(214, 140, 30, 0.13);
+    --card: #fffdf8;
+    --ink: #2b1a0e;
+    --muted: #8a7260;
+    --line: #f0e0c6;
+    --chip: #fbeed6;
+    --saffron: #e99a0c;
+    --chili: #d8342c;
+    --cook: #2f9a5a;
+    --skip: #8a8f98;
+    --gold: #f2b01c;
+    --shadow: rgba(110, 60, 10, 0.32);
+    --ghost: rgba(43, 26, 14, 0.16);
+    --ghost-edge: rgba(43, 26, 14, 0.55);
+    --focus: #1f6fd1;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg1: #140d08;
+    --bg2: #1f150c;
+    --glow1: rgba(255, 181, 46, 0.2);
+    --glow2: rgba(255, 90, 75, 0.12);
+    --bezel: #050302;
+    --bezel-edge: rgba(255, 220, 160, 0.1);
+    --screen: #1a120b;
+    --dots: rgba(255, 181, 46, 0.07);
+    --card: #261a11;
+    --ink: #fcefdc;
+    --muted: #b79c82;
+    --line: #3b2a1b;
+    --chip: #2f2115;
+    --saffron: #ffb52e;
+    --chili: #ff5a4b;
+    --cook: #4cd384;
+    --skip: #a8adb6;
+    --gold: #ffc93d;
+    --shadow: rgba(0, 0, 0, 0.72);
+    --ghost: rgba(255, 255, 255, 0.2);
+    --ghost-edge: rgba(255, 255, 255, 0.75);
+    --focus: #8fc1ff;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg1);
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 2px; }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- Stage ---------- */
+  .stage {
+    position: relative;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(32px, 6vw, 96px);
+    padding: 16px;
+    overflow: hidden;
+    background:
+      radial-gradient(50% 50% at 14% 22%, var(--glow1), transparent 70%),
+      radial-gradient(45% 55% at 86% 82%, var(--glow2), transparent 70%),
+      linear-gradient(165deg, var(--bg1), var(--bg2));
+  }
+  /* slow floating spice blobs */
+  .blob { position: absolute; border-radius: 50%; filter: blur(40px); opacity: 0.55; animation: float-b 14s ease-in-out infinite alternate; }
+  .blob.b1 { width: 260px; height: 260px; left: 8%; bottom: -60px; background: var(--saffron); }
+  .blob.b2 { width: 200px; height: 200px; right: 10%; top: -40px; background: var(--chili); opacity: 0.25; animation-duration: 18s; }
+  @keyframes float-b { to { transform: translate(40px, -30px) scale(1.12); } }
+
+  .cap { position: relative; z-index: 1; max-width: 300px; display: none; }
+  @media (min-width: 900px) { .cap { display: block; } }
+  .kick { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--chili); font-weight: 800; }
+  .cap h1 { font-size: 46px; line-height: 1; letter-spacing: -0.045em; margin: 10px 0 12px; }
+  .cap p { color: var(--muted); font-size: 15px; line-height: 1.55; margin: 0 0 20px; }
+  .cap ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+  .cap li {
+    display: flex; align-items: center; gap: 10px; width: max-content; max-width: 100%;
+    padding: 9px 14px 9px 9px; border-radius: 14px; font-size: 13.5px; font-weight: 650;
+    background: color-mix(in srgb, var(--card) 72%, transparent); border: 1px solid var(--line);
+    box-shadow: 0 10px 24px -18px var(--shadow);
+  }
+  .cap li svg { width: 26px; height: 26px; flex: none; border-radius: 8px; padding: 5px; fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------- Phone ---------- */
+  .phone {
+    position: relative;
+    z-index: 1;
+    flex: none;
+    width: min(390px, 100%);
+    height: clamp(540px, calc(100vh - 32px), 760px);
+    height: clamp(540px, calc(100dvh - 32px), 760px);
+    border: 9px solid var(--bezel);
+    border-radius: 48px;
+    background: var(--screen);
+    box-shadow: 0 0 0 1px var(--bezel-edge), 0 50px 90px -40px var(--shadow), 0 20px 40px -30px var(--shadow);
+    overflow: hidden;
+    overflow: clip;
+    isolation: isolate;
+  }
+  @media (max-width: 480px) {
+    .stage { padding: 0; }
+    .phone { width: 100%; height: 100vh; height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+  }
+  .screen {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    background: radial-gradient(var(--dots) 1.4px, transparent 1.8px) 0 0 / 18px 18px, var(--screen);
+  }
+  .status {
+    flex: none; height: 42px; display: flex; align-items: center; justify-content: space-between;
+    padding: 2px 24px 0 28px; font-size: 14px; font-weight: 700;
+  }
+  .status svg { height: 12px; fill: currentColor; }
+  .top { flex: none; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 22px 4px; }
+  .top small { font-size: 11.5px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--chili); }
+  .top h2 { margin: 2px 0 0; font-size: 23px; letter-spacing: -0.035em; }
+  .count {
+    font-size: 12.5px; font-weight: 750; padding: 6px 11px; border-radius: 999px; background: var(--chip);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .count.tick { animation: bump 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+
+  /* ---------- The deck ---------- */
+  .deck { position: relative; z-index: 2; flex: 1; min-height: 0; touch-action: none; outline: none; }
+  .deck:focus-visible::after { content: ""; position: absolute; z-index: 50; inset: 4px 14px; border-radius: 28px; outline: 2.5px solid var(--focus); pointer-events: none; }
+  .card {
+    position: absolute; left: 50%; top: calc(50% - 14px);
+    width: var(--cw, 280px); height: var(--ch, 360px);
+    margin: calc(var(--ch, 360px) / -2) 0 0 calc(var(--cw, 280px) / -2);
+    will-change: transform;
+    user-select: none; -webkit-user-select: none;
+  }
+  .card.top { cursor: grab; }
+  .deck.dragging .card.top { cursor: grabbing; }
+  .card.gone { pointer-events: none; }
+  /* the back cards glide up when the top one leaves */
+  .deck.settle .card:not(.gone):not(.top) { transition: transform 0.55s cubic-bezier(0.3, 1.45, 0.5, 1), opacity 0.3s; }
+  .card-in {
+    position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden;
+    border-radius: 26px; background: var(--card);
+    box-shadow: 0 1px 0 var(--line), 0 18px 40px -22px var(--shadow), 0 4px 12px -6px var(--shadow);
+  }
+  .card.top .card-in { animation: idle 3.4s ease-in-out infinite; }
+  .deck.dragging .card.top .card-in { animation-play-state: paused; }
+  /* cards further back are a touch darker so the layers read clearly */
+  .card-in::after { content: ""; position: absolute; inset: 0; z-index: 3; border-radius: inherit; background: #1a0c02; opacity: calc(var(--dep, 0) * 0.06); pointer-events: none; }
+  @keyframes idle { 50% { transform: translateY(-3px) rotate(-0.4deg); } }
+  .art {
+    position: relative; flex: 1; min-height: 0; margin: 8px 8px 0; border-radius: 20px; overflow: hidden;
+    background: radial-gradient(120% 95% at 28% 18%, var(--a), var(--b));
+  }
+  .art::before {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(rgba(255, 255, 255, 0.22) 1.3px, transparent 1.8px) 0 0 / 14px 14px;
+    -webkit-mask-image: linear-gradient(transparent, #000 70%);
+    mask-image: linear-gradient(transparent, #000 70%);
+  }
+  .art svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* a slow sunburst and glow behind each dish */
+  .art .rays { fill: #fff; opacity: 0.17; transform-origin: 120px 92px; animation: spin 48s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .art .steam { fill: none; stroke: rgba(255, 255, 255, 0.75); stroke-width: 3; stroke-linecap: round; animation: steam 2.6s ease-in-out infinite; }
+  @keyframes steam { 0% { opacity: 0; transform: translateY(8px); } 40% { opacity: 0.9; } 100% { opacity: 0; transform: translateY(-14px); } }
+  .art .spark { animation: twinkle 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes twinkle { 50% { opacity: 0.2; transform: scale(0.6) rotate(30deg); } }
+  .tag {
+    position: absolute; left: 12px; bottom: 12px; z-index: 1; padding: 5px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.02em; color: #2b1a0e; background: rgba(255, 255, 255, 0.82);
+  }
+  .info { flex: none; padding: 12px 16px 14px; }
+  .info h3 { margin: 0; font-size: 19px; letter-spacing: -0.025em; }
+  .info p { margin: 3px 0 10px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .facts { display: flex; align-items: center; gap: 12px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .facts span { display: inline-flex; align-items: center; gap: 4px; }
+  .facts svg { width: 15px; height: 15px; fill: none; stroke: var(--muted); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .facts .spice { margin-left: auto; gap: 1px; }
+  .facts .spice svg { stroke: var(--line); stroke-width: 3.2; width: 16px; height: 16px; }
+  .facts .spice svg.on { stroke: var(--chili); }
+  .facts .spice svg .stem { stroke: var(--cook); stroke-width: 1.6; }
+  .facts .sweet { margin-left: auto; color: #e46f92; }
+
+  .stamp {
+    position: absolute; z-index: 2; padding: 3px 11px 4px; border: 3.5px solid currentColor; border-radius: 12px;
+    font-size: 26px; font-weight: 900; letter-spacing: 0.08em; line-height: 1.1; text-transform: uppercase;
+    background: color-mix(in srgb, var(--card) 86%, transparent);
+    opacity: 0; pointer-events: none; display: flex; align-items: center; gap: 6px;
+  }
+  .stamp svg { width: 22px; height: 22px; fill: currentColor; }
+  .s-cook { left: 16px; top: 20px; color: var(--cook); transform: rotate(-13deg) scale(var(--ss, 1.35)); }
+  .s-skip { right: 16px; top: 20px; color: var(--skip); transform: rotate(13deg) scale(var(--ss, 1.35)); }
+  .s-tonight { left: 50%; top: 38%; color: var(--gold); transform: translateX(-50%) rotate(-4deg) scale(var(--ss, 1.35)); }
+  .stamp.thunk { animation: thunk 0.35s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes thunk { 40% { scale: 1.18; } }
+
+  /* summary when the deck is empty */
+  .summary {
+    position: absolute; left: 50%; top: calc(50% - 14px); z-index: 1;
+    width: var(--cw, 280px); height: var(--ch, 360px);
+    margin: calc(var(--ch, 360px) / -2) 0 0 calc(var(--cw, 280px) / -2);
+    border-radius: 26px; background: var(--card); border: 2px dashed var(--line);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 18px;
+    visibility: hidden; opacity: 0; transform: scale(0.82) translateY(20px);
+    transition: opacity 0.3s, transform 0.6s cubic-bezier(0.3, 1.5, 0.5, 1), visibility 0s linear 0.3s;
+  }
+  .summary.show { visibility: visible; opacity: 1; transform: none; transition: opacity 0.3s, transform 0.6s cubic-bezier(0.3, 1.5, 0.5, 1), visibility 0s; }
+  .summary svg.plates { width: 92px; height: 64px; }
+  .summary.show svg.plates .pl { animation: plate 0.6s cubic-bezier(0.3, 1.7, 0.5, 1) backwards; }
+  .summary.show svg.plates .pl:nth-child(2) { animation-delay: 0.1s; } .summary.show svg.plates .pl:nth-child(3) { animation-delay: 0.2s; }
+  @keyframes plate { from { transform: translateY(-30px); opacity: 0; } }
+  .summary .big { font-size: 58px; font-weight: 900; letter-spacing: -0.05em; line-height: 1; color: var(--saffron); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .summary p { margin: 4px 0 0; font-size: 14px; font-weight: 700; }
+  .summary .ton { color: var(--muted); font-weight: 650; font-size: 13px; margin-top: 6px; }
+  .shuffle {
+    margin-top: 18px; border: 0; border-radius: 14px; padding: 12px 18px; cursor: pointer;
+    background: var(--chili); color: #fff; font-weight: 800; font-size: 14px;
+    display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 12px 24px -14px var(--chili);
+    transition: transform 0.3s cubic-bezier(0.3, 1.7, 0.5, 1);
+  }
+  .shuffle svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .shuffle:active { transform: scale(0.93); }
+
+  /* ---------- Round buttons ---------- */
+  .controls { flex: none; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 6px 0 10px; }
+  .cbtn {
+    position: relative; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+    background: var(--card);
+    box-shadow: 0 12px 24px -14px var(--shadow), inset 0 0 0 1.5px var(--line);
+    transform: scale(calc(1 + var(--hl, 0) * 0.14));
+    transition: transform 0.3s cubic-bezier(0.3, 1.7, 0.5, 1), opacity 0.2s;
+  }
+  .cbtn::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: currentColor; opacity: calc(var(--hl, 0) * 0.16); }
+  .cbtn svg { position: relative; width: 44%; height: 44%; }
+  .cbtn.lg { width: 62px; height: 62px; }
+  .cbtn.md { width: 52px; height: 52px; }
+  .cbtn.sm { width: 42px; height: 42px; }
+  .cbtn.skip { color: var(--skip); } .cbtn.cook { color: var(--cook); } .cbtn.tonight { color: var(--gold); } .cbtn.undo { color: var(--muted); }
+  .cbtn .fill { fill: currentColor; } .cbtn .line { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .cbtn:active { transform: scale(0.86); }
+  .cbtn:disabled { opacity: 0.38; cursor: default; }
+  .cbtn.hit::after {
+    content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2.5px solid currentColor;
+    animation: ring 0.55s ease-out forwards;
+  }
+  @keyframes ring { from { transform: scale(0.8); opacity: 1; } to { transform: scale(1.5); opacity: 0; } }
+
+  /* ---------- My menu tray ---------- */
+  .tray {
+    flex: none; display: flex; align-items: center; gap: 10px; min-height: 52px;
+    margin: 0 12px 12px; padding: 8px 8px 8px 12px; border-radius: 18px; background: var(--chip);
+  }
+  .tray-label { flex: none; display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800; }
+  .badge {
+    min-width: 21px; height: 21px; padding: 0 6px; border-radius: 11px; display: grid; place-items: center;
+    background: var(--chili); color: #fff; font-size: 11.5px; font-variant-numeric: tabular-nums;
+  }
+  .badge.bump, .bump { animation: bump 0.5s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes bump { 40% { transform: scale(1.3); } }
+  .chips { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; padding: 2px; }
+  .chips::-webkit-scrollbar { display: none; }
+  .hint { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mchip {
+    flex: none; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 11px 0 4px;
+    border-radius: 16px; background: var(--card); font-size: 12px; font-weight: 750; white-space: nowrap;
+    box-shadow: inset 0 0 0 1.5px var(--line);
+    transition: box-shadow 0.3s;
+  }
+  .mchip i { width: 24px; height: 24px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, var(--a), var(--b)); flex: none; }
+  .mchip .st { width: 0; height: 13px; opacity: 0; fill: var(--gold); transition: width 0.3s, opacity 0.3s; flex: none; }
+  .mchip.tonight { box-shadow: inset 0 0 0 2px var(--gold); }
+  .mchip.tonight .st { width: 13px; opacity: 1; }
+  .mchip.pop { animation: chip-in 0.55s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes chip-in { from { transform: scale(0.4); } }
+  .mchip.out { animation: chip-out 0.3s ease-in forwards; }
+  @keyframes chip-out { to { transform: scale(0.3); opacity: 0; } }
+  .flychip { position: absolute; left: 0; top: 0; z-index: 30; pointer-events: none; box-shadow: 0 14px 26px -12px var(--shadow), inset 0 0 0 1.5px var(--line); }
+
+  .fx { position: absolute; inset: 0; z-index: 25; pointer-events: none; overflow: hidden; }
+  .bit { position: absolute; width: 7px; height: 11px; border-radius: 2px; margin: -5px 0 0 -3px; }
+  .ghost {
+    position: absolute; left: -23px; top: -23px; width: 46px; height: 46px; z-index: 40;
+    pointer-events: none; opacity: 0; transition: opacity 0.35s;
+  }
+  .ghost::before {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle, var(--ghost), transparent 72%);
+    border: 2px solid var(--ghost-edge);
+    box-shadow: 0 8px 20px -6px var(--shadow);
+    transition: transform 0.2s cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+  .ghost.show { opacity: 1; }
+  .ghost.press::before { transform: scale(0.76); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <i class="blob b1" aria-hidden="true"></i><i class="blob b2" aria-hidden="true"></i>
+  <div class="cap">
+    <div class="kick">Swipeable cards</div>
+    <h1>Dish Deck</h1>
+    <p>Plan the week's dinners one recipe at a time. Every card tilts with your finger, stamps its verdict and flies off with a spin.</p>
+    <ul>
+      <li><svg viewBox="0 0 24 24" style="background: var(--cook)" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Swipe right to cook it</li>
+      <li><svg viewBox="0 0 24 24" style="background: var(--skip)" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Swipe left to skip</li>
+      <li><svg viewBox="0 0 24 24" style="background: var(--gold)" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Swipe up to make it tonight</li>
+    </ul>
+  </div>
+
+  <section class="phone" id="phone" aria-label="Dish Deck recipe picker">
+    <div class="screen" id="screen">
+      <div class="status" aria-hidden="true">
+        <span>9:41</span>
+        <svg viewBox="0 0 64 14"><rect x="0" y="9" width="3.5" height="5" rx="1"/><rect x="5.5" y="6" width="3.5" height="8" rx="1"/><rect x="11" y="3" width="3.5" height="11" rx="1"/><rect x="16.5" y="0" width="3.5" height="14" rx="1"/><path d="M30 5.5a10 10 0 0 1 13 0l-1.6 1.7a7.6 7.6 0 0 0-9.8 0zM33.2 8.8a5.4 5.4 0 0 1 6.6 0L36.5 12.3z"/><rect x="47" y="1.5" width="15" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="49" y="3.5" width="9" height="7" rx="1.5"/><rect x="62.6" y="5" width="1.4" height="4" rx=".7"/></svg>
+      </div>
+      <div class="top">
+        <div><small>This week</small><h2>What's cooking?</h2></div>
+        <span class="count" id="count">1 of 6</span>
+      </div>
+
+      <div class="deck" id="deck" tabindex="0" role="group" aria-label="Recipe cards. Arrow Right cooks, Arrow Left skips, Arrow Up picks it for tonight, Backspace undoes.">
+        <div class="summary" id="summary" aria-hidden="true">
+          <svg class="plates" viewBox="0 0 92 64" aria-hidden="true">
+            <g class="pl"><ellipse cx="46" cy="54" rx="40" ry="8" fill="#e99a0c"/><ellipse cx="46" cy="52" rx="32" ry="5" fill="#ffd166"/></g>
+            <g class="pl"><ellipse cx="46" cy="40" rx="36" ry="7.5" fill="#d8342c"/><ellipse cx="46" cy="38" rx="28" ry="4.5" fill="#ff8a6e"/></g>
+            <g class="pl"><ellipse cx="46" cy="26" rx="32" ry="7" fill="#2f9a5a"/><ellipse cx="46" cy="24" rx="24" ry="4" fill="#8fe0a9"/></g>
+          </svg>
+          <div class="big" id="sum-big">0</div>
+          <p id="sum-line">dishes saved for this week</p>
+          <p class="ton" id="sum-ton">No pick for tonight yet</p>
+          <button class="shuffle" id="shuffle" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3c5 0 5 10 10 10h3M17 14l3 3-3 3M4 17h3c1.6 0 2.6-1 3.5-2.4M13.5 9.4C14.4 8 15.4 7 17 7h3M17 4l3 3-3 3"/></svg>Shuffle again</button>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="cbtn sm undo" id="b-undo" type="button" aria-label="Undo the last swipe" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="line" d="M9 7L4 12l5 5M4 12h10a6 6 0 0 1 0 12" transform="translate(0 -3)"/></svg></button>
+        <button class="cbtn lg skip" id="b-skip" type="button" aria-label="Skip this dish"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="line" d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button class="cbtn md tonight" id="b-tonight" type="button" aria-label="Cook this tonight"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M12 2.6l2.9 6 6.5.8-4.8 4.5 1.3 6.5L12 17.2l-5.9 3.2 1.3-6.5L2.6 9.4l6.5-.8z"/></svg></button>
+        <button class="cbtn lg cook" id="b-cook" type="button" aria-label="Save to cook this week"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M12 20.5S3.5 15.4 3.5 9.3A4.6 4.6 0 0 1 12 6.8a4.6 4.6 0 0 1 8.5 2.5c0 6.1-8.5 11.2-8.5 11.2z"/></svg></button>
+      </div>
+
+      <div class="tray">
+        <div class="tray-label">My menu <span class="badge" id="badge">0</span></div>
+        <div class="chips" id="chips"><span class="hint" id="hint">Swipe right to add dishes</span></div>
+      </div>
+    </div>
+    <div class="fx" id="fx" aria-hidden="true"></div>
+    <div class="ghost" id="ghost" aria-hidden="true"></div>
+    <p class="sr-only" id="live" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+  (function () {
+    "use strict";
+    var $ = function (id) { return document.getElementById(id); };
+    var phone = $("phone"), screen = $("screen"), deck = $("deck"), summary = $("summary"), chipsBox = $("chips");
+    var hint = $("hint"), badge = $("badge"), countEl = $("count"), live = $("live"), ghost = $("ghost"), fx = $("fx");
+    var btnSkip = $("b-skip"), btnCook = $("b-cook"), btnTonight = $("b-tonight"), btnUndo = $("b-undo"), btnShuffle = $("shuffle");
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    var acted = false;     // vibration only after a real tap (browsers block it before that)
+
+    function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+    function say(t) { if (!demo.on) live.textContent = t; }
+    function buzz(p) { if (!acted) return; try { if (typeof navigator.vibrate === "function") navigator.vibrate(p); } catch (e) {} }
+    function retrigger(el, cls) { el.classList.remove(cls); void el.getBoundingClientRect(); el.classList.add(cls); }
+
+    /* ================= Dish illustrations (stylised SVG, drawn in a 240 x 170 box) ================= */
+    var seed = 5;
+    function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+    function n1(v) { return v.toFixed(1); }
+    function grains(n, x0, x1, topFn, yMax, colors, rx, ry) {
+      var s = "";
+      for (var i = 0; i < n; i++) {
+        var x = x0 + rnd() * (x1 - x0), yt = topFn(x) + 4;
+        if (yt > yMax - 2) continue;
+        var y = yt + rnd() * (yMax - yt);
+        s += '<ellipse cx="' + n1(x) + '" cy="' + n1(y) + '" rx="' + rx + '" ry="' + ry + '" fill="' + colors[i % colors.length] + '" transform="rotate(' + Math.round(rnd() * 180) + " " + n1(x) + " " + n1(y) + ')"/>';
+      }
+      return s;
+    }
+    function leaf(x, y, r) { return '<path d="M' + x + " " + y + 'c3-5 9-6 13-4-2 5-8 8-13 4z" fill="#3f9a4a" transform="rotate(' + r + " " + x + " " + y + ')"/>'; }
+    function dots(list, fill, r) { return list.map(function (p) { return '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (p[2] || r) + '" fill="' + fill + '"/>'; }).join(""); }
+    function steam(xs) { return xs.map(function (x, i) { return '<path class="steam" style="animation-delay:' + (i * 0.55) + 's" d="M' + x + ' 58c-6-7 6-13 0-20s6-13 0-20"/>'; }).join(""); }
+    function sparks(list) { return list.map(function (p, i) { return '<path class="spark" style="animation-delay:' + i * 0.4 + 's" d="M' + p[0] + " " + p[1] + 'l2 6 6 2-6 2-2 6-2-6-6-2 6-2z" fill="#fff"/>'; }).join(""); }
+    var SHADOW = '<ellipse cx="120" cy="152" rx="96" ry="10" fill="#000" opacity=".16"/>';
+    // sunburst rays (they reach past the view box so they fill the whole art panel) and a soft glow
+    var RAYS = (function () {
+      var d = "", R = 320;
+      for (var i = 0; i < 18; i++) {
+        var a = (i / 18) * Math.PI * 2, w = 0.07;
+        d += "M120 92L" + n1(120 + Math.cos(a - w) * R) + " " + n1(92 + Math.sin(a - w) * R) + "L" + n1(120 + Math.cos(a + w) * R) + " " + n1(92 + Math.sin(a + w) * R) + "Z";
+      }
+      return '<path class="rays" d="' + d + '"/><ellipse cx="120" cy="108" rx="108" ry="58" fill="#fff" opacity=".16"/>';
+    })();
+
+    var ART = {
+      biryani: function () {
+        var top = function (x) { return 64 + Math.pow((x - 120) / 70, 2) * 62; };
+        return SHADOW +
+          '<ellipse cx="120" cy="134" rx="98" ry="26" fill="#a9561f"/><ellipse cx="120" cy="130" rx="88" ry="21" fill="#d98a48"/>' +
+          '<path d="M50 130C58 92 90 64 120 64s62 28 70 66z" fill="#fde9b0"/>' +
+          '<path d="M66 118c8-22 28-40 46-44-4 18-22 34-46 44zM150 82c14 8 24 22 28 38-14-6-24-18-28-38z" fill="#f7b538" opacity=".85"/>' +
+          grains(80, 56, 184, top, 127, ["#fff7dc", "#ffd36b", "#ffffff", "#f59e2a"], 3.2, 1.2) +
+          '<path d="M122 86c10-14 34-14 42 0 7 13-2 27-18 27-6 9-16 12-21 7-4-5 0-11 5-13-9-5-12-14-8-21z" fill="#a8471d"/>' +
+          '<path d="M132 88c6-6 18-6 23 1-6-2-15-2-23-1z" fill="#d9773a"/>' +
+          '<circle cx="118" cy="119" r="4" fill="#fff3d6"/><circle cx="113" cy="116" r="3.6" fill="#fff3d6"/>' +
+          '<ellipse cx="86" cy="100" rx="13" ry="9" fill="#fffdf6"/><circle cx="86" cy="100" r="5" fill="#ffc21c"/>' +
+          leaf(96, 80, -20) + leaf(150, 112, 30) + leaf(70, 114, 160) +
+          '<path d="M178 128a18 18 0 0 0 26-10z" fill="#ffe14d" stroke="#f1c40f" stroke-width="2"/>' +
+          steam([100, 122, 144]);
+      },
+      daal: function () {
+        var top = function (x) { return 82 + Math.pow((x - 86) / 48, 2) * 46; };
+        return SHADOW +
+          '<ellipse cx="120" cy="132" rx="102" ry="26" fill="#e9dcc0"/><ellipse cx="120" cy="129" rx="92" ry="21" fill="#fffaf0"/>' +
+          '<path d="M38 128c4-28 24-46 48-46s44 18 48 46z" fill="#fffdf7"/>' +
+          grains(60, 42, 130, top, 126, ["#efe6d2", "#e3d7bd", "#ffffff"], 3, 1.1) +
+          '<path d="M124 100h86c0 26-19 40-43 40s-43-14-43-40z" fill="#b8582a"/>' +
+          '<path d="M132 108c6 18 20 26 35 26-18-2-30-12-35-26z" fill="#d9773a" opacity=".6"/>' +
+          '<ellipse cx="167" cy="100" rx="43" ry="11" fill="#d98a48"/><ellipse cx="167" cy="100" rx="37" ry="8" fill="#f2b51e"/>' +
+          '<ellipse cx="158" cy="98" rx="18" ry="3" fill="#ffd45c"/>' +
+          dots([[150, 101], [164, 97], [178, 102], [186, 98], [143, 98]], "#b3261e", 1.9) +
+          dots([[156, 103], [171, 99], [181, 104]], "#6b3b12", 1.4) +
+          leaf(166, 97, 10) + leaf(180, 100, -30) +
+          '<path d="M60 142c14 4 30 2 40-6" stroke="#3f9a4a" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M100 136l5-4" stroke="#2c6e33" stroke-width="3" stroke-linecap="round"/>' +
+          steam([152, 174]);
+      },
+      nihari: function () {
+        return SHADOW +
+          '<g transform="rotate(-14 70 92)"><ellipse cx="70" cy="92" rx="56" ry="30" fill="#e2b468"/><ellipse cx="70" cy="90" rx="51" ry="25" fill="#f4d390"/>' +
+          dots([[50, 84, 4], [72, 78, 3], [88, 92, 4.5], [60, 100, 3], [96, 82, 2.5]], "#b9772f", 3) + "</g>" +
+          '<path d="M54 102h132c0 32-30 46-66 46s-66-14-66-46z" fill="#3b2a24"/>' +
+          '<path d="M64 112c8 20 30 30 54 30-26 2-48-10-54-30z" fill="#5c4339"/>' +
+          '<ellipse cx="120" cy="102" rx="66" ry="15" fill="#5c4339"/><ellipse cx="120" cy="102" rx="59" ry="11.5" fill="#8a2a14"/>' +
+          '<ellipse cx="112" cy="100" rx="40" ry="6" fill="#c9481b" opacity=".85"/>' +
+          dots([[92, 103, 2.6], [104, 106, 2], [140, 104, 3], [150, 99, 2], [124, 98, 1.8], [84, 99, 1.6]], "#f39a2e", 2) +
+          '<path d="M100 97l14-3M118 101l12 2M136 96l10-4M88 104l9 1" stroke="#ffe7a6" stroke-width="2" stroke-linecap="round"/>' +
+          '<circle cx="128" cy="104" r="3" fill="none" stroke="#3f9a4a" stroke-width="1.8"/><circle cx="108" cy="99" r="2.6" fill="none" stroke="#3f9a4a" stroke-width="1.8"/>' +
+          leaf(92, 102, -10) + leaf(144, 98, 20) +
+          '<path d="M180 142a16 16 0 0 1 30-2z" fill="#ffe14d" stroke="#f1c40f" stroke-width="2"/>' +
+          steam([100, 120, 140]);
+      },
+      paratha: function () {
+        var sp = "";
+        for (var i = 0; i < 16; i++) {
+          var a = rnd() * Math.PI * 2, r = rnd();
+          var x = 123 + Math.cos(a) * r * 70, y = 116 + Math.sin(a) * r * 13;
+          sp += '<ellipse cx="' + n1(x) + '" cy="' + n1(y) + '" rx="' + n1(2.5 + rnd() * 4) + '" ry="' + n1(1.2 + rnd() * 1.6) + '" fill="#a8641e" opacity=".5"/>';
+        }
+        return SHADOW +
+          '<ellipse cx="120" cy="138" rx="90" ry="18" fill="#c9832a"/><ellipse cx="120" cy="135" rx="88" ry="16" fill="#e0a148"/>' +
+          '<ellipse cx="116" cy="127" rx="88" ry="18" fill="#cf8f33"/><ellipse cx="116" cy="125" rx="86" ry="16" fill="#e8b155"/>' +
+          '<ellipse cx="123" cy="118" rx="86" ry="18" fill="#d99a3c"/><ellipse cx="123" cy="116" rx="84" ry="16" fill="#f3c666"/>' +
+          sp +
+          '<path d="M106 102l18-8 20 7-18 9z" fill="#fff4b0"/><path d="M106 102v9l20 9v-10z" fill="#f3d86a"/><path d="M126 110v10l18-9v-10z" fill="#e8c84a"/>' +
+          '<path d="M108 113c-6 4-12 8-18 8 9 2 18 0 24-6z" fill="#fff0a0" opacity=".9"/>' +
+          '<path d="M178 104h46c0 17-10 26-23 26s-23-9-23-26z" fill="#3b6fb6"/><ellipse cx="201" cy="104" rx="23" ry="6" fill="#5a8ad0"/><ellipse cx="201" cy="104" rx="19" ry="4.4" fill="#fffdf6"/>' +
+          dots([[196, 104], [204, 103], [200, 106]], "#7a4b1e", 1) +
+          steam([104, 124, 144]);
+      },
+      chaat: function () {
+        var peas = "", toms = "";
+        for (var row = 0; row < 4; row++) {
+          var yy = 101 - row * 8, half = 58 - row * 13, count = 9 - row * 2;
+          for (var k = 0; k < count; k++) {
+            var x = 120 - half + (k + 0.5) * ((half * 2) / count) + (rnd() - 0.5) * 4, y = yy + (rnd() - 0.5) * 3;
+            peas += '<circle cx="' + n1(x) + '" cy="' + n1(y) + '" r="6.4" fill="#e8b86a" stroke="#c08436" stroke-width="1.2"/><circle cx="' + n1(x - 2) + '" cy="' + n1(y - 2) + '" r="1.8" fill="#fbe2ad"/>';
+            if (rnd() > 0.68) toms += '<rect x="' + n1(x + 2) + '" y="' + n1(y - 6) + '" width="7" height="7" rx="1.5" fill="#e2382f" transform="rotate(' + Math.round(rnd() * 60) + " " + n1(x + 5) + " " + n1(y - 2) + ')"/>';
+          }
+        }
+        return SHADOW +
+          '<path d="M42 100h156c0 34-35 50-78 50s-78-16-78-50z" fill="#fff6e6"/>' +
+          '<path d="M50 116c16 18 44 26 70 26s54-8 70-26" stroke="#2f9a7a" stroke-width="5" fill="none"/>' +
+          '<ellipse cx="120" cy="100" rx="78" ry="15" fill="#fffaf0"/><ellipse cx="120" cy="101" rx="70" ry="11" fill="#e3c99a"/>' +
+          peas + toms +
+          '<path d="M86 84c4-3 8-3 11 0M136 80c4-3 8-3 11 0M110 94c4-3 8-3 11 0" stroke="#a35ca8" stroke-width="2" fill="none" stroke-linecap="round"/>' +
+          '<path d="M72 90c10-6 18 6 28 0s18 6 28 0 18 6 28 0" stroke="#6b2f12" stroke-width="2.6" fill="none" stroke-linecap="round" opacity=".85"/>' +
+          '<path d="M100 76l6 3M128 72l5 4M150 88l6-2M90 96l-5 3" stroke="#f6c23a" stroke-width="2" stroke-linecap="round"/>' +
+          leaf(112, 74, -30) + leaf(140, 92, 10) + leaf(78, 96, 150) +
+          sparks([[196, 56], [44, 70]]);
+      },
+      kheer: function () {
+        var bits = "";
+        var pis = [[96, 96, 20], [112, 101, -30], [132, 95, 60], [146, 100, 10], [122, 92, -10], [104, 92, 80]];
+        pis.forEach(function (p) { bits += '<rect x="' + p[0] + '" y="' + p[1] + '" width="8" height="2.8" rx="1.4" fill="#8cc152" transform="rotate(' + p[2] + " " + p[0] + " " + p[1] + ')"/>'; });
+        [[118, 98, 40], [138, 93, -20], [90, 100, 10], [154, 96, 70]].forEach(function (p) { bits += '<rect x="' + p[0] + '" y="' + p[1] + '" width="8" height="3" rx="1.5" fill="#f0d3a0" transform="rotate(' + p[2] + " " + p[0] + " " + p[1] + ')"/>'; });
+        [[106, 97, 30], [128, 101, -40], [142, 92, 10]].forEach(function (p) { bits += '<ellipse cx="' + p[0] + '" cy="' + p[1] + '" rx="4.2" ry="2.4" fill="#e8557a" transform="rotate(' + p[2] + " " + p[0] + " " + p[1] + ')"/>'; });
+        return SHADOW +
+          '<path d="M58 98h124c0 34-27 50-62 50s-62-16-62-50z" fill="#a84a26"/>' +
+          '<path d="M66 108c8 22 28 32 52 32-28 2-46-12-52-32z" fill="#c4643a" opacity=".7"/>' +
+          '<path d="M60 118h120" stroke="#8f3c1c" stroke-width="2" opacity=".5"/>' +
+          '<ellipse cx="120" cy="98" rx="62" ry="14" fill="#cf7246"/><ellipse cx="120" cy="98" rx="55" ry="10.5" fill="#fff3da"/>' +
+          '<path d="M84 98c10-5 26-6 36-2s24 4 34-1" stroke="#f1dcb2" stroke-width="2.4" fill="none" stroke-linecap="round"/>' +
+          bits +
+          '<rect x="114" y="94" width="6" height="4" fill="#e3e9ee" opacity=".9" transform="rotate(12 117 96)"/>' +
+          '<ellipse cx="190" cy="144" rx="6.5" ry="3.6" fill="#7fae4a" transform="rotate(-20 190 144)"/><ellipse cx="204" cy="140" rx="6" ry="3.4" fill="#6f9e3c" transform="rotate(30 204 140)"/>' +
+          sparks([[64, 60], [176, 50], [196, 86]]);
+      }
+    };
+
+    var DISHES = [
+      { id: "biryani", name: "Chicken biryani", short: "Biryani", line: "Saffron rice layered with spiced chicken", time: "1 h 10 min", serves: 4, spice: 3, tag: "Sunday special", a: "#ffd166", b: "#f0832b" },
+      { id: "daal", name: "Daal chawal", short: "Daal chawal", line: "Yellow lentils with a sizzling cumin tarka", time: "35 min", serves: 3, spice: 1, tag: "Weeknight easy", a: "#fff09a", b: "#d9a422" },
+      { id: "nihari", name: "Nihari", short: "Nihari", line: "Slow-cooked beef stew with ginger and lemon", time: "6 h, slow", serves: 6, spice: 2, tag: "Old Lahore", a: "#e0684a", b: "#6e1f16" },
+      { id: "paratha", name: "Aloo paratha", short: "Paratha", line: "Flaky flatbread stuffed with masala potato", time: "40 min", serves: 2, spice: 1, tag: "Breakfast", a: "#ffe6bd", b: "#ee9449" },
+      { id: "chaat", name: "Chana chaat", short: "Chaat", line: "Tangy chickpeas, tomato, onion and tamarind", time: "15 min", serves: 4, spice: 2, tag: "Iftar favourite", a: "#b4ecd0", b: "#2b8f71" },
+      { id: "kheer", name: "Kheer", short: "Kheer", line: "Creamy rice pudding with pistachio and rose", time: "50 min", serves: 6, spice: 0, tag: "Something sweet", a: "#ffd8e2", b: "#df6a8e" }
+    ];
+
+    var CLOCK = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8l2.4 1.6"/></svg>';
+    var PEOPLE = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="5.4" r="2.5"/><path d="M1.6 13.5c.5-3 2.3-4.5 4.4-4.5s3.9 1.5 4.4 4.5M11 3.2a2.4 2.4 0 0 1 0 4.6M12.6 9.4c1 .8 1.6 2.2 1.8 4.1"/></svg>';
+    function chili(on) { return '<svg viewBox="0 0 16 16" aria-hidden="true"' + (on ? ' class="on"' : "") + '><path d="M3.5 12.5c4.5.4 8-2.6 8.8-7.5"/><path class="stem" d="M12.3 5l1.6-1.8"/></svg>'; }
+    var STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.9 6 6.5.8-4.8 4.5 1.3 6.5L12 17.2l-5.9 3.2 1.3-6.5L2.6 9.4l6.5-.8z"/></svg>';
+    var HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5S3.5 15.4 3.5 9.3A4.6 4.6 0 0 1 12 6.8a4.6 4.6 0 0 1 8.5 2.5c0 6.1-8.5 11.2-8.5 11.2z"/></svg>';
+
+    // ---------- Build the cards once; they are reused after a shuffle ----------
+    var cards = DISHES.map(function (d) {
+      var c = document.createElement("article");
+      c.className = "card";
+      c._dish = d;
+      var spice = d.spice ? '<span class="spice" aria-label="Spice ' + d.spice + ' of 3">' + chili(d.spice > 0) + chili(d.spice > 1) + chili(d.spice > 2) + "</span>" : '<span class="sweet">Sweet</span>';
+      c.innerHTML =
+        '<div class="card-in">' +
+          '<div class="art" style="--a:' + d.a + ";--b:" + d.b + '"><span class="tag"></span><svg viewBox="12 20 216 144" aria-hidden="true">' + RAYS + ART[d.id]() + "</svg></div>" +
+          '<div class="info"><h3></h3><p></p><div class="facts"><span>' + CLOCK + d.time + "</span><span>" + PEOPLE + "Serves " + d.serves + "</span>" + spice + "</div></div>" +
+          '<b class="stamp s-cook" aria-hidden="true">' + HEART + "Cook</b>" +
+          '<b class="stamp s-skip" aria-hidden="true">Skip</b>' +
+          '<b class="stamp s-tonight" aria-hidden="true">' + STAR + "Tonight</b>" +
+        "</div>";
+      c.querySelector(".tag").textContent = d.tag;
+      c.querySelector("h3").textContent = d.name;
+      c.querySelector(".info p").textContent = d.line;
+      c._st = { cook: c.querySelector(".s-cook"), skip: c.querySelector(".s-skip"), tonight: c.querySelector(".s-tonight") };
+      deck.appendChild(c);
+      return c;
+    });
+
+    /* ================= State ================= */
+    var stack = cards.slice();        // cards still in the deck, 0 = top
+    var top = { x: 0, y: 0, r: 0, s: 1, vx: 0, vy: 0, vr: 0, vs: 0, spring: false };
+    var drag = null, pend = null, flying = [], history = [], menu = [], throwing = false, settleTimer = 0, dealTimer = 0;
+    var cw = 280, ch = 360, threshX = 110, threshY = 100;
+
+    function layout() {
+      var w = deck.clientWidth, h = deck.clientHeight;
+      ch = Math.max(220, Math.min(h - 40, 460));
+      cw = Math.max(200, Math.min(310, w - 56, ch / 1.16));
+      ch = Math.min(ch, cw * 1.45);
+      deck.style.setProperty("--cw", cw.toFixed(1) + "px");
+      deck.style.setProperty("--ch", ch.toFixed(1) + "px");
+      threshX = cw * 0.42;
+      threshY = ch * 0.3;
+      paintStack();
+    }
+
+    /* ================= Painting ================= */
+    function progress() { return clamp(Math.max(Math.abs(top.x) / threshX, -top.y / threshY), 0, 1); }
+    function setStamp(s, o) {
+      s.style.opacity = o.toFixed(3);
+      s.style.setProperty("--ss", (1.35 - 0.35 * o).toFixed(3));
+    }
+    function stampsFor(c, x, y) {
+      var px = x / threshX, py = -y / threshY;
+      var a = clamp(px * 1.25 - 0.18, 0, 1), b = clamp(-px * 1.25 - 0.18, 0, 1), t = clamp((py - Math.abs(px) * 0.6) * 1.25 - 0.18, 0, 1);
+      setStamp(c._st.cook, a);
+      setStamp(c._st.skip, b);
+      setStamp(c._st.tonight, t);
+      c._lit = a + b + t > 0;
+    }
+    function hl(btn, v) { btn.style.setProperty("--hl", v.toFixed(3)); }
+    function paintStack() {
+      var p = progress();
+      stack.forEach(function (c, i) {
+        c.style.zIndex = String(20 - i);
+        c.classList.toggle("top", i === 0);
+        c.setAttribute("aria-hidden", i === 0 ? "false" : "true");
+        if (i === 0) {
+          c.style.transform = "translate3d(" + top.x.toFixed(1) + "px," + top.y.toFixed(1) + "px,0) rotate(" + top.r.toFixed(2) + "deg) scale(" + top.s.toFixed(4) + ")";
+          c.style.opacity = "1";
+          c.style.setProperty("--dep", "0");
+          stampsFor(c, top.x, top.y);
+        } else {
+          // each card behind sits a little lower and smaller, and rises as the top card moves away
+          var d = Math.max(0, i - p);
+          c.style.transform = "translate3d(0," + (22 * d).toFixed(1) + "px,0) rotate(0deg) scale(" + (1 - 0.05 * d).toFixed(4) + ")";
+          c.style.setProperty("--dep", Math.min(d, 3).toFixed(3));
+          c.style.opacity = d > 2 ? clamp(3 - d, 0, 1).toFixed(3) : "1";
+          if (c._lit !== false) stampsFor(c, 0, 0);       // clear any stamp left from a drag
+        }
+      });
+      var px = top.x / threshX, py = -top.y / threshY;
+      hl(btnCook, clamp(px, 0, 1));
+      hl(btnSkip, clamp(-px, 0, 1));
+      hl(btnTonight, clamp(py - Math.abs(px) * 0.5, 0, 1));
+    }
+
+    /* ================= Drag (pointer and the demo finger use the same functions) ================= */
+    function dragStart(cx, cy, src, t0) {
+      var c = stack[0];
+      if (!c) return;
+      c.style.transition = "";
+      deck.classList.remove("settle");
+      var r = c.getBoundingClientRect();
+      drag = { sx: cx - top.x, sy: cy - top.y, lx: cx, ly: cy, lt: t0 || performance.now(), vx: 0, vy: 0,
+               sign: cy < r.top + r.height / 2 ? 1 : -1, src: src, pid: null, armed: null };
+      top.spring = false;
+      top.s = 1;
+      deck.classList.add("dragging");
+    }
+    function decide(vx, vy) {
+      var px = top.x / threshX, py = -top.y / threshY;
+      if (py > 1 && py > Math.abs(px)) return "tonight";
+      if (px > 1) return "cook";
+      if (px < -1) return "skip";
+      if (vy < -0.7 && -top.y > 40 && -vy > Math.abs(vx)) return "tonight";   // flicks (px per ms)
+      if (vx > 0.7 && top.x > 40) return "cook";
+      if (vx < -0.7 && top.x < -40) return "skip";
+      return null;
+    }
+    function dragMove(cx, cy) {
+      if (!drag) return;
+      var now = performance.now(), dt = Math.max(8, now - drag.lt);
+      drag.vx = drag.vx * 0.5 + ((cx - drag.lx) / dt) * 0.5;
+      drag.vy = drag.vy * 0.5 + ((cy - drag.ly) / dt) * 0.5;
+      drag.lx = cx; drag.ly = cy; drag.lt = now;
+      var dx = cx - drag.sx, dy = cy - drag.sy;
+      top.x = dx;
+      top.y = dy > 0 ? dy * 0.55 : dy;                       // pulling down feels heavier
+      top.r = clamp(dx * 0.075 * drag.sign, -24, 24);       // tilt depends on where you grabbed
+      paintStack();
+      var armed = decide(0, 0);
+      if (armed !== drag.armed) {
+        drag.armed = armed;
+        if (armed) { buzz(10); retrigger(stack[0]._st[armed], "thunk"); }
+      }
+    }
+    function dragEnd() {
+      if (!drag) return;
+      var d = drag;
+      drag = null;
+      deck.classList.remove("dragging");
+      var still = performance.now() - d.lt > 90;
+      var vx = still ? 0 : d.vx, vy = still ? 0 : d.vy;
+      var act = decide(vx, vy);
+      if (act) commit(act, vx * 1000, vy * 1000);
+      else {
+        top.vx = vx * 1000; top.vy = vy * 1000; top.vr = 0;
+        top.spring = true;
+        if (reduce.matches) { top.x = top.y = top.r = 0; top.spring = false; paintStack(); }
+      }
+    }
+
+    deck.addEventListener("pointerdown", function (e) {
+      if (drag || throwing || (e.pointerType === "mouse" && e.button !== 0)) return;
+      var c = e.target.closest(".card");
+      if (!c || c !== stack[0]) return;
+      pend = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
+    });
+    deck.addEventListener("pointermove", function (e) {
+      if (drag && drag.src === "pointer") { if (e.pointerId === drag.pid) dragMove(e.clientX, e.clientY); return; }
+      if (!pend || e.pointerId !== pend.id) return;
+      if (Math.abs(e.clientX - pend.x) + Math.abs(e.clientY - pend.y) < 6) return;
+      try { deck.setPointerCapture(e.pointerId); } catch (err) {}
+      dragStart(pend.x, pend.y, "pointer", pend.t);
+      if (drag) drag.pid = e.pointerId;
+      pend = null;
+      dragMove(e.clientX, e.clientY);
+    });
+    function pointerUp(e) {
+      if (pend && pend.id === e.pointerId) pend = null;
+      if (drag && drag.src === "pointer" && e.pointerId === drag.pid) dragEnd();
+    }
+    deck.addEventListener("pointerup", pointerUp);
+    deck.addEventListener("pointercancel", pointerUp);
+
+    /* ================= Leaving the deck ================= */
+    function settleBack() {
+      deck.classList.add("settle");
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(function () { deck.classList.remove("settle"); }, 600);
+    }
+    function commit(act, vx, vy) {
+      var c = stack[0];
+      if (!c) return;
+      var p = progress();
+      stack.shift();
+      var dirx = act === "cook" ? 1 : act === "skip" ? -1 : 0, sp = 1900;
+      var f = {
+        card: c, x: top.x, y: top.y, r: top.r,
+        vx: dirx ? dirx * Math.max(sp, Math.abs(vx)) : clamp(vx, -300, 300),
+        vy: act === "tonight" ? Math.min(-sp, vy) : clamp(vy, -500, 300) - 160,
+        vr: dirx ? dirx * (240 + Math.random() * 140) : (top.r >= 0 ? 80 : -80),
+        g: act === "tonight" ? 0 : 1100
+      };
+      c.classList.remove("top");
+      c.classList.add("gone");
+      c.style.zIndex = "40";
+      c.setAttribute("aria-hidden", "true");
+      setStamp(c._st.cook, act === "cook" ? 1 : 0);
+      setStamp(c._st.skip, act === "skip" ? 1 : 0);
+      setStamp(c._st.tonight, act === "tonight" ? 1 : 0);
+      if (reduce.matches) c.style.visibility = "hidden"; else flying.push(f);
+      // the next card takes over from where it was sitting, then springs to the front
+      top.x = 0; top.y = 22 * (1 - p); top.r = 0; top.s = 1 - 0.05 * (1 - p);
+      top.vx = top.vy = top.vr = top.vs = 0;
+      top.spring = !reduce.matches;
+      if (reduce.matches) { top.y = 0; top.s = 1; }
+      settleBack();
+      paintStack();
+      history.push({ card: c, act: act, dirx: dirx });
+      var d = c._dish;
+      if (act === "skip") { buzz(8); say("Skipped " + d.name + "."); }
+      else {
+        addToMenu(d, act === "tonight", f.x);
+        if (act === "tonight") { buzz([10, 40, 16]); confetti(); say(d.name + " is tonight's dinner."); }
+        else { buzz(12); say(d.name + " saved to your menu."); }
+      }
+      updateUi();
+      if (!stack.length) setTimeout(function () { if (!stack.length) showSummary(); }, 480);
+    }
+
+    // buttons and arrow keys: a little lean back (anticipation), then the throw
+    function throwCard(act) {
+      if (!stack.length || throwing || drag) return;
+      var dirx = act === "cook" ? 1 : act === "skip" ? -1 : 0, up = act === "tonight";
+      if (reduce.matches) { commit(act, dirx * 2000, up ? -2000 : 0); return; }
+      throwing = true;
+      top.spring = false;
+      stack[0].style.transition = "";
+      var t0 = performance.now(), x0 = top.x, y0 = top.y, c = stack[0];
+      (function loop(now) {
+        var k = Math.min(1, (now - t0) / 160), e = Math.sin((k * Math.PI) / 2);
+        top.x = x0 - dirx * 18 * e;
+        top.y = y0 + (up ? 16 * e : -4 * e);
+        top.r = -dirx * 3 * e;
+        paintStack();
+        setStamp(c._st[act], e);
+        if (k < 1) requestAnimationFrame(loop);
+        else { throwing = false; commit(act, dirx * 2100, up ? -2100 : -200); }
+      })(t0);
+    }
+
+    /* ================= Undo and shuffle ================= */
+    function undo() {
+      var h = history.pop();
+      if (!h || drag || throwing) { if (h) history.push(h); return; }
+      hideSummary();
+      var c = h.card;
+      flying = flying.filter(function (f) { return f.card !== c; });
+      c.classList.remove("gone");
+      c.style.visibility = "";
+      c.style.transition = "";
+      stack.unshift(c);
+      // it flies back in from the side it left
+      top.x = h.dirx * deck.clientWidth * 0.8;
+      top.y = h.act === "tonight" ? -deck.clientHeight * 0.8 : -30;
+      top.r = h.dirx * 22; top.s = 1;
+      top.vx = top.vy = top.vr = top.vs = 0;
+      top.spring = true;
+      if (reduce.matches) { top.x = top.y = top.r = 0; top.spring = false; }
+      if (h.act !== "skip") {
+        for (var i = menu.length - 1; i >= 0; i--) {
+          if (menu[i].id === c._dish.id) { removeChip(menu[i].chip); menu.splice(i, 1); break; }
+        }
+      }
+      settleBack();
+      paintStack();
+      updateUi();
+      buzz(8);
+      say("Brought back " + c._dish.name + ".");
+    }
+
+    function deal(order) {
+      stack = order;
+      flying = [];
+      top = { x: 0, y: 0, r: 0, s: 1, vx: 0, vy: 0, vr: 0, vs: 0, spring: false };
+      cards.forEach(function (c) { if (stack.indexOf(c) < 0) c.style.visibility = "hidden"; });
+      var vis = Math.min(stack.length, 4);
+      stack.forEach(function (c, i) {
+        c.classList.remove("gone");
+        c.style.visibility = "";
+        setStamp(c._st.cook, 0); setStamp(c._st.skip, 0); setStamp(c._st.tonight, 0);
+        c._lit = false;
+        if (reduce.matches) return;
+        c.style.transition = "none";
+        // cards start low and fanned out (still visible, so the very first frame is never empty)
+        c.style.transform = "translate3d(" + ((Math.random() - 0.5) * 80).toFixed(0) + "px," + (deck.clientHeight * 0.62).toFixed(0) + "px,0) rotate(" + ((Math.random() - 0.5) * 50).toFixed(0) + "deg) scale(0.9)";
+        c.style.opacity = i < vis ? "1" : "0";
+      });
+      void deck.offsetWidth;
+      if (!reduce.matches) {
+        // the deepest visible card lands first, the top card last
+        stack.forEach(function (c, i) {
+          var delay = (vis - 1 - Math.min(i, vis - 1)) * 60;
+          c.style.transition = "transform 0.62s cubic-bezier(0.3, 1.35, 0.5, 1) " + delay + "ms, opacity 0.25s " + delay + "ms";
+        });
+      }
+      paintStack();
+      clearTimeout(dealTimer);
+      dealTimer = setTimeout(function () { stack.forEach(function (c) { c.style.transition = ""; }); }, (vis - 1) * 60 + 640);
+      updateUi();
+    }
+    function shuffle() {
+      hideSummary();
+      menu.forEach(function (m, i) { setTimeout(function () { removeChip(m.chip); }, i * 60); });
+      menu = [];
+      history = [];
+      var order = cards.slice();
+      for (var i = order.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = order[i]; order[i] = order[j]; order[j] = t; }
+      deal(order);
+      say("New week. " + order[0]._dish.name + " is on top.");
+    }
+
+    function showSummary() {
+      var saved = menu.length, ton = null;
+      menu.forEach(function (m) { if (m.tonight) ton = m; });
+      $("sum-big").textContent = saved;
+      $("sum-line").textContent = (saved === 1 ? "dish" : "dishes") + " saved for this week";
+      $("sum-ton").textContent = ton ? "Tonight: " + ton.name : "No pick for tonight yet";
+      summary.classList.add("show");
+      summary.setAttribute("aria-hidden", "false");
+      if (!demo.on && document.activeElement && (document.activeElement === deck || document.activeElement.classList.contains("cbtn") || document.activeElement === document.body)) btnShuffle.focus();
+      say(saved + (saved === 1 ? " dish" : " dishes") + " saved for this week." + (ton ? " Tonight: " + ton.name + "." : "") + " Press Shuffle again to start over.");
+    }
+    function hideSummary() {
+      if (!summary.classList.contains("show")) return;
+      var hadFocus = summary.contains(document.activeElement);
+      summary.classList.remove("show");
+      summary.setAttribute("aria-hidden", "true");
+      if (hadFocus) deck.focus();
+    }
+    btnShuffle.addEventListener("click", shuffle);
+
+    /* ================= My menu tray ================= */
+    function makeChip(d, tonight) {
+      var chip = document.createElement("span");
+      chip.className = "mchip" + (tonight ? " tonight" : "");
+      chip.style.setProperty("--a", d.a);
+      chip.style.setProperty("--b", d.b);
+      chip.innerHTML = "<i></i><span></span>" + STAR.replace("<svg ", '<svg class="st" ');
+      chip.querySelector("span").textContent = d.short;
+      return chip;
+    }
+    function removeChip(chip) {
+      if (reduce.matches) { chip.remove(); updateUi(); return; }
+      chip.classList.add("out");
+      setTimeout(function () { chip.remove(); updateUi(); }, 300);
+    }
+    function addToMenu(d, tonight, fromX) {
+      if (tonight) menu.forEach(function (m) { if (m.tonight) { m.tonight = false; m.chip.classList.remove("tonight"); } });
+      var chip = makeChip(d, tonight);
+      chipsBox.appendChild(chip);
+      menu.push({ id: d.id, name: d.name, chip: chip, tonight: tonight });
+      hint.style.display = "none";
+      chipsBox.scrollLeft = chipsBox.scrollWidth;
+      if (reduce.matches || !chip.animate) { retrigger(badge, "bump"); return; }
+      // a copy of the chip flies from the card down into the tray
+      chip.style.visibility = "hidden";
+      var pr = phone.getBoundingClientRect(), cr = chip.getBoundingClientRect(), dr = deck.getBoundingClientRect();
+      var ox = pr.left + phone.clientLeft, oy = pr.top + phone.clientTop;
+      var sx = dr.left + dr.width / 2 + clamp(fromX, -80, 80) * 0.6 - ox - cr.width / 2, sy = dr.top + dr.height * 0.42 - oy;
+      var ex = cr.left - ox, ey = cr.top - oy;
+      var fly = chip.cloneNode(true);
+      fly.classList.add("flychip");
+      fly.style.visibility = "visible";
+      phone.appendChild(fly);
+      var mx = (sx + ex) / 2, my = Math.min(sy, ey) - 50;
+      var a = fly.animate([
+        { transform: "translate(" + sx + "px," + sy + "px) scale(1.6)", opacity: 0 },
+        { transform: "translate(" + mx + "px," + my + "px) scale(1.3)", opacity: 1, offset: 0.4 },
+        { transform: "translate(" + ex + "px," + ey + "px) scale(1)", opacity: 1 }
+      ], { duration: 720, easing: "cubic-bezier(.45,0,.25,1)" });
+      a.onfinish = function () {
+        fly.remove();
+        chip.style.visibility = "";
+        retrigger(chip, "pop");
+        retrigger(badge, "bump");
+      };
+    }
+
+    function confetti() {
+      if (reduce.matches) return;
+      var pr = fx.getBoundingClientRect(), dr = deck.getBoundingClientRect();
+      var ox = dr.left + dr.width / 2 - pr.left, oy = dr.top + 40 - pr.top;
+      var colors = ["#f2b01c", "#d8342c", "#2f9a5a", "#ffd166", "#ff8a6e", "#ffffff"];
+      for (var i = 0; i < 40; i++) {
+        var s = document.createElement("i");
+        s.className = "bit";
+        s.style.background = colors[i % colors.length];
+        s.style.left = ox + "px";
+        s.style.top = oy + "px";
+        if (i % 3 === 0) { s.style.borderRadius = "50%"; s.style.width = s.style.height = "8px"; }
+        fx.appendChild(s);
+        var ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, spd = 110 + Math.random() * 180;
+        var dx = Math.cos(ang) * spd, dy = Math.sin(ang) * spd, rot = (Math.random() - 0.5) * 900;
+        var an = s.animate([
+          { transform: "translate(0,0) rotate(0deg) scale(0.5)", opacity: 1 },
+          { transform: "translate(" + (dx * 0.85).toFixed(1) + "px," + dy.toFixed(1) + "px) rotate(" + (rot / 2).toFixed(0) + "deg) scale(1)", opacity: 1, offset: 0.42 },
+          { transform: "translate(" + dx.toFixed(1) + "px," + (dy + 320).toFixed(1) + "px) rotate(" + rot.toFixed(0) + "deg) scale(0.8)", opacity: 0 }
+        ], { duration: 1300 + Math.random() * 600, easing: "cubic-bezier(.2,.65,.4,1)", fill: "forwards" });
+        an.onfinish = (function (n) { return function () { n.remove(); }; })(s);
+      }
+    }
+
+    function updateUi() {
+      var total = DISHES.length;
+      var txt = stack.length ? total - stack.length + 1 + " of " + total : "All done";
+      if (countEl.textContent !== txt) { countEl.textContent = txt; retrigger(countEl, "tick"); }
+      btnUndo.disabled = !history.length;
+      btnSkip.disabled = btnCook.disabled = btnTonight.disabled = !stack.length;
+      badge.textContent = menu.length;
+      hint.style.display = chipsBox.querySelector(".mchip:not(.out)") ? "none" : "";
+      var t = stack[0];
+      deck.setAttribute("aria-label", t
+        ? "Recipe card " + txt + ": " + t._dish.name + ", " + t._dish.time + ", serves " + t._dish.serves + ". Arrow Right cooks, Arrow Left skips, Arrow Up picks it for tonight, Backspace undoes."
+        : "Deck empty. Backspace undoes the last swipe.");
+    }
+
+    /* ================= Buttons and keys ================= */
+    function wire(btn, fn) { btn.addEventListener("click", function () { retrigger(btn, "hit"); fn(); }); }
+    wire(btnSkip, function () { throwCard("skip"); });
+    wire(btnCook, function () { throwCard("cook"); });
+    wire(btnTonight, function () { throwCard("tonight"); });
+    wire(btnUndo, undo);
+    deck.addEventListener("keydown", function (e) {
+      var k = e.key;
+      if (k === "ArrowRight") { e.preventDefault(); retrigger(btnCook, "hit"); throwCard("cook"); }
+      else if (k === "ArrowLeft") { e.preventDefault(); retrigger(btnSkip, "hit"); throwCard("skip"); }
+      else if (k === "ArrowUp") { e.preventDefault(); retrigger(btnTonight, "hit"); throwCard("tonight"); }
+      else if (k === "Backspace" || k === "Delete" || k === "z") { e.preventDefault(); undo(); }
+      else if (k === "Enter" && !stack.length && e.target === deck) { e.preventDefault(); shuffle(); }
+    });
+
+    /* ================= Main loop: spring home + flying cards ================= */
+    var K = 260, C = 2 * 0.55 * Math.sqrt(260), last = performance.now();
+    function frame(now) {
+      var dt = Math.min(0.04, Math.max(0, (now - last) / 1000));
+      last = now;
+      if (top.spring && !drag && !throwing) {
+        var n = Math.max(1, Math.ceil(dt / 0.008)), s = dt / n;
+        for (var i = 0; i < n; i++) {
+          top.vx += (-K * top.x - C * top.vx) * s; top.x += top.vx * s;
+          top.vy += (-K * top.y - C * top.vy) * s; top.y += top.vy * s;
+          top.vr += (-K * top.r - C * top.vr) * s; top.r += top.vr * s;
+          top.vs += (-K * (top.s - 1) - C * top.vs) * s; top.s += top.vs * s;
+        }
+        if (Math.abs(top.x) + Math.abs(top.y) + Math.abs(top.r) < 0.3 && Math.abs(top.vx) + Math.abs(top.vy) < 8 && Math.abs(top.s - 1) < 0.002) {
+          top.x = top.y = top.r = 0; top.s = 1; top.spring = false;
+        }
+        paintStack();
+      }
+      if (flying.length) {
+        var W = deck.clientWidth / 2 + cw, H = deck.clientHeight / 2 + ch;
+        for (var j = flying.length - 1; j >= 0; j--) {
+          var f = flying[j];
+          f.vy += f.g * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.r += f.vr * dt;
+          f.card.style.transform = "translate3d(" + f.x.toFixed(1) + "px," + f.y.toFixed(1) + "px,0) rotate(" + f.r.toFixed(1) + "deg) scale(1)";
+          if (Math.abs(f.x) > W || f.y < -H || f.y > H) { f.card.style.visibility = "hidden"; flying.splice(j, 1); }
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+
+    /* ================= Auto demo: a ghost finger swipes with the real drag code ================= */
+    var demo = { on: !reduce.matches };
+    function stopDemo() {
+      if (!demo.on) return;
+      demo.on = false;
+      ghost.classList.remove("show", "press");
+      if (drag && drag.src === "demo") dragEnd();
+    }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) {
+      window.addEventListener(t, function (e) { if (e.isTrusted) { acted = true; stopDemo(); } }, { capture: true, passive: true });
+    });
+    function wait(ms) { return new Promise(function (res, rej) { setTimeout(function () { if (demo.on) res(); else rej("stop"); }, ms); }); }
+    function tween(ms, fn) {
+      return new Promise(function (res, rej) {
+        var t0 = performance.now();
+        (function loop(now) {
+          if (!demo.on) return rej("stop");
+          var k = Math.min(1, (now - t0) / ms);
+          fn(k);
+          if (k < 1) requestAnimationFrame(loop); else res();
+        })(t0);
+      });
+    }
+    // the ghost lives inside the phone; convert page coordinates to phone coordinates
+    function gpos(cx, cy) {
+      var pr = phone.getBoundingClientRect();
+      ghost.style.transform = "translate(" + (cx - pr.left - phone.clientLeft).toFixed(1) + "px," + (cy - pr.top - phone.clientTop).toFixed(1) + "px)";
+    }
+    async function runDemo() {
+      var acts = ["cook", "skip", "tonight"], n = 0;
+      try {
+        await wait(600);
+        while (demo.on) {
+          if (!stack.length) {
+            await wait(1400);
+            var br = btnShuffle.getBoundingClientRect(), bx = br.left + br.width / 2, by = br.top + br.height / 2;
+            gpos(bx, by + 30);
+            ghost.classList.add("show");
+            await tween(220, function (k) { gpos(bx, by + 30 * (1 - k)); });
+            ghost.classList.add("press");
+            await wait(140);
+            ghost.classList.remove("press");
+            retrigger(btnShuffle, "bump");
+            shuffle();
+            await wait(300);
+            ghost.classList.remove("show");
+            await wait(1000);
+            continue;
+          }
+          var act = acts[n++ % 3];
+          var dr = deck.getBoundingClientRect();
+          var cx = dr.left + dr.width / 2 + cw * 0.12, cy = dr.top + dr.height / 2 - ch * 0.08;
+          var tx = act === "cook" ? threshX * 1.22 : act === "skip" ? -threshX * 1.22 : 16;
+          var ty = act === "tonight" ? -threshY * 1.3 : act === "cook" ? -18 : 12;
+          gpos(cx, cy + 28);
+          ghost.classList.add("show");
+          await tween(160, function (k) { gpos(cx, cy + 28 * (1 - k)); });
+          ghost.classList.add("press");
+          await wait(90);
+          dragStart(cx, cy, "demo");
+          await tween(1000, function (k) {
+            var e = 1 - (1 - k) * (1 - k);
+            var px = cx + tx * e + Math.sin(k * Math.PI) * 8, py = cy + ty * e;
+            gpos(px, py);
+            dragMove(px, py);
+          });
+          await wait(150);
+          dragEnd();
+          ghost.classList.remove("press");
+          var gx = cx + tx, gy = cy + ty;
+          await tween(260, function (k) { gpos(gx + (tx > 40 ? 30 : tx < -40 ? -30 : 0) * k, gy + (act === "tonight" ? -24 : 0) * k); });
+          ghost.classList.remove("show");
+          await wait(1350);
+        }
+      } catch (err) { /* stopped by real input */ }
+    }
+
+    /* ================= Start ================= */
+    window.addEventListener("resize", layout);
+    layout();
+    deal(cards.slice());
+    requestAnimationFrame(frame);
+    if (demo.on) runDemo();
+  })();
+</script>
+</body>
+</html>

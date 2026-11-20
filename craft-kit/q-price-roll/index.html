@@ -1,0 +1,518 @@
+<!doctype html>
+<!-- Chill & Craft · Price Roll · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Price Roll · pricing cards with rolling prices</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: ivory + navy + amber (light), midnight + amber (dark) ---------- */
+  :root {
+    --bg: #f1ebdf; --bg-2: #fbf8f1;
+    --card: #fffdf8; --edge: rgba(22, 32, 58, 0.1);
+    --ink: #16203a; --muted: #636a7c; --soft: #f1ead9;
+    --amber: #f0a12a; --amber-2: #ffc861; --amber-ink: #3b2400;
+    --feat: #16203a; --feat-2: #26355f; --feat-ink: #f8f2e4; --feat-muted: #b9c0d6;
+    --good: #1f9d6b; --shadow: rgba(22, 32, 58, 0.26); --guil: rgba(22, 32, 58, 0.075); --focus: #16203a;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #070b16; --bg-2: #121a31;
+    --card: #10182d; --edge: rgba(255, 255, 255, 0.075);
+    --ink: #eef1f8; --muted: #9aa3b9; --soft: #19233f;
+    --amber: #f5ac35; --amber-2: #ffd27a; --amber-ink: #2a1900;
+    --feat: #1a274c; --feat-2: #2a3d74; --feat-ink: #fbf5e8; --feat-muted: #b4bdd8;
+    --good: #3ccf92; --shadow: rgba(0, 0, 0, 0.62); --guil: rgba(255, 220, 160, 0.05); --focus: #ffd27a;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: radial-gradient(80% 60% at 50% 8%, var(--bg-2), var(--bg) 70%);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 3px; }
+
+  /* ---------- Stage ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 26px 0 20px; overflow: hidden; }
+  /* banknote-style engraving behind everything, turning very slowly */
+  .guil { position: absolute; left: 50%; top: 46%; width: 1200px; height: 1200px; margin: -600px 0 0 -600px; color: var(--guil); pointer-events: none; animation: turn 180s linear infinite; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+  .wrap { position: relative; width: min(1040px, 100%); display: flex; flex-direction: column; align-items: center; }
+
+  .head { text-align: center; padding: 0 20px; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 12px; font-weight: 750; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow i { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--amber) 22%, transparent); } }
+  h1 { margin: 0; font-size: clamp(25px, 4.4vw, 40px); line-height: 1.08; letter-spacing: -0.03em; font-weight: 800; }
+  .lede { margin: 10px auto 0; max-width: 430px; color: var(--muted); font-size: clamp(14px, 1.6vw, 16px); line-height: 1.45; }
+
+  /* ---------- Billing switch: a pill that stretches as it slides ---------- */
+  .seg { position: relative; display: inline-grid; grid-template-columns: auto auto; margin-top: 18px; padding: 5px; border-radius: 999px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 14px 26px -20px var(--shadow); }
+  .seg button {
+    position: relative; z-index: 1; appearance: none; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 720;
+    color: var(--muted); padding: 10px 18px; border-radius: 999px; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap; transition: color 0.3s;
+  }
+  .seg button[aria-pressed="true"] { color: var(--feat-ink); }
+  .seg .tag { font-size: 11px; font-weight: 800; padding: 3px 7px; border-radius: 999px; background: var(--amber); color: var(--amber-ink); animation: wiggle 5s ease-in-out infinite 2s; }
+  @keyframes wiggle { 0%, 86%, 100% { transform: none; } 89% { transform: rotate(-7deg) scale(1.08); } 93% { transform: rotate(6deg) scale(1.08); } 96% { transform: rotate(-2deg); } }
+  .seg .pill {
+    position: absolute; top: 5px; bottom: 5px; left: var(--l, 5px); right: var(--r, 50%); border-radius: 999px;
+    background: linear-gradient(180deg, var(--feat-2), var(--feat)); box-shadow: 0 8px 16px -8px var(--shadow);
+    transition: left 0.5s cubic-bezier(0.3, 1.35, 0.5, 1) var(--dl, 0s), right 0.5s cubic-bezier(0.3, 1.35, 0.5, 1) var(--dr, 0s);
+  }
+  :root[data-theme="dark"] .seg .pill { background: linear-gradient(180deg, #34477f, #22325f); }
+
+  /* ---------- Plan cards ---------- */
+  .plans { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; width: 100%; padding: 34px 24px 12px; align-items: center; }
+  .plan {
+    position: relative; border-radius: 26px; padding: 22px 22px 20px; background: var(--card); border: 1px solid var(--edge);
+    box-shadow: 0 30px 50px -40px var(--shadow); transition: transform 0.6s cubic-bezier(0.3, 1.5, 0.5, 1), box-shadow 0.4s;
+    animation: rise 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards; animation-delay: calc(var(--i) * 110ms + 60ms);
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(60px) scale(0.94); } }
+  .plan.feat { background: linear-gradient(165deg, var(--feat-2), var(--feat) 70%); color: var(--feat-ink); border-color: transparent; padding-top: 30px; padding-bottom: 26px; box-shadow: 0 44px 60px -36px var(--shadow); }
+  .plan.feat::after { /* soft light that sweeps across the featured card now and then */
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.13) 50%, transparent 62%) -160% 0 / 260% 100% no-repeat;
+    animation: sheen 6s ease-in-out infinite 2.4s;
+  }
+  @keyframes sheen { 0%, 60% { background-position: -160% 0; } 100% { background-position: 160% 0; } }
+  .plans.dip .plan { transform: translateY(6px) scale(0.982); transition-duration: 0.14s; }
+  .plan.chosen { box-shadow: 0 0 0 2.5px var(--amber), 0 34px 54px -36px var(--shadow); }
+
+  .ribbon {
+    position: absolute; top: -13px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px;
+    background: linear-gradient(180deg, var(--amber-2), var(--amber)); color: var(--amber-ink); font-size: 11.5px; font-weight: 800;
+    letter-spacing: 0.07em; text-transform: uppercase; padding: 6px 12px; border-radius: 999px; white-space: nowrap; box-shadow: 0 8px 16px -8px rgba(240, 161, 42, 0.8);
+  }
+  .ribbon svg { width: 12px; height: 12px; fill: currentColor; animation: twinkle 2.8s ease-in-out infinite; }
+  @keyframes twinkle { 50% { transform: rotate(72deg) scale(1.2); } }
+  .mine {
+    position: absolute; top: 14px; right: 14px; font-size: 11px; font-weight: 800; padding: 4px 8px; border-radius: 999px;
+    background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); opacity: 0; transform: translateY(-10px) scale(0.6);
+    transition: opacity 0.3s, transform 0.55s cubic-bezier(0.3, 1.8, 0.5, 1);
+  }
+  .feat .mine { top: 18px; background: rgba(60, 207, 146, 0.2); color: #7ff0bd; }
+  .chosen .mine { opacity: 1; transform: none; }
+
+  .top { display: flex; align-items: center; gap: 12px; }
+  .ico { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; flex: none; background: var(--soft); }
+  .feat .ico { background: rgba(255, 255, 255, 0.1); }
+  .ico svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .ico svg .fill { fill: var(--amber); stroke: none; }
+  .plan h2 { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
+  .plan .line { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+  .feat .line, .feat .note, .feat .per, .feat .cur, .feat .was { color: var(--feat-muted); }
+
+  /* the old price, struck through on yearly */
+  .was { position: relative; display: inline-block; height: 16px; margin-top: 14px; font-size: 13px; font-weight: 650; color: var(--muted); opacity: 0; transform: translateY(6px); transition: opacity 0.35s, transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .was::after { content: ""; position: absolute; left: -2px; right: -2px; top: 50%; height: 2px; border-radius: 2px; background: var(--amber); transform: scaleX(0); transform-origin: left; transition: transform 0.45s ease 0.25s; }
+  .yearly .was.on { opacity: 1; transform: none; transition-delay: 0.9s; }
+  .yearly .was.on::after { transform: scaleX(1); transition-delay: 1.25s; }
+
+  /* price drums: each digit is a strip of 0-9 (three times over) that rolls like a counter */
+  .price { display: flex; align-items: flex-start; gap: 6px; margin: 2px 0 2px; }
+  .cur { font-size: 13px; font-weight: 800; letter-spacing: 0.06em; margin-top: 10px; color: var(--muted); }
+  .digits { display: flex; font-size: 46px; font-weight: 820; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .reel { display: block; height: 1.1em; width: 1ch; overflow: hidden; -webkit-mask: linear-gradient(transparent, #000 14%, #000 86%, transparent); mask: linear-gradient(transparent, #000 14%, #000 86%, transparent); }
+  .strip { display: block; transform: translateY(calc(var(--n, 10) * -1.1em)); transition: transform 1.15s cubic-bezier(0.2, 1.22, 0.36, 1); }
+  .strip span { display: block; height: 1.1em; line-height: 1.1em; text-align: center; }
+  .rolling .strip { filter: blur(0.5px); }
+  .comma { width: 0.26em; line-height: 1.1em; }
+  .per { align-self: flex-end; margin-bottom: 9px; font-size: 14px; color: var(--muted); font-weight: 600; }
+  .note { position: relative; height: 18px; overflow: hidden; font-size: 12.5px; color: var(--muted); }
+  .note span { position: absolute; left: 0; top: 0; white-space: nowrap; transition: transform 0.5s cubic-bezier(0.3, 1.4, 0.5, 1), opacity 0.35s; }
+  .note b { color: var(--amber); font-weight: 750; }
+  .note .y { transform: translateY(110%); opacity: 0; }
+  .yearly .note .m { transform: translateY(-110%); opacity: 0; }
+  .yearly .note .y { transform: none; opacity: 1; transition-delay: 0.15s; }
+
+  .feats { list-style: none; margin: 16px 0 18px; padding: 16px 0 0; border-top: 1px dashed var(--edge); display: grid; gap: 9px; font-size: 13.5px; }
+  .feat .feats { border-top-color: rgba(255, 255, 255, 0.14); }
+  .feats li { display: flex; align-items: center; gap: 9px; animation: fade-in 0.6s ease backwards; animation-delay: calc(var(--i) * 110ms + var(--k) * 70ms + 420ms); }
+  @keyframes fade-in { from { opacity: 0; transform: translateX(-8px); } }
+  .feats svg { width: 18px; height: 18px; flex: none; border-radius: 50%; padding: 3px; background: color-mix(in srgb, var(--good) 15%, transparent); stroke: var(--good); fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .feat .feats svg { background: rgba(255, 200, 97, 0.18); stroke: var(--amber-2); }
+
+  /* ---------- Call-to-action button: press, morph into a progress pill, tick, settle ---------- */
+  .cta {
+    position: relative; display: block; width: 100%; height: 48px; border: 0; border-radius: 14px; cursor: pointer; overflow: hidden;
+    font: inherit; font-size: 15px; font-weight: 760; background: var(--ink); color: var(--card);
+    clip-path: inset(0 0 0 0 round 14px);
+    transition: transform 0.5s cubic-bezier(0.3, 1.6, 0.5, 1), clip-path 0.5s cubic-bezier(0.4, 1.3, 0.5, 1), background 0.3s, color 0.3s;
+  }
+  .feat .cta { background: linear-gradient(180deg, var(--amber-2), var(--amber)); color: var(--amber-ink); }
+  .cta:hover { transform: translateY(-1px); }
+  .cta[data-state="press"] { transform: scale(0.95); transition-duration: 0.12s; }
+  .cta[data-state="work"] { clip-path: inset(0 13% 0 13% round 24px); }
+  .cta[data-state="done"] { clip-path: inset(0 calc(50% - 24px) 0 calc(50% - 24px) round 24px); background: var(--good); color: #fff; }
+  .cta[data-state="current"] { background: transparent; color: var(--good); box-shadow: inset 0 0 0 1.5px var(--good); cursor: default; }
+  .lbl { position: relative; display: block; transition: opacity 0.25s, transform 0.4s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  .cta[data-state="work"] .lbl, .cta[data-state="done"] .lbl { opacity: 0; transform: translateY(-14px); }
+  .bar { position: absolute; left: 18%; right: 18%; top: 50%; height: 6px; margin-top: -3px; border-radius: 6px; background: rgba(127, 127, 127, 0.28); opacity: 0; transition: opacity 0.2s; }
+  .bar i { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: inherit; background: currentColor; }
+  .cta[data-state="work"] .bar { opacity: 1; transition-delay: 0.2s; }
+  .cta[data-state="work"] .bar i { width: 100%; transition: width 1s cubic-bezier(0.6, 0.1, 0.3, 1) 0.2s; }
+  .tick { position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; margin: -12px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 24; stroke-dashoffset: 24; transition: stroke-dashoffset 0.4s ease 0.15s; }
+  .cta[data-state="done"] .tick { stroke-dashoffset: 0; }
+
+  .dots { display: none; justify-content: center; gap: 8px; margin-top: 2px; }
+  .dots button { width: 22px; height: 22px; padding: 0; border: 0; background: none; cursor: pointer; display: grid; place-items: center; }
+  .dots button::before { content: ""; width: 7px; height: 7px; border-radius: 6px; background: var(--muted); opacity: 0.35; transition: width 0.4s cubic-bezier(0.3, 1.5, 0.5, 1), opacity 0.3s; }
+  .dots button[aria-current="true"]::before { width: 20px; opacity: 1; background: var(--amber); }
+
+  /* confetti layer and the demo pointer */
+  .fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }
+  .ghost { position: fixed; left: 0; top: 0; z-index: 40; width: 26px; height: 26px; margin: -3px 0 0 -4px; pointer-events: none; opacity: 0; transform: translate(var(--gx, 80vw), var(--gy, 110vh)); transition: transform 0.75s cubic-bezier(0.55, 0, 0.25, 1), opacity 0.35s; }
+  .ghost.show { opacity: 1; }
+  .ghost svg { width: 100%; height: 100%; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35)); transition: transform 0.15s; }
+  .ghost.tap svg { transform: scale(0.8); }
+  .ghost::after { content: ""; position: absolute; left: -10px; top: -11px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--amber); opacity: 0; }
+  .ghost.tap::after { animation: ring 0.5s ease-out; }
+  @keyframes ring { from { opacity: 0.95; transform: scale(0.3); } to { opacity: 0; transform: scale(1.7); } }
+
+  /* ---------- Phones: the cards become a swipe row with the featured card in the middle ---------- */
+  @media (max-width: 760px) {
+    .stage { padding-top: 22px; }
+    .plans { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 28px 9% 16px; align-items: stretch; scrollbar-width: none; }
+    .plans::-webkit-scrollbar { display: none; }
+    .plan { flex: 0 0 82%; scroll-snap-align: center; padding: 20px 20px 18px; }
+    .plan.feat { padding-top: 26px; padding-bottom: 20px; }
+    .feats { margin: 12px 0 14px; padding-top: 12px; gap: 7px; font-size: 13px; }
+    .dots { display: flex; }
+    .digits { font-size: 42px; }
+  }
+  @media (max-width: 380px) { .seg button { padding: 9px 13px; font-size: 13px; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; transition-delay: 0s !important; }
+    .rolling .strip { filter: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <svg class="guil" viewBox="-600 -600 1200 1200" aria-hidden="true"><g id="guil" fill="none" stroke="currentColor" stroke-width="1.2"></g></svg>
+  <section class="wrap" aria-labelledby="ttl">
+    <div class="head">
+      <p class="eyebrow"><i></i>Pricing</p>
+      <h1 id="ttl">Plans that grow with your shop</h1>
+      <p class="lede">Start free. Pay yearly and two months are on us.</p>
+      <div class="seg" role="group" aria-label="Billing period">
+        <span class="pill" aria-hidden="true"></span>
+        <button type="button" aria-pressed="true" data-bill="m">Monthly</button>
+        <button type="button" aria-pressed="false" data-bill="y">Yearly <span class="tag">-20%</span></button>
+      </div>
+    </div>
+
+    <div class="plans" id="plans">
+      <article class="plan" data-plan="starter" style="--i:0">
+        <span class="mine">Your plan</span>
+        <div class="top">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 20v-7"/><path d="M12 13c0-3.5 2.5-6 6-6 0 3.5-2.5 6-6 6z"/><path d="M12 15c0-2.8-2-4.8-5-4.8 0 2.8 2 4.8 5 4.8z"/><circle class="fill" cx="18" cy="7" r="1.6"/></svg></span>
+          <div><h2>Starter</h2><p class="line">For a single stall or side hustle</p></div>
+        </div>
+        <span class="was">&nbsp;</span>
+        <div class="price" aria-hidden="true"><span class="cur">PKR</span><span class="digits"></span><span class="per">/mo</span></div>
+        <p class="sr-only" data-sr></p>
+        <div class="note"><span class="m">Free for one shop, forever</span><span class="y">Free for one shop, forever</span></div>
+        <ul class="feats">
+          <li style="--k:0"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>1 shop, 1 user</li>
+          <li style="--k:1"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>50 invoices a month</li>
+          <li style="--k:2"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>Stock list and receipts</li>
+          <li style="--k:3"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>Email support</li>
+        </ul>
+        <button class="cta" type="button" data-state="idle"><span class="lbl">Choose Starter</span><span class="bar" aria-hidden="true"><i></i></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7.5"/></svg></button>
+      </article>
+
+      <article class="plan feat" data-plan="growth" style="--i:1">
+        <span class="ribbon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.6 6.6L21 9.3l-5 4.5 1.5 6.9L12 17l-5.5 3.7L8 13.8 3 9.3l6.4-.7z"/></svg>Most loved</span>
+        <span class="mine">Your plan</span>
+        <div class="top">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 10l1.5-5h13L20 10"/><path d="M4 10c0 1.4 1.2 2.4 2.7 2.4S9.3 11.4 9.3 10c0 1.4 1.2 2.4 2.7 2.4s2.7-1 2.7-2.4c0 1.4 1.2 2.4 2.6 2.4S20 11.4 20 10"/><path d="M5.5 12.2V20h13v-7.8"/><path d="M10 20v-4.5h4V20"/></svg></span>
+          <div><h2>Growth</h2><p class="line">For busy shops with a small team</p></div>
+        </div>
+        <span class="was">PKR 2,499</span>
+        <div class="price" aria-hidden="true"><span class="cur">PKR</span><span class="digits"></span><span class="per">/mo</span></div>
+        <p class="sr-only" data-sr></p>
+        <div class="note"><span class="m">Billed monthly · cancel any time</span><span class="y">PKR 23,988 a year · <b>save 6,000</b></span></div>
+        <ul class="feats">
+          <li style="--k:0"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>3 shops, 5 users</li>
+          <li style="--k:1"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>Unlimited invoices</li>
+          <li style="--k:2"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>Payment reminders by SMS</li>
+          <li style="--k:3"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>Sales reports and exports</li>
+        </ul>
+        <button class="cta" type="button" data-state="idle"><span class="lbl">Choose Growth</span><span class="bar" aria-hidden="true"><i></i></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7.5"/></svg></button>
+      </article>
+
+      <article class="plan" data-plan="studio" style="--i:2">
+        <span class="mine">Your plan</span>
+        <div class="top">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M5 20V9l4-3v14"/><path d="M9 20V4l6 3v13"/><path d="M15 20v-9l4 2v7"/><circle class="fill" cx="12" cy="10" r="1.3"/></svg></span>
+          <div><h2>Studio</h2><p class="line">For chains and wholesalers</p></div>
+        </div>
+        <span class="was">PKR 6,999</span>
+        <div class="price" aria-hidden="true"><span class="cur">PKR</span><span class="digits"></span><span class="per">/mo</span></div>
+        <p class="sr-only" data-sr></p>
+        <div class="note"><span class="m">Billed monthly · cancel any time</span><span class="y">PKR 67,188 a year · <b>save 16,800</b></span></div>
+        <ul class="feats">
+          <li style="--k:0"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>Unlimited shops and users</li>
+          <li style="--k:1"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>Roles and approvals</li>
+          <li style="--k:2"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>Priority phone support</li>
+          <li style="--k:3"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>Receipts with your logo</li>
+        </ul>
+        <button class="cta" type="button" data-state="idle"><span class="lbl">Choose Studio</span><span class="bar" aria-hidden="true"><i></i></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7.5"/></svg></button>
+      </article>
+    </div>
+    <div class="dots" aria-label="Plans">
+      <button type="button" aria-label="Show Starter" data-to="0"></button>
+      <button type="button" aria-label="Show Growth" data-to="1" aria-current="true"></button>
+      <button type="button" aria-label="Show Studio" data-to="2"></button>
+    </div>
+    <p class="sr-only" aria-live="polite" id="status"></p>
+  </section>
+</main>
+<canvas class="fx" aria-hidden="true"></canvas>
+<div class="ghost" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 2.5v17l4.6-4.3 3 6.6 3.1-1.4-3-6.4 6.3-.4z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (s, r) { return (r || document).querySelector(s); };
+    var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+    /* ---------- Data ---------- */
+    var PLANS = {
+      starter: { name: "Starter", m: 0, y: 0 },
+      growth: { name: "Growth", m: 2499, y: 1999 },
+      studio: { name: "Studio", m: 6999, y: 5599 }
+    };
+    var plansEl = $("#plans");
+    var cards = $$(".plan");
+    var segBtns = $$(".seg button");
+    var pill = $(".seg .pill");
+    var status = $("#status");
+    var yearly = false;
+    var current = null; // the chosen plan id
+    var working = false;
+    function cardOf(id) { return $('.plan[data-plan="' + id + '"]'); }
+    function fmt(n) { return n.toLocaleString("en-US"); }
+    function say(t) { status.textContent = t; }
+
+    /* ---------- Engraved background: rotated ellipses like a banknote ---------- */
+    (function () {
+      var g = $("#guil"), html = "";
+      for (var i = 0; i < 24; i++) html += '<ellipse rx="520" ry="210" transform="rotate(' + i * 7.5 + ')"/>';
+      for (var j = 0; j < 6; j++) html += '<circle r="' + (120 + j * 22) + '"/>';
+      g.innerHTML = html;
+    })();
+
+    /* ---------- Price drums ---------- */
+    // Each digit is a .reel holding a strip of 0-9 three times over. Rest position = middle copy (10 + digit).
+    function buildDigits(card) {
+      var box = $(".digits", card), v = PLANS[card.dataset.plan].m, s = fmt(v), html = "";
+      for (var i = 0; i < s.length; i++) {
+        if (s[i] === ",") { html += '<span class="comma">,</span>'; continue; }
+        var strip = "";
+        for (var k = 0; k < 30; k++) strip += "<span>" + (k % 10) + "</span>";
+        html += '<span class="reel"><span class="strip" style="--n:' + (10 + +s[i]) + '">' + strip + "</span></span>";
+      }
+      box.innerHTML = html;
+      setSr(card);
+    }
+    function setSr(card) {
+      var p = PLANS[card.dataset.plan], v = yearly ? p.y : p.m;
+      $("[data-sr]", card).textContent = v ? "PKR " + fmt(v) + " per month" + (yearly ? ", billed yearly" : "") : "Free";
+    }
+    // Roll every reel of a card to a new value. dir > 0 rolls up, dir < 0 rolls down; unchanged digits still spin once.
+    function roll(card, value, dir, delay) {
+      var digits = String(value).split("");
+      $$(".reel", card).forEach(function (reel, i) {
+        var strip = reel.firstChild, d = +digits[i], tok = (reel._tok = (reel._tok || 0) + 1);
+        var to = dir > 0 ? 20 + d : d;
+        var wait = reduce.matches ? 0 : delay + i * 75;
+        setTimeout(function () {
+          if (tok !== reel._tok) return;
+          reel.classList.add("rolling");
+          strip.style.setProperty("--n", to);
+        }, wait);
+        // once it lands, quietly jump back to the middle copy so the next roll has room either way
+        setTimeout(function () {
+          if (tok !== reel._tok) return;
+          reel.classList.remove("rolling");
+          strip.style.transition = "none";
+          strip.style.setProperty("--n", 10 + d);
+          void strip.offsetWidth;
+          strip.style.transition = "";
+        }, wait + (reduce.matches ? 30 : 1250));
+      });
+    }
+
+    /* ---------- Billing switch ---------- */
+    function placePill(btn, animate) {
+      var seg = btn.parentNode, l = btn.offsetLeft, r = seg.clientWidth - (btn.offsetLeft + btn.offsetWidth);
+      var goingRight = l > parseFloat(pill.style.getPropertyValue("--l") || 0);
+      // the leading edge moves first and the trailing edge catches up, so the pill stretches like a drop
+      pill.style.setProperty("--dl", animate && goingRight ? "0.09s" : "0s");
+      pill.style.setProperty("--dr", animate && !goingRight ? "0.09s" : "0s");
+      pill.style.setProperty("--l", l + "px");
+      pill.style.setProperty("--r", r + "px");
+    }
+    function setBilling(toYearly) {
+      if (toYearly === yearly) return;
+      yearly = toYearly;
+      segBtns.forEach(function (b) { b.setAttribute("aria-pressed", String((b.dataset.bill === "y") === yearly)); });
+      placePill(segBtns[yearly ? 1 : 0], true);
+      // anticipation: the cards dip, then spring back as the drums roll card by card
+      plansEl.classList.add("dip");
+      setTimeout(function () { plansEl.classList.remove("dip"); }, 150);
+      cards.forEach(function (card, k) {
+        var p = PLANS[card.dataset.plan];
+        roll(card, yearly ? p.y : p.m, yearly ? -1 : 1, 150 + k * 110);
+        setSr(card);
+        $(".was", card).classList.toggle("on", !!p.m);
+      });
+      setTimeout(function () { plansEl.classList.toggle("yearly", yearly); }, 180);
+      // finish: a spark of amber over the featured price when the saving lands
+      if (yearly) setTimeout(function () {
+        var r = $(".digits", cardOf("growth")).getBoundingClientRect();
+        burst(r.left + r.width / 2, r.top + r.height / 2, 16, ["#ffc861", "#f0a12a", "#fff3d1"], 0.55);
+      }, 1250);
+      say(yearly ? "Yearly billing. Growth is PKR 1,999 a month, Studio PKR 5,599 a month." : "Monthly billing. Growth is PKR 2,499 a month, Studio PKR 6,999 a month.");
+    }
+    segBtns.forEach(function (b) { b.addEventListener("click", function () { setBilling(b.dataset.bill === "y"); }); });
+
+    /* ---------- Choosing a plan ---------- */
+    function labelButtons() {
+      cards.forEach(function (card) {
+        var id = card.dataset.plan, btn = $(".cta", card), name = PLANS[id].name;
+        card.classList.toggle("chosen", id === current);
+        btn.dataset.state = id === current ? "current" : "idle";
+        $(".lbl", btn).textContent = id === current ? "Current plan" : (current ? "Switch to " : "Choose ") + name;
+        btn.setAttribute("aria-pressed", String(id === current));
+      });
+    }
+    function choose(card) {
+      var id = card.dataset.plan, btn = $(".cta", card), name = PLANS[id].name;
+      if (working || id === current) return;
+      working = true;
+      btn.dataset.state = "press"; // anticipation
+      setTimeout(function () { btn.dataset.state = "work"; say("Setting up " + name + "…"); }, 130); // progress
+      setTimeout(function () { // finish: tick, ring and confetti from the button
+        btn.dataset.state = "done";
+        current = id;
+        card.classList.add("chosen");
+        var r = btn.getBoundingClientRect();
+        burst(r.left + r.width / 2, r.top + r.height / 2, 46, ["#f0a12a", "#ffc861", "#1f9d6b", "#26355f", "#ff7a59"], 1);
+      }, 1450);
+      setTimeout(function () { // settle into the new state
+        working = false;
+        labelButtons();
+        say(name + " is now your plan" + (yearly ? ", billed yearly." : ", billed monthly."));
+      }, 2500);
+    }
+    cards.forEach(function (card) { $(".cta", card).addEventListener("click", function () { choose(card); }); });
+
+    /* ---------- Phone swipe row: centre the featured card, dots follow the scroll ---------- */
+    var dots = $$(".dots button");
+    function centre(card, smooth) {
+      var left = card.offsetLeft - (plansEl.clientWidth - card.offsetWidth) / 2;
+      if (plansEl.scrollWidth > plansEl.clientWidth + 2) plansEl.scrollTo({ left: left, behavior: smooth && !reduce.matches ? "smooth" : "auto" });
+    }
+    dots.forEach(function (d) { d.addEventListener("click", function () { centre(cards[+d.dataset.to], true); }); });
+    plansEl.addEventListener("scroll", function () {
+      var mid = plansEl.scrollLeft + plansEl.clientWidth / 2, best = 0, bd = 1e9;
+      cards.forEach(function (c, i) { var dd = Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid); if (dd < bd) { bd = dd; best = i; } });
+      dots.forEach(function (d, i) { d.setAttribute("aria-current", String(i === best)); });
+    }, { passive: true });
+
+    /* ---------- Confetti ---------- */
+    var fx = $(".fx"), ctx = fx.getContext("2d"), bits = [], fxRaf = 0;
+    function sizeFx() { var d = Math.min(window.devicePixelRatio || 1, 2); fx.width = innerWidth * d; fx.height = innerHeight * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+    function burst(x, y, n, colors, power) {
+      if (reduce.matches) return;
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * Math.PI * 2, s = (2 + Math.random() * 7) * power;
+        bits.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 4 * power, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4, w: 3 + Math.random() * 5, h: 5 + Math.random() * 6, c: colors[i % colors.length], life: 0 });
+      }
+      if (!fxRaf) fxRaf = requestAnimationFrame(stepFx);
+    }
+    function stepFx() {
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      bits = bits.filter(function (b) { return b.life < 95 && b.y < innerHeight + 30; });
+      bits.forEach(function (b) {
+        b.life++; b.vy += 0.3; b.vx *= 0.98; b.x += b.vx; b.y += b.vy; b.r += b.vr;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r);
+        ctx.globalAlpha = Math.min(1, (95 - b.life) / 25);
+        ctx.fillStyle = b.c; ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h * Math.abs(Math.cos(b.life * 0.16 + b.r)));
+        ctx.restore();
+      });
+      fxRaf = bits.length ? requestAnimationFrame(stepFx) : 0;
+    }
+
+    /* ---------- Auto-demo: plays on load and every few seconds; any real input stops it ---------- */
+    var ghost = $(".ghost"), demoOn = !reduce.matches, timers = [];
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+    function ghostAt(x, y) { ghost.style.setProperty("--gx", x + "px"); ghost.style.setProperty("--gy", y + "px"); }
+    function ghostTo(el, then) {
+      var r = el.getBoundingClientRect();
+      ghost.classList.add("show");
+      ghostAt(r.left + r.width * 0.62, r.top + r.height * 0.6);
+      later(function () {
+        ghost.classList.add("tap");
+        later(function () { ghost.classList.remove("tap"); if (then) then(); }, 170);
+      }, 800);
+    }
+    function stopDemo() {
+      if (!demoOn) return;
+      demoOn = false;
+      timers.forEach(clearTimeout);
+      ghost.classList.remove("show", "tap");
+    }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) {
+      addEventListener(t, function (e) { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true });
+    });
+    function demo() {
+      if (!demoOn) return;
+      later(function () { ghostTo(segBtns[1], function () { setBilling(true); }); }, 100);
+      later(function () { ghostTo($(".cta", cardOf("growth")), function () { choose(cardOf("growth")); }); }, 2700);
+      later(function () { ghostTo(segBtns[0], function () { setBilling(false); }); }, 6400);
+      later(function () { ghost.classList.remove("show"); }, 7900);
+      later(function () { if (current === "growth" && !working) { current = null; labelButtons(); } }, 8600);
+      later(demo, 10200);
+    }
+
+    /* ---------- Start ---------- */
+    cards.forEach(buildDigits);
+    labelButtons();
+    sizeFx();
+    addEventListener("resize", function () { sizeFx(); placePill(segBtns[yearly ? 1 : 0], false); });
+    requestAnimationFrame(function () {
+      placePill(segBtns[0], false);
+      centre(cardOf("growth"), false);
+      ghostAt(innerWidth * 0.82, innerHeight + 40);
+    });
+    if (demoOn) later(demo, 650);
+  })();
+</script>
+</body>
+</html>

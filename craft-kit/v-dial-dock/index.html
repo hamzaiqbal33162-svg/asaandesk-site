@@ -1,0 +1,487 @@
+<!doctype html>
+<!-- Chill & Craft · Dial Dock · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dial Dock · rotary dial menu</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and keep following it)
+  (function () {
+    var q = new URLSearchParams(location.search).get("theme");
+    var m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { document.documentElement.setAttribute("data-theme", q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"); }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colours: mustard bakelite, chocolate wheel, cream plate ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #f6e9c9;
+    --bg2: #ead39c;
+    --dots: rgba(150, 100, 20, .14);
+    --card: #fffaf0;
+    --card2: #fbf1dd;
+    --line: #efe2c6;
+    --ink: #2e2116;
+    --ink2: #6c5a47;
+    --soft: #a3907a;
+    --body1: #f0bb45;
+    --body2: #c98b16;
+    --wheel1: #4a3120;
+    --wheel2: #2c1c11;
+    --plate: #fbf0d8;
+    --plate-ink: #3b2717;
+    --red: #d1442f;
+    --chrome1: #f4f4f2;
+    --chrome2: #9a9c9f;
+    --accent: #d1442f;
+    --ok: #3b8a5a;
+    --focus: #d1442f;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #1d160e;
+    --bg2: #0e0a06;
+    --dots: rgba(240, 180, 70, .08);
+    --card: #1c1610;
+    --card2: #241c14;
+    --line: #33281c;
+    --ink: #f5e9d4;
+    --ink2: #c9b79c;
+    --soft: #8f7c63;
+    --body1: #3a2a1b;
+    --body2: #1f160d;
+    --wheel1: #e0b456;
+    --wheel2: #b4852a;
+    --plate: #2a2016;
+    --plate-ink: #f3dfb8;
+    --red: #ff6a4d;
+    --accent: #ffb04d;
+    --ok: #5fcf8c;
+    --focus: #ffb04d;
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: var(--sans);
+    color: var(--ink);
+    background: radial-gradient(var(--dots) 1.5px, transparent 1.6px) 0 0 / 22px 22px, radial-gradient(120% 90% at 50% 0%, var(--bg1), var(--bg2));
+    overflow: hidden;
+  }
+  .stage { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+  .app {
+    position: relative;
+    display: flex; flex-direction: column;
+    width: min(460px, 100%);
+    height: min(700px, calc(100vh - 40px));
+    min-height: 580px;
+    border-radius: 36px;
+    background: linear-gradient(180deg, var(--card), var(--card2));
+    box-shadow: 0 50px 90px -50px rgba(90, 50, 0, .7), 0 0 0 1px var(--line);
+    overflow: hidden;
+  }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 3px; border-radius: 12px; }
+
+  .bar { display: flex; align-items: center; gap: 10px; padding: 20px 24px 6px; }
+  .bar .logo { width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(circle at 50% 50%, var(--plate) 0 30%, var(--wheel1) 32% 62%, var(--body1) 64%); box-shadow: 0 0 0 2px var(--body2); }
+  .bar b { font: 600 18px/1 var(--serif); }
+  .bar .clock { margin-left: auto; color: var(--soft); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+  /* ---------- Pages ---------- */
+  .view { position: relative; flex: 1; overflow: hidden; }
+  .page { position: absolute; inset: 0; padding: 8px 24px 120px; transform-origin: 50% 100%; overflow: hidden; }
+  .page h1 { margin: 8px 0 2px; font: 600 30px/1.1 var(--serif); letter-spacing: -.01em; }
+  .page .sub { margin: 0 0 16px; color: var(--ink2); font-size: 14px; }
+  .rows { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: var(--card); box-shadow: 0 0 0 1px var(--line); }
+  .av { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 13.5px; background: var(--c); }
+  .row b { display: block; font-size: 14.5px; }
+  .row small { color: var(--soft); font-size: 12.5px; }
+  .row .r { margin-left: auto; color: var(--ink2); font-size: 12.5px; white-space: nowrap; }
+  .dirIc { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; margin-right: 4px; }
+  .miss { color: var(--red); }
+  .favs { display: flex; gap: 10px; margin: 0 0 16px; }
+  .fav { flex: 1; display: grid; justify-items: center; gap: 6px; padding: 10px 4px; border: 0; border-radius: 16px; background: var(--card); box-shadow: 0 0 0 1px var(--line); cursor: pointer; font-size: 12px; transition: transform .35s var(--spring); }
+  .fav:hover { transform: translateY(-3px); }
+  .search { width: 100%; margin: 0 0 12px; padding: 11px 14px; border: 0; border-radius: 14px; background: var(--card); box-shadow: 0 0 0 1px var(--line); font-size: 14.5px; }
+  .play { flex: none; width: 36px; height: 36px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; cursor: pointer; transition: transform .3s var(--spring); }
+  .play:active { transform: scale(.9); }
+  .play svg { width: 14px; height: 14px; fill: currentColor; }
+  .vm { flex: 1; min-width: 0; }
+  .prog { height: 5px; margin-top: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .prog i { display: block; width: 0; height: 100%; background: var(--accent); }
+  .chk { flex: none; width: 24px; height: 24px; border: 2px solid var(--soft); border-radius: 8px; background: none; cursor: pointer; display: grid; place-items: center; transition: background .2s, border-color .2s; }
+  .chk svg { width: 14px; height: 14px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 20; stroke-dashoffset: 20; transition: stroke-dashoffset .35s ease .05s; }
+  .chk[aria-checked="true"] { background: var(--ok); border-color: var(--ok); }
+  .chk[aria-checked="true"] svg { stroke-dashoffset: 0; }
+  .chk[aria-checked="true"] + span b { text-decoration: line-through; opacity: .55; }
+  .sw { flex: none; position: relative; width: 46px; height: 27px; margin-left: auto; border: 0; border-radius: 14px; background: var(--line); cursor: pointer; transition: background .25s; }
+  .sw::after { content: ""; position: absolute; left: 3px; top: 3px; width: 21px; height: 21px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, .3); transition: transform .45s var(--spring); }
+  .sw[aria-checked="true"] { background: var(--ok); }
+  .sw[aria-checked="true"]::after { transform: translateX(19px); }
+
+  /* ---------- The dial ---------- */
+  .scrim { position: absolute; inset: 0; z-index: 4; background: radial-gradient(70% 50% at 50% 100%, rgba(40, 20, 0, .45), rgba(40, 20, 0, .15)); opacity: 0; pointer-events: none; transition: opacity .35s; }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .dialwrap {
+    position: absolute; left: 50%; bottom: 26px; z-index: 5;
+    width: 270px; height: 270px; margin-left: -135px;
+    transform-origin: 50% 82%;
+  }
+  .dialwrap[hidden] { display: none; }
+  .dial { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 24px 30px rgba(60, 30, 0, .45)); }
+  .bodyc { fill: url(#bodyG); }
+  .b1 { stop-color: var(--body1); } .b2 { stop-color: var(--body2); }
+  .w1 { stop-color: var(--wheel1); } .w2 { stop-color: var(--wheel2); }
+  .c1 { stop-color: var(--chrome1); } .c2 { stop-color: var(--chrome2); }
+  .basec { fill: var(--plate); }
+  .hole-ic { fill: none; stroke: var(--plate-ink); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .hole-no { fill: var(--plate-ink); font: 700 8px/1 var(--sans); text-anchor: middle; opacity: .7; }
+  .wheelc { fill: url(#wheelG); fill-rule: evenodd; stroke: rgba(0, 0, 0, .25); stroke-width: 1; }
+  .gloss { fill: url(#glossG); pointer-events: none; }
+  .g1 { stop-color: #fff; stop-opacity: .32; } .g2 { stop-color: #fff; stop-opacity: 0; }
+  .stopc { fill: url(#chromeG); stroke: rgba(0, 0, 0, .25); }
+  .tick { fill: var(--red); opacity: .25; transition: opacity .08s; }
+  .tick.on { opacity: 1; }
+  .platec { fill: var(--plate); stroke: var(--red); stroke-width: 2.5; }
+  .plate-name { fill: var(--plate-ink); font: 600 17px/1 var(--serif); text-anchor: middle; }
+  .plate-hint { fill: var(--plate-ink); opacity: .6; font: 600 8.5px/1 var(--sans); letter-spacing: .14em; text-anchor: middle; }
+  .pulse { fill: var(--plate-ink); opacity: .18; transition: opacity .1s; }
+  .pulse.on { fill: var(--red); opacity: 1; }
+  .finger { fill: rgba(255, 220, 170, .55); stroke: rgba(255, 255, 255, .7); stroke-width: 2; }
+  .here { fill: none; stroke: var(--red); stroke-width: 2.5; stroke-dasharray: 4 4; animation: spin 6s linear infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .holebtn { position: absolute; width: 48px; height: 48px; margin: -24px 0 0 -24px; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+  .holebtn:focus-visible { outline-offset: 0; border-radius: 50%; }
+
+  .dock {
+    position: absolute; left: 50%; bottom: 26px; z-index: 6;
+    width: 70px; height: 70px; margin-left: -35px; padding: 0;
+    border: 0; border-radius: 50%; cursor: pointer;
+    background: radial-gradient(circle at 35% 30%, var(--body1), var(--body2));
+    box-shadow: 0 16px 26px -12px rgba(80, 40, 0, .7), inset 0 2px 0 rgba(255, 255, 255, .35), inset 0 -3px 0 rgba(0, 0, 0, .18);
+    transition: transform .5s var(--spring), opacity .25s;
+  }
+  .dock:hover { transform: translateY(-3px) rotate(-12deg); }
+  .dock.away { transform: scale(.4) rotate(90deg); opacity: 0; pointer-events: none; }
+  .dock svg { width: 100%; height: 100%; }
+  .mring { fill: none; stroke: var(--wheel1); stroke-width: 9; }
+  .mhole { fill: var(--plate); }
+  .dock .mini { animation: idle 8s ease-in-out infinite; transform-origin: 35px 35px; }
+  @keyframes idle { 0%, 70%, 100% { transform: rotate(0); } 78% { transform: rotate(40deg); } 90% { transform: rotate(-6deg); } }
+  .halo { position: absolute; left: 50%; bottom: 26px; z-index: 5; width: 70px; height: 70px; margin-left: -35px; border-radius: 50%; border: 2px solid var(--body1); opacity: 0; pointer-events: none; animation: halo 3.2s ease-out infinite; }
+  @keyframes halo { 0% { opacity: .7; transform: scale(1); } 60%, 100% { opacity: 0; transform: scale(1.6); } }
+  .toast { position: absolute; left: 50%; top: 70px; z-index: 7; padding: 10px 16px; border-radius: 999px; background: var(--ink); color: var(--card); font-size: 13.5px; white-space: nowrap; transform: translate(-50%, -20px); opacity: 0; pointer-events: none; transition: transform .5s var(--spring), opacity .3s; }
+  .toast.on { transform: translate(-50%, 0); opacity: 1; }
+
+  @media (max-width: 480px) {
+    .stage { padding: 0; }
+    .app { width: 100%; height: 100vh; min-height: 0; border-radius: 0; box-shadow: none; }
+    .page { padding: 6px 18px 120px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="app" id="app">
+    <div class="bar"><span class="logo" aria-hidden="true"></span><b>Party Line</b><span class="clock" id="clock">4:20 pm</span></div>
+    <div class="view" id="view"></div>
+    <div class="scrim" id="scrim"></div>
+    <div class="dialwrap" id="dialwrap" hidden>
+      <svg class="dial" viewBox="-135 -135 270 270" aria-hidden="true">
+        <defs>
+          <radialGradient id="bodyG" cx="40%" cy="30%" r="80%"><stop offset="0" class="b1"/><stop offset="1" class="b2"/></radialGradient>
+          <radialGradient id="wheelG" cx="45%" cy="35%" r="75%"><stop offset="0" class="w1"/><stop offset="1" class="w2"/></radialGradient>
+          <linearGradient id="chromeG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="c1"/><stop offset="1" class="c2"/></linearGradient>
+          <linearGradient id="glossG" x1="0" y1="0" x2=".4" y2="1"><stop offset="0" class="g1"/><stop offset=".6" class="g2"/></linearGradient>
+        </defs>
+        <circle class="bodyc" r="133"/>
+        <circle class="basec" r="121"/>
+        <g id="base"></g>
+        <g id="wheel"><path class="wheelc" id="wheelPath"/><g id="fingerG"><circle class="finger" id="finger" r="0"/></g></g>
+        <path class="gloss" d="M-118-20a120 120 0 0 1 200-70 140 140 0 0 0-200 70z"/>
+        <g transform="rotate(60)"><rect class="stopc" x="104" y="-6" width="30" height="12" rx="6"/></g>
+        <g id="ticks"></g>
+        <circle class="platec" r="52"/>
+        <text class="plate-name" id="plateName" y="2">Home</text>
+        <text class="plate-hint" y="20">DIAL 1 TO 6</text>
+        <g id="pulses"></g>
+      </svg>
+      <div id="holes" role="group" aria-label="Pages"></div>
+    </div>
+    <span class="halo" id="halo" aria-hidden="true"></span>
+    <button class="dock" id="dock" type="button" aria-expanded="false" aria-controls="dialwrap" aria-label="Open the dial menu, now on Home">
+      <svg viewBox="0 0 70 70" aria-hidden="true"><g class="mini" id="mini"></g><circle class="mhole" cx="35" cy="35" r="13"/><g id="dockIc" transform="translate(26 26) scale(.75)" class="hole-ic"></g></svg>
+    </button>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+  <p class="sr-only" id="live" aria-live="polite"></p>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const NS = "http://www.w3.org/2000/svg";
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function tween(ms, fn, ease = (t) => t) {
+    return new Promise((res) => {
+      const t0 = performance.now();
+      const f = (now) => { const p = Math.max(0, Math.min(1, (now - t0) / ms)); fn(ease(p), p); if (p < 1) requestAnimationFrame(f); else res(); };
+      requestAnimationFrame(f);
+    });
+  }
+  const inOut = (t) => (t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
+  // ---------- Pages ----------
+  const IC = {
+    Home: '<path d="M4 11 12 4l8 7v8.5a.5.5 0 0 1-.5.5H15v-6H9v6H4.5a.5.5 0 0 1-.5-.5z"/>',
+    Calls: '<path d="M6.5 4h3l1.5 4-2 1.5a10 10 0 0 0 5.5 5.5l1.5-2 4 1.5v3a2 2 0 0 1-2 2A15 15 0 0 1 4.5 6a2 2 0 0 1 2-2z"/>',
+    Contacts: '<circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c1-3.6 3.7-5.5 7-5.5s6 1.9 7 5.5"/>',
+    Voicemail: '<circle cx="7" cy="13" r="3.5"/><circle cx="17" cy="13" r="3.5"/><path d="M7 16.5h10"/>',
+    Notes: '<path d="M6 4h12v16H6z"/><path d="M9 9h6M9 12.5h6M9 16h3.5"/>',
+    Settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.5M12 18v2.5M3.5 12H6M18 12h2.5M6 6l1.8 1.8M16.2 16.2 18 18M6 18l1.8-1.8M16.2 7.8 18 6"/>',
+  };
+  const PAGES = ["Home", "Calls", "Contacts", "Voicemail", "Notes", "Settings"];
+  const PEOPLE = [["Sara Qureshi", "#d1708a"], ["Hamid Ali", "#5f8fd6"], ["Zainab Raza", "#5fae8f"], ["Kamran Sheikh", "#d69a4a"], ["Office, Lahore", "#8a6fd6"], ["Nadia Iqbal", "#d65f5f"], ["Bilal Ahmed", "#4fa6b8"]];
+  const ini = (n) => n.split(/[ ,]+/).map((w) => w[0]).slice(0, 2).join("");
+  const av = (p) => `<span class="av" style="--c:${p[1]}" aria-hidden="true">${ini(p[0])}</span>`;
+  const state = { notes: [false, true, false, false], sw: [true, false, true], q: "" };
+  const arrow = (d) => `<svg class="dirIc" viewBox="0 0 24 24" aria-hidden="true"><path d="${d === "in" ? "M17 7 7 17M7 9v8h8" : "M7 17 17 7M9 7h8v8"}"/></svg>`;
+
+  function pageHTML(i) {
+    switch (PAGES[i]) {
+      case "Home": return `<h1>Afternoon, Faraz</h1><p class="sub">Two missed calls and one new voicemail</p>
+        <div class="favs">${PEOPLE.slice(0, 4).map((p, k) => `<button class="fav" type="button" data-call="${k}">${av(p)}${p[0].split(" ")[0]}</button>`).join("")}</div>
+        <ul class="rows">${[[0, "Missed · 12 min ago", "miss"], [2, "Called you · 1 h ago", "in"], [4, "You called · 3 h ago", "out"]].map(([k, t, d]) => `<li class="row">${av(PEOPLE[k])}<span><b>${PEOPLE[k][0]}</b><small class="${d === "miss" ? "miss" : ""}">${t}</small></span></li>`).join("")}</ul>`;
+      case "Calls": return `<h1>Calls</h1><p class="sub">Today and yesterday</p><ul class="rows">${[[1, "out", "4:02 pm", "6 min"], [0, "in", "3:48 pm", "Missed"], [3, "in", "1:15 pm", "12 min"], [5, "out", "Yesterday", "2 min"], [6, "in", "Yesterday", "21 min"]].map(([k, d, t, len]) => `<li class="row">${av(PEOPLE[k])}<span><b>${PEOPLE[k][0]}</b><small class="${len === "Missed" ? "miss" : ""}">${arrow(d)}${t}</small></span><span class="r">${len}</span></li>`).join("")}</ul>`;
+      case "Contacts": return `<h1>Contacts</h1><p class="sub">${PEOPLE.length} people</p><label class="sr-only" for="q">Search contacts</label><input class="search" id="q" type="search" placeholder="Search by name" value="${state.q}" autocomplete="off"><ul class="rows" id="clist"></ul>`;
+      case "Voicemail": return `<h1>Voicemail</h1><p class="sub">1 new, 2 saved</p><ul class="rows">${[[3, "0:42", "New · 2:10 pm", 42], [0, "0:18", "Saved · Monday", 18], [6, "1:05", "Saved · 9 Nov", 65]].map(([k, l, t, s]) => `<li class="row"><button class="play" type="button" data-s="${s}" aria-label="Play message from ${PEOPLE[k][0]}"><svg viewBox="0 0 14 14"><path d="M3 1.5v11l9-5.5z"/></svg></button><span class="vm"><b>${PEOPLE[k][0]}</b><small>${t} · ${l}</small><span class="prog"><i></i></span></span></li>`).join("")}</ul>`;
+      case "Notes": return `<h1>Notes</h1><p class="sub">Things to say on the next call</p><ul class="rows">${["Ask Hamid about the Murree booking", "Send Sara the school form", "Confirm Saturday dinner at 8", "Renew the office line plan"].map((t, k) => `<li class="row"><button class="chk" type="button" role="checkbox" aria-checked="${state.notes[k]}" data-n="${k}" aria-label="${t}"><svg viewBox="0 0 14 14"><path d="m3 7.5 2.6 2.6L11 4.5"/></svg></button><span><b>${t}</b></span></li>`).join("")}</ul>`;
+      default: return `<h1>Settings</h1><p class="sub">Your line, your rules</p><ul class="rows">${[["Do not disturb", "Calls go to voicemail"], ["Loud ring", "Ring at full volume"], ["Show caller name", "Look up unknown numbers"]].map(([t, s], k) => `<li class="row"><span><b>${t}</b><small>${s}</small></span><button class="sw" type="button" role="switch" aria-checked="${state.sw[k]}" data-w="${k}" aria-label="${t}"></button></li>`).join("")}</ul>`;
+    }
+  }
+  const view = $("view"), live = $("live"), toast = $("toast");
+  let toastT = 0;
+  function note(t) { toast.textContent = t; toast.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => toast.classList.remove("on"), 1800); }
+  function wire(pg) {
+    pg.querySelectorAll("[data-call]").forEach((b) => b.addEventListener("click", () => note(`Calling ${PEOPLE[+b.dataset.call][0]}…`)));
+    const q = pg.querySelector("#q");
+    if (q) {
+      const fill = () => {
+        const s = q.value.trim().toLowerCase();
+        state.q = q.value;
+        const hit = PEOPLE.filter((p) => p[0].toLowerCase().includes(s));
+        pg.querySelector("#clist").innerHTML = hit.length ? hit.map((p) => `<li class="row">${av(p)}<span><b>${p[0]}</b><small>Mobile</small></span></li>`).join("") : `<li class="row"><span><b>No match</b><small>Try another name</small></span></li>`;
+      };
+      q.addEventListener("input", fill);
+      fill();
+    }
+    pg.querySelectorAll(".play").forEach((b) => b.addEventListener("click", () => {
+      const bar = b.parentElement.querySelector(".prog i"), s = +b.dataset.s;
+      if (bar._play) bar._play.cancel();
+      bar._play = bar.animate([{ width: "0%" }, { width: "100%" }], { duration: s * 1000 / 6, fill: "forwards" }); // a sixth of real time, for the demo
+      note("Playing voicemail");
+    }));
+    pg.querySelectorAll(".chk").forEach((b) => b.addEventListener("click", () => { const k = +b.dataset.n; state.notes[k] = !state.notes[k]; b.setAttribute("aria-checked", state.notes[k]); }));
+    pg.querySelectorAll(".sw").forEach((b) => b.addEventListener("click", () => { const k = +b.dataset.w; state.sw[k] = !state.sw[k]; b.setAttribute("aria-checked", state.sw[k]); }));
+  }
+  let cur = 0;
+  function showPage(i, first) {
+    const old = view.querySelector(".page");
+    const pg = document.createElement("section");
+    pg.className = "page"; pg.setAttribute("aria-label", PAGES[i]);
+    pg.innerHTML = pageHTML(i);
+    view.appendChild(pg);
+    wire(pg);
+    if (old) {
+      if (reduce) old.remove();
+      else old.animate([{ opacity: 1 }, { opacity: 0, transform: "rotate(7deg) translateY(10px)" }], { duration: 280, easing: "ease-in", fill: "forwards" }).onfinish = () => old.remove();
+    }
+    if (reduce) return;
+    pg.animate([{ opacity: 0, transform: "rotate(-8deg) translateY(14px)" }, { opacity: 1, transform: "none" }], { duration: 650, delay: first ? 0 : 120, easing: "cubic-bezier(.3,1.3,.5,1)", fill: "backwards" });
+    [...pg.querySelectorAll(".row, .fav, .search")].forEach((el, k) => el.animate([{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }], { duration: 500, delay: 200 + k * 45, easing: "cubic-bezier(.3,1.4,.5,1)", fill: "backwards" }));
+  }
+
+  // ---------- Build the dial ----------
+  const STOP = 60, FIRST = 48, STEP = 42, R = 90, HR = 23; // angles in degrees, clockwise from 3 o'clock
+  const holeA = (k) => STOP - FIRST - STEP * k;
+  const pos = (a, r) => [Math.cos((a * Math.PI) / 180) * r, Math.sin((a * Math.PI) / 180) * r];
+  const circ = (cx, cy, r) => `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0z`;
+  const base = $("base"), holes = $("holes"), ticks = $("ticks"), pulses = $("pulses");
+  let d = circ(0, 0, 121) + circ(0, 0, 56);
+  PAGES.forEach((name, k) => {
+    const [x, y] = pos(holeA(k), R);
+    d += circ(x, y, HR);
+    const g = document.createElementNS(NS, "g");
+    g.innerHTML = `<g transform="translate(${x - 10} ${y - 13}) scale(.84)" class="hole-ic">${IC[name]}</g><text class="hole-no" x="${x}" y="${y + 16}">${k + 1}</text>`;
+    base.appendChild(g);
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "holebtn";
+    b.style.left = 135 + x + "px"; b.style.top = 135 + y + "px";
+    b.setAttribute("aria-label", `${k + 1}, ${name}`);
+    holes.appendChild(b);
+  });
+  $("wheelPath").setAttribute("d", d);
+  // the dashed ring marks the page you are on
+  const here = document.createElementNS(NS, "circle");
+  here.setAttribute("class", "here"); here.setAttribute("r", HR + 4);
+  base.appendChild(here);
+  for (let k = 0; k < 6; k++) {
+    const [x, y] = pos(STOP + 8 + k * 5, 128);
+    const t = document.createElementNS(NS, "circle");
+    t.setAttribute("class", "tick"); t.setAttribute("cx", x); t.setAttribute("cy", y); t.setAttribute("r", 2.2);
+    ticks.appendChild(t);
+    const p = document.createElementNS(NS, "circle");
+    p.setAttribute("class", "pulse"); p.setAttribute("cx", -20 + k * 8); p.setAttribute("cy", -24); p.setAttribute("r", 2.4);
+    pulses.appendChild(p);
+  }
+  const hb = [...holes.querySelectorAll(".holebtn")], tk = [...ticks.children], pl = [...pulses.children];
+  const wheel = $("wheel"), finger = $("finger"), plateName = $("plateName");
+  // mini dial on the floating button
+  const mini = $("mini");
+  mini.innerHTML = `<circle class="mring" cx="35" cy="35" r="27"/>` + PAGES.map((_, k) => { const [x, y] = pos(holeA(k), 27); return `<circle class="mhole" cx="${35 + x}" cy="${35 + y}" r="3.4"/>`; }).join("");
+  function markHere(i) {
+    const [x, y] = pos(holeA(i), R);
+    here.setAttribute("cx", x); here.setAttribute("cy", y);
+    $("dockIc").innerHTML = IC[PAGES[i]];
+    $("dock").setAttribute("aria-label", `Open the dial menu, now on ${PAGES[i]}`);
+    plateName.textContent = PAGES[i];
+  }
+
+  // ---------- Open / close ----------
+  const wrap = $("dialwrap"), dock = $("dock"), scrim = $("scrim"), halo = $("halo");
+  let isOpen = false, dialing = false;
+  async function openDial(focus) {
+    if (isOpen) return;
+    isOpen = true;
+    wrap.hidden = false;
+    dock.classList.add("away"); halo.style.display = "none";
+    dock.setAttribute("aria-expanded", "true");
+    scrim.classList.add("on");
+    live.textContent = "Dial open. Choose a page, 1 to 6.";
+    if (!reduce) wrap.animate([{ transform: "translateY(60px) scale(.26) rotate(-140deg)", opacity: 0 }, { transform: "translateY(-6px) scale(1.03) rotate(6deg)", opacity: 1, offset: .7 }, { transform: "none", opacity: 1 }], { duration: 620, easing: "cubic-bezier(.25,1,.4,1)" });
+    if (focus) hb[cur].focus();
+  }
+  async function closeDial(refocus) {
+    if (!isOpen || dialing) return;
+    isOpen = false;
+    dock.setAttribute("aria-expanded", "false");
+    scrim.classList.remove("on");
+    if (!reduce) await wrap.animate([{ transform: "none", opacity: 1 }, { transform: "translateY(60px) scale(.26) rotate(120deg)", opacity: 0 }], { duration: 360, easing: "cubic-bezier(.5,0,.75,0)" }).finished;
+    if (isOpen) return; // reopened meanwhile
+    wrap.hidden = true;
+    dock.classList.remove("away"); halo.style.display = "";
+    if (refocus) dock.focus();
+  }
+
+  // ---------- Dialing: finger in, wind to the stop, clack, spring back at governor speed counting pulses ----------
+  const setWheel = (a) => wheel.setAttribute("transform", `rotate(${a.toFixed(2)})`);
+  function tick(n) { tk.forEach((t, k) => t.classList.toggle("on", k < n)); }
+  async function dial(k) {
+    if (dialing) return;
+    if (!isOpen) await openDial(false);
+    dialing = true;
+    const need = FIRST + STEP * k, [fx, fy] = pos(holeA(k), R);
+    plateName.textContent = PAGES[k];
+    if (reduce) {
+      cur = k; markHere(k); showPage(k); live.textContent = `${PAGES[k]} page`;
+      dialing = false; await closeDial(true); return;
+    }
+    // 1. a fingertip settles into the hole
+    finger.setAttribute("cx", fx); finger.setAttribute("cy", fy);
+    await tween(150, (e) => finger.setAttribute("r", (HR - 5) * e));
+    // 2. wind the wheel round to the finger stop; ratchet lamps light as each hole passes
+    await tween(240 + need * 2.1, (e) => { setWheel(need * e); tick(Math.floor((need * e) / STEP)); }, inOut);
+    // 3. clack against the stop: a little push back
+    await tween(150, (e) => setWheel(need - Math.sin(e * Math.PI) * 3.5));
+    await tween(120, (e) => finger.setAttribute("r", (HR - 5) * (1 - e)));
+    // the page changes as the wheel lets go
+    cur = k; showPage(k);
+    live.textContent = `${PAGES[k]} page`;
+    // 4. spring back at a steady governor speed; each hole passing is one pulse on the plate
+    pl.forEach((p) => p.classList.remove("on"));
+    await tween(need * 3.2, (e) => {
+      const a = need * (1 - e);
+      setWheel(a);
+      const n = Math.min(6, Math.floor((need - a + 4) / STEP));
+      pl.forEach((p, j) => p.classList.toggle("on", j < n));
+      tick(Math.floor(a / STEP));
+    });
+    await tween(260, (e) => setWheel(Math.sin(e * Math.PI * 2) * 2.4 * (1 - e)));
+    setWheel(0); tick(0);
+    markHere(k);
+    dialing = false;
+    await sleep(380);
+    pl.forEach((p) => p.classList.remove("on"));
+    await closeDial(document.activeElement && wrap.contains(document.activeElement));
+  }
+
+  // ---------- Input ----------
+  dock.addEventListener("click", () => openDial(true));
+  scrim.addEventListener("click", () => closeDial(true));
+  hb.forEach((b, k) => {
+    b.addEventListener("click", () => dial(k));
+    const peek = () => { if (!dialing) plateName.textContent = PAGES[k]; };
+    const back = () => { if (!dialing) plateName.textContent = PAGES[cur]; };
+    b.addEventListener("pointerenter", peek); b.addEventListener("focus", peek);
+    b.addEventListener("pointerleave", back); b.addEventListener("blur", back);
+    b.addEventListener("keydown", (e) => {
+      const m = { ArrowRight: -1, ArrowDown: -1, ArrowLeft: 1, ArrowUp: 1 }[e.key];
+      if (!m) return;
+      e.preventDefault();
+      hb[(k + m + hb.length) % hb.length].focus();
+    });
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && isOpen) closeDial(true);
+    if (/^[1-6]$/.test(e.key) && !(document.activeElement && document.activeElement.tagName === "INPUT")) dial(+e.key - 1);
+  });
+  // a live clock in the corner
+  const clock = $("clock");
+  const tickClock = () => { clock.textContent = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase(); };
+  tickClock(); setInterval(tickClock, 15000);
+
+  // ---------- Start and demo ----------
+  markHere(0);
+  showPage(0, true);
+  let demo = !reduce;
+  const stop = (e) => { if (e.isTrusted) demo = false; };
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach((t) => addEventListener(t, stop, { capture: true, passive: true }));
+  (async () => {
+    const order = [1, 3, 5, 2, 4, 0];
+    let i = 0;
+    await sleep(600);
+    while (demo) {
+      await openDial(false);
+      await sleep(650);
+      if (!demo) { closeDial(false); return; }
+      await dial(order[i++ % order.length]);
+      await sleep(900);
+      if (!demo) return;
+      // use the page a little: play a voicemail, tick a note, flip a switch
+      const pg = view.querySelector(".page:last-child");
+      const act = pg && (pg.querySelector(".play") || pg.querySelector(".chk") || pg.querySelector(".sw"));
+      if (act) { act.click(); await sleep(1100); }
+      await sleep(900);
+    }
+  })();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,535 @@
+<!doctype html>
+<!-- Chill & Craft · Sky Slot · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sky Slot · delivery slot picker</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens (the sky itself is painted by script, per time slot) ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #eaf4ff;
+    --bg2: #c7dcf5;
+    --ink: #142235;
+    --muted: #5f7189;
+    --card: #ffffff;
+    --line: #dfe8f3;
+    --soft: #f2f6fb;
+    --accent: #ff7a45;
+    --accent-d: #e2552a;
+    --sel: #1d4ed8;
+    --ok: #15803d;
+    --focus: #f59e0b;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #142037;
+    --bg2: #060a14;
+    --ink: #e8f0fb;
+    --muted: #93a4bd;
+    --card: #0f1828;
+    --line: #22314a;
+    --soft: #16233a;
+    --sel: #7aa2ff;
+    --ok: #4ade80;
+    --focus: #fbbf24;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: radial-gradient(900px 620px at 50% 0%, var(--bg1), var(--bg2));
+    background-color: var(--bg2);
+  }
+  .stage { width: 100%; display: grid; place-items: center; padding: 16px; }
+  .vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .card { position: relative; width: min(390px, 100%); border-radius: 28px; overflow: hidden; background: var(--card); border: 1px solid var(--line); box-shadow: 0 34px 70px -40px rgba(20, 40, 90, .6); }
+  :root[data-theme="dark"] .card { box-shadow: 0 34px 70px -30px rgba(0, 0, 0, .85); }
+
+  /* ---------- The sky ---------- */
+  .sky { position: relative; height: 176px; overflow: hidden; }
+  .sky svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .cloud { animation: drift linear infinite; }
+  .cloud.a { animation-duration: 38s; }
+  .cloud.b { animation-duration: 54s; animation-delay: -20s; }
+  .cloud.c { animation-duration: 70s; animation-delay: -45s; }
+  .twinkle { animation: twinkle 2.4s ease-in-out infinite; }
+  .twinkle:nth-child(3n) { animation-delay: -.8s; } .twinkle:nth-child(3n+1) { animation-delay: -1.6s; }
+  .wheel { transform-box: fill-box; transform-origin: center; }
+  .riding .wheel { animation: spin .3s linear infinite; }
+  .riding .rbody { animation: putt .25s ease-in-out infinite; }
+  .label { position: absolute; left: 16px; top: 14px; color: #fff; text-shadow: 0 1px 8px rgba(0, 0, 0, .35); }
+  .label small { display: block; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .9; }
+  .label b { display: block; margin-top: 3px; font-size: 22px; letter-spacing: -.02em; }
+  .label span { display: block; font-size: 13px; font-weight: 650; opacity: .95; }
+  .label .swap { animation: swapIn .5s var(--spring); }
+
+  /* the ticket that drops in once a slot is booked */
+  .ticket {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    top: 14px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: var(--card);
+    color: var(--ink);
+    box-shadow: 0 18px 30px -16px rgba(0, 0, 0, .5);
+    transform: translateY(-140%) rotate(-4deg);
+    transition: transform .6s cubic-bezier(.5, 0, .75, 0);
+    -webkit-mask: radial-gradient(circle 9px at 0 50%, transparent 8.5px, #000 9px) left / 51% 100% no-repeat, radial-gradient(circle 9px at 100% 50%, transparent 8.5px, #000 9px) right / 51% 100% no-repeat;
+    mask: radial-gradient(circle 9px at 0 50%, transparent 8.5px, #000 9px) left / 51% 100% no-repeat, radial-gradient(circle 9px at 100% 50%, transparent 8.5px, #000 9px) right / 51% 100% no-repeat;
+  }
+  .ticket.show { transform: none; transition: transform .7s var(--spring); }
+  .ticket .ok { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--ok) 16%, transparent); }
+  .ticket .ok path { stroke-dasharray: 20; stroke-dashoffset: 20; transition: stroke-dashoffset .4s .5s ease-out; }
+  .ticket.show .ok path { stroke-dashoffset: 0; }
+  .ticket b { display: block; font-size: 14.5px; }
+  .ticket span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .ticket .dash { flex: 1; min-width: 0; border-left: 2px dashed var(--line); padding-left: 12px; }
+
+  /* ---------- Pickers ---------- */
+  .body { padding: 14px 16px 16px; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend { padding: 0; margin-bottom: 8px; font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .days { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .dpill { position: absolute; top: 0; left: 0; height: 100%; border-radius: 14px; background: var(--ink); box-shadow: 0 10px 18px -10px rgba(10, 20, 50, .6); transition: transform .55s var(--spring), width .55s var(--spring); }
+  .day { position: relative; z-index: 1; display: grid; place-items: center; gap: 1px; padding: 7px 0 8px; border-radius: 14px; border: 1px solid var(--line); cursor: pointer; transition: color .25s, border-color .25s, transform .3s var(--spring); }
+  .day:hover { transform: translateY(-2px); }
+  .day small { font-size: 10.5px; font-weight: 750; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; transition: color .25s; }
+  .day b { font-size: 17px; line-height: 1.1; }
+  input:checked + .day { color: var(--card); border-color: transparent; }
+  input:checked + .day small { color: var(--card); opacity: .8; }
+  input:focus-visible + .day, input:focus-visible + .slot { outline: 3px solid var(--focus); outline-offset: 2px; }
+  input:disabled + .day { opacity: .45; cursor: not-allowed; }
+
+  .slots { margin-top: 14px; }
+  .sgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; perspective: 600px; }
+  .slot { position: relative; display: grid; gap: 2px; padding: 8px 9px; border-radius: 13px; border: 1.5px solid var(--line); background: var(--soft); cursor: pointer; transition: border-color .2s, background .2s, transform .3s var(--spring), box-shadow .2s; animation: flipIn .55s var(--spring) backwards; transform-origin: 50% 0; }
+  .slot b { font-size: 12.5px; white-space: nowrap; }
+  .slot span { font-size: 11px; font-weight: 700; color: var(--muted); }
+  .slot em { position: absolute; top: -7px; right: 6px; padding: 1px 6px; border-radius: 6px; font-size: 9.5px; font-style: normal; font-weight: 850; letter-spacing: .04em; background: var(--accent); color: #fff; }
+  .slot em.saver { background: var(--ok); }
+  .slot:hover { transform: translateY(-2px); }
+  input:checked + .slot { border-color: var(--sel); background: color-mix(in srgb, var(--sel) 10%, var(--card)); box-shadow: 0 8px 16px -10px var(--sel); }
+  input:checked + .slot span { color: var(--sel); }
+  input:disabled + .slot { cursor: not-allowed; opacity: .5; background: repeating-linear-gradient(-45deg, transparent 0 6px, var(--line) 6px 7px); }
+  input:disabled + .slot:hover { transform: none; }
+
+  .foot { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+  .tot { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); }
+  .tot span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tot b { display: block; font-size: 19px; color: var(--ink); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .book {
+    --p: 0;
+    position: relative;
+    overflow: hidden;
+    flex: none;
+    height: 50px;
+    min-width: 128px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: 16px;
+    background: linear-gradient(180deg, var(--accent), var(--accent-d));
+    color: #fff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 14px 24px -14px var(--accent-d), inset 0 1px 0 rgba(255, 255, 255, .3);
+    transition: transform .35s var(--spring), filter .2s, background .3s;
+  }
+  .book::before { content: ""; position: absolute; inset: 0; transform-origin: 0 50%; transform: scaleX(var(--p)); background: rgba(255, 255, 255, .25); }
+  .book span { position: relative; }
+  .book:hover { transform: translateY(-2px); filter: brightness(1.06); }
+  .book.done { background: linear-gradient(180deg, #2b3a55, #18233a); }
+  :root[data-theme="dark"] .book.done { background: linear-gradient(180deg, #34476a, #22314f); }
+
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+
+  @keyframes drift { from { transform: translateX(-140px); } to { transform: translateX(520px); } }
+  @keyframes twinkle { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes putt { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.2px); } }
+  @keyframes flipIn { from { opacity: 0; transform: rotateX(-80deg); } }
+  @keyframes swapIn { from { opacity: 0; transform: translateY(8px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" aria-labelledby="title">
+    <div class="sky" aria-hidden="true">
+      <svg viewBox="0 0 390 176" preserveAspectRatio="xMidYMax slice" id="skySvg">
+        <defs>
+          <linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1"><stop id="s0" offset="0" stop-color="#5aa9ff" /><stop id="s1" offset="1" stop-color="#ffd9b0" /></linearGradient>
+          <radialGradient id="sunG"><stop offset="0" stop-color="#fff7cf" /><stop offset=".45" stop-color="#ffd25a" /><stop offset="1" stop-color="#ffd25a" stop-opacity="0" /></radialGradient>
+          <radialGradient id="moonG"><stop offset="0" stop-color="#f4f1ff" stop-opacity=".9" /><stop offset="1" stop-color="#cfd8ff" stop-opacity="0" /></radialGradient>
+        </defs>
+        <rect width="390" height="176" fill="url(#skyG)" />
+        <g id="stars" opacity="0">
+          <circle class="twinkle" cx="40" cy="30" r="1.2" fill="#fff" /><circle class="twinkle" cx="92" cy="58" r="1" fill="#fff" /><circle class="twinkle" cx="150" cy="22" r="1.4" fill="#fff" />
+          <circle class="twinkle" cx="210" cy="48" r="1" fill="#fff" /><circle class="twinkle" cx="268" cy="18" r="1.3" fill="#fff" /><circle class="twinkle" cx="318" cy="44" r="1" fill="#fff" />
+          <circle class="twinkle" cx="360" cy="26" r="1.2" fill="#fff" /><circle class="twinkle" cx="120" cy="80" r=".9" fill="#fff" /><circle class="twinkle" cx="240" cy="78" r=".9" fill="#fff" />
+        </g>
+        <g id="sun"><circle r="34" fill="url(#sunG)" /><circle r="14" fill="#ffe27a" /></g>
+        <g id="moon" opacity="0"><circle r="28" fill="url(#moonG)" /><circle r="11" fill="#f3f0ff" /><circle cx="5" cy="-3" r="10" fill="#1d2a55" id="moonBite" /></g>
+        <g id="clouds" opacity=".9">
+          <g class="cloud a"><path d="M20 62a12 12 0 0 1 22-6 10 10 0 0 1 17 6 8 8 0 0 1 0 16H22a8 8 0 0 1-2-16z" fill="#fff" opacity=".85" /></g>
+          <g class="cloud b"><path d="M60 34a9 9 0 0 1 16-4 7 7 0 0 1 12 4 6 6 0 0 1 0 12H62a6 6 0 0 1-2-12z" fill="#fff" opacity=".7" /></g>
+          <g class="cloud c"><path d="M-20 92a14 14 0 0 1 26-7 12 12 0 0 1 20 7 9 9 0 0 1 0 18h-44a9 9 0 0 1-2-18z" fill="#fff" opacity=".6" /></g>
+        </g>
+        <!-- far skyline -->
+        <path id="far" d="M0 140V112h18v-8h14v8h10V96h22v16h8v-10h16v-14h4v14h12v24h10V98l10-8 10 8v42h14v-26h20v-12h8v12h12v26h12v-34h26v34h10v-20h14v-16h18v16h10v-10h22v30h16v-22h14v22z" fill="#8fb3d9" />
+        <!-- near rooftops with water tanks, a minaret and trees -->
+        <path id="near" d="M0 176V128h26v-6h6v6h20v-14h30v14h6v-10h10v-6h8v6h4v10h12v-30l3-8 3 8v30h10v-18h26v-8h12v8h6v18h20v-12a10 10 0 0 1 20 0v12h18v-24h30v8h8v-8h22v24h14v-16h6v-6h10v6h6v16h24v48z" fill="#3c5a80" />
+        <g id="windows" opacity="0" fill="#ffd36b">
+          <rect x="34" y="134" width="4" height="5" /><rect x="60" y="122" width="4" height="5" /><rect x="70" y="132" width="4" height="5" /><rect x="152" y="132" width="4" height="5" />
+          <rect x="166" y="124" width="4" height="5" /><rect x="236" y="130" width="4" height="5" /><rect x="250" y="122" width="4" height="5" /><rect x="296" y="134" width="4" height="5" /><rect x="340" y="132" width="4" height="5" />
+        </g>
+        <rect y="160" width="390" height="16" fill="#2a3d57" id="road" />
+        <path d="M0 168H390" stroke="#ffd36b" stroke-width="1.6" stroke-dasharray="10 9" opacity=".7" />
+        <!-- the house you are ordering to -->
+        <g transform="translate(330 140)">
+          <path d="M0 20V6l12-10 12 10v14z" fill="#f2e6d8" /><path d="M-2 7l14-12 14 12" fill="none" stroke="#c45b3c" stroke-width="3" stroke-linejoin="round" />
+          <rect x="9" y="10" width="6" height="10" fill="#7a4b2e" /><rect id="houseLight" x="16" y="7" width="5" height="5" fill="#ffd36b" opacity=".2" />
+        </g>
+        <g id="pin" transform="translate(342 118)" opacity="0"><path d="M0 0c-6 0-10 4-10 9 0 7 10 15 10 15s10-8 10-15c0-5-4-9-10-9z" fill="#ff7a45" /><path d="M-4 9l3 3 5-6" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" /></g>
+        <!-- delivery rider -->
+        <g id="rider" transform="translate(20 146)">
+          <g class="rbody">
+            <rect x="-2" y="-8" width="12" height="11" rx="2" fill="#ff7a45" /><path d="M1 -3h6" stroke="#fff" stroke-width="1.4" />
+            <path d="M2 6h14l4-9h4" fill="none" stroke="#1d2a3d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M12 -2l2-8" stroke="#1d2a3d" stroke-width="3" stroke-linecap="round" /><circle cx="15" cy="-13" r="4" fill="#ffcf3f" />
+          </g>
+          <g class="wheel"><circle cx="2" cy="9" r="4.5" fill="#1d2a3d" /><circle cx="2" cy="9" r="1.6" fill="#c7d2e3" /></g>
+          <g class="wheel"><circle cx="21" cy="9" r="4.5" fill="#1d2a3d" /><circle cx="21" cy="9" r="1.6" fill="#c7d2e3" /></g>
+        </g>
+      </svg>
+      <div class="label" id="label"><small>Delivery slot</small><b id="lblTime">Pick a time</b><span id="lblDay">&nbsp;</span></div>
+    </div>
+    <div class="ticket" id="ticket" role="status">
+      <span class="ok" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="var(--ok)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg></span>
+      <div class="dash"><b id="tkTitle">Slot booked</b><span id="tkText">Friday 20 Nov · 5–7 pm</span></div>
+    </div>
+
+    <div class="body">
+      <h1 class="vh" id="title">Choose a delivery slot</h1>
+      <fieldset>
+        <legend>Day</legend>
+        <div class="days" id="days"><span class="dpill" id="dpill" aria-hidden="true"></span></div>
+      </fieldset>
+      <fieldset class="slots">
+        <legend>Time</legend>
+        <div class="sgrid" id="sgrid"></div>
+      </fieldset>
+      <div class="foot">
+        <p class="tot" style="margin:0"><span id="breakdown">Order 2,740 + delivery</span><b id="total">PKR 2,740</b></p>
+        <button class="book" id="book" type="button"><span id="bookTxt">Book slot</span></button>
+      </div>
+      <p class="vh" id="status" aria-live="polite"></p>
+    </div>
+  </section>
+</main>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<script>
+  // ---------- Sky Slot: pick a day and a time; the sky, sun, moon and city follow the hour you pick ----------
+  const $ = (id) => document.getElementById(id);
+  const ORDER = 2740;
+  const SLOTS = [
+    { t: "9–11 am", end: 11, fee: 120, tag: "Saver", sun: 150 },
+    { t: "11 am–1 pm", end: 13, fee: 150, sun: 104 },
+    { t: "1–3 pm", end: 15, fee: 150, sun: 68 },
+    { t: "3–5 pm", end: 17, fee: 150, sun: 40 },
+    { t: "5–7 pm", end: 19, fee: 220, tag: "Peak", sun: 10 },
+    { t: "7–9 pm", end: 21, fee: 220, tag: "Peak", sun: -30 },
+  ];
+  // Sky look per slot: sky top, sky bottom, far city, near city, stars, windows, clouds, moon
+  const LOOK = [
+    ["#7fb8f5", "#ffd6ad", "#a9bfdc", "#5a7598", 0, 0, .95, 0],
+    ["#3d8ff0", "#bfe1ff", "#8fb3d9", "#3c5a80", 0, 0, .95, 0],
+    ["#4a93ea", "#ffe7b6", "#97b4d4", "#43607f", 0, 0, .9, 0],
+    ["#f0a25a", "#ffe2a8", "#c99a86", "#6c5468", 0, .1, .8, 0],
+    ["#6b4fb5", "#ff8a5c", "#8a5f8f", "#45325f", .25, .6, .6, 0],
+    ["#0d1838", "#2d4280", "#2b3b66", "#18223f", 1, 1, .25, 1],
+  ];
+  const fmt = (n) => "PKR " + n.toLocaleString("en-US");
+  const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => calmQ.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 120) : ms));
+  const play = (el, frames, opts) => (calm() || !el.animate ? Promise.resolve() : el.animate(frames, opts).finished.catch(() => {}));
+  function tween(ms, fn, ease) {
+    return new Promise((res) => {
+      if (calm()) { fn(1); res(); return; }
+      const s = performance.now();
+      requestAnimationFrame(function f(now) { const t = Math.min(1, (now - s) / ms); fn((ease || ((x) => 1 - Math.pow(1 - x, 3)))(t)); t < 1 ? requestAnimationFrame(f) : res(); });
+    });
+  }
+  const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const mix = (a, b, t) => "#" + hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * t).toString(16).padStart(2, "0")).join("");
+
+  // ---------- Days: today and the next four, from the real calendar ----------
+  const now = new Date();
+  const DAYS = [...Array(5)].map((_, i) => { const d = new Date(now); d.setDate(now.getDate() + i); return d; });
+  const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], WDL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const MO = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dayShort = (i) => (i === 0 ? "Today" : i === 1 ? "Tmrw" : WD[DAYS[i].getDay()]);
+  const dayLong = (i) => `${i === 0 ? "Today" : i === 1 ? "Tomorrow" : WDL[DAYS[i].getDay()]}, ${DAYS[i].getDate()} ${MO[DAYS[i].getMonth()]}`;
+  // which slots are taken: past hours today, and a fixed pattern of full slots on other days
+  const FULL = [[], [4], [1, 5], [0], [2]];
+  function state(d, s) {
+    if (d === 0 && SLOTS[s].end - 1 <= now.getHours() + 1) return "Past";
+    if (FULL[d].includes(s)) return "Full";
+    return "";
+  }
+  const open = (d) => SLOTS.some((_, s) => !state(d, s));
+
+  const daysEl = $("days"), sgrid = $("sgrid");
+  DAYS.forEach((d, i) => {
+    daysEl.insertAdjacentHTML("beforeend", `<input class="vh" type="radio" name="day" id="d${i}" value="${i}" ${open(i) ? "" : "disabled"}><label class="day" for="d${i}"><small>${dayShort(i)}</small><b>${d.getDate()}</b><span class="vh">${dayLong(i)}${open(i) ? "" : ", fully booked"}</span></label>`);
+  });
+
+  let day = -1, slot = -1, booked = false, busy = false;
+  function renderSlots(stagger) {
+    sgrid.innerHTML = "";
+    SLOTS.forEach((s, i) => {
+      const st = state(day, i);
+      sgrid.insertAdjacentHTML("beforeend", `<input class="vh" type="radio" name="slot" id="s${i}" value="${i}" ${st ? "disabled" : ""}><label class="slot" for="s${i}" style="animation-delay:${stagger ? i * 45 : 0}ms">${s.tag && !st ? `<em class="${s.tag === "Saver" ? "saver" : ""}">${s.tag}</em>` : ""}<b>${s.t}</b><span>${st || fmt(s.fee)}</span></label>`);
+    });
+    sgrid.querySelectorAll("input").forEach((r) => r.addEventListener("change", () => pickSlot(+r.value)));
+  }
+  function moveDayPill() {
+    const lab = daysEl.querySelector(`label[for="d${day}"]`), p = $("dpill");
+    p.style.width = lab.offsetWidth + "px";
+    p.style.transform = `translateX(${lab.offsetLeft}px)`;
+  }
+  addEventListener("resize", () => { if (day >= 0) moveDayPill(); });
+
+  function pickDay(d, keepSlot) {
+    if (busy) { if (day >= 0) $("d" + day).checked = true; return; } // hold still while booking
+    if (booked) unbook();
+    day = d;
+    $("d" + d).checked = true;
+    moveDayPill();
+    renderSlots(true);
+    // keep the same time if it is free on the new day, otherwise take the first free one
+    let s = keepSlot != null && !state(d, keepSlot) ? keepSlot : SLOTS.findIndex((_, i) => !state(d, i));
+    pickSlot(s, true);
+  }
+  daysEl.addEventListener("change", (e) => { if (e.target.name === "day") pickDay(+e.target.value, slot); });
+
+  // ---------- Painting the sky for a slot ----------
+  const sky = { look: LOOK[1].slice(), sun: 104, sunV: 0, sunT: 104 };
+  const stops = [$("s0"), $("s1")];
+  function paint(l) {
+    stops[0].setAttribute("stop-color", l[0]); stops[1].setAttribute("stop-color", l[1]);
+    $("far").setAttribute("fill", l[2]); $("near").setAttribute("fill", l[3]);
+    $("stars").setAttribute("opacity", l[4]); $("windows").setAttribute("opacity", l[5]);
+    $("clouds").setAttribute("opacity", l[6]); $("moon").setAttribute("opacity", l[7]);
+    $("houseLight").setAttribute("opacity", .2 + l[5] * .8);
+    $("moonBite").setAttribute("fill", l[0]);
+  }
+  function skyTo(i) {
+    const from = sky.look.slice(), to = LOOK[i];
+    sky.sunT = SLOTS[i].sun;
+    return tween(900, (t) => {
+      sky.look = from.map((v, k) => (typeof v === "string" ? mix(v, to[k], t) : v + (to[k] - v) * t));
+      paint(sky.look);
+    }, (x) => x * x * (3 - 2 * x));
+  }
+  // the sun rides an arc on a spring (and dips below the city at night); the moon rises on the left
+  let skyLast = performance.now();
+  function skyLoop(now) {
+    const dt = Math.min(.033, (now - skyLast) / 1000); skyLast = now;
+    if (calm()) sky.sun = sky.sunT; else { sky.sunV += ((sky.sunT - sky.sun) * 40 - sky.sunV * 7.5) * dt; sky.sun += sky.sunV * dt; }
+    const a = sky.sun * Math.PI / 180;
+    $("sun").setAttribute("transform", `translate(${(195 + Math.cos(a) * 150).toFixed(1)} ${(150 - Math.sin(a) * 118).toFixed(1)})`);
+    const m = (1 - sky.look[7]);
+    $("moon").setAttribute("transform", `translate(${70 + m * 10} ${46 + m * 70})`);
+    requestAnimationFrame(skyLoop);
+  }
+
+  // ---------- The rider ----------
+  let riderX = 20;
+  const rider = $("rider");
+  function setRider(x) { riderX = x; rider.setAttribute("transform", `translate(${x.toFixed(1)} 146)`); }
+  async function ride(to, ms) {
+    rider.classList.add("riding");
+    const from = riderX;
+    let lastPuff = 0;
+    await tween(ms, (t) => {
+      setRider(from + (to - from) * t);
+      if (t - lastPuff > .08 && t < .95) { lastPuff = t; puff(); }
+    }, (x) => (x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2));
+    rider.classList.remove("riding");
+  }
+  function puff() {
+    if (calm()) return;
+    const r = $("skySvg").getBoundingClientRect(), k = r.height / 176;
+    const off = (r.width - 390 * k) / 2; // xMidYMax slice keeps the middle
+    emit({ x: r.left + off + (riderX - 2) * k, y: r.top + 154 * k, vx: -20 - Math.random() * 30, vy: -10 - Math.random() * 15, max: .6, size: 3 + Math.random() * 3, color: "rgba(220,225,235,A)", g: -10 });
+  }
+
+  // ---------- Picking a time ----------
+  async function pickSlot(i, fromDay) {
+    if (i < 0) return;
+    if (busy) { if (slot >= 0) $("s" + slot).checked = true; return; }
+    if (booked) unbook();
+    const changed = i !== slot || fromDay;
+    slot = i;
+    $("s" + i).checked = true;
+    const s = SLOTS[i];
+    // label in the sky swaps with a springy rise
+    const lt = $("lblTime"), ld = $("lblDay");
+    lt.textContent = s.t; ld.textContent = dayLong(day);
+    lt.classList.remove("swap"); ld.classList.remove("swap"); lt.offsetWidth; lt.classList.add("swap"); ld.classList.add("swap");
+    updateTotal();
+    say(`${dayLong(day)}, ${s.t}. Delivery ${fmt(s.fee)}. Total ${fmt(ORDER + s.fee)}.`);
+    if (!changed) return;
+    const lab = sgrid.querySelector(`label[for="s${i}"]`);
+    play(lab, [{ transform: "scale(1)" }, { transform: "scale(.92)", offset: .3 }, { transform: "scale(1.05)", offset: .65 }, { transform: "scale(1)" }], { duration: 420 });
+    skyTo(i);
+    // the rider nips along the road to a new spot that matches the hour
+    ride(30 + i * 46, 700);
+  }
+
+  let shown = ORDER;
+  function updateTotal() {
+    const fee = SLOTS[slot].fee, total = ORDER + fee, from = shown;
+    shown = total;
+    $("breakdown").textContent = `Order ${ORDER.toLocaleString("en-US")} + delivery ${fee}`;
+    tween(500, (t) => { $("total").textContent = fmt(Math.round(from + (total - from) * t)); });
+    $("bookTxt").textContent = "Book slot";
+  }
+
+  // ---------- Booking: the rider rides to the house, a pin drops and a ticket swings in ----------
+  async function book() {
+    if (busy || slot < 0) return;
+    if (booked) { unbook(); $("bookTxt").textContent = "Book slot"; say("Booking cancelled. Pick a slot."); return; }
+    busy = true;
+    const b = $("book");
+    play(b, [{ transform: "scale(1)" }, { transform: "scale(.94, .88)", offset: .3 }, { transform: "scale(1.03)", offset: .7 }, { transform: "scale(1)" }], { duration: 420 });
+    $("bookTxt").textContent = "Booking…";
+    say("Booking your slot…");
+    // anticipation: the rider backs up a little, then goes
+    await ride(Math.max(6, riderX - 14), 260);
+    const go = ride(306, 1100);
+    await tween(1100, (t) => b.style.setProperty("--p", t.toFixed(3)), (x) => x);
+    await go;
+    // finish: the pin drops on the house with a bounce, the window lights up and the ticket arrives
+    const pin = $("pin");
+    pin.setAttribute("opacity", 1);
+    play(pin, [{ transform: "translate(342px, 90px) scale(.6)" }, { transform: "translate(342px, 121px) scale(1.1, .9)", offset: .6 }, { transform: "translate(342px, 115px) scale(.95, 1.05)", offset: .8 }, { transform: "translate(342px, 118px)" }], { duration: 520, easing: "ease-out" });
+    $("tkText").textContent = `${dayLong(day)} · ${SLOTS[slot].t}`;
+    $("tkTitle").textContent = `Slot booked · ${fmt(ORDER + SLOTS[slot].fee)}`;
+    $("ticket").classList.add("show");
+    b.classList.add("done");
+    b.style.setProperty("--p", 0);
+    $("bookTxt").textContent = "Change slot";
+    booked = true;
+    const r = $("ticket").getBoundingClientRect();
+    stars(r.left + r.width / 2, r.top + r.height, 24);
+    say(`Booked: ${dayLong(day)}, ${SLOTS[slot].t}. Total ${fmt(ORDER + SLOTS[slot].fee)}.`);
+    busy = false;
+  }
+  function unbook() {
+    booked = false;
+    $("ticket").classList.remove("show");
+    $("book").classList.remove("done");
+    $("pin").setAttribute("opacity", 0);
+    ride(30 + slot * 46, 600);
+  }
+  $("book").addEventListener("click", book);
+
+  // ---------- Dust and stars on a canvas ----------
+  const fx = $("fx"), ctx = fx.getContext("2d");
+  let parts = [], fxOn = false, fxLast = 0;
+  function sizeFx() { const d = Math.min(2, devicePixelRatio || 1); fx.width = innerWidth * d; fx.height = innerHeight * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+  sizeFx(); addEventListener("resize", sizeFx);
+  function emit(P) { if (calm()) return; parts.push(Object.assign({ life: 0 }, P)); if (!fxOn) { fxOn = true; fxLast = performance.now(); requestAnimationFrame(drawFx); } }
+  function stars(x, y, n) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.PI * (.1 + Math.random() * .8), v = 80 + Math.random() * 200;
+      emit({ x: x + (Math.random() - .5) * 120, y, vx: Math.cos(a) * v * (Math.random() < .5 ? -1 : 1), vy: Math.sin(a) * v * .6, g: 240, max: .7 + Math.random() * .5, size: 3 + Math.random() * 3, star: true, color: ["rgba(255,122,69,A)", "rgba(255,211,107,A)", "rgba(122,162,255,A)"][i % 3] });
+    }
+  }
+  function drawFx(now) {
+    const dt = Math.min(.04, (now - fxLast) / 1000); fxLast = now;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      p.life += dt;
+      if (p.life > p.max) { parts.splice(i, 1); continue; }
+      p.vx *= .96; p.vy = p.vy * .96 + (p.g || 0) * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      const a = 1 - p.life / p.max;
+      ctx.fillStyle = p.color.replace("A", a.toFixed(3));
+      ctx.beginPath();
+      if (p.star) { const r = p.size * 1.4; ctx.moveTo(p.x, p.y - r); ctx.quadraticCurveTo(p.x, p.y, p.x + r, p.y); ctx.quadraticCurveTo(p.x, p.y, p.x, p.y + r); ctx.quadraticCurveTo(p.x, p.y, p.x - r, p.y); ctx.quadraticCurveTo(p.x, p.y, p.x, p.y - r); }
+      else ctx.arc(p.x, p.y, p.size * (1 + (1 - a)), 0, 7);
+      ctx.fill();
+    }
+    if (parts.length) requestAnimationFrame(drawFx); else { fxOn = false; ctx.clearRect(0, 0, innerWidth, innerHeight); }
+  }
+  function say(m) { $("status").textContent = m; }
+
+  // ---------- Auto-demo: sweeps through the day, books a slot, then starts again ----------
+  const demo = { on: true, timer: 0, n: 0 };
+  function stopDemo() { if (demo.on) { demo.on = false; clearTimeout(demo.timer); } }
+  addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  const firstOpenDay = () => DAYS.findIndex((_, i) => open(i));
+  async function runDemo() {
+    if (!demo.on) return;
+    const d = (firstOpenDay() + 1 + (demo.n++ % 3)) % 5;
+    const dd = open(d) ? d : firstOpenDay();
+    pickDay(dd, null);
+    // walk the free slots from morning to night, then book the last one
+    const free = SLOTS.map((_, i) => i).filter((i) => !state(dd, i));
+    for (const i of free.slice(1)) { await wait(820); if (!demo.on) return; pickSlot(i); }
+    await wait(1100); if (!demo.on) return;
+    await book();
+    await wait(2600); if (!demo.on) return;
+    unbook();
+    $("bookTxt").textContent = "Book slot";
+    demo.timer = setTimeout(runDemo, 900);
+  }
+
+  // ---------- Start: first free day and slot, morning sky ----------
+  paint(sky.look);
+  pickDay(Math.max(0, firstOpenDay()), null);
+  requestAnimationFrame(skyLoop);
+  demo.timer = setTimeout(runDemo, 450);
+</script>
+</body>
+</html>

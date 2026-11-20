@@ -1,0 +1,554 @@
+<!doctype html>
+<!-- Chill & Craft · Fishbowl · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fishbowl · trash with restore</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #e6f4fa;
+    --bg2: #fbefe6;
+    --panel: rgba(255, 255, 255, .78);
+    --panel-line: rgba(30, 90, 110, .1);
+    --tile: #ffffff;
+    --ink: #15313b;
+    --muted: #5d7883;
+    --slot: #c4dbe3;
+    --coral: #ff7a59;
+    --aqua: #2fb3d6;
+    --glass: rgba(70, 140, 165, .5);
+    --glass-fill: rgba(255, 255, 255, .35);
+    --water-top: rgba(120, 214, 238, .55);
+    --water-bot: rgba(38, 140, 190, .62);
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #0a1a22;
+    --bg2: #17141c;
+    --panel: rgba(18, 32, 40, .82);
+    --panel-line: rgba(140, 210, 230, .1);
+    --tile: #1a2c35;
+    --ink: #e4f2f6;
+    --muted: #8ea8b2;
+    --slot: #2c4652;
+    --glass: rgba(150, 220, 240, .45);
+    --glass-fill: rgba(150, 220, 240, .06);
+    --water-top: rgba(70, 170, 210, .45);
+    --water-bot: rgba(20, 90, 140, .6);
+    --focus: #93c5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    color: var(--ink);
+    background: linear-gradient(135deg, var(--bg1), var(--bg2));
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 22px 16px; width: 100%; }
+  .desk {
+    width: min(700px, 100%);
+    display: grid;
+    grid-template-columns: 1fr 250px;
+    gap: 22px;
+    align-items: center;
+    padding: 20px;
+    border-radius: 26px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    box-shadow: 0 40px 70px -46px rgba(20, 70, 90, .55);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+  @media (max-width: 620px) { .desk { grid-template-columns: 1fr; gap: 10px; padding: 16px; } }
+  h1 { margin: 0 0 12px; font-size: 16px; font-weight: 740; display: flex; align-items: baseline; gap: 8px; }
+  h1 span { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+
+  /* ---------- File tiles ---------- */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .tile {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+    padding: 14px 6px 10px;
+    border-radius: 16px;
+    background: var(--tile);
+    border: 1.5px solid var(--panel-line);
+    box-shadow: 0 10px 20px -16px rgba(20, 70, 90, .5);
+    transition: background-color .3s, box-shadow .3s, border-color .3s;
+  }
+  .tile .art { width: 52px; height: 52px; transition: transform .45s var(--spring), opacity .25s; }
+  .tile .art svg, .item svg, .flyer svg { display: block; width: 100%; height: 100%; }
+  .tile .nm { max-width: 100%; font-size: 12px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .25s; }
+  .tile.gone, .tile.lost { background: transparent; box-shadow: none; border: 1.5px dashed var(--slot); }
+  .tile.gone .art, .tile.lost .art { transform: scale(.4); opacity: 0; }
+  .tile.gone .nm, .tile.lost .nm { opacity: .45; }
+  .tile.lost .nm::after { content: " · emptied"; }
+  .x {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--coral);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    opacity: 0;
+    transform: scale(.6);
+    transition: opacity .2s, transform .35s var(--spring);
+    box-shadow: 0 6px 12px -6px var(--coral);
+  }
+  .x svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
+  .tile:hover .x, .tile:focus-within .x, .tile.demo-hover .x { opacity: 1; transform: scale(1); }
+  @media (hover: none) { .x { opacity: .9; transform: scale(.9); } }
+  .tile.gone .x, .tile.lost .x { visibility: hidden; }
+  .x:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .x:active, .x.pressed { transform: scale(.8); }
+  .reset { margin-top: 12px; height: 34px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--panel-line); background: var(--tile); color: var(--ink); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+  .reset[hidden] { display: none; }
+
+  /* ---------- The fishbowl ---------- */
+  .bowl { display: grid; justify-items: center; gap: 8px; }
+  .glass { position: relative; width: 250px; aspect-ratio: 1; }
+  @media (max-width: 620px) { .glass { width: 210px; } }
+  .glass > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .water { transform: translateY(100px); transition: transform .9s var(--spring); }
+  .wavepath { animation: wave 3.2s linear infinite; }
+  .weed { transform-box: fill-box; transform-origin: 50% 100%; animation: sway 4s ease-in-out infinite; }
+  .weed.w2 { animation-duration: 5.2s; animation-delay: -1.4s; }
+  .fish { transform-box: view-box; transform-origin: 0 0; animation: swim 11s ease-in-out infinite; }
+  .tail { transform-box: fill-box; transform-origin: 100% 50%; animation: wag .45s ease-in-out infinite alternate; }
+  .dart { transform-box: view-box; }
+  .dart.go { animation: dart .7s cubic-bezier(.2, .8, .3, 1); }
+  .bub { animation: rise 3.6s ease-in infinite; opacity: 0; }
+  .bub:nth-of-type(2) { animation-delay: -1.2s; }
+  .bub:nth-of-type(3) { animation-delay: -2.4s; }
+  .ripple { transform-box: fill-box; transform-origin: 50% 50%; }
+
+  .inside { position: absolute; inset: 0; }
+  .item {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    margin: -22px 0 0 -22px;
+    padding: 2px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .item[hidden] { display: none; }
+  .item .bob { display: block; width: 100%; height: 100%; animation: bob 3s ease-in-out infinite; filter: drop-shadow(0 4px 4px rgba(10, 60, 90, .25)); }
+  .item:nth-child(2n) .bob { animation-duration: 3.7s; animation-delay: -1s; }
+  .item:nth-child(3n) .bob { animation-duration: 2.6s; animation-delay: -.6s; }
+  .item:hover .bob { filter: drop-shadow(0 0 6px rgba(255, 255, 255, .9)); }
+  .item:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .bfoot { display: flex; align-items: center; gap: 10px; }
+  .tcount { font-size: 13px; font-weight: 650; }
+  .tcount span { font-weight: 500; color: var(--muted); }
+  .empty { height: 34px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--coral); color: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 8px 16px -10px var(--coral); transition: transform .3s var(--spring), opacity .3s; }
+  .empty:hover:not(:disabled) { transform: translateY(-1px); }
+  .empty:disabled { opacity: 1; cursor: default; box-shadow: none; background: transparent; color: var(--muted); outline: 1.5px dashed var(--slot); outline-offset: -1.5px; }
+  .empty:focus-visible, .reset:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+  .empty.pressed { transform: scale(.92); }
+
+  .flyer { position: fixed; z-index: 30; pointer-events: none; filter: drop-shadow(0 8px 8px rgba(10, 60, 90, .25)); }
+  .drop { position: fixed; z-index: 31; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: var(--aqua); pointer-events: none; }
+  .bubble { position: fixed; z-index: 31; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; pointer-events: none; border: 1.5px solid rgba(255, 255, 255, .9); background: radial-gradient(circle at 32% 30%, rgba(255, 255, 255, .95) 0 14%, rgba(180, 235, 250, .35) 30%, rgba(120, 210, 240, .15) 70%); }
+  .hint { margin: 0; font-size: 13px; color: var(--muted); text-align: center; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @keyframes wave { from { transform: translateX(0); } to { transform: translateX(60px); } }
+  @keyframes sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(7deg); } }
+  @keyframes swim {
+    0% { transform: translate(64px, 152px) scaleX(1); }
+    44% { transform: translate(176px, 136px) scaleX(1); }
+    50% { transform: translate(180px, 140px) scaleX(-1); }
+    94% { transform: translate(60px, 156px) scaleX(-1); }
+    100% { transform: translate(64px, 152px) scaleX(1); }
+  }
+  @keyframes wag { from { transform: rotate(-16deg); } to { transform: rotate(16deg); } }
+  @keyframes dart { 0% { transform: translate(0, 0); } 30% { transform: translate(-16px, 10px); } 100% { transform: translate(0, 0); } }
+  @keyframes rise { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: .9; } 85% { opacity: .7; } 100% { transform: translateY(-96px); opacity: 0; } }
+  @keyframes bob { 0%, 100% { transform: translateY(-3px) rotate(-6deg); } 50% { transform: translateY(4px) rotate(6deg); } }
+
+  /* Calm mode: same steps, no big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="desk">
+    <section aria-labelledby="files-title">
+      <h1 id="files-title">My files <span id="fcount">5 files</span></h1>
+      <div class="grid" id="grid"></div>
+      <button class="reset" id="reset" type="button" hidden>Bring back the sample files</button>
+    </section>
+    <section class="bowl" aria-labelledby="bowl-title">
+      <h2 class="sr-only" id="bowl-title">Trash</h2>
+      <div class="glass" id="glass">
+        <svg viewBox="0 0 240 240" id="bowlsvg" aria-hidden="true">
+          <defs>
+            <clipPath id="bowlclip"><path d="M76 46C40 62 22 100 22 138c0 54 44 88 98 88s98-34 98-88c0-38-18-76-54-92z" /></clipPath>
+            <linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--water-top)" /><stop offset="1" style="stop-color: var(--water-bot)" /></linearGradient>
+          </defs>
+          <ellipse cx="120" cy="233" rx="82" ry="6" fill="rgba(10,40,60,.14)" />
+          <path d="M76 46C40 62 22 100 22 138c0 54 44 88 98 88s98-34 98-88c0-38-18-76-54-92z" style="fill: var(--glass-fill)" />
+          <g clip-path="url(#bowlclip)">
+            <g class="water" id="water">
+              <path class="wavepath" d="M-60 0q15-5 30 0t30 0 30 0 30 0 30 0 30 0 30 0 30 0 30 0 30 0 30 0V170H-60z" fill="url(#wg)" />
+            </g>
+            <g>
+              <circle cx="40" cy="214" r="9" fill="#e9c46a" /><circle cx="58" cy="220" r="8" fill="#f4a261" /><circle cx="76" cy="222" r="9" fill="#a8dadc" />
+              <circle cx="96" cy="224" r="8" fill="#e76f51" /><circle cx="114" cy="226" r="9" fill="#e9c46a" /><circle cx="134" cy="225" r="8" fill="#84c5d6" />
+              <circle cx="152" cy="223" r="9" fill="#f4a261" /><circle cx="172" cy="220" r="8" fill="#e9c46a" /><circle cx="190" cy="215" r="9" fill="#a8dadc" />
+              <circle cx="206" cy="206" r="7" fill="#e76f51" /><circle cx="28" cy="204" r="7" fill="#84c5d6" />
+            </g>
+            <path class="weed" d="M168 214c-5-14 6-24 1-38-4-11 4-18 1-30" fill="none" stroke="#2a9d8f" stroke-width="5" stroke-linecap="round" />
+            <path class="weed w2" d="M182 212c-3-10 5-16 2-26" fill="none" stroke="#3cb38f" stroke-width="4" stroke-linecap="round" />
+            <path class="weed w2" d="M58 212c-4-12 4-20 0-32" fill="none" stroke="#2a9d8f" stroke-width="4" stroke-linecap="round" />
+            <circle class="bub" cx="166" cy="190" r="3" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="1.2" />
+            <circle class="bub" cx="172" cy="196" r="2" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="1.2" />
+            <circle class="bub" cx="162" cy="200" r="2.5" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="1.2" />
+            <g class="dart" id="dart">
+              <g class="fish">
+                <path class="tail" d="M-10 0l-10-7.5v15z" fill="#e85d3a" />
+                <ellipse cx="0" cy="0" rx="13" ry="8.5" fill="#ff7a59" />
+                <path d="M-2-8c3-5 8-5 9-1z" fill="#e85d3a" />
+                <circle cx="6" cy="-2" r="2.4" fill="#fff" /><circle cx="6.6" cy="-2" r="1.2" fill="#15313b" />
+              </g>
+            </g>
+            <g id="fxg"></g>
+          </g>
+          <path d="M76 46C40 62 22 100 22 138c0 54 44 88 98 88s98-34 98-88c0-38-18-76-54-92" fill="none" style="stroke: var(--glass)" stroke-width="2.5" />
+          <ellipse cx="120" cy="46" rx="44" ry="7" fill="none" style="stroke: var(--glass)" stroke-width="2.5" />
+          <path d="M46 104c-8 30-4 62 16 86" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="5" stroke-linecap="round" />
+          <path d="M190 84c6 8 9 16 10 24" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="4" stroke-linecap="round" />
+        </svg>
+        <div class="inside" id="inside"></div>
+      </div>
+      <div class="bfoot">
+        <span class="tcount" id="tcount">Trash <span>· empty</span></span>
+        <button class="empty" id="empty" type="button" disabled>Empty</button>
+      </div>
+    </section>
+  </div>
+  <p class="hint">Press × to drop a file in the bowl · tap a floating file to fish it back out</p>
+  <p class="sr-only" id="status" aria-live="polite"></p>
+</main>
+
+<script>
+  // ---------- Fishbowl: deleted files float in a glass bowl until you fish them out or empty it ----------
+  const $ = (id) => document.getElementById(id);
+  const grid = $("grid"), inside = $("inside"), bowlsvg = $("bowlsvg"), water = $("water"), fxg = $("fxg"), dartEl = $("dart");
+  const tcount = $("tcount"), emptyBtn = $("empty"), resetBtn = $("reset"), fcount = $("fcount"), status = $("status");
+
+  // Little file pictures (48x48), used on the desk, in the bowl and while flying
+  const ART = {
+    photo: '<svg viewBox="0 0 48 48"><rect x="4" y="8" width="40" height="32" rx="7" fill="#7fd0ec" /><circle cx="34" cy="17" r="4.5" fill="#ffd166" /><path d="M4 33l12-14 9 10 6-6 13 12v1a7 7 0 0 1-7 7H11a7 7 0 0 1-7-7z" fill="#2f7d6d" /><path d="M16 19l4 4.6-2.2-.8-1.8 1.6-1.8-1.6-2 .8z" fill="#fff" /></svg>',
+    note: '<svg viewBox="0 0 48 48"><rect x="9" y="4" width="30" height="40" rx="5" fill="#fff6d1" stroke="#e5c96b" stroke-width="1.5" /><path d="M15 15h18M15 21h18M15 27h13M15 33h16" stroke="#c9a94a" stroke-width="2" stroke-linecap="round" /><circle cx="24" cy="7" r="3" fill="#ff7a59" /></svg>',
+    music: '<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="#8b5cf6" /><circle cx="24" cy="24" r="12" fill="none" stroke="#a78bfa" stroke-width="1.4" /><circle cx="24" cy="24" r="5" fill="#ddd6fe" /><path d="M27 12v13.5a3.6 3.6 0 1 1-2-3.2V12l7 2v4z" fill="#fff" /></svg>',
+    sheet: '<svg viewBox="0 0 48 48"><rect x="7" y="6" width="34" height="36" rx="6" fill="#22a06b" /><rect x="7" y="6" width="34" height="9" rx="6" fill="#178a59" /><path d="M7 24h34M7 33h34M19 15v27M30 15v27" stroke="#c9f0dc" stroke-width="1.6" /></svg>',
+    zip: '<svg viewBox="0 0 48 48"><path d="M5 14a5 5 0 0 1 5-5h10l4 5h14a5 5 0 0 1 5 5v17a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5z" fill="#f5b041" /><path d="M5 19h38" stroke="#e39b22" stroke-width="2" /><path d="M24 14v4h3v4h-3v4h3v4h-3" stroke="#7a4b0c" stroke-width="2" fill="none" /><rect x="21" y="30" width="6" height="7" rx="1.5" fill="#7a4b0c" /></svg>'
+  };
+  const FILES = [
+    { name: "Hunza trip.jpg", art: "photo" },
+    { name: "Shopping list.txt", art: "note" },
+    { name: "Qawwali mix.mp3", art: "music" },
+    { name: "Budget 2026.xlsx", art: "sheet" },
+    { name: "Old logos.zip", art: "zip" }
+  ];
+  // where floating files rest inside the bowl (bowl SVG units)
+  const SLOTS = [[86, 142], [150, 130], [118, 172], [72, 186], [166, 184]];
+  const BASE_WATER = 100, RISE = 4;
+
+  const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => calmQ.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 250) : ms));
+  function play(el, frames, opts) {
+    if (calm() || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  function say(msg) { if (!demo.on) status.textContent = msg; }
+
+  // ---------- Build desk tiles and bowl items ----------
+  FILES.forEach((f, i) => {
+    f.state = "desk"; // desk | flying | bowl | lost
+    f.slot = -1;
+    const t = document.createElement("div");
+    t.className = "tile";
+    t.innerHTML = '<div class="art" aria-hidden="true">' + ART[f.art] + '</div><span class="nm">' + f.name + "</span>" +
+      '<button class="x" type="button" aria-label="Move ' + f.name + ' to the trash"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" /></svg></button>';
+    t.querySelector(".x").addEventListener("click", () => trash(i));
+    grid.appendChild(t);
+    f.tile = t;
+    const it = document.createElement("button");
+    it.type = "button";
+    it.className = "item";
+    it.hidden = true;
+    it.setAttribute("aria-label", "Restore " + f.name);
+    it.innerHTML = '<span class="bob">' + ART[f.art] + "</span>";
+    it.addEventListener("click", () => fishOut(i));
+    inside.appendChild(it);
+    f.item = it;
+  });
+
+  // ---------- Helpers: bowl coordinates, counts and water level ----------
+  const inBowl = () => FILES.filter((f) => f.state === "bowl" || (f.state === "flying" && f.dir === "in"));
+  const waterY = () => BASE_WATER - inBowl().length * RISE;
+  function bowlPt(vx, vy) {
+    const r = bowlsvg.getBoundingClientRect();
+    return { x: r.left + vx * r.width / 240, y: r.top + vy * r.height / 240, k: r.width / 240 };
+  }
+  function refresh() {
+    const n = FILES.filter((f) => f.state === "bowl").length;
+    tcount.innerHTML = "Trash <span>· " + (n ? n + (n === 1 ? " file" : " files") : "empty") + "</span>";
+    emptyBtn.disabled = n === 0;
+    water.style.transform = "translateY(" + waterY() + "px)";
+    const desk = FILES.filter((f) => f.state === "desk").length;
+    fcount.textContent = desk + (desk === 1 ? " file" : " files");
+    resetBtn.hidden = !FILES.some((f) => f.state === "lost");
+  }
+  const freeSlot = () => SLOTS.findIndex((_, s) => !FILES.some((f) => f.slot === s));
+
+  // A copy of the picture that flies along a curve from a to b over an apex
+  function fly(art, a, b, apex, s0, s1, ms, spin) {
+    const el = document.createElement("div");
+    el.className = "flyer";
+    el.innerHTML = ART[art];
+    const box = (p, s, rot) => ({ left: p.x - s / 2 + "px", top: p.y - s / 2 + "px", width: s + "px", height: s + "px", transform: "rotate(" + rot + "deg)" });
+    Object.assign(el.style, box(b, s1, spin));
+    document.body.appendChild(el);
+    const mid = Object.assign(box(apex, (s0 + s1) / 2 * 1.1, spin / 2), { offset: .45 });
+    return play(el, [box(a, s0, 0), mid, box(b, s1, spin)], { duration: ms, easing: "cubic-bezier(.45,.05,.4,1)" }).then(() => el);
+  }
+
+  // Splash at the water surface: a ring on the water and droplets that hop and fall
+  function splash(vx, big) {
+    const vy = waterY();
+    if (calm()) return;
+    const e = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+    e.setAttribute("cx", vx); e.setAttribute("cy", vy); e.setAttribute("rx", 22); e.setAttribute("ry", 4);
+    e.setAttribute("fill", "none"); e.setAttribute("stroke", "rgba(255,255,255,.9)"); e.setAttribute("stroke-width", 2);
+    e.classList.add("ripple");
+    fxg.appendChild(e);
+    e.animate([{ transform: "scale(.15)", opacity: 1 }, { transform: "scale(1.5)", opacity: 0 }], { duration: 700, easing: "ease-out" }).onfinish = () => e.remove();
+    const p = bowlPt(vx, vy);
+    for (let i = 0; i < (big ? 10 : 7); i++) {
+      const d = document.createElement("span");
+      d.className = "drop";
+      d.style.left = p.x + "px"; d.style.top = p.y + "px";
+      document.body.appendChild(d);
+      const dx = (Math.random() - .5) * 70, h = 26 + Math.random() * 30;
+      d.animate([{ transform: "translate(0,0) scale(1)", opacity: 1 }, { transform: "translate(" + dx * .55 + "px," + -h + "px) scale(1)", opacity: 1, offset: .45 }, { transform: "translate(" + dx + "px,6px) scale(.5)", opacity: 0 }], { duration: 620 + Math.random() * 160, easing: "cubic-bezier(.3,.6,.6,1)" }).onfinish = () => d.remove();
+    }
+    dartEl.classList.remove("go");
+    void dartEl.getBoundingClientRect();
+    dartEl.classList.add("go");
+  }
+
+  // ---------- Delete: the file arcs into the bowl, splashes and sinks to a resting spot ----------
+  async function trash(i) {
+    const f = FILES[i];
+    if (f.state !== "desk") return;
+    const s = freeSlot();
+    if (s < 0) return;
+    f.state = "flying"; f.dir = "in"; f.slot = s;
+    const hadFocus = f.tile.contains(document.activeElement);
+    const art = f.tile.querySelector(".art");
+    await play(art, [{ transform: "scale(1)" }, { transform: "scale(1.12, .84)" }, { transform: "scale(1)" }], { duration: 230, easing: "ease-out" });
+    const ar = art.getBoundingClientRect();
+    f.tile.classList.add("gone");
+    refresh();
+    const from = { x: ar.left + ar.width / 2, y: ar.top + ar.height / 2 };
+    const surfV = waterY();
+    const surf = bowlPt(SLOTS[s][0], surfV);
+    const rim = bowlPt(120, 20);
+    const apex = { x: (from.x + surf.x) / 2, y: Math.min(from.y, rim.y) - 60 };
+    const el = await fly(f.art, from, surf, apex, ar.width, 44, 760, 220);
+    el.remove();
+    splash(SLOTS[s][0], false);
+    // sink from the surface to the resting spot with a soft bounce
+    const it = f.item;
+    it.style.left = SLOTS[s][0] / 2.4 + "%";
+    it.style.top = SLOTS[s][1] / 2.4 + "%";
+    it.hidden = false;
+    const drop = (surfV - SLOTS[s][1]) * surf.k;
+    play(it, [{ transform: "translateY(" + drop + "px)" }, { transform: "translateY(8px)", offset: .6 }, { transform: "translateY(-3px)", offset: .82 }, { transform: "none" }], { duration: 1100, easing: "cubic-bezier(.3,.6,.4,1)" });
+    f.state = "bowl";
+    refresh();
+    if (hadFocus) { const next = FILES.find((x) => x.state === "desk"); (next ? next.tile.querySelector(".x") : it).focus({ preventScroll: true }); }
+    say(f.name + " moved to the trash. Select it in the bowl to restore it.");
+  }
+
+  // ---------- Restore: fish it out; it jumps from the water and lands back on its tile ----------
+  async function fishOut(i) {
+    const f = FILES[i];
+    if (f.state !== "bowl") return;
+    f.state = "flying"; f.dir = "out";
+    const hadFocus = f.item === document.activeElement;
+    const r = f.item.getBoundingClientRect();
+    const s = f.slot;
+    f.item.hidden = true;
+    f.slot = -1;
+    splash(SLOTS[s][0], true);
+    refresh();
+    const art = f.tile.querySelector(".art");
+    const tr = art.getBoundingClientRect();
+    // the tile art is scaled down while gone: use the tile's own box to find the real centre
+    const tb = f.tile.getBoundingClientRect();
+    const to = { x: tb.left + tb.width / 2, y: tr.top + tr.height / 2 };
+    const from = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    const apex = { x: (from.x + to.x) / 2, y: Math.min(from.y, to.y) - 90 };
+    const el = await fly(f.art, from, to, apex, r.width, 52, 720, -360);
+    el.remove();
+    f.tile.classList.remove("gone");
+    play(art, [{ transform: "scale(.5)", opacity: 1 }, { transform: "scale(1.18)", offset: .55 }, { transform: "scale(1)" }], { duration: 520, easing: "ease-out" });
+    play(f.tile, [{ boxShadow: "0 0 0 6px rgba(47,179,214,.35)" }, { boxShadow: "0 10px 20px -16px rgba(20,70,90,.5)" }], { duration: 900, easing: "ease-out" });
+    if (!calm()) for (let k = 0; k < 6; k++) {
+      const d = document.createElement("span");
+      d.className = "drop";
+      d.style.left = to.x + "px"; d.style.top = to.y + "px";
+      document.body.appendChild(d);
+      const a = (k / 6) * Math.PI * 2;
+      d.animate([{ transform: "translate(0,0)", opacity: 1 }, { transform: "translate(" + Math.cos(a) * 40 + "px," + Math.sin(a) * 34 + "px) scale(.4)", opacity: 0 }], { duration: 560, easing: "ease-out" }).onfinish = () => d.remove();
+    }
+    f.state = "desk";
+    refresh();
+    if (hadFocus) f.tile.querySelector(".x").focus({ preventScroll: true });
+    say(f.name + " restored.");
+  }
+
+  // ---------- Empty: every file turns into a bubble that rises and pops ----------
+  let emptying = false;
+  async function emptyBowl() {
+    const list = FILES.filter((f) => f.state === "bowl");
+    if (!list.length || emptying) return;
+    emptying = true;
+    const hadFocus = emptyBtn === document.activeElement || inside.contains(document.activeElement);
+    await play($("glass"), [{ transform: "rotate(0)" }, { transform: "rotate(-2.5deg)" }, { transform: "rotate(2deg)" }, { transform: "rotate(-1deg)" }, { transform: "rotate(0)" }], { duration: 420, easing: "ease-in-out" });
+    await Promise.all(list.map((f, k) => (async () => {
+      await wait(k * 160);
+      const r = f.item.getBoundingClientRect();
+      const s = f.slot;
+      play(f.item, [{ transform: "scale(1)", opacity: 1 }, { transform: "scale(1.15)", opacity: 1, offset: .3 }, { transform: "scale(0)", opacity: 0 }], { duration: 320, easing: "ease-in" }).then(() => { f.item.hidden = true; });
+      f.state = "lost";
+      f.slot = -1;
+      if (calm()) return;
+      const b = document.createElement("span");
+      b.className = "bubble";
+      const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+      b.style.left = x0 + "px"; b.style.top = y0 + "px";
+      document.body.appendChild(b);
+      const top = bowlPt(SLOTS[s][0], waterY()).y;
+      const h = y0 - top;
+      await b.animate([
+        { transform: "translate(0,0) scale(.3)" },
+        { transform: "translate(5px," + -h * .35 + "px) scale(1)", offset: .3 },
+        { transform: "translate(-5px," + -h * .7 + "px) scale(1)", offset: .65 },
+        { transform: "translate(0," + -h + "px) scale(1.1)" }
+      ], { duration: 820, easing: "ease-in" }).finished.catch(() => {});
+      b.remove();
+      // pop: a ring and a few sparkles at the surface
+      for (let q = 0; q < 6; q++) {
+        const d = document.createElement("span");
+        d.className = "drop";
+        d.style.background = "#fff";
+        d.style.left = x0 + "px"; d.style.top = top + "px";
+        document.body.appendChild(d);
+        const a = (q / 6) * Math.PI * 2;
+        d.animate([{ transform: "translate(0,0)", opacity: 1 }, { transform: "translate(" + Math.cos(a) * 18 + "px," + Math.sin(a) * 18 + "px) scale(.3)", opacity: 0 }], { duration: 380, easing: "ease-out" }).onfinish = () => d.remove();
+      }
+    })()));
+    FILES.forEach((f) => { if (f.state === "lost") { f.tile.classList.remove("gone"); f.tile.classList.add("lost"); } });
+    refresh();
+    emptying = false;
+    if (hadFocus) (FILES.find((x) => x.state === "desk") ? FILES.find((x) => x.state === "desk").tile.querySelector(".x") : resetBtn).focus({ preventScroll: true });
+    say("Trash emptied. " + list.length + (list.length === 1 ? " file is" : " files are") + " gone for good.");
+  }
+
+  // ---------- Reset: lost files come back to the desk ----------
+  function resetFiles() {
+    let k = 0;
+    FILES.forEach((f) => {
+      if (f.state !== "lost") return;
+      f.state = "desk";
+      f.tile.classList.remove("lost");
+      play(f.tile.querySelector(".art"), [{ transform: "scale(.3)", opacity: 0 }, { transform: "scale(1.15)", opacity: 1, offset: .6 }, { transform: "scale(1)" }], { duration: 520, delay: k++ * 90, easing: "ease-out", fill: "backwards" });
+    });
+    refresh();
+  }
+
+  emptyBtn.addEventListener("click", emptyBowl);
+  resetBtn.addEventListener("click", () => { resetFiles(); FILES[0].tile.querySelector(".x").focus(); });
+
+  // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+  const demo = { on: true, timer: 0 };
+  function stopDemo() { if (!demo.on) return; demo.on = false; clearTimeout(demo.timer); document.querySelectorAll(".demo-hover").forEach((t) => t.classList.remove("demo-hover")); }
+  addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  function scheduleDemo(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+  async function press(i) {
+    const t = FILES[i].tile, x = t.querySelector(".x");
+    t.classList.add("demo-hover");
+    await wait(260);
+    x.classList.add("pressed");
+    await wait(140);
+    x.classList.remove("pressed");
+    t.classList.remove("demo-hover");
+    trash(i);
+  }
+  async function runDemo() {
+    if (!demo.on) return;
+    if (FILES.some((f) => f.state !== "desk")) {
+      FILES.filter((f) => f.state === "bowl").forEach((f) => fishOut(FILES.indexOf(f)));
+      resetFiles();
+      scheduleDemo(2000);
+      return;
+    }
+    await press(4); await wait(1000); if (!demo.on) return;
+    await press(1); await wait(1700); if (!demo.on) return;
+    fishOut(1); await wait(1500); if (!demo.on) return;
+    await press(2); await wait(1700); if (!demo.on) return;
+    emptyBtn.classList.add("pressed");
+    await wait(150);
+    emptyBtn.classList.remove("pressed");
+    await emptyBowl();
+    await wait(1800); if (!demo.on) return;
+    resetFiles();
+    scheduleDemo(3200);
+  }
+  refresh();
+  scheduleDemo(450);
+</script>
+</body>
+</html>

@@ -1,0 +1,471 @@
+<!doctype html>
+<!-- Chill & Craft · Card Pocket · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card Pocket · payment method picker</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: navy leather, brass stitching ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #edf1f9;
+    --bg2: #c8d3ea;
+    --ink: #17203b;
+    --muted: #63708f;
+    --panel: #fbfcff;
+    --line: #dde4f2;
+    --leather: #22325f;
+    --leather-d: #141e3d;
+    --leather-hi: #33467d;
+    --brass: #d9b45c;
+    --brass-d: #a8832f;
+    --ok: #1f8a5b;
+    --focus: #f59e0b;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #18213f;
+    --bg2: #05070f;
+    --ink: #eef2ff;
+    --muted: #9aa6c7;
+    --panel: #10162c;
+    --line: #232d4f;
+    --leather: #2a3b6e;
+    --leather-d: #182348;
+    --leather-hi: #3c5190;
+    --ok: #4ade80;
+    --focus: #fbbf24;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background:
+      radial-gradient(520px 340px at 50% 42%, rgba(217, 180, 92, .22), transparent 70%),
+      radial-gradient(900px 640px at 50% 0%, var(--bg1), var(--bg2));
+    background-color: var(--bg2);
+  }
+  .stage { width: 100%; display: grid; place-items: center; padding: 16px; }
+  .vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  .box { width: min(380px, 100%); }
+  .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; padding: 0 6px; }
+  .head h1 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
+  .head p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); }
+  .head .amt { text-align: right; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .head .amt b { display: block; white-space: nowrap; font-size: 20px; letter-spacing: -.02em; text-transform: none; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* ---------- The wallet scene ---------- */
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .scene { position: relative; width: 260px; height: 316px; margin: 14px auto 0; }
+  .slots { position: absolute; left: -60px; right: -60px; top: 0; height: 312px; clip-path: inset(-400px 50px 0 50px round 0 0 24px 24px); }
+  .back {
+    position: absolute;
+    left: 50px;
+    right: 50px;
+    top: 150px;
+    bottom: 0;
+    border-radius: 24px;
+    background:
+      radial-gradient(rgba(255, 255, 255, .05) 1px, transparent 1.5px) 0 0 / 5px 5px,
+      linear-gradient(180deg, var(--leather-d), var(--leather));
+    box-shadow: 0 30px 50px -26px rgba(10, 20, 60, .7);
+  }
+  .pocket {
+    position: absolute;
+    left: 50px;
+    right: 50px;
+    bottom: 0;
+    border-radius: 0 0 24px 24px;
+    background:
+      radial-gradient(rgba(255, 255, 255, .06) 1px, transparent 1.5px) 0 0 / 5px 5px,
+      linear-gradient(180deg, var(--leather-hi), var(--leather) 26px, var(--leather-d));
+    box-shadow: 0 -8px 14px -8px rgba(0, 0, 0, .55);
+    transition: transform .4s var(--spring);
+  }
+  .pocket::before { content: ""; position: absolute; left: 12px; right: 12px; top: 6px; border-top: 2px dashed var(--brass); opacity: .85; }
+  .pocket::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, .14); }
+
+  .pc { position: absolute; left: 60px; width: 260px; height: 160px; cursor: pointer; will-change: transform; }
+  .pc .face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 9px 14px 12px;
+    border-radius: 16px;
+    color: #fff;
+    overflow: hidden;
+    box-shadow: 0 -2px 0 rgba(255, 255, 255, .25) inset, 0 10px 22px -12px rgba(0, 0, 0, .6);
+    transition: box-shadow .3s;
+  }
+  .pc.up .face { box-shadow: 0 -2px 0 rgba(255, 255, 255, .25) inset, 0 26px 40px -18px rgba(10, 15, 50, .75); }
+  .pc:has(input:focus-visible) .face { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .pc:hover:not(.up) .face { filter: brightness(1.08); }
+  .top { display: flex; align-items: center; gap: 8px; height: 22px; font-size: 13.5px; }
+  .top svg { width: 20px; height: 20px; flex: none; }
+  .top b { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top em { font-style: normal; font-size: 12px; font-weight: 700; opacity: .85; letter-spacing: .04em; white-space: nowrap; }
+  .mid { flex: 1; display: flex; align-items: center; gap: 12px; opacity: 0; transform: translateY(8px); transition: opacity .3s, transform .45s var(--spring); }
+  .bot { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: 0; transition: opacity .3s .1s; }
+  .pc.up .mid { opacity: 1; transform: none; transition-delay: .15s; }
+  .pc.up .bot { opacity: .9; }
+  .mid p { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.25; letter-spacing: 0; }
+  .chip { width: 38px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, #f7dc91, #c99a33); box-shadow: inset 0 0 0 1px rgba(90, 60, 0, .35); position: relative; flex: none; }
+  .chip::before { content: ""; position: absolute; inset: 7px 0; border-top: 1px solid rgba(90, 60, 0, .4); border-bottom: 1px solid rgba(90, 60, 0, .4); }
+  .num { font-size: 17px; font-weight: 700; letter-spacing: .14em; font-variant-numeric: tabular-nums; }
+  .ico { width: 34px; height: 34px; flex: none; }
+  .shine { position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, .45) 45%, transparent 60%); transform: translateX(-120%); pointer-events: none; }
+  .pc.shimmer .shine { transform: translateX(120%); transition: transform .9s ease-in-out; }
+  .k-card .face { background: radial-gradient(circle at 85% 15%, rgba(255, 255, 255, .25), transparent 40%), linear-gradient(135deg, #ff7a59, #d6336c); }
+  .k-wallet .face { background: radial-gradient(circle at 85% 15%, rgba(255, 255, 255, .25), transparent 40%), linear-gradient(135deg, #1fb5a2, #0d6e7a); }
+  .k-bank .face { background: radial-gradient(circle at 85% 15%, rgba(255, 255, 255, .22), transparent 40%), linear-gradient(135deg, #8b6cff, #4a32c4); }
+  .k-cod .face { background: repeating-linear-gradient(-45deg, rgba(40, 80, 30, .05) 0 6px, transparent 6px 12px), linear-gradient(135deg, #f1f6df, #cfe3ad); color: #1f3a16; box-shadow: 0 -2px 0 rgba(255, 255, 255, .6) inset, 0 10px 22px -12px rgba(0, 0, 0, .5); }
+
+  /* the lid that folds down over the wallet when you pay */
+  .lid {
+    position: absolute;
+    left: 50px;
+    right: 50px;
+    top: 150px;
+    bottom: 0;
+    z-index: 30;
+    border-radius: 24px;
+    background:
+      radial-gradient(rgba(255, 255, 255, .06) 1px, transparent 1.5px) 0 0 / 5px 5px,
+      linear-gradient(180deg, var(--leather-hi), var(--leather) 40%, var(--leather-d));
+    box-shadow: 0 20px 30px -16px rgba(0, 0, 0, .6);
+    transform-origin: 50% 0;
+    transform: perspective(500px) rotateX(-96deg);
+    visibility: hidden;
+    display: grid;
+    place-items: center;
+  }
+  .lid.shut { visibility: visible; transform: perspective(500px) rotateX(0); transition: transform .55s cubic-bezier(.5, 1.5, .6, 1); }
+  .lid.opening { visibility: visible; transform: perspective(500px) rotateX(-96deg); transition: transform .45s cubic-bezier(.5, 0, .75, 0); }
+  .lid svg.stitch { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .stitch rect { fill: none; stroke: var(--brass); stroke-width: 2; stroke-dasharray: 5 4; opacity: .35; }
+  .stitch .run { stroke-dasharray: 0 2000; opacity: 1; filter: drop-shadow(0 0 3px rgba(255, 210, 120, .9)); }
+  .snap { position: absolute; left: 50%; bottom: 22px; width: 64px; height: 36px; margin-left: -32px; border-radius: 0 0 18px 18px; background: var(--leather-d); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .08); display: grid; place-items: center; }
+  .snap i { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff2c4, var(--brass) 55%, var(--brass-d)); box-shadow: 0 2px 4px rgba(0, 0, 0, .5); }
+  .stamp { padding: 6px 14px; border: 2.5px solid var(--brass); border-radius: 10px; color: var(--brass); font-size: 20px; font-weight: 900; letter-spacing: .2em; transform: rotate(-8deg) scale(1.8); opacity: 0; margin-bottom: 30px; text-shadow: 0 1px 0 rgba(0, 0, 0, .4); }
+  .stamp.on { transform: rotate(-8deg) scale(1); opacity: 1; transition: transform .4s cubic-bezier(.3, 1.6, .5, 1), opacity .15s; }
+  .progress { position: absolute; top: 30px; left: 0; right: 0; text-align: center; font-size: 12px; font-weight: 800; letter-spacing: .12em; color: var(--brass); text-transform: uppercase; }
+
+  /* ---------- Totals and the pay button ---------- */
+  .sum { margin-top: 12px; padding: 12px 14px; border-radius: 18px; background: var(--panel); border: 1px solid var(--line); display: grid; gap: 5px; font-size: 13px; }
+  .sum div { display: flex; justify-content: space-between; }
+  .sum span { color: var(--muted); }
+  .sum b { font-variant-numeric: tabular-nums; }
+  .adj { overflow: hidden; max-height: 0; opacity: 0; transition: max-height .4s ease, opacity .3s; }
+  .adj.show { max-height: 24px; opacity: 1; }
+  .adj.minus b { color: var(--ok); }
+  .pay {
+    --p: 0;
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 52px;
+    margin-top: 10px;
+    border: 0;
+    border-radius: 17px;
+    background: linear-gradient(180deg, #2b3d73, var(--leather-d));
+    color: #fff;
+    font: inherit;
+    font-size: 15.5px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 16px 28px -16px var(--leather-d), inset 0 1px 0 rgba(255, 255, 255, .18);
+    transition: transform .35s var(--spring), filter .2s, background .3s;
+  }
+  .pay::before { content: ""; position: absolute; inset: 0; transform-origin: 0 50%; transform: scaleX(var(--p)); background: linear-gradient(90deg, rgba(217, 180, 92, .25), rgba(217, 180, 92, .5)); }
+  .pay span { position: relative; }
+  .pay:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.1); }
+  .pay:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .pay:disabled { cursor: not-allowed; opacity: .55; }
+  .pay.ok { background: linear-gradient(180deg, #27a36b, #167049); }
+  .note { margin: 8px 0 0; text-align: center; font-size: 12px; color: var(--muted); min-height: 1.3em; }
+
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 40; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="box">
+    <div class="head">
+      <div><h1 id="title">How will you pay?</h1><p>3 items · delivery to Gulberg, Lahore</p></div>
+      <div class="amt">To pay<b id="amt">PKR 6,480</b></div>
+    </div>
+
+    <fieldset class="scene" id="scene" aria-labelledby="title">
+      <legend class="vh">Payment method</legend>
+      <div class="slots" id="slots">
+        <div class="back" aria-hidden="true"></div>
+        <!-- cards and pockets are interleaved by z-index, so each card sits in its own slot -->
+        <div id="cards"></div>
+        <div class="lid" id="lid" aria-hidden="true">
+          <svg class="stitch" viewBox="0 0 260 162" preserveAspectRatio="none"><rect x="8" y="8" width="244" height="146" rx="17" /><rect class="run" id="run" x="8" y="8" width="244" height="146" rx="17" /></svg>
+          <div class="progress" id="prog">Paying…</div>
+          <div class="stamp" id="stamp">PAID</div>
+          <div class="snap"><i></i></div>
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="sum">
+      <div><span>Subtotal · 3 items</span><b>PKR 6,380</b></div>
+      <div><span>Delivery</span><b>PKR 100</b></div>
+      <div class="adj" id="adj"><span id="adjL">Prepaid discount</span><b id="adjV">− PKR 100</b></div>
+    </div>
+    <button class="pay" id="pay" type="button" disabled><span id="payTxt">Choose how to pay</span></button>
+    <p class="note" id="note" aria-live="polite">Pick a card from the wallet.</p>
+  </div>
+</main>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<script>
+  // ---------- Card Pocket: payment methods live in wallet slots; the chosen one slides up, paying shuts the wallet ----------
+  const $ = (id) => document.getElementById(id);
+  const BASE = 6380 + 100;
+  const ICONS = {
+    card: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="4.5" width="16" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2 8.5h16" stroke="currentColor" stroke-width="2"/></svg>',
+    wallet: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="2" width="9" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="15" r="1" fill="currentColor"/></svg>',
+    bank: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 7.5L10 3l7.5 4.5zM4 9v6M8 9v6M12 9v6M16 9v6M2.5 17h15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+    cod: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="1.5" y="5" width="17" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+  };
+  const METHODS = [
+    { k: "card", name: "Debit card", tag: "•••• 4821", adj: 0, mid: '<span class="chip"></span><span class="num">•••• •••• 4821</span>', bot: ["Ayesha Khan", "09/28"], pay: "Pay", note: "Charged to your card ending 4821. No fee." },
+    { k: "wallet", name: "Mobile wallet", tag: "•• 4567", adj: 0, mid: '<svg class="ico" viewBox="0 0 34 34"><rect x="9" y="3" width="16" height="28" rx="4" fill="rgba(255,255,255,.2)" stroke="#fff" stroke-width="2"/><path d="M13 17l3 3 6-6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><p>We send a request.<br>Approve it in your app.</p>', bot: ["No fee", "Instant"], pay: "Pay", note: "A payment request goes to 0300 ••• 4567." },
+    { k: "bank", name: "Bank transfer", tag: "PK•• 0912", adj: -100, mid: '<svg class="ico" viewBox="0 0 34 34"><path d="M4 13L17 5l13 8zM7 15v10M13 15v10M21 15v10M27 15v10M4 28h26" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/></svg><p>Pay now and save<br>PKR 100 on this order.</p>', bot: ["Prepaid discount", "− PKR 100"], pay: "Pay", note: "Pay by bank transfer and PKR 100 comes off." },
+    { k: "cod", name: "Cash on delivery", tag: "+ PKR 99", adj: 99, mid: '<svg class="ico" viewBox="0 0 34 34"><rect x="3" y="9" width="28" height="16" rx="2.5" fill="none" stroke="#1f3a16" stroke-width="2.2"/><circle cx="17" cy="17" r="4" fill="none" stroke="#1f3a16" stroke-width="2"/><path d="M7 13v8M27 13v8" stroke="#1f3a16" stroke-width="2"/></svg><p>Pay the rider in cash<br>at your door.</p>', bot: ["Cash handling", "+ PKR 99"], pay: "Place order", note: "Keep PKR 6,579 ready for the rider." },
+  ];
+  const fmt = (n) => "PKR " + Math.round(n).toLocaleString("en-US");
+  const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => calmQ.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 120) : ms));
+  const play = (el, frames, opts) => (calm() || !el.animate ? Promise.resolve() : el.animate(frames, opts).finished.catch(() => {}));
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+  const easeInOut = (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const springy = (t) => { const c = 1.6; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
+  function tween(ms, fn, ease) {
+    return new Promise((res) => {
+      if (calm()) { fn(1); res(); return; }
+      const s = performance.now();
+      requestAnimationFrame(function f(now) { const t = Math.min(1, (now - s) / ms); fn((ease || easeOut)(t)); t < 1 ? requestAnimationFrame(f) : res(); });
+    });
+  }
+
+  // ---------- Build the slots: card k sits at SLOT_TOP + k*STEP; its pocket starts STRIP px lower ----------
+  const SLOT_TOP = 160, STEP = 32, STRIP = 34;
+  const cardsEl = $("cards");
+  METHODS.forEach((m, k) => {
+    cardsEl.insertAdjacentHTML("beforeend", `<label class="pc k-${m.k}" id="c-${m.k}" style="top:${SLOT_TOP + k * STEP}px;z-index:${k * 2 + 1}">
+      <input class="vh" type="radio" name="pay" value="${m.k}" aria-label="${m.name}, ${m.tag}">
+      <span class="face"><span class="top">${ICONS[m.k]}<b>${m.name}</b><em>${m.tag}</em></span><span class="mid">${m.mid}</span><span class="bot"><span>${m.bot[0]}</span><span>${m.bot[1]}</span></span><span class="shine"></span></span>
+    </label><div class="pocket" style="top:${SLOT_TOP + k * STEP + STRIP}px;z-index:${k * 2 + 2}" aria-hidden="true"></div>`);
+  });
+  const card = (k) => $("c-" + k);
+  const pos = {}; // current translateY / rotate of each card
+  METHODS.forEach((m) => (pos[m.k] = { y: 0, r: 0 }));
+  function place(k) { card(k).style.transform = `translateY(${pos[k].y.toFixed(1)}px) rotate(${pos[k].r.toFixed(2)}deg)`; }
+  function move(k, y, r, ms, ease) {
+    card(k).getAnimations().forEach((x) => x.cancel()); // stop any idle breathing first
+    const a = { ...pos[k] };
+    return tween(ms, (t) => { pos[k].y = a.y + (y - a.y) * t; pos[k].r = a.r + (r - a.r) * t; place(k); }, ease);
+  }
+  const idx = (k) => METHODS.findIndex((m) => m.k === k);
+  const homeZ = (k) => idx(k) * 2 + 1;
+
+  // ---------- Choosing a method ----------
+  let chosen = null, busy = false, queued = null, paying = false;
+  // A card comes out in two moves: up inside its slot until it clears the pocket, then (on top of everything) to the display spot
+  async function raise(k) {
+    const el = card(k), i = idx(k), clear = -(160 - STRIP + 6), show = -(SLOT_TOP + i * STEP) + 2;
+    play(el, [{ transform: el.style.transform }, { transform: `translateY(${pos[k].y - 6}px) rotate(-2deg)` }, { transform: `translateY(${pos[k].y - 4}px) rotate(2deg)` }, { transform: el.style.transform }], { duration: 240 });
+    await wait(200);
+    play(el.nextElementSibling, [{ transform: "none" }, { transform: "scaleX(1.03) translateY(2px)", offset: .4 }, { transform: "none" }], { duration: 420 });
+    await move(k, clear, 0, 300, easeInOut);
+    el.style.zIndex = 20;
+    el.classList.add("up");
+    await move(k, show, -2.5, 560, springy);
+    await move(k, show, 0, 260, easeOut);
+    el.classList.add("shimmer");
+    setTimeout(() => el.classList.remove("shimmer"), 950);
+  }
+  async function lower(k) {
+    const el = card(k), clear = -(160 - STRIP + 6);
+    el.classList.remove("up");
+    await move(k, clear, 1.5, 300, easeInOut);
+    el.style.zIndex = homeZ(k);
+    await move(k, 0, 0, 380, springy);
+  }
+  async function choose(k) {
+    if (paying) { if (chosen) card(chosen).querySelector("input").checked = true; return; } // the wallet is shut while paying
+    if (busy) { queued = k; return; }
+    if (k === chosen) return;
+    busy = true;
+    const prev = chosen;
+    chosen = k;
+    const m = METHODS[idx(k)];
+    updateTotals(m);
+    say(`${m.name} chosen. ${m.note}`);
+    if (prev) await lower(prev);
+    await raise(k);
+    busy = false;
+    if (queued && queued !== chosen) { const q = queued; queued = null; choose(q); } else queued = null;
+  }
+  document.querySelectorAll('input[name="pay"]').forEach((r) => r.addEventListener("change", () => choose(r.value)));
+
+  // ---------- Totals ----------
+  let shown = BASE;
+  function updateTotals(m) {
+    const total = BASE + m.adj;
+    const adj = $("adj");
+    adj.classList.toggle("show", m.adj !== 0);
+    adj.classList.toggle("minus", m.adj < 0);
+    if (m.adj) { $("adjL").textContent = m.adj < 0 ? "Prepaid discount" : "Cash handling"; $("adjV").textContent = (m.adj < 0 ? "− " : "+ ") + fmt(Math.abs(m.adj)); }
+    const from = shown; shown = total;
+    const pay = $("pay");
+    pay.disabled = false;
+    tween(600, (t) => { const v = fmt(from + (total - from) * t); $("amt").textContent = v; $("payTxt").textContent = `${m.pay} · ${v}`; });
+  }
+  const note = $("note");
+  function say(t) { note.textContent = t; }
+
+  // ---------- Paying: the card slides home, the lid folds shut, brass stitching runs round, PAID is stamped ----------
+  async function pay() {
+    if (!chosen || busy || paying) return;
+    paying = true;
+    const m = METHODS[idx(chosen)], k = chosen, pay = $("pay"), lid = $("lid"), run = $("run"), stamp = $("stamp"), prog = $("prog");
+    const total = BASE + m.adj;
+    pay.disabled = true;
+    play(pay, [{ transform: "scale(1)" }, { transform: "scale(.95, .9)", offset: .3 }, { transform: "scale(1.02)", offset: .7 }, { transform: "scale(1)" }], { duration: 420 });
+    // anticipation: the card tips back, then slides into its slot
+    await move(k, pos[k].y - 10, -4, 220, easeOut);
+    await lower(k);
+    // main: the lid folds down and the snap clicks
+    lid.classList.remove("opening");
+    prog.textContent = m.k === "cod" ? "Booking…" : "Paying…";
+    stamp.textContent = m.k === "cod" ? "BOOKED" : "PAID";
+    lid.classList.add("shut");
+    await wait(520);
+    play(lid.querySelector(".snap i"), [{ transform: "scale(1)" }, { transform: "scale(.7)", offset: .3 }, { transform: "scale(1.2)", offset: .7 }, { transform: "scale(1)" }], { duration: 360 });
+    play($("slots"), [{ transform: "none" }, { transform: "translateY(3px) scaleY(.985)", offset: .3 }, { transform: "none" }], { duration: 360 });
+    say(m.k === "cod" ? "Booking your cash on delivery order…" : `Paying ${fmt(total)} with ${m.name.toLowerCase()}…`);
+    // progress: a glowing stitch runs round the lid edge and the button fills
+    const L = run.getTotalLength();
+    await tween(1500, (t) => {
+      run.style.strokeDasharray = `${(L * t).toFixed(1)} ${L + 10}`;
+      pay.style.setProperty("--p", t.toFixed(3));
+      $("payTxt").textContent = `${m.k === "cod" ? "Booking" : "Paying"}… ${Math.round(t * 100)}%`;
+    }, easeInOut);
+    // finish: stamp, sparkles, green button
+    prog.textContent = "";
+    stamp.classList.add("on");
+    await wait(160);
+    const r = lid.getBoundingClientRect();
+    sparkle(r.left + r.width / 2, r.top + r.height / 2 - 15, 26);
+    play($("slots"), [{ transform: "none" }, { transform: "scale(1.03)", offset: .35 }, { transform: "none" }], { duration: 480, easing: "cubic-bezier(.3,1.6,.5,1)" });
+    pay.classList.add("ok");
+    pay.style.setProperty("--p", 0);
+    $("payTxt").textContent = m.k === "cod" ? "Order placed ✓" : `Paid ${fmt(total)} ✓`;
+    say(m.k === "cod" ? `Order placed. Pay ${fmt(total)} in cash when it arrives.` : `Payment of ${fmt(total)} done with ${m.name.toLowerCase()}.`);
+    // reset: the stamp lifts, the lid opens and the chosen card comes back up
+    await wait(1700);
+    stamp.classList.remove("on");
+    run.style.strokeDasharray = "0 2000";
+    lid.classList.remove("shut");
+    lid.classList.add("opening");
+    await wait(470);
+    lid.classList.remove("opening");
+    pay.classList.remove("ok");
+    paying = false;
+    updateTotals(m);
+    await raise(k);
+    pay.disabled = false;
+  }
+  $("pay").addEventListener("click", pay);
+
+  // ---------- Brass sparkles ----------
+  const fx = $("fx"), ctx = fx.getContext("2d");
+  let parts = [], fxOn = false, fxLast = 0;
+  function sizeFx() { const d = Math.min(2, devicePixelRatio || 1); fx.width = innerWidth * d; fx.height = innerHeight * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+  sizeFx(); addEventListener("resize", sizeFx);
+  function sparkle(x, y, n) {
+    if (calm()) return;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = 80 + Math.random() * 220;
+      parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 50, life: 0, max: .7 + Math.random() * .5, s: 2.5 + Math.random() * 4, star: i % 3 === 0, c: ["#ffe7a3", "#d9b45c", "#fff"][i % 3] });
+    }
+    if (!fxOn) { fxOn = true; fxLast = performance.now(); requestAnimationFrame(drawFx); }
+  }
+  function drawFx(now) {
+    const dt = Math.min(.04, (now - fxLast) / 1000); fxLast = now;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      p.life += dt;
+      if (p.life > p.max) { parts.splice(i, 1); continue; }
+      p.vx *= .95; p.vy = p.vy * .95 + 260 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      const a = 1 - p.life / p.max, r = p.s * (.4 + a * .6);
+      ctx.globalAlpha = a; ctx.fillStyle = p.c; ctx.beginPath();
+      if (p.star) { ctx.moveTo(p.x, p.y - r * 1.6); ctx.quadraticCurveTo(p.x, p.y, p.x + r * 1.6, p.y); ctx.quadraticCurveTo(p.x, p.y, p.x, p.y + r * 1.6); ctx.quadraticCurveTo(p.x, p.y, p.x - r * 1.6, p.y); ctx.quadraticCurveTo(p.x, p.y, p.x, p.y - r * 1.6); }
+      else ctx.arc(p.x, p.y, r, 0, 7);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (parts.length) requestAnimationFrame(drawFx); else { fxOn = false; ctx.clearRect(0, 0, innerWidth, innerHeight); }
+  }
+
+  // ---------- Idle life: the slotted cards breathe a little while nothing happens ----------
+  setInterval(() => {
+    if (busy || paying || calm() || document.hidden) return;
+    const loose = METHODS.filter((m) => m.k !== chosen);
+    const m = loose[Math.floor(Math.random() * loose.length)];
+    play(card(m.k), [{ transform: card(m.k).style.transform || "none" }, { transform: `translateY(${pos[m.k].y - 5}px)` }, { transform: card(m.k).style.transform || "none" }], { duration: 700, easing: "ease-in-out" });
+  }, 1600);
+
+  // ---------- Auto-demo: picks methods and pays, looping until someone touches it ----------
+  const demo = { on: true, timer: 0, n: 0 };
+  const DEMO = [["bank", true], ["wallet", false], ["cod", true], ["card", false]];
+  function stopDemo() { if (demo.on) { demo.on = false; clearTimeout(demo.timer); } }
+  addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  async function runDemo() {
+    if (!demo.on) return;
+    const [k, andPay] = DEMO[demo.n++ % DEMO.length];
+    card(k).querySelector("input").checked = true;
+    await choose(k);
+    if (!demo.on) return;
+    if (andPay) { await wait(700); if (demo.on) await pay(); }
+    if (demo.on) demo.timer = setTimeout(runDemo, andPay ? 1400 : 1500);
+  }
+  demo.timer = setTimeout(runDemo, 300);
+</script>
+</body>
+</html>

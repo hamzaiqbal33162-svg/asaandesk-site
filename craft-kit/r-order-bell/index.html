@@ -1,0 +1,494 @@
+<!doctype html>
+<!-- Chill & Craft · Order Bell · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order Bell · order placed confirmation</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: diner tiles, brushed steel, tomato and mustard ---------- */
+  :root {
+    color-scheme: light;
+    --wall: #f5efe4;
+    --wall2: #ebe1d0;
+    --ink: #2a1f1a;
+    --muted: #84756a;
+    --card: #fffdf9;
+    --line: #eadfce;
+    --soft: #f6f0e6;
+    --tomato: #e2412d;
+    --tomato-d: #b42d1d;
+    --mustard: #f2b636;
+    --steel1: #f3f4f5;
+    --steel2: #aab1b6;
+    --paper: #fffaf0;
+    --ok: #2f8f4e;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --wall: #221e20;
+    --wall2: #141113;
+    --ink: #f5ede6;
+    --muted: #b3a59a;
+    --card: #1b1719;
+    --line: #342d2f;
+    --soft: #262022;
+    --steel1: #c9cfd3;
+    --steel2: #6c7479;
+    --paper: #f7f0e1;
+    --ok: #5fd38b;
+    --focus: #93c5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    /* subway tiles drawn by a tiny inline SVG pattern (works on light and dark walls) */
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='28'%3E%3Cpath d='M0 .5H56M0 14.5H56M.5 0V14M28.5 14V28' stroke='rgba(120,90,60,.16)' fill='none'/%3E%3C/svg%3E"),
+      radial-gradient(700px 520px at 50% 30%, var(--wall), var(--wall2));
+    background-color: var(--wall2);
+  }
+  .stage { width: 100%; display: grid; place-items: center; padding: 16px; }
+  .vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .box { width: min(390px, 100%); }
+
+  /* ---------- The kitchen pass: ticket rail, heat lamps, bell ---------- */
+  .pass { position: relative; height: 212px; }
+  .rail { position: absolute; left: 0; right: 0; top: 12px; height: 14px; border-radius: 7px; background: linear-gradient(180deg, var(--steel1), var(--steel2)); box-shadow: 0 6px 10px -6px rgba(0, 0, 0, .4), inset 0 1px 0 #fff; }
+  .rail::after { content: ""; position: absolute; left: 8px; right: 8px; top: 6px; height: 2px; border-radius: 1px; background: rgba(0, 0, 0, .25); }
+  .empty { position: absolute; left: 22px; top: 40px; font-size: 12px; color: var(--muted); font-weight: 650; transition: opacity .3s; }
+  .lamps { position: absolute; right: 22px; top: 0; display: flex; gap: 22px; }
+  .lamp { position: relative; width: 44px; height: 80px; }
+  .lamp::before { content: ""; position: absolute; left: 21px; top: 0; width: 2px; height: 34px; background: var(--steel2); }
+  .shade { position: absolute; left: 0; top: 32px; width: 44px; height: 22px; border-radius: 22px 22px 4px 4px; background: linear-gradient(180deg, #3b3f44, #1f2226); }
+  .bulb { position: absolute; left: 12px; top: 50px; width: 20px; height: 8px; border-radius: 0 0 10px 10px; background: #5a4a3e; transition: background .4s, box-shadow .4s; }
+  .glow { position: absolute; left: -30px; top: 54px; width: 104px; height: 120px; background: radial-gradient(50% 60% at 50% 0, rgba(255, 110, 40, .45), transparent 70%); opacity: 0; transition: opacity .5s; pointer-events: none; }
+  .pass.hot .bulb { background: #ffb347; box-shadow: 0 0 14px 4px rgba(255, 120, 40, .8); }
+  .pass.hot .glow { opacity: 1; animation: hum 1.2s ease-in-out infinite; }
+  .counter { position: absolute; left: -6px; right: -6px; bottom: 0; height: 30px; border-radius: 10px; background: linear-gradient(180deg, var(--steel1), var(--steel2) 60%, #7b8389); box-shadow: 0 14px 24px -14px rgba(0, 0, 0, .55), inset 0 2px 0 #fff; }
+  .counter::before { content: ""; position: absolute; left: 14px; right: 14px; top: 8px; height: 1px; background: rgba(255, 255, 255, .6); }
+  .steam { position: absolute; right: 8px; bottom: 34px; width: 80px; height: 70px; opacity: 0; transition: opacity .5s; }
+  .pass.hot .steam { opacity: 1; }
+  .steam path { fill: none; stroke: rgba(160, 150, 140, .5); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 8 40; animation: steam 1.6s linear infinite; }
+  :root[data-theme="dark"] .steam path { stroke: rgba(230, 220, 210, .35); }
+  .steam path:nth-child(2) { animation-delay: -.5s; } .steam path:nth-child(3) { animation-delay: -1s; }
+  .pan { position: absolute; right: 14px; bottom: 28px; width: 70px; height: 18px; }
+
+  .bell { position: absolute; left: 22px; bottom: 22px; width: 76px; height: 62px; }
+  .bell svg { width: 100%; height: 100%; overflow: visible; }
+  .dome { transform-box: fill-box; transform-origin: 50% 100%; }
+  .plunger { transform-box: fill-box; transform-origin: 50% 100%; }
+  .ring { fill: none; stroke: var(--mustard); stroke-width: 2.5; opacity: 0; transform-box: fill-box; transform-origin: center; }
+  .ringing .ring { animation: ring .8s ease-out; }
+  .ringing .ring:nth-of-type(2) { animation-delay: .12s; } .ringing .ring:nth-of-type(3) { animation-delay: .24s; }
+  .ding { position: absolute; left: 70px; top: 0; font-size: 15px; font-weight: 900; font-style: italic; color: var(--tomato); opacity: 0; pointer-events: none; }
+  .ringing .ding { animation: ding .9s var(--spring); }
+
+  /* the order ticket that clips onto the rail */
+  /* outer box moves and casts the shadow; the inner paper has the torn edge (a clip-path would cut the shadow off) */
+  .ticket {
+    position: absolute;
+    left: 112px;
+    top: 16px;
+    width: 156px;
+    transform-origin: 50% 0;
+    filter: drop-shadow(0 10px 10px rgba(40, 20, 0, .28));
+    visibility: hidden;
+    z-index: 2;
+  }
+  .paper {
+    position: relative;
+    padding: 12px 11px 14px;
+    background: var(--paper);
+    color: #2a221c;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
+    font-size: 10.5px;
+    line-height: 1.4;
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), 94% 100%, 88% calc(100% - 6px), 82% 100%, 76% calc(100% - 6px), 70% 100%, 64% calc(100% - 6px), 58% 100%, 52% calc(100% - 6px), 46% 100%, 40% calc(100% - 6px), 34% 100%, 28% calc(100% - 6px), 22% 100%, 16% calc(100% - 6px), 10% 100%, 4% calc(100% - 6px), 0 100%);
+  }
+  .ticket.on { visibility: visible; }
+  .clip { position: absolute; left: 177px; top: 4px; width: 26px; height: 18px; z-index: 3; border-radius: 4px; background: linear-gradient(180deg, #dfe3e6, #8e979d); box-shadow: 0 2px 3px rgba(0, 0, 0, .35); visibility: hidden; }
+  .clip.on { visibility: visible; }
+  .ticket h3 { margin: 0; display: flex; justify-content: space-between; font-size: 13px; letter-spacing: .02em; }
+  .ticket .meta { color: #7a6a5c; font-size: 9.5px; }
+  .ticket ul { list-style: none; margin: 4px 0; padding: 4px 0; border-top: 1px dashed #c9b9a6; border-bottom: 1px dashed #c9b9a6; }
+  .ticket li { display: flex; justify-content: space-between; gap: 6px; }
+  .ticket .tt { display: flex; justify-content: space-between; font-weight: 800; }
+  .steps { display: flex; align-items: center; gap: 0; margin-top: 6px; }
+  .steps i { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #c9b9a6; background: var(--paper); transition: background .3s, border-color .3s, transform .4s var(--spring); }
+  .steps i.done { background: var(--ok); border-color: var(--ok); transform: scale(1.2); }
+  .steps i.now { border-color: var(--tomato); background: var(--mustard); animation: pulse .8s ease-in-out infinite; }
+  .steps b { flex: 1; height: 3px; background: #e4d7c6; position: relative; overflow: hidden; border-radius: 2px; }
+  .steps b::after { content: ""; position: absolute; inset: 0; background: var(--ok); transform-origin: 0 50%; transform: scaleX(var(--f, 0)); }
+  .stepNames { display: flex; justify-content: space-between; margin-top: 3px; font-size: 8.5px; color: #7a6a5c; text-transform: uppercase; letter-spacing: .06em; }
+  .stamp { position: absolute; left: 50%; top: 46%; padding: 3px 9px; border: 3px solid var(--ok); border-radius: 6px; color: var(--ok); font-family: system-ui, sans-serif; font-size: 22px; font-weight: 900; letter-spacing: .12em; background: rgba(255, 250, 240, .75); transform: translate(-50%, -50%) rotate(-12deg) scale(2.2); opacity: 0; }
+  :root[data-theme="dark"] .stamp { color: #2f8f4e; border-color: #2f8f4e; }
+  .stamp.on { opacity: 1; transform: translate(-50%, -50%) rotate(-12deg) scale(1); transition: transform .35s cubic-bezier(.4, 1.8, .5, 1), opacity .1s; }
+
+  /* ---------- The order form ---------- */
+  .card { margin-top: 12px; padding: 16px 16px 18px; border-radius: 24px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 30px 60px -36px rgba(60, 30, 10, .55); }
+  :root[data-theme="dark"] .card { box-shadow: 0 30px 60px -30px rgba(0, 0, 0, .85); }
+  .card h1 { margin: 0; font-size: 17px; display: flex; justify-content: space-between; align-items: baseline; }
+  .card h1 small { font-size: 12px; font-weight: 650; color: var(--muted); }
+  .items { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; }
+  .items li { display: flex; gap: 8px; }
+  .items li span:first-child { flex: none; min-width: 26px; height: 20px; border-radius: 6px; background: var(--soft); text-align: center; font-size: 12px; font-weight: 800; line-height: 20px; }
+  .items li span:nth-child(2) { flex: 1; }
+  .items li b { font-variant-numeric: tabular-nums; }
+  fieldset { border: 0; margin: 12px 0 0; padding: 0; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  legend { float: left; padding: 0; margin-right: 4px; font-size: 12px; font-weight: 750; color: var(--muted); min-width: 40px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chips label { padding: 6px 11px; border-radius: 99px; border: 1.5px solid var(--line); background: var(--soft); font-size: 12.5px; font-weight: 750; cursor: pointer; transition: transform .3s var(--spring), background .2s, border-color .2s, color .2s; }
+  .chips label:hover { transform: translateY(-2px); }
+  .chips input:checked + label { background: var(--ink); border-color: var(--ink); color: var(--card); }
+  .chips input:focus-visible + label { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .tots { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); display: grid; gap: 4px; font-size: 13px; }
+  .tots div { display: flex; justify-content: space-between; }
+  .tots span { color: var(--muted); }
+  .tots b { font-variant-numeric: tabular-nums; }
+  .tots .big span { color: var(--ink); font-weight: 800; }
+  .tots .big b { font-size: 19px; letter-spacing: -.02em; }
+  .place {
+    --p: 0;
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 52px;
+    margin-top: 12px;
+    border: 0;
+    border-radius: 16px;
+    background: linear-gradient(180deg, var(--tomato), var(--tomato-d));
+    color: #fff;
+    font: inherit;
+    font-size: 15.5px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 16px 26px -14px var(--tomato-d), inset 0 1px 0 rgba(255, 255, 255, .3);
+    transition: transform .35s var(--spring), filter .2s, background .3s;
+  }
+  .place::before { content: ""; position: absolute; inset: 0; transform-origin: 0 50%; transform: scaleX(var(--p)); background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, .2) 0 8px, rgba(255, 255, 255, .07) 8px 16px); }
+  .place span { position: relative; }
+  .place:hover { transform: translateY(-2px); filter: brightness(1.06); }
+  .place.new { background: linear-gradient(180deg, #3a312c, #221c19); }
+  :root[data-theme="dark"] .place.new { background: linear-gradient(180deg, #4a403b, #2f2724); }
+  .place[aria-disabled="true"] { cursor: progress; }
+
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+
+  @keyframes hum { 0%, 100% { opacity: .85; } 50% { opacity: 1; } }
+  @keyframes steam { from { stroke-dashoffset: 48; } to { stroke-dashoffset: 0; } }
+  @keyframes ring { from { opacity: .9; transform: scale(.4); } to { opacity: 0; transform: scale(1.6); } }
+  @keyframes ding { 0% { opacity: 0; transform: translateY(10px) scale(.5) rotate(-10deg); } 40% { opacity: 1; transform: translateY(-6px) scale(1.1) rotate(4deg); } 100% { opacity: 0; transform: translateY(-18px) scale(1) rotate(0); } }
+  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="box">
+    <div class="pass" id="pass" aria-hidden="true">
+      <div class="rail"></div>
+      <p class="empty" id="emptyNote">Orders clip on here</p>
+      <div class="lamps"><div class="lamp"><div class="shade"></div><div class="bulb"></div><div class="glow"></div></div></div>
+      <svg class="steam" viewBox="0 0 80 70"><path d="M20 66c-6-10 6-16 0-26s6-16 0-26" /><path d="M40 66c-6-10 6-16 0-26s6-16 0-26" /><path d="M60 66c-6-10 6-16 0-26s6-16 0-26" /></svg>
+      <svg class="pan" viewBox="0 0 70 18"><path d="M4 2h52l-4 14H8z" fill="#2c2f33" /><path d="M56 6h12" stroke="#2c2f33" stroke-width="4" stroke-linecap="round" /><ellipse cx="30" cy="3" rx="24" ry="3" fill="#c0492b" /></svg>
+      <div class="counter"></div>
+      <div class="bell" id="bell">
+        <svg viewBox="0 0 76 62">
+          <circle class="ring" cx="38" cy="22" r="20" /><circle class="ring" cx="38" cy="22" r="20" /><circle class="ring" cx="38" cy="22" r="20" />
+          <rect class="plunger" id="plunger" x="35" y="4" width="6" height="10" rx="2" fill="#9aa3a9" />
+          <g class="dome" id="dome">
+            <path d="M10 48a28 28 0 0 1 56 0z" fill="url(#bellG)" />
+            <path d="M18 40a20 20 0 0 1 14-16" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none" opacity=".7" />
+            <circle cx="38" cy="18" r="3.5" fill="#b8892a" />
+          </g>
+          <rect x="4" y="47" width="68" height="9" rx="4" fill="#2c2f33" />
+          <defs><linearGradient id="bellG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe7a1" /><stop offset=".5" stop-color="#e7b13b" /><stop offset="1" stop-color="#a87314" /></linearGradient></defs>
+        </svg>
+        <span class="ding">Ding!</span>
+      </div>
+      <span class="clip" id="clip"></span>
+      <div class="ticket" id="ticket"><div class="paper">
+        <h3><span id="tNo">#A-482</span><span id="tType">TABLE 7</span></h3>
+        <div class="meta" id="tTime">Placed 7:42 pm</div>
+        <ul id="tItems"></ul>
+        <div class="tt"><span>TOTAL</span><span id="tTotal">PKR 0</span></div>
+        <div class="steps"><i id="st0"></i><b id="sb0"></b><i id="st1"></i><b id="sb1"></b><i id="st2"></i></div>
+        <div class="stepNames"><span>Got it</span><span>Cooking</span><span>Ready</span></div>
+        <div class="stamp" id="stamp">READY</div>
+      </div>
+      </div>
+    </div>
+
+    <section class="card" aria-labelledby="title">
+      <h1 id="title">Your order <small>Karahi House</small></h1>
+      <ul class="items">
+        <li><span>1×</span><span>Chicken karahi, half</span><b>PKR 1,450</b></li>
+        <li><span>4×</span><span>Garlic naan</span><b>PKR 320</b></li>
+        <li><span>1×</span><span>Mint raita</span><b>PKR 180</b></li>
+      </ul>
+      <fieldset>
+        <legend>Order</legend>
+        <div class="chips">
+          <input class="vh" type="radio" name="type" id="ty-dine" value="dine" checked><label for="ty-dine">Dine in · Table 7</label>
+          <input class="vh" type="radio" name="type" id="ty-take" value="take"><label for="ty-take">Takeaway</label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Tip, PKR</legend>
+        <div class="chips">
+          <input class="vh" type="radio" name="tip" id="tip0" value="0"><label for="tip0">None</label>
+          <input class="vh" type="radio" name="tip" id="tip50" value="50" checked><label for="tip50">50</label>
+          <input class="vh" type="radio" name="tip" id="tip100" value="100"><label for="tip100">100</label>
+          <input class="vh" type="radio" name="tip" id="tip150" value="150"><label for="tip150">150</label>
+        </div>
+      </fieldset>
+      <div class="tots">
+        <div><span>Subtotal</span><b>PKR 1,950</b></div>
+        <div><span id="extraL">Service 5%</span><b id="extra">PKR 98</b></div>
+        <div><span>Tip</span><b id="tipV">PKR 50</b></div>
+        <div class="big"><span>Total</span><b id="total">PKR 2,098</b></div>
+      </div>
+      <button class="place" id="place" type="button"><span id="placeTxt">Place order · PKR 2,098</span></button>
+      <p class="vh" id="status" aria-live="polite"></p>
+    </section>
+  </div>
+</main>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<script>
+  // ---------- Order Bell: placing an order rings the counter bell and clips a kitchen ticket onto the rail ----------
+  const $ = (id) => document.getElementById(id);
+  const ITEMS = [["1", "Karahi, half", 1450], ["4", "Garlic naan", 320], ["1", "Mint raita", 180]];
+  const SUB = 1950;
+  const fmt = (n) => "PKR " + Math.round(n).toLocaleString("en-US");
+  const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => calmQ.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 120) : ms));
+  const play = (el, frames, opts) => (calm() || !el.animate ? Promise.resolve() : el.animate(frames, opts).finished.catch(() => {}));
+  function tween(ms, fn, ease) {
+    return new Promise((res) => {
+      if (calm()) { fn(1); res(); return; }
+      const s = performance.now();
+      requestAnimationFrame(function f(now) { const t = Math.min(1, (now - s) / ms); fn((ease || ((x) => x))(t)); t < 1 ? requestAnimationFrame(f) : res(); });
+    });
+  }
+
+  // ---------- Totals ----------
+  const get = () => {
+    const type = document.querySelector('input[name="type"]:checked').value, tip = +document.querySelector('input[name="tip"]:checked').value;
+    const extra = type === "dine" ? Math.round(SUB * .05) : 50;
+    return { type, tip, extra, total: SUB + extra + tip };
+  };
+  let shown = 0, state = "idle", orderNo = 482;
+  function refresh() {
+    const o = get();
+    $("extraL").textContent = o.type === "dine" ? "Service 5%" : "Takeaway packing";
+    $("extra").textContent = fmt(o.extra);
+    $("tipV").textContent = o.tip ? fmt(o.tip) : "None";
+    const from = shown || o.total; shown = o.total;
+    tween(450, (t) => { const v = fmt(from + (o.total - from) * (1 - Math.pow(1 - t, 3))); $("total").textContent = v; if (state === "idle") $("placeTxt").textContent = "Place order · " + v; });
+  }
+  document.querySelectorAll('input[name="type"], input[name="tip"]').forEach((r) => r.addEventListener("change", () => { refresh(); say(`Total ${fmt(get().total)}.`); }));
+
+  // ---------- Ticket sway: a damped spring around the clip ----------
+  const ticket = $("ticket"), clip = $("clip");
+  const sway = { a: 0, v: 0, on: false };
+  function swayLoop(prev) {
+    return function f(now) {
+      const dt = Math.min(.033, (now - prev) / 1000); prev = now;
+      sway.v += (-sway.a * 60 - sway.v * 3.2) * dt; sway.a += sway.v * dt;
+      ticket.style.transform = `rotate(${sway.a.toFixed(2)}deg)`;
+      if (Math.abs(sway.a) > .03 || Math.abs(sway.v) > .05) requestAnimationFrame(f); else { sway.on = false; ticket.style.transform = ""; }
+    };
+  }
+  function kick(v) { if (calm()) return; sway.v += v; if (!sway.on) { sway.on = true; requestAnimationFrame(swayLoop(performance.now())); } }
+  // a breeze from the heat lamps now and then
+  setInterval(() => { if (ticket.classList.contains("on") && !document.hidden && state !== "flying") kick((Math.random() - .5) * 30); }, 2200);
+
+  // ---------- The bell ----------
+  async function ring(times) {
+    const bell = $("bell");
+    for (let i = 0; i < times; i++) {
+      play($("plunger"), [{ transform: "none" }, { transform: "scaleY(.4)", offset: .3 }, { transform: "none" }], { duration: 260 });
+      play($("dome"), [{ transform: "none" }, { transform: "scale(1.08, .9)", offset: .25 }, { transform: "rotate(-6deg)", offset: .45 }, { transform: "rotate(5deg)", offset: .6 }, { transform: "rotate(-3deg)", offset: .75 }, { transform: "none" }], { duration: 640 });
+      bell.classList.remove("ringing"); bell.offsetWidth; bell.classList.add("ringing");
+      await wait(times > 1 ? 280 : 120);
+    }
+  }
+
+  // ---------- Placing the order ----------
+  async function place() {
+    if (state === "busy" || state === "flying") return;
+    if (state === "done") { await newOrder(); return; }
+    state = "busy";
+    const o = get(), b = $("place"), txt = $("placeTxt");
+    b.setAttribute("aria-disabled", "true");
+    // 1. anticipation: the button squashes and fills while the bell gets pressed
+    play(b, [{ transform: "scale(1)" }, { transform: "scale(.95, .88)", offset: .3 }, { transform: "scale(1.02)", offset: .7 }, { transform: "scale(1)" }], { duration: 420 });
+    txt.textContent = "Sending to the kitchen…";
+    say("Sending your order to the kitchen…");
+    await tween(500, (t) => b.style.setProperty("--p", t.toFixed(3)));
+    // 2. main: ding, and the ticket flies up from the counter and clips onto the rail
+    ring(1);
+    fillTicket(o);
+    $("emptyNote").style.opacity = 0;
+    ticket.classList.add("on");
+    state = "flying";
+    await play(ticket, [
+      { transform: "translate(-80px, 150px) rotate(-30deg) scale(.3)", opacity: 0 },
+      { transform: "translate(-20px, -40px) rotate(8deg) scale(1.05)", opacity: 1, offset: .6 },
+      { transform: "translate(0, -6px) rotate(-4deg) scale(1)", offset: .85 },
+      { transform: "none" },
+    ], { duration: 720, easing: "cubic-bezier(.2,.7,.3,1)" });
+    clip.classList.add("on");
+    play(clip, [{ transform: "translateY(-8px) scale(1.2)" }, { transform: "translateY(2px) scale(.95)", offset: .6 }, { transform: "none" }], { duration: 300 });
+    kick(160);
+    const r = clip.getBoundingClientRect();
+    spark(r.left + r.width / 2, r.top + r.height, 10, ["#dfe3e6", "#f2b636"]);
+    state = "busy";
+    b.style.setProperty("--p", 0);
+    say(`Order ${$("tNo").textContent} placed. Total ${fmt(o.total)}. The kitchen has it.`);
+    // 3. progress: received, then cooking under the heat lamps with steam
+    $("st0").className = "done";
+    txt.textContent = "Kitchen has it · cooking";
+    await wait(350);
+    $("st1").className = "now";
+    $("pass").classList.add("hot");
+    await tween(500, (t) => $("sb0").style.setProperty("--f", t.toFixed(3)));
+    await tween(2200, (t) => { $("sb1").style.setProperty("--f", t.toFixed(3)); b.style.setProperty("--p", t.toFixed(3)); txt.textContent = `Cooking · ${Math.round(t * 100)}%`; });
+    $("st1").className = "done";
+    $("st2").className = "done";
+    $("pass").classList.remove("hot");
+    // 4. finish: READY is stamped, the bell rings twice, confetti
+    $("stamp").classList.add("on");
+    play(ticket, [{ transform: "none" }, { transform: "scale(.94, 1.04)", offset: .3 }, { transform: "none" }], { duration: 320 });
+    kick(-120);
+    ring(2);
+    const tr = ticket.getBoundingClientRect();
+    confetti(tr.left + tr.width / 2, tr.top + tr.height * .45, 40);
+    b.style.setProperty("--p", 0);
+    b.classList.add("new");
+    txt.textContent = "Ready ✓ · Place a new order";
+    b.removeAttribute("aria-disabled");
+    say(`Order ${$("tNo").textContent} is ready.`);
+    state = "done";
+  }
+  function fillTicket(o) {
+    const d = new Date();
+    $("tNo").textContent = "#A-" + orderNo++;
+    $("tType").textContent = o.type === "dine" ? "TABLE 7" : "TAKEAWAY";
+    $("tTime").textContent = "Placed " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase();
+    $("tItems").innerHTML = ITEMS.map(([q, n, p]) => `<li><span>${q}× ${n}</span><span>${p.toLocaleString("en-US")}</span></li>`).join("");
+    $("tTotal").textContent = fmt(o.total);
+    ["st0", "st1", "st2"].forEach((id) => ($(id).className = ""));
+    ["sb0", "sb1"].forEach((id) => $(id).style.setProperty("--f", 0));
+    $("stamp").classList.remove("on");
+  }
+  // 5. reset: the old ticket slides off the rail and drops, the form is ready again
+  async function newOrder() {
+    state = "busy";
+    const b = $("place");
+    await play(ticket, [{ transform: "none" }, { transform: "translateX(18px) rotate(4deg)", offset: .2 }, { transform: "translateX(-200px) rotate(-6deg)", offset: .7, opacity: 1 }, { transform: "translate(-240px, 160px) rotate(-40deg)", opacity: 0 }], { duration: 760, easing: "cubic-bezier(.5,0,.7,1)" });
+    ticket.classList.remove("on");
+    clip.classList.remove("on");
+    $("emptyNote").style.opacity = 1;
+    b.classList.remove("new");
+    state = "idle";
+    refresh();
+    say("Ready for a new order.");
+  }
+  $("place").addEventListener("click", place);
+
+  // ---------- Confetti and sparks ----------
+  const fx = $("fx"), ctx = fx.getContext("2d");
+  let parts = [], fxOn = false, fxLast = 0;
+  function sizeFx() { const d = Math.min(2, devicePixelRatio || 1); fx.width = innerWidth * d; fx.height = innerHeight * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+  sizeFx(); addEventListener("resize", sizeFx);
+  function go() { if (!fxOn) { fxOn = true; fxLast = performance.now(); requestAnimationFrame(drawFx); } }
+  function confetti(x, y, n) {
+    if (calm()) return;
+    const C = ["#e2412d", "#f2b636", "#2f8f4e", "#fffaf0"];
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - .5) * 2.6, v = 160 + Math.random() * 260;
+      parts.push({ k: "c", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0, max: 1.1 + Math.random() * .5, w: 4 + Math.random() * 4, h: 6 + Math.random() * 6, rot: Math.random() * 6, vr: (Math.random() - .5) * 14, c: C[i % C.length] });
+    }
+    go();
+  }
+  function spark(x, y, n, C) {
+    if (calm()) return;
+    for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI, v = 60 + Math.random() * 120; parts.push({ k: "s", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v * .5, life: 0, max: .4 + Math.random() * .3, r: 1.5 + Math.random() * 1.5, c: C[i % C.length] }); }
+    go();
+  }
+  function drawFx(now) {
+    const dt = Math.min(.04, (now - fxLast) / 1000); fxLast = now;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      p.life += dt;
+      if (p.life > p.max) { parts.splice(i, 1); continue; }
+      ctx.globalAlpha = Math.min(1, (p.max - p.life) * 3);
+      if (p.k === "c") {
+        p.vx *= .985; p.vy = p.vy * .985 + 640 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(1, Math.cos(p.life * 8)); ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+      } else {
+        p.vy += 500 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+        ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+    if (parts.length) requestAnimationFrame(drawFx); else { fxOn = false; ctx.clearRect(0, 0, innerWidth, innerHeight); }
+  }
+  function say(m) { $("status").textContent = m; }
+
+  // ---------- Auto-demo: change the order a little, place it, then start a new one ----------
+  const demo = { on: true, timer: 0, n: 0 };
+  function stopDemo() { if (demo.on) { demo.on = false; clearTimeout(demo.timer); } }
+  addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  const pick = (id) => { $(id).checked = true; refresh(); play(document.querySelector(`label[for="${id}"]`), [{ transform: "scale(1)" }, { transform: "scale(.9)", offset: .3 }, { transform: "scale(1.08)", offset: .65 }, { transform: "scale(1)" }], { duration: 380 }); };
+  async function runDemo() {
+    if (!demo.on) return;
+    const n = demo.n++;
+    pick(n % 2 ? "ty-take" : "ty-dine");
+    await wait(260); if (!demo.on) return;
+    pick(["tip100", "tip50", "tip150"][n % 3]);
+    await wait(300); if (!demo.on) return;
+    await place();
+    await wait(2400); if (!demo.on) return;
+    await place(); // "Place a new order" clears the rail
+    if (demo.on) demo.timer = setTimeout(runDemo, 700);
+  }
+
+  refresh();
+  demo.timer = setTimeout(runDemo, 150);
+</script>
+</body>
+</html>

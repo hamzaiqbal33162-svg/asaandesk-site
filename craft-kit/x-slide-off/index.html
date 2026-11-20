@@ -1,0 +1,481 @@
+<!doctype html>
+<!-- Chill & Craft · Slide Off · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slide Off · slide-to-delete control</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #f4effb;
+    --blob1: rgba(236, 72, 153, .2);
+    --blob2: rgba(249, 115, 22, .16);
+    --card: #ffffff;
+    --line: #ebe3f6;
+    --ink: #1d1530;
+    --muted: #74698a;
+    --track: #1c1532;
+    --track-line: rgba(255, 255, 255, .07);
+    --track-ink: #d6cdee;
+    --g1: #ec4899;
+    --g2: #f97316;
+    --ok: #22c55e;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d0a16;
+    --blob1: rgba(236, 72, 153, .16);
+    --blob2: rgba(249, 115, 22, .1);
+    --card: #191428;
+    --line: #2b2342;
+    --ink: #f2edfb;
+    --muted: #a094b8;
+    --track: #110c1e;
+    --track-line: rgba(255, 255, 255, .09);
+    --focus: #93c5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    color: var(--ink);
+    background:
+      radial-gradient(420px 300px at 22% 28%, var(--blob1), transparent 70%),
+      radial-gradient(460px 320px at 80% 78%, var(--blob2), transparent 70%),
+      var(--bg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 30px; padding: 30px 16px; width: 100%; }
+
+  /* ---------- Chat card (an empty slot stays behind once it is gone) ---------- */
+  .slot { position: relative; width: min(340px, 100%); display: grid; }
+  .slot::before { content: ""; position: absolute; inset: 0; border-radius: 20px; border: 1.5px dashed var(--line); opacity: 0; transform: scale(.96); transition: opacity .4s, transform .6s var(--spring); }
+  :root[data-theme="dark"] .slot::before { border-color: #3a3156; }
+  .slot-note { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--muted); opacity: 0; transition: opacity .4s .15s; }
+  .slot.gone::before { opacity: 1; transform: none; }
+  .slot.gone .slot-note { opacity: 1; }
+  .chat {
+    --tint: 0;
+    position: relative;
+    width: min(340px, 100%);
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 14px 16px 14px 14px;
+    border-radius: 20px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 26px 46px -30px rgba(60, 20, 90, .55);
+    transform-origin: 50% 100%;
+    will-change: transform;
+  }
+  .chat::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, rgba(236, 72, 153, .05), rgba(249, 115, 22, .35)); opacity: var(--tint); pointer-events: none; }
+  .av { position: relative; flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, #a78bfa, #ec4899); color: #fff; font-weight: 760; }
+  .av::after { content: ""; position: absolute; right: 0; bottom: 1px; width: 12px; height: 12px; border-radius: 50%; background: var(--ok); border: 2.5px solid var(--card); animation: online 2.6s ease-in-out infinite; }
+  .who { flex: 1; min-width: 0; display: grid; gap: 3px; }
+  .who .top { display: flex; align-items: baseline; gap: 8px; }
+  .who b { font-size: 15.5px; font-weight: 720; }
+  .who time { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .who p { margin: 0; font-size: 13.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who small { font-size: 11.5px; color: var(--muted); opacity: .85; }
+  .typing { display: inline-flex; gap: 3px; margin-right: 6px; vertical-align: 2px; }
+  .typing i { width: 4px; height: 4px; border-radius: 50%; background: var(--g1); animation: dots 1.2s ease-in-out infinite; }
+  .typing i:nth-child(2) { animation-delay: .15s; }
+  .typing i:nth-child(3) { animation-delay: .3s; }
+
+  /* ---------- Slide track ---------- */
+  .track {
+    --p: 0;
+    position: relative;
+    width: 320px;
+    max-width: calc(100vw - 32px);
+    height: 68px;
+    border-radius: 34px;
+    background: var(--track);
+    border: 1px solid var(--track-line);
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, .35), 0 18px 34px -20px rgba(236, 72, 153, calc(.3 + var(--p) * .7)), 0 0 calc(var(--p) * 30px) rgba(249, 115, 22, calc(var(--p) * .35));
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .track.anim { transition: width .6s var(--spring); }
+  .track.done { width: 68px; background: rgba(34, 197, 94, .14); border-color: rgba(34, 197, 94, .45); box-shadow: 0 0 0 7px rgba(34, 197, 94, .1), 0 14px 26px -14px rgba(34, 197, 94, .7); }
+  .track.done .fill { opacity: 0; }
+  .track.focus { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 68px; border-radius: 34px; background: linear-gradient(90deg, var(--g1), var(--g2)); opacity: calc(.25 + var(--p) * .75); }
+  .label {
+    position: absolute;
+    inset: 0 0 0 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 15.5px;
+    font-weight: 650;
+    letter-spacing: .01em;
+    white-space: nowrap;
+    opacity: calc(1 - var(--p) * 1.7);
+    transform: translateX(calc(var(--p) * 34px));
+    pointer-events: none;
+  }
+  .label span { background: linear-gradient(90deg, var(--track-ink) 0 35%, #fff 50%, var(--track-ink) 65% 100%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 2.6s linear infinite; }
+  .chev { display: inline-flex; }
+  .chev svg { width: 9px; height: 14px; fill: none; stroke: var(--track-ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; animation: chev 1.4s ease-in-out infinite; }
+  .chev svg:nth-child(2) { animation-delay: .15s; }
+  .chev svg:nth-child(3) { animation-delay: .3s; }
+  .track.done .label { opacity: 0; }
+
+  .knob {
+    position: absolute;
+    left: 5px;
+    top: 5px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, var(--g1), var(--g2));
+    box-shadow: 0 8px 18px -6px rgba(236, 72, 153, .8), inset 0 1px 0 rgba(255, 255, 255, .35), inset 0 -3px 0 rgba(0, 0, 0, .12);
+    cursor: grab;
+    will-change: transform;
+  }
+  .knob:active { cursor: grabbing; }
+  .knob.anim { transition: transform .6s var(--spring); }
+  .knob.nudge .inner { animation: nudge .9s var(--spring); }
+  .inner { position: relative; width: 26px; height: 26px; }
+  .inner svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #fff; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; overflow: visible; transition: opacity .25s, transform .45s var(--spring); }
+  .lid { transform-box: fill-box; transform-origin: 0% 100%; }
+  .tick { opacity: 0; transform: scale(.5); }
+  .tick path { stroke-dasharray: 22; stroke-dashoffset: 22; transition: stroke-dashoffset .45s .15s ease-out; stroke-width: 3; }
+  .knob.ok .bin { opacity: 0; transform: scale(.4) rotate(-30deg); }
+  .knob.ok .tick { opacity: 1; transform: none; }
+  .knob.ok .tick path { stroke-dashoffset: 0; }
+  .knob.ok { background: linear-gradient(135deg, #34d399, var(--ok)); box-shadow: 0 8px 18px -6px rgba(34, 197, 94, .8), inset 0 1px 0 rgba(255, 255, 255, .35); }
+
+  /* hidden range input = keyboard and screen reader access */
+  .rng { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
+
+  .result { min-height: 36px; margin-top: -14px; padding: 0 8px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; font-size: 13.5px; text-align: center; color: var(--muted); }
+  .result b { color: var(--ink); font-weight: 680; }
+  .undo { height: 32px; padding: 0 14px; border-radius: 99px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: transform .3s var(--spring); }
+  .undo:hover { transform: translateY(-1px); }
+  .undo:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .undo[hidden] { display: none; }
+
+  .bit { position: fixed; z-index: 40; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 2px; pointer-events: none; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @keyframes shimmer { from { background-position: 110% 0; } to { background-position: -110% 0; } }
+  @keyframes chev { 0%, 100% { opacity: .25; transform: translateX(0); } 50% { opacity: 1; transform: translateX(3px); } }
+  @keyframes nudge { 0% { transform: none; } 30% { transform: translateX(10px) rotate(8deg); } 100% { transform: none; } }
+  @keyframes online { 0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, .5); } 60% { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); } }
+  @keyframes dots { 0%, 100% { transform: translateY(0); opacity: .4; } 40% { transform: translateY(-3px); opacity: 1; } }
+
+  /* Calm mode: same steps, no big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="slot" id="slot"><span class="slot-note" aria-hidden="true">Chat removed</span>
+  <article class="chat" id="chat" aria-label="Chat with Zara Hussain">
+    <span class="av" aria-hidden="true">ZH</span>
+    <div class="who">
+      <div class="top"><b>Zara Hussain</b><time>4:52 pm</time></div>
+      <p><span class="typing" aria-hidden="true"><i></i><i></i><i></i></span>See you at Liberty Market at 5?</p>
+      <small>1,204 messages · 312 MB of media</small>
+    </div>
+  </article>
+  </div>
+
+  <div class="track" id="track">
+    <div class="fill" id="fill" aria-hidden="true"></div>
+    <div class="label" aria-hidden="true"><span>Slide to delete chat</span><i class="chev"><svg viewBox="0 0 9 14"><path d="M2 2l5 5-5 5" /></svg><svg viewBox="0 0 9 14"><path d="M2 2l5 5-5 5" /></svg><svg viewBox="0 0 9 14"><path d="M2 2l5 5-5 5" /></svg></i></div>
+    <div class="knob" id="knob" aria-hidden="true">
+      <span class="inner">
+        <svg class="bin" viewBox="0 0 26 26"><g class="lid" id="lid"><path d="M4 7.5h18" /><path d="M10 7.5V5.6c0-.9.7-1.6 1.6-1.6h2.8c.9 0 1.6.7 1.6 1.6v1.9" /></g><path d="M6.6 10.5l1 10.4a2.2 2.2 0 0 0 2.2 2h6.4a2.2 2.2 0 0 0 2.2-2l1-10.4" /><path d="M11 13.5v5.5M15 13.5v5.5" /></svg>
+        <svg class="tick" viewBox="0 0 26 26"><path d="M6 13.5l5 5 9-10" /></svg>
+      </span>
+    </div>
+    <input class="rng" id="rng" type="range" min="0" max="100" step="5" value="0" aria-label="Slide to delete the chat with Zara Hussain" aria-describedby="result">
+  </div>
+  <div class="result" id="result"><span id="rtext">Drag the bin all the way · keyboard: End</span><button class="undo" id="undo" type="button" hidden>Undo</button></div>
+  <p class="sr-only" id="status" aria-live="polite"></p>
+</main>
+
+<script>
+  // ---------- Slide Off: drag the bin across; the chat above leans in, then gets swallowed ----------
+  const $ = (id) => document.getElementById(id);
+  const chat = $("chat"), track = $("track"), knob = $("knob"), lid = $("lid"), rng = $("rng");
+  const rtext = $("rtext"), undoBtn = $("undo"), status = $("status");
+  const IDLE_TEXT = "Drag the bin all the way · keyboard: End";
+  const COMMIT_AT = .86;
+
+  const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => calmQ.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 300) : ms));
+  const easeInOut = (t) => -(Math.cos(Math.PI * t) - 1) / 2;
+  function play(el, frames, opts) {
+    if (calm() || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  function say(msg) { if (!demo.on) status.textContent = msg; }
+
+  // ---------- State and drawing ----------
+  let x = 0, v = 0, mode = "rest"; // rest | drag | spring | demo | commit | done
+  const maxX = () => track.clientWidth - 56 - 10;
+  function render() {
+    const p = Math.max(0, Math.min(1, x / maxX()));
+    track.style.setProperty("--p", p.toFixed(3));
+    knob.style.transform = "translateX(" + x.toFixed(1) + "px) rotate(" + (p * 12).toFixed(1) + "deg)";
+    $("fill").style.width = (68 + x) + "px";
+    lid.style.transform = "translateY(" + (-p * 2).toFixed(2) + "px) rotate(" + (-p * 32).toFixed(1) + "deg)";
+    chat.style.setProperty("--tint", p.toFixed(3));
+    chat.style.transform = "perspective(700px) translateY(" + (p * 10).toFixed(1) + "px) rotateX(" + (p * 16).toFixed(1) + "deg) scale(" + (1 - p * .07).toFixed(3) + ")";
+    if (mode !== "kbd") rng.value = Math.round(p * 20) * 5;
+    rng.setAttribute("aria-valuetext", Math.round(p * 100) + "% of the way to delete");
+  }
+
+  // Spring back home; the knob bounces off the left wall
+  function springBack() {
+    if (calm()) { x = 0; v = 0; mode = "rest"; render(); return; }
+    mode = "spring";
+    let last = performance.now();
+    requestAnimationFrame(function f(now) {
+      if (mode !== "spring") return;
+      const dt = Math.max(0, Math.min(.032, (now - last) / 1000)); last = now;
+      v += (-340 * x - 20 * v) * dt;
+      x += v * dt;
+      if (x < 0) { x = -x * .3; v = -v * .4; }
+      if (Math.abs(x) < .3 && Math.abs(v) < 6) { x = 0; v = 0; mode = "rest"; render(); return; }
+      render();
+      requestAnimationFrame(f);
+    });
+  }
+
+  // ---------- Pointer drag ----------
+  let grabX = 0, lastX = 0, lastT = 0;
+  knob.addEventListener("pointerdown", (e) => {
+    if (mode === "commit" || mode === "done") return;
+    e.preventDefault();
+    knob.setPointerCapture(e.pointerId);
+    mode = "drag";
+    grabX = e.clientX - x;
+    lastX = e.clientX; lastT = performance.now(); v = 0;
+    play(knob.querySelector(".inner"), [{ transform: "scale(1)" }, { transform: "scale(.86)" }, { transform: "scale(1)" }], { duration: 260 });
+  });
+  knob.addEventListener("pointermove", (e) => {
+    if (mode !== "drag") return;
+    x = Math.max(0, Math.min(maxX(), e.clientX - grabX));
+    const now = performance.now();
+    v = (e.clientX - lastX) / Math.max(1, now - lastT) * 1000;
+    lastX = e.clientX; lastT = now;
+    render();
+  });
+  const letGo = () => {
+    if (mode !== "drag") return;
+    if (x / maxX() >= COMMIT_AT) commit();
+    else { springBack(); if (x > 8) say("Not far enough. The chat was not deleted."); }
+  };
+  knob.addEventListener("pointerup", letGo);
+  knob.addEventListener("pointercancel", letGo);
+  knob.addEventListener("lostpointercapture", letGo);
+
+  // ---------- Keyboard: arrows move it, End or Enter goes all the way, Esc sends it home ----------
+  rng.addEventListener("focus", () => track.classList.add("focus"));
+  rng.addEventListener("blur", () => { track.classList.remove("focus"); if (mode === "kbd") springBack(); });
+  rng.addEventListener("input", () => {
+    if (mode === "commit" || mode === "done") return;
+    mode = "kbd";
+    x = (+rng.value / 100) * maxX();
+    render();
+    if (+rng.value >= 100) commit();
+  });
+  rng.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (mode === "rest" || mode === "kbd" || mode === "spring")) { e.preventDefault(); slideTo(1, 420).then((ok) => { if (ok) commit(); }); }
+    if (e.key === "Escape" && mode === "kbd") { e.preventDefault(); springBack(); }
+  });
+
+  // Glide the knob to a fraction of the track (used by Enter and by the demo)
+  function slideTo(frac, ms) {
+    const from = x, to = frac * maxX();
+    mode = "demo";
+    return new Promise((res) => {
+      if (calm()) { x = to; render(); res(true); return; }
+      const s = performance.now();
+      requestAnimationFrame(function f(now) {
+        if (mode !== "demo") { res(false); return; }
+        const t = Math.max(0, Math.min(1, (now - s) / ms));
+        x = from + (to - from) * easeInOut(t);
+        render();
+        if (t < 1) requestAnimationFrame(f); else res(true);
+      });
+    });
+  }
+
+  function burst(cx, cy) {
+    if (calm()) return;
+    const cols = ["#ec4899", "#f97316", "#fbbf24", "#a78bfa"];
+    for (let i = 0; i < 18; i++) {
+      const b = document.createElement("span");
+      b.className = "bit";
+      b.style.left = cx + "px"; b.style.top = cy + "px";
+      b.style.background = cols[i % 4];
+      document.body.appendChild(b);
+      const a = (i / 18) * Math.PI * 2, d = 34 + Math.random() * 30;
+      b.animate([{ transform: "translate(0,0) rotate(0) scale(1)", opacity: 1 }, { transform: "translate(" + Math.cos(a) * d + "px," + Math.sin(a) * d + "px) rotate(220deg) scale(.3)", opacity: 0 }], { duration: 560 + Math.random() * 200, easing: "cubic-bezier(.2,.7,.4,1)" }).onfinish = () => b.remove();
+    }
+  }
+
+  // ---------- Commit: swallow the chat, collapse to a tick, offer Undo, reset ----------
+  let undoNow = null;
+  async function commit() {
+    if (mode === "commit" || mode === "done") return;
+    mode = "commit";
+    const hadFocus = document.activeElement === rng;
+    // anticipation: snap to the end, lid flies open
+    const from = x, to = maxX();
+    if (!calm()) {
+      const s = performance.now();
+      await new Promise((res) => requestAnimationFrame(function f(now) {
+        const t = Math.max(0, Math.min(1, (now - s) / 160));
+        x = from + (to - from) * t; render();
+        if (t < 1) requestAnimationFrame(f); else res();
+      }));
+    }
+    x = to; render();
+    lid.style.transform = "translateY(-3px) rotate(-70deg)";
+    // main: the chat card is sucked into the bin
+    const kr = knob.getBoundingClientRect(), cr = chat.getBoundingClientRect();
+    const dx = kr.left + kr.width / 2 - (cr.left + cr.width / 2), dy = kr.top + kr.height / 2 - (cr.top + cr.height);
+    const start = chat.style.transform;
+    chat.style.opacity = 0;
+    $("slot").classList.add("gone");
+    await play(chat, [
+      { transform: start, opacity: 1 },
+      { transform: "translate(" + dx * .2 + "px," + (dy * .15 - 14) + "px) scale(.86, 1.04)", opacity: 1, offset: .3 },
+      { transform: "translate(" + dx * .75 + "px," + dy * .7 + "px) scale(.28, .4) rotate(-10deg)", opacity: 1, offset: .75 },
+      { transform: "translate(" + dx + "px," + dy + "px) scale(.04) rotate(-20deg)", opacity: 0 }
+    ], { duration: 640, easing: "cubic-bezier(.55,0,.8,.45)" });
+    // finish: lid slams, knob gulps, sparks fly
+    lid.style.transform = "";
+    play(knob, [{ transform: knob.style.transform }, { transform: knob.style.transform + " scale(1.22, .8)", offset: .3 }, { transform: knob.style.transform + " scale(.92, 1.08)", offset: .6 }, { transform: knob.style.transform }], { duration: 460, easing: "ease-out" });
+    burst(kr.left + kr.width / 2, kr.top + kr.height / 2);
+    await wait(320);
+    // the track folds into a round tick
+    track.classList.add("anim", "done");
+    knob.classList.add("anim", "ok");
+    x = 0;
+    knob.style.transform = "translateX(0px)";
+    $("fill").style.width = "68px";
+    mode = "done";
+    rtext.innerHTML = "<b>Chat deleted</b> · 312 MB freed";
+    undoBtn.hidden = false;
+    if (hadFocus) undoBtn.focus();
+    say("Chat with Zara Hussain deleted. Undo is available for a few seconds.");
+    const undone = await Promise.race([wait(2800).then(() => false), new Promise((r) => (undoNow = r)).then(() => true)]);
+    undoNow = null;
+    await reset(undone);
+  }
+
+  // Smooth reset; after Undo the chat pops back out of the bin instead of dropping in
+  async function reset(undone) {
+    const hadFocus = document.activeElement === undoBtn;
+    undoBtn.hidden = true;
+    knob.classList.remove("ok");
+    $("slot").classList.remove("gone");
+    track.classList.remove("done");
+    track.style.setProperty("--p", 0);
+    chat.style.setProperty("--tint", 0);
+    chat.style.transform = "";
+    chat.style.opacity = "";
+    if (undone) {
+      const kr = knob.getBoundingClientRect(), cr = chat.getBoundingClientRect();
+      const dx = kr.left + kr.width / 2 - (cr.left + cr.width / 2), dy = kr.top + kr.height / 2 - (cr.top + cr.height / 2);
+      play(chat, [{ transform: "translate(" + dx + "px," + dy + "px) scale(.05)", opacity: 0 }, { transform: "translate(" + dx * .3 + "px," + dy * .3 + "px) scale(.7) rotate(6deg)", opacity: 1, offset: .5 }, { transform: "none", opacity: 1 }], { duration: 620, easing: "cubic-bezier(.3,1.35,.5,1)" });
+      rtext.innerHTML = "<b>Chat restored</b>";
+      say("Chat restored.");
+    } else {
+      play(chat, [{ transform: "translateY(-30px) scale(.94)", opacity: 0 }, { transform: "translateY(4px) scale(1.01)", opacity: 1, offset: .65 }, { transform: "none", opacity: 1 }], { duration: 640, easing: "ease-out" });
+      rtext.textContent = IDLE_TEXT;
+    }
+    await wait(650);
+    track.classList.remove("anim");
+    knob.classList.remove("anim");
+    rng.value = 0;
+    mode = "rest";
+    render();
+    if (hadFocus) rng.focus();
+    if (undone) setTimeout(() => { if (mode === "rest") rtext.textContent = IDLE_TEXT; }, 1600);
+    if (demo.on) scheduleDemo(2600);
+  }
+  undoBtn.addEventListener("click", () => { if (undoNow) undoNow(); });
+
+  // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+  const demo = { on: true, timer: 0, n: 0 };
+  function stopDemo() {
+    if (!demo.on) return;
+    demo.on = false;
+    clearTimeout(demo.timer);
+    if (mode === "demo") springBack();
+  }
+  addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+  function scheduleDemo(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+  async function runDemo() {
+    if (!demo.on) return;
+    if (mode !== "rest") { scheduleDemo(1200); return; }
+    demo.n++;
+    if (demo.n % 3 === 2) {
+      // a timid slide that is let go too early and springs back
+      if (!(await slideTo(.42, 520))) return;
+      await wait(120); if (!demo.on) return;
+      if (!(await slideTo(.64, 420))) return;
+      v = 0; springBack();
+      scheduleDemo(3200);
+      return;
+    }
+    if (!(await slideTo(.5, 560))) return;
+    await wait(140); if (!demo.on) { springBack(); return; }
+    if (!(await slideTo(.44, 180))) return;
+    if (!(await slideTo(1, 480))) return;
+    commit();
+  }
+
+  // Idle hint: the knob nudges right now and then
+  setInterval(() => {
+    if (mode !== "rest" || document.hidden) return;
+    knob.classList.remove("nudge");
+    void knob.offsetWidth;
+    knob.classList.add("nudge");
+  }, 3600);
+
+  render();
+  scheduleDemo(450);
+</script>
+</body>
+</html>

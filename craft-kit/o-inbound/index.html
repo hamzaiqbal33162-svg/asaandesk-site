@@ -1,0 +1,554 @@
+<!doctype html>
+<!-- Chill & Craft · Inbound · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inbound · SMS code with a message banner and resend timer</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: pastel sky, periwinkle and bubblegum ---------- */
+  :root {
+    color-scheme: light;
+    --sky: #dfe8ff;
+    --sky-2: #fde4f1;
+    --card: #ffffff;
+    --ink: #1d2350;
+    --muted: #6d74a3;
+    --line: rgba(29, 35, 80, .12);
+    --blue: #4b5cff;
+    --blue-2: #7d8bff;
+    --pink: #ff6fae;
+    --ok: #1fae7a;
+    --bad: #f0466e;
+    --field: #f3f5ff;
+    --glass: rgba(255, 255, 255, .78);
+    --shadow: rgba(60, 72, 180, .28);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --sky: #0b1230;
+    --sky-2: #2a0f2c;
+    --card: #131b42;
+    --ink: #eef0ff;
+    --muted: #a3a9d8;
+    --line: rgba(238, 240, 255, .13);
+    --blue: #8190ff;
+    --blue-2: #a5b0ff;
+    --ok: #3fd69c;
+    --bad: #ff7896;
+    --field: #1b2453;
+    --glass: rgba(30, 38, 84, .82);
+    --shadow: rgba(0, 0, 0, .7);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 18px 16px;
+    overflow-x: hidden;
+    color: var(--ink);
+    background: radial-gradient(circle at 85% 10%, var(--sky-2), transparent 50%), radial-gradient(circle at 10% 90%, rgba(75, 92, 255, .16), transparent 55%), var(--sky);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  button { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  .wrap { width: min(100%, 400px); }
+
+  /* ---------- Message banner that drops in ---------- */
+  .banner-slot { height: 92px; margin-bottom: 40px; perspective: 600px; }
+  .banner {
+    display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 11px;
+    width: 100%; height: 100%; padding: 11px 12px; border-radius: 22px; text-align: left; cursor: pointer; border: 0;
+    background: var(--glass); backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    box-shadow: 0 0 0 1px var(--line), 0 18px 34px -18px var(--shadow);
+    transform: translateY(-140%) scale(.9); opacity: 0; visibility: hidden;
+    transition: transform .7s cubic-bezier(.3, 1.45, .45, 1), opacity .35s, visibility 0s .7s;
+  }
+  .banner.in { transform: none; opacity: 1; visibility: visible; transition: transform .7s cubic-bezier(.3, 1.45, .45, 1), opacity .35s, visibility 0s; }
+  .banner.used { opacity: .82; }
+  .banner:hover { box-shadow: 0 0 0 1px var(--blue-2), 0 18px 34px -16px var(--shadow); }
+  .banner:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+  .banner .app { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: linear-gradient(160deg, #53e08f, #19b064); box-shadow: 0 4px 8px -3px rgba(25, 176, 100, .6); }
+  .banner .top { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
+  .banner .top b { color: var(--ink); font-weight: 700; }
+  .banner .msg { display: block; margin: 3px 0 0; font-size: 13px; line-height: 1.35; }
+  .banner .msg .code { font-weight: 800; letter-spacing: .06em; color: var(--blue); white-space: nowrap; }
+  .banner .msg .code span { display: inline-block; transition: opacity .2s; }
+  .banner .msg .code span.gone { opacity: .25; }
+  .banner .fill { align-self: center; padding: 8px 11px; border-radius: 12px; font-size: 12.5px; font-weight: 800; color: #fff; background: linear-gradient(135deg, var(--blue), var(--pink)); box-shadow: 0 6px 12px -6px var(--shadow); white-space: nowrap; }
+  .banner.press .fill { transform: scale(.92); }
+
+  /* ---------- Card ---------- */
+  .card { position: relative; padding: 22px 20px 18px; border-radius: 26px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 40px 60px -36px var(--shadow); text-align: center; }
+  .phone { position: relative; width: 58px; height: 58px; margin: -50px auto 8px; border-radius: 18px; display: grid; place-items: center; background: linear-gradient(160deg, var(--blue-2), var(--blue)); box-shadow: 0 12px 22px -10px var(--shadow), 0 0 0 6px var(--card); animation: float 4s ease-in-out infinite; }
+  @keyframes float { 50% { transform: translateY(-4px) rotate(-3deg); } }
+  .phone.buzz { animation: buzz .5s linear; }
+  @keyframes buzz { 10%, 30%, 50%, 70%, 90% { transform: translateX(-3px) rotate(-6deg); } 20%, 40%, 60%, 80% { transform: translateX(3px) rotate(6deg); } }
+  .phone .dot { position: absolute; right: -4px; top: -4px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 900; color: #fff; background: var(--pink); box-shadow: 0 0 0 3px var(--card); transform: scale(0); transition: transform .4s cubic-bezier(.34, 1.8, .5, 1); }
+  .phone.has .dot { transform: scale(1); }
+  .phone .verified { position: absolute; right: -6px; bottom: -6px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--ok); box-shadow: 0 0 0 3px var(--card); transform: scale(0) rotate(-90deg); transition: transform .5s cubic-bezier(.34, 1.8, .5, 1); }
+  .card.ok .phone .verified { transform: none; }
+  h1 { margin: 0; font-size: 21px; letter-spacing: -.01em; }
+  .sub { margin: 6px 0 0; font-size: 14px; color: var(--muted); line-height: 1.45; }
+  .sub b { color: var(--ink); white-space: nowrap; }
+  .sub .change { padding: 0; border: 0; background: none; color: var(--blue); font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+  /* Six boxes that can merge into one pill */
+  .field { position: relative; margin: 20px 0 6px; height: 58px; }
+  .boxes { display: flex; justify-content: center; gap: clamp(6px, 2vw, 9px); height: 100%; }
+  .box { position: relative; width: clamp(40px, 12vw, 50px); transition: transform .5s cubic-bezier(.6, 0, .3, 1), opacity .35s; }
+  .box input {
+    width: 100%; height: 100%; padding: 0; border: 0; border-radius: 15px; outline: none; text-align: center;
+    background: var(--field); color: var(--ink); caret-color: var(--pink);
+    font: 800 24px/1 system-ui, sans-serif; font-variant-numeric: tabular-nums;
+    box-shadow: inset 0 0 0 1.5px var(--line); transition: box-shadow .2s, transform .3s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .box input:focus, .box.cur input { box-shadow: inset 0 0 0 2px var(--blue), 0 0 0 5px rgba(75, 92, 255, .14); transform: translateY(-3px); }
+  .box.filled input { box-shadow: inset 0 0 0 2px var(--blue-2); }
+  .box input:disabled { opacity: .45; cursor: not-allowed; }
+  .box.land input { animation: land .45s cubic-bezier(.34, 1.8, .5, 1); }
+  @keyframes land { 0% { transform: scale(.82); } 50% { transform: scale(1.12); } }
+  .boxes.merge .box { transform: translateX(var(--dx)) scale(.5); opacity: 0; transition-delay: calc(var(--d) * 40ms); }
+  .boxes.bad .box input { box-shadow: inset 0 0 0 2px var(--bad); }
+  .boxes.bad { animation: shake .45s ease; }
+  @keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+
+  .pill {
+    position: absolute; left: 50%; top: 0; height: 58px; width: 58px; border-radius: 29px;
+    display: flex; align-items: center; justify-content: center; gap: 10px; overflow: hidden;
+    color: #fff; font-size: 15px; font-weight: 750; white-space: nowrap;
+    background: linear-gradient(135deg, var(--blue), var(--pink));
+    box-shadow: 0 12px 24px -10px var(--shadow);
+    transform: translateX(-50%) scale(0); opacity: 0;
+    transition: transform .5s cubic-bezier(.34, 1.56, .64, 1), width .55s cubic-bezier(.6, 0, .25, 1.25), background .4s, opacity .3s;
+  }
+  .pill.on { transform: translateX(-50%) scale(1); opacity: 1; width: 210px; }
+  .pill.ok { width: 58px; background: var(--ok); }
+  .pill.bad { background: var(--bad); animation: pshake .45s ease; }
+  @keyframes pshake { 20%, 60% { margin-left: -8px; } 40%, 80% { margin-left: 8px; } }
+  .pill .spin { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, .35); border-top-color: #fff; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pill .chk { display: none; }
+  .pill.ok .spin, .pill.ok .txt, .pill.bad .spin { display: none; }
+  .pill.ok .chk { display: block; }
+  .pill.ok .chk path { stroke-dasharray: 30; stroke-dashoffset: 30; animation: draw .4s ease .25s forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .pill::after { content: ""; position: absolute; inset: -2px; border-radius: inherit; border: 3px solid var(--ok); opacity: 0; }
+  .pill.ok::after { animation: burst .8s ease-out .3s; }
+  @keyframes burst { from { opacity: .9; transform: scale(1); } to { opacity: 0; transform: scale(2.2); } }
+
+  .status { min-height: 21px; margin: 8px 0 4px; font-size: 14px; font-weight: 650; }
+  .status[data-tone="good"] { color: var(--ok); }
+  .status[data-tone="bad"] { color: var(--bad); }
+  .status.pop { animation: statusIn .45s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes statusIn { from { opacity: 0; transform: translateY(6px); } }
+
+  /* Resend row with a countdown ring */
+  .resend { display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 8px; font-size: 13.5px; color: var(--muted); }
+  .resend svg { width: 22px; height: 22px; transform: rotate(-90deg); }
+  .resend circle { fill: none; stroke-width: 3; }
+  .resend .bg { stroke: var(--line); }
+  .resend .fg { stroke: var(--pink); stroke-linecap: round; stroke-dasharray: 50.3; transition: stroke-dashoffset 1s linear; }
+  .resend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .btn {
+    padding: 9px 16px; border: 0; border-radius: 999px; cursor: pointer; font-size: 13.5px; font-weight: 750;
+    background: rgba(75, 92, 255, .12); color: var(--blue);
+    transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), background .2s;
+  }
+  .btn:hover:not(:disabled) { transform: translateY(-2px); background: rgba(75, 92, 255, .2); }
+  .btn:active:not(:disabled) { transform: scale(.95); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.solid { color: #fff; background: linear-gradient(135deg, var(--blue), var(--pink)); }
+  .btn:focus-visible, .change:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
+  .fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+  .fx i, .fx b { position: absolute; left: 0; top: 0; display: block; }
+  .fx b { font: 800 24px/1 system-ui, sans-serif; color: var(--blue); text-shadow: 0 6px 12px var(--shadow); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="banner-slot">
+      <button type="button" class="banner" id="banner" aria-describedby="bannerMsg">
+        <span class="app" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 3c4.4 0 8 2.8 8 6.3s-3.6 6.2-8 6.2c-.9 0-1.8-.1-2.6-.3L3.5 17l.9-3.3C2.9 12.6 2 11 2 9.3 2 5.8 5.6 3 10 3z" fill="#fff"/></svg></span>
+        <span>
+          <span class="top"><b>Messages</b><span id="when">now</span></span>
+          <span class="msg" id="bannerMsg">Your sign-in code is <span class="code" id="bannerCode"></span>. Don't share it with anyone.</span>
+        </span>
+        <span class="fill" aria-hidden="true">Fill</span>
+      </button>
+    </div>
+
+    <section class="card" id="card" aria-labelledby="title">
+      <div class="phone" id="phone" aria-hidden="true">
+        <svg width="26" height="34" viewBox="0 0 26 34" fill="none"><rect x="2" y="1.5" width="22" height="31" rx="5" stroke="#fff" stroke-width="2.4"/><path d="M10 27.5h6" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><path d="M7 9h12M7 14h8" stroke="#fff" stroke-opacity=".7" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="dot">1</span>
+        <span class="verified"><svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 7l2.8 2.8 5.2-6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </div>
+      <h1 id="title">Check your messages</h1>
+      <p class="sub">We sent a 6-digit code to <b>+92 300 ••• 4127</b>. <button type="button" class="change" id="change">Change</button></p>
+
+      <div class="field">
+        <div class="boxes" id="boxes" role="group" aria-labelledby="title">
+          <span class="box"><input inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 1 of 6"></span>
+          <span class="box"><input inputmode="numeric" autocomplete="off" aria-label="Digit 2 of 6"></span>
+          <span class="box"><input inputmode="numeric" autocomplete="off" aria-label="Digit 3 of 6"></span>
+          <span class="box"><input inputmode="numeric" autocomplete="off" aria-label="Digit 4 of 6"></span>
+          <span class="box"><input inputmode="numeric" autocomplete="off" aria-label="Digit 5 of 6"></span>
+          <span class="box"><input inputmode="numeric" autocomplete="off" aria-label="Digit 6 of 6"></span>
+        </div>
+        <div class="pill" id="pill" aria-hidden="true">
+          <span class="spin"></span><span class="txt">Verifying</span>
+          <svg class="chk" width="26" height="26" viewBox="0 0 26 26"><path d="M6 13.5l5 5 9-11" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+
+      <div class="resend" id="resendRow">
+        <span id="timerWrap"><svg viewBox="0 0 22 22" aria-hidden="true"><circle class="bg" cx="11" cy="11" r="8"/><circle class="fg" id="ringFg" cx="11" cy="11" r="8"/></svg></span>
+        <span id="timerText">Resend code in <b id="secs">0:30</b></span>
+        <button type="button" class="btn" id="resend" hidden>Resend code</button>
+        <button type="button" class="btn solid" id="again" hidden>Verify another number</button>
+      </div>
+    </section>
+  </main>
+  <div class="fx" id="fx" aria-hidden="true"></div>
+
+<script>
+(function () {
+  "use strict";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (id) => document.getElementById(id);
+  const banner = $("banner"), bannerCode = $("bannerCode"), phone = $("phone"), card = $("card");
+  const boxesEl = $("boxes"), pill = $("pill"), statusEl = $("status");
+  const resendBtn = $("resend"), againBtn = $("again"), timerWrap = $("timerWrap"), timerText = $("timerText");
+  const wraps = Array.from(document.querySelectorAll(".box"));
+  const boxes = wraps.map((w) => w.querySelector("input"));
+  const LEN = 6;
+  const vals = Array(LEN).fill("");
+  let code = "", busy = false, done = false, tries = 3, resends = 0;
+
+  // ---- Cancellable waits ----
+  const CANCEL = { cancelled: true };
+  let gen = 0;
+  function pause(ms, g, isAnim) {
+    const t = isAnim && reduce ? Math.min(ms, 140) : ms;
+    return new Promise((ok, no) => setTimeout(() => (g === gen ? ok() : no(CANCEL)), t));
+  }
+  const quiet = (p) => p.catch((e) => { if (e !== CANCEL) throw e; });
+  function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+  function say(msg, tone) { statusEl.textContent = msg; statusEl.dataset.tone = tone || ""; restart(statusEl, "pop"); }
+
+  // ---- A message arrives ----
+  function sendCode() {
+    do { code = ""; for (let i = 0; i < LEN; i++) code += Math.floor(Math.random() * 10); } while (/^(\d)\1+$/.test(code));
+    bannerCode.innerHTML = code.split("").map((d) => "<span>" + d + "</span>").join("");
+    banner.classList.remove("in", "used");
+    void banner.offsetWidth;
+    banner.classList.add("in");
+    banner.setAttribute("aria-label", "New message: your sign-in code is " + code.split("").join(" ") + ". Press to fill it in.");
+    phone.classList.add("has");
+    restart(phone, "buzz");
+    $("when").textContent = "now";
+  }
+
+  // ---- Resend countdown ----
+  let timer = 0, left = 0;
+  function startTimer(seconds) {
+    clearInterval(timer);
+    left = seconds;
+    const total = seconds;
+    resendBtn.hidden = true;
+    timerWrap.hidden = false;
+    timerText.hidden = false;
+    const paint = () => {
+      $("secs").textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
+      $("ringFg").style.strokeDashoffset = String(50.3 * (1 - left / total));
+    };
+    paint();
+    timer = setInterval(() => {
+      left--;
+      paint();
+      if (left <= 0) {
+        clearInterval(timer);
+        timerWrap.hidden = true;
+        timerText.hidden = true;
+        if (!done) {
+          resendBtn.hidden = false;
+          resendBtn.disabled = resends >= 3;
+          resendBtn.textContent = resends >= 3 ? "No more resends today" : "Resend code";
+        }
+      }
+    }, 1000);
+  }
+
+  // ---- Boxes: typing, paste, backspace and arrows ----
+  function setDigit(i, d) {
+    vals[i] = d;
+    boxes[i].value = d;
+    wraps[i].classList.toggle("filled", !!d);
+    if (d) restart(wraps[i], "land");
+  }
+  function mark(i) { wraps.forEach((w, n) => w.classList.toggle("cur", n === i && demoOn)); }
+  function focusBox(i) {
+    i = Math.max(0, Math.min(LEN - 1, i));
+    mark(i);
+    if (!demoOn) { boxes[i].focus(); boxes[i].select(); }
+  }
+  function clearBoxes() { for (let i = 0; i < LEN; i++) setDigit(i, ""); }
+  function fillFrom(start, digits) {
+    let i = start;
+    for (const d of digits) { if (i >= LEN) break; setDigit(i, d); i++; }
+    focusBox(i);
+    checkFull();
+  }
+  function checkFull() { if (!busy && !done && vals.every((v) => v)) return quiet(verify(gen)); return null; }
+  boxes.forEach((box, i) => {
+    box.addEventListener("focus", () => requestAnimationFrame(() => box.select()));
+    box.addEventListener("input", (e) => {
+      if (busy || done) { box.value = vals[i]; return; }
+      const all = box.value.replace(/\D/g, "");
+      if (e.inputType === "insertText" && e.data && e.data.length === 1) {
+        const d = e.data.replace(/\D/g, "");
+        if (!d) { box.value = vals[i]; return; }
+        setDigit(i, d); focusBox(i + 1); checkFull();
+      } else if (all.length > 1) {
+        fillFrom(all.length >= LEN ? 0 : i, all);
+      } else {
+        setDigit(i, all);
+        if (all) { focusBox(i + 1); checkFull(); }
+      }
+    });
+    box.addEventListener("keydown", (e) => {
+      if (busy || done) return;
+      switch (e.key) {
+        case "Backspace":
+          e.preventDefault();
+          if (vals[i]) setDigit(i, "");
+          else if (i > 0) { setDigit(i - 1, ""); focusBox(i - 1); }
+          break;
+        case "Delete": e.preventDefault(); setDigit(i, ""); break;
+        case "ArrowLeft": e.preventDefault(); focusBox(i - 1); break;
+        case "ArrowRight": e.preventDefault(); focusBox(i + 1); break;
+        case "Home": e.preventDefault(); focusBox(0); break;
+        case "End": e.preventDefault(); focusBox(LEN - 1); break;
+      }
+    });
+    box.addEventListener("paste", (e) => {
+      e.preventDefault();
+      if (busy || done) return;
+      const digits = (e.clipboardData ? e.clipboardData.getData("text") : "").replace(/\D/g, "");
+      if (digits) fillFrom(digits.length >= LEN ? 0 : i, digits);
+      else say("Only numbers can be pasted here.", "bad");
+    });
+  });
+
+  // ---- Fill from the banner: each digit flies into its box ----
+  async function autofill(g) {
+    if (busy || done || !banner.classList.contains("in")) return;
+    busy = true;
+    banner.classList.add("used");
+    clearBoxes();
+    mark(-1);
+    const spans = Array.from(bannerCode.children);
+    const fx = $("fx");
+    const flights = spans.map((sp, i) => new Promise((land) => {
+      const a = sp.getBoundingClientRect(), b = wraps[i].getBoundingClientRect();
+      sp.classList.add("gone");
+      if (reduce) { setDigit(i, code[i]); land(); return; }
+      const f = document.createElement("b");
+      f.textContent = code[i];
+      fx.append(f);
+      const x0 = a.left, y0 = a.top, x1 = b.left + b.width / 2 - 7, y1 = b.top + b.height / 2 - 12;
+      const mx = (x0 + x1) / 2 + (i - 2.5) * 10, my = Math.min(y0, y1) - 30;
+      const anim = f.animate([
+        { transform: "translate(" + x0 + "px," + y0 + "px) scale(.6)", opacity: 0 },
+        { transform: "translate(" + x0 + "px," + (y0 - 10) + "px) scale(1.1)", opacity: 1, offset: 0.15 },
+        { transform: "translate(" + mx + "px," + my + "px) scale(1.25) rotate(" + (i % 2 ? 12 : -12) + "deg)", offset: 0.55 },
+        { transform: "translate(" + x1 + "px," + y1 + "px) scale(1)", opacity: 1 }
+      ], { duration: 620, delay: i * 75, easing: "cubic-bezier(.45,0,.25,1)", fill: "both" });
+      anim.onfinish = () => { f.remove(); if (g === gen) setDigit(i, code[i]); land(); };
+    }));
+    await Promise.all(flights);
+    if (g !== gen) return;
+    spans.forEach((s) => s.classList.remove("gone"));   // the message keeps showing its code
+    busy = false;
+    await verify(g);
+  }
+  banner.addEventListener("click", () => quiet(autofill(gen)));
+
+  // ---- Verify: boxes merge into a pill, then a check (or split back on a miss) ----
+  async function verify(g) {
+    busy = true;
+    mark(-1);
+    const row = boxesEl.getBoundingClientRect();
+    const mid = row.left + row.width / 2;
+    wraps.forEach((w, i) => {
+      const r = w.getBoundingClientRect();
+      w.style.setProperty("--dx", mid - (r.left + r.width / 2) + "px");
+      w.style.setProperty("--d", String(Math.abs(i - 2.5) < 1 ? 2 : Math.abs(i - 2.5) < 2 ? 1 : 0));
+    });
+    say("Verifying the code…");
+    boxesEl.classList.add("merge");
+    await pause(330, g, true);
+    pill.classList.add("on");
+    await pause(950, g, true);
+    if (vals.join("") === code) {
+      pill.classList.add("ok");
+      card.classList.add("ok");
+      phone.classList.remove("has");
+      done = true;
+      clearInterval(timer);
+      timerWrap.hidden = true;
+      timerText.hidden = true;
+      resendBtn.hidden = true;
+      say("Phone number verified. You are signed in.", "good");
+      await pause(350, g, true);
+      sparkles(pill);
+      againBtn.hidden = false;
+      if (!demoOn) againBtn.focus();
+      busy = false;
+    } else {
+      tries--;
+      pill.classList.add("bad");
+      say(tries > 0 ? "That code is not right. " + tries + (tries === 1 ? " try" : " tries") + " left." : "Too many tries. Ask for a new code.", "bad");
+      await pause(650, g, true);
+      pill.classList.remove("on", "bad");
+      boxesEl.classList.remove("merge");
+      await pause(300, g, true);
+      boxes.forEach((b) => b.setAttribute("aria-invalid", "true"));
+      restart(boxesEl, "bad");
+      await pause(450, g, true);
+      boxesEl.classList.remove("bad");
+      boxes.forEach((b) => b.removeAttribute("aria-invalid"));
+      clearBoxes();
+      banner.classList.remove("used");
+      Array.from(bannerCode.children).forEach((s) => s.classList.remove("gone"));
+      if (tries <= 0) {
+        // Out of tries: the old code is dead and the boxes wait for a new one
+        code = "";
+        banner.classList.remove("in");
+        boxes.forEach((b) => (b.disabled = true));
+        startTimer(1);
+        busy = false;
+        return;
+      }
+      busy = false;
+      focusBox(0);
+    }
+  }
+
+  // ---- Resend: a fresh code after a short "sending" moment ----
+  resendBtn.addEventListener("click", () => quiet(resend(gen)));
+  async function resend(g) {
+    if (busy || resends >= 3) return;
+    resends++;
+    tries = 3;
+    resendBtn.disabled = true;
+    resendBtn.textContent = "Sending…";
+    banner.classList.remove("in");
+    say("Sending a new code…");
+    await pause(1100, g, true);
+    clearBoxes();
+    boxes.forEach((b) => (b.disabled = false));
+    sendCode();
+    say("New code sent. The old one no longer works.");
+    resendBtn.disabled = false;
+    startTimer(30 * (resends + 1));
+    focusBox(0);
+  }
+
+  // ---- Start again ----
+  function fresh() {
+    done = false;
+    busy = false;
+    tries = 3;
+    resends = 0;
+    card.classList.remove("ok");
+    pill.classList.remove("on", "ok", "bad");
+    boxesEl.classList.remove("merge", "bad");
+    againBtn.hidden = true;
+    clearBoxes();
+    boxes.forEach((b) => (b.disabled = false));
+    sendCode();
+    startTimer(30);
+    say("");
+  }
+  againBtn.addEventListener("click", () => { fresh(); focusBox(0); });
+  phone.addEventListener("animationend", (e) => { if (e.animationName === "buzz") phone.classList.remove("buzz"); });
+  $("change").addEventListener("click", () => say("Number changes are off in this demo.", ""));
+
+  // ---- Sparkles around the check ----
+  function sparkles(el) {
+    if (reduce) return;
+    const r = el.getBoundingClientRect();
+    const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+    const COLORS = ["#4b5cff", "#ff6fae", "#1fae7a", "#ffd166", "#7d8bff"];
+    for (let n = 0; n < 34; n++) {
+      const p = document.createElement("i");
+      const s = 6 + Math.random() * 7;
+      p.style.width = p.style.height = s + "px";
+      p.style.background = COLORS[n % COLORS.length];
+      p.style.clipPath = n % 2 ? "polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%)" : "circle(50%)";
+      $("fx").append(p);
+      const a = (n / 34) * Math.PI * 2 + Math.random() * 0.3, d = 60 + Math.random() * 90;
+      p.animate([
+        { transform: "translate(" + x0 + "px," + y0 + "px) scale(.2) rotate(0)", opacity: 1 },
+        { transform: "translate(" + (x0 + Math.cos(a) * d) + "px," + (y0 + Math.sin(a) * d) + "px) scale(1) rotate(180deg)", opacity: 1, offset: 0.6 },
+        { transform: "translate(" + (x0 + Math.cos(a) * d * 1.2) + "px," + (y0 + Math.sin(a) * d * 1.2 + 30) + "px) scale(.4) rotate(260deg)", opacity: 0 }
+      ], { duration: 1100 + Math.random() * 500, easing: "cubic-bezier(.2,.8,.3,1)" }).onfinish = () => p.remove();
+    }
+  }
+
+  function hardReset() { gen++; fresh(); mark(-1); }
+
+  // ---- Auto-demo: the message drops in and its code flies into the boxes ----
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); hardReset(); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) =>
+    window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  async function runDemo() {
+    const g = gen;
+    round++;
+    await pause(650, g);
+    if (round % 2) {
+      banner.classList.add("press");
+      await pause(160, g);
+      banner.classList.remove("press");
+      await autofill(g);
+    } else {
+      // every other round the code is typed by hand
+      for (let i = 0; i < LEN; i++) { setDigit(i, code[i]); mark(i + 1 < LEN ? i + 1 : -1); await pause(170, g); }
+      await verify(g);
+    }
+    await pause(2400, g);
+    fresh();
+    demoTimer = setTimeout(() => quiet(runDemo()), 700);
+  }
+
+  fresh();
+  demoTimer = setTimeout(() => quiet(runDemo()), 150);
+})();
+</script>
+</body>
+</html>

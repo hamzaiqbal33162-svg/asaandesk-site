@@ -1,0 +1,501 @@
+<!doctype html>
+<!-- Chill & Craft · Gate Pass · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate Pass · booking reference check-in on a boarding pass</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: dawn sky, paper pass, navy ink, runway orange ---------- */
+  :root {
+    color-scheme: light;
+    --sky-top: #a9d4ff;
+    --sky-mid: #d7e9ff;
+    --sky-low: #ffd9bd;
+    --cloud: rgba(255, 255, 255, .85);
+    --paper: #fffdf8;
+    --navy: #16213e;
+    --navy-2: #24345f;
+    --ink: #16213e;
+    --muted: #7a8199;
+    --line: rgba(22, 33, 62, .14);
+    --orange: #ff8a3d;
+    --orange-dk: #e0661a;
+    --ok: #18a86b;
+    --bad: #e5484d;
+    --cell: #f2f4fa;
+    --page-ink: #16213e;
+    --shadow: rgba(22, 33, 62, .32);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --sky-top: #050a1c;
+    --sky-mid: #0d1838;
+    --sky-low: #2b1f3c;
+    --cloud: rgba(170, 190, 240, .12);
+    --page-ink: #e7ecff;
+    --shadow: rgba(0, 0, 0, .75);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 20px 16px;
+    overflow-x: hidden;
+    color: var(--page-ink);
+    background: linear-gradient(180deg, var(--sky-top), var(--sky-mid) 55%, var(--sky-low));
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  [data-theme="dark"] body {
+    background:
+      radial-gradient(1px 1px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 72% 12%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 40% 30%, #dfe6ff, transparent), radial-gradient(1px 1px at 88% 40%, #fff, transparent),
+      radial-gradient(1px 1px at 22% 62%, #cfd8ff, transparent), radial-gradient(1.5px 1.5px at 60% 70%, #fff, transparent),
+      linear-gradient(180deg, var(--sky-top), var(--sky-mid) 55%, var(--sky-low));
+  }
+  button { font: inherit; }
+  [hidden] { display: none !important; }
+
+  /* Drifting clouds (idle life) */
+  .clouds { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+  .clouds i { position: absolute; display: block; width: 180px; height: 54px; border-radius: 40px; background: var(--cloud); filter: blur(1px); animation: drift linear infinite; }
+  .clouds i::before, .clouds i::after { content: ""; position: absolute; border-radius: 50%; background: inherit; }
+  .clouds i::before { width: 80px; height: 70px; left: 26px; top: -34px; }
+  .clouds i::after { width: 64px; height: 56px; left: 88px; top: -22px; }
+  .clouds i:nth-child(1) { top: 12%; animation-duration: 60s; animation-delay: -20s; }
+  .clouds i:nth-child(2) { top: 58%; transform: scale(.7); animation-duration: 80s; animation-delay: -55s; }
+  .clouds i:nth-child(3) { top: 84%; transform: scale(1.2); animation-duration: 95s; animation-delay: -10s; }
+  @keyframes drift { from { left: -220px; } to { left: 100%; } }
+
+  .wrap { position: relative; z-index: 1; width: min(100%, 440px); }
+
+  /* ---------- The pass: two masked halves with notches at the tear line ---------- */
+  .pass { position: relative; filter: drop-shadow(0 22px 26px var(--shadow)); color: var(--ink); }
+  .half { position: relative; isolation: isolate; }
+  .half::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--paper); }
+  .top::before {
+    border-radius: 20px 20px 0 0;
+    -webkit-mask: radial-gradient(circle 11px at 0 100%, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 11px at 100% 100%, #0000 97%, #000) right / 51% 100% no-repeat;
+    mask: radial-gradient(circle 11px at 0 100%, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 11px at 100% 100%, #0000 97%, #000) right / 51% 100% no-repeat;
+  }
+  .bot::before {
+    border-radius: 0 0 20px 20px;
+    -webkit-mask: radial-gradient(circle 11px at 0 0, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 11px at 100% 0, #0000 97%, #000) right / 51% 100% no-repeat;
+    mask: radial-gradient(circle 11px at 0 0, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 11px at 100% 0, #0000 97%, #000) right / 51% 100% no-repeat;
+  }
+  .bot { margin: 0 14px; padding: 16px 4px 16px; }
+  .bot::before { left: -14px; right: -14px; top: 0; }
+  .tear { position: absolute; left: 0; right: 0; top: 0; border-top: 2px dashed var(--line); }
+
+  .band { display: flex; align-items: center; justify-content: space-between; padding: 11px 18px; border-radius: 20px 20px 0 0; color: #fff; background: linear-gradient(90deg, var(--navy), var(--navy-2)); font-size: 11.5px; font-weight: 800; letter-spacing: .2em; }
+  .band span:last-child { letter-spacing: .06em; font-weight: 650; opacity: .85; }
+  .band svg { vertical-align: -3px; margin-right: 8px; }
+
+  .route { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: end; gap: 6px; padding: 14px 18px 4px; }
+  .city b { display: block; font-size: clamp(28px, 9vw, 36px); font-weight: 900; letter-spacing: -.01em; line-height: 1; }
+  .city span { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
+  .city.to { text-align: right; }
+  .city.to.arrive b { animation: arrive .7s cubic-bezier(.34, 1.8, .5, 1); color: var(--orange-dk); }
+  @keyframes arrive { 40% { transform: scale(1.18); } }
+  .arc { width: 100%; min-width: 0; height: 64px; overflow: visible; }
+  .arc .dash { fill: none; stroke: var(--line); stroke-width: 2; stroke-dasharray: 4 6; animation: march 1.6s linear infinite; }
+  @keyframes march { to { stroke-dashoffset: -20; } }
+  .arc .trail { fill: none; stroke: var(--orange); stroke-width: 2.6; stroke-linecap: round; }
+  .arc .plane { transition: opacity .3s; }
+  .arc .bob { animation: bob 2.4s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-2px); } }
+  .arc .pin { fill: var(--navy); }
+
+  .details { position: relative; display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 8px; padding: 12px 18px 16px; }
+  .details small { display: block; font-size: 9.5px; font-weight: 800; letter-spacing: .14em; color: var(--muted); }
+  .details b { display: block; margin-top: 3px; font-size: 14px; font-weight: 800; white-space: nowrap; }
+  .details .seat.pop b { animation: arrive .6s cubic-bezier(.34, 1.8, .5, 1); color: var(--orange-dk); }
+  .stamp {
+    position: absolute; right: 16px; top: 2px; padding: 6px 10px; border: 3px double var(--orange-dk); border-radius: 8px;
+    color: var(--orange-dk); font: 900 15px/1 system-ui, sans-serif; letter-spacing: .14em; background: rgba(255, 138, 61, .06); mix-blend-mode: multiply;
+    opacity: 0; transform: rotate(-12deg); pointer-events: none;
+  }
+  .top { overflow: hidden; border-radius: 20px 20px 0 0; }   /* keeps the big stamp from widening the page while it slams down */
+  .pass.ok .stamp { animation: slam .55s cubic-bezier(.3, 1.5, .5, 1) forwards; }
+  @keyframes slam { 0% { opacity: 0; transform: rotate(-18deg) scale(2.2); } 60% { opacity: 1; transform: rotate(-11deg) scale(.94); } 100% { opacity: 1; transform: rotate(-12deg) scale(1); } }
+
+  /* Booking reference cells */
+  .lblrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 9px; }
+  .lblrow label { font-size: 10.5px; font-weight: 800; letter-spacing: .16em; color: var(--muted); }
+  .ticket { padding: 4px 8px; border-radius: 7px; font-size: 11.5px; color: var(--muted); background: var(--cell); white-space: nowrap; }
+  .ticket b { font: 800 12.5px ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .14em; color: var(--ink); }
+  .cells { display: flex; gap: 7px; }
+  .cell { flex: 1; min-width: 0; position: relative; }
+  .cell input {
+    width: 100%; height: 52px; padding: 0; border: 0; border-radius: 12px; outline: none; text-align: center;
+    background: var(--cell); color: var(--ink); caret-color: var(--orange);
+    font: 800 22px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-transform: uppercase;
+    box-shadow: inset 0 0 0 1.5px var(--line); transition: box-shadow .2s, transform .3s cubic-bezier(.34, 1.56, .64, 1), background .3s, color .3s;
+  }
+  .cell input:focus, .cell.cur input { box-shadow: inset 0 0 0 2px var(--orange), 0 0 0 4px rgba(255, 138, 61, .18); transform: translateY(-2px); }
+  .cell.pop input { animation: pop .38s cubic-bezier(.34, 1.7, .5, 1); }
+  @keyframes pop { 40% { transform: translateY(-4px) scale(1.1); } }
+  .cells.ok .cell input { background: var(--navy); color: #fff; box-shadow: none; animation: hop .5s cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(var(--i) * 60ms); }
+  @keyframes hop { 40% { transform: translateY(-8px); } }
+  .cells.bad { animation: shake .45s ease; }
+  .cells.bad .cell input { box-shadow: inset 0 0 0 2px var(--bad); }
+  @keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+
+  /* Barcode that builds as you type, with a laser that sweeps it */
+  .barcode { position: relative; height: 44px; margin-top: 12px; overflow: hidden; border-radius: 6px; }
+  .barcode svg { display: block; width: 100%; height: 100%; }
+  .barcode rect.b { transform-box: fill-box; transform-origin: bottom; animation: grow .35s cubic-bezier(.34, 1.56, .64, 1) both; fill: var(--navy); }
+  @keyframes grow { from { transform: scaleY(0); } }
+  .barcode .ghost { fill: var(--line); }
+  .laser { position: absolute; top: -4px; bottom: -4px; left: 0; width: 3px; border-radius: 2px; background: #ff3b3b; box-shadow: 0 0 10px 2px rgba(255, 59, 59, .8); opacity: 0; }
+  .barcode.scan .laser { animation: sweep .9s ease-in-out 2 alternate; }
+  @keyframes sweep { 0% { opacity: 1; left: 0; } 100% { opacity: 1; left: calc(100% - 3px); } }
+  .barcode.good rect.b { fill: var(--ok); transition: fill .3s; }
+  .barcode.bad rect.b { fill: var(--bad); }
+
+  /* ---------- Below the pass ---------- */
+  .status { min-height: 21px; margin: 18px 0 10px; font-size: 14px; font-weight: 700; text-align: center; color: var(--page-ink); text-shadow: 0 1px 0 rgba(255, 255, 255, .4); }
+  [data-theme="dark"] .status { text-shadow: none; }
+  .status[data-tone="good"] { color: #0d7a4c; }
+  .status[data-tone="bad"] { color: #c2262c; }
+  [data-theme="dark"] .status[data-tone="good"] { color: #5fe3a6; }
+  [data-theme="dark"] .status[data-tone="bad"] { color: #ff8a8e; }
+  .status.pop { animation: statusIn .45s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes statusIn { from { opacity: 0; transform: translateY(6px); } }
+  .go {
+    display: block; width: 100%; height: 48px; border: 0; border-radius: 14px; cursor: pointer;
+    color: #fff; font-size: 15px; font-weight: 800; letter-spacing: .02em;
+    background: linear-gradient(180deg, #ff9b55, var(--orange-dk)); box-shadow: 0 4px 0 #b44c10, 0 14px 22px -12px var(--shadow);
+    transition: transform .12s, box-shadow .12s, filter .2s;
+  }
+  .go:hover { filter: brightness(1.05); }
+  .go:active, .go.press { transform: translateY(4px); box-shadow: 0 0 0 #b44c10, 0 6px 12px -8px var(--shadow); }
+  .go:disabled { filter: grayscale(.5); opacity: .7; cursor: default; }
+  .go:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+
+  .fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+  .fx i { position: absolute; left: 0; top: 0; display: block; border-radius: 50%; }
+
+  @media (max-width: 380px) {
+    .details { grid-template-columns: 1.4fr 1fr 1fr; }
+    .details > div:nth-child(4) { display: none; }
+    .cells { gap: 5px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="clouds" aria-hidden="true"><i></i><i></i><i></i></div>
+  <main class="wrap">
+    <div class="pass" id="pass">
+      <div class="half top">
+        <div class="band"><span><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 9.5l2-.4 2.2 1.6 2.7-1L5.4 4.3l1.6-.5 4.3 4 2.6-1c.8-.3 1.6.2 1.4.9-.1.4-.4.7-.8.8L3.4 12.3z" fill="#ff8a3d"/></svg>BOARDING PASS</span><span>DA 318 · Economy</span></div>
+        <div class="route">
+          <div class="city"><b>KHI</b><span>Karachi</span></div>
+          <svg class="arc" id="arc" viewBox="0 0 200 64" aria-hidden="true">
+            <path id="arcPath" class="dash" d="M8 56 Q100 -14 192 56"/>
+            <path id="trail" class="trail" d="M8 56 Q100 -14 192 56"/>
+            <circle class="pin" cx="8" cy="56" r="3.2"/>
+            <circle class="pin" cx="192" cy="56" r="3.2"/>
+            <g id="plane" class="plane"><g class="bob"><path d="M12 0Q11 -1.6 7 -1.6H2L-3.4 -9.5H-6.4L-3 -1.6H-8L-10.4 -5H-12.4L-11.2 0L-12.4 5H-10.4L-8 1.6H-3L-6.4 9.5H-3.4L2 1.6H7Q11 1.6 12 0Z" fill="#16213e" stroke="#fffdf8" stroke-width="1.2" stroke-linejoin="round"/></g></g>
+          </svg>
+          <div class="city to" id="toCity"><b>ISB</b><span>Islamabad</span></div>
+        </div>
+        <div class="details">
+          <div><small>PASSENGER</small><b>Hamza Ali</b></div>
+          <div class="seat" id="seat"><small>SEAT</small><b>14C</b></div>
+          <div><small>GATE</small><b>B7</b></div>
+          <div><small>BOARDS</small><b>09:40</b></div>
+          <span class="stamp" aria-hidden="true">CHECKED IN</span>
+        </div>
+      </div>
+      <div class="half bot">
+        <span class="tear" aria-hidden="true"></span>
+        <div class="lblrow"><label id="lbl" for="c0">BOOKING REFERENCE</label><span class="ticket">E-ticket ref <b id="demo"></b></span></div>
+        <div class="cells" id="cells" role="group" aria-labelledby="lbl">
+          <span class="cell" style="--i:0"><input id="c0" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Booking reference, character 1 of 6"></span>
+          <span class="cell" style="--i:1"><input autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Character 2 of 6"></span>
+          <span class="cell" style="--i:2"><input autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Character 3 of 6"></span>
+          <span class="cell" style="--i:3"><input autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Character 4 of 6"></span>
+          <span class="cell" style="--i:4"><input autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Character 5 of 6"></span>
+          <span class="cell" style="--i:5"><input autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Character 6 of 6"></span>
+        </div>
+        <div class="barcode" id="barcode" aria-hidden="true"><svg id="bars" viewBox="0 0 132 44" preserveAspectRatio="none"></svg><span class="laser"></span></div>
+      </div>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+    <button type="button" class="go" id="go">Check in</button>
+  </main>
+  <div class="fx" id="fx" aria-hidden="true"></div>
+
+<script>
+(function () {
+  "use strict";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (id) => document.getElementById(id);
+  const pass = $("pass"), cellsEl = $("cells"), barcode = $("barcode"), barsSvg = $("bars"), statusEl = $("status"), goBtn = $("go");
+  const arcPath = $("arcPath"), trail = $("trail"), plane = $("plane");
+  const wraps = Array.from(document.querySelectorAll(".cell"));
+  const cells = wraps.map((w) => w.querySelector("input"));
+  const LEN = 6;
+  const ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const vals = Array(LEN).fill("");
+  let code = "", busy = false, done = false;
+
+  // ---- Cancellable waits ----
+  const CANCEL = { cancelled: true };
+  let gen = 0;
+  function pause(ms, g, isAnim) {
+    const t = isAnim && reduce ? Math.min(ms, 140) : ms;
+    return new Promise((ok, no) => setTimeout(() => (g === gen ? ok() : no(CANCEL)), t));
+  }
+  const quiet = (p) => p.catch((e) => { if (e !== CANCEL) throw e; });
+  function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+  function say(msg, tone) { statusEl.textContent = msg; statusEl.dataset.tone = tone || ""; restart(statusEl, "pop"); }
+
+  // ---- Plane on the route arc ----
+  const L = arcPath.getTotalLength();
+  trail.style.strokeDasharray = L + " " + L;
+  function placePlane(t) {
+    const p = arcPath.getPointAtLength(L * t);
+    const q = arcPath.getPointAtLength(Math.min(L, L * t + 1));
+    const p0 = t >= 1 ? arcPath.getPointAtLength(L - 1) : p;
+    const ang = Math.atan2(q.y - p0.y, q.x - p0.x) * 180 / Math.PI;
+    plane.setAttribute("transform", "translate(" + p.x + " " + p.y + ") rotate(" + (t >= 1 ? 30 : ang) + ") scale(.9)");
+    trail.style.strokeDashoffset = String(L * (1 - t));
+  }
+  function fly(g) {
+    return new Promise((done) => {
+      if (reduce) { placePlane(1); done(); return; }
+      const t0 = performance.now(), dur = 1600;
+      let lastPuff = 0;
+      const step = (now) => {
+        if (g !== gen) return done();
+        const k = Math.min(1, (now - t0) / dur);
+        const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        placePlane(e);
+        if (now - lastPuff > 70 && k < 0.95) { lastPuff = now; puff(); }
+        if (k < 1) requestAnimationFrame(step); else done();
+      };
+      requestAnimationFrame(step);
+    });
+  }
+  function puff() {
+    const r = plane.getBoundingClientRect();
+    const p = document.createElement("i");
+    const s = 5 + Math.random() * 5;
+    p.style.width = p.style.height = s + "px";
+    p.style.background = "rgba(255, 255, 255, .95)";
+    p.style.boxShadow = "0 0 0 1px rgba(22,33,62,.08)";
+    $("fx").append(p);
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    p.animate([{ transform: "translate(" + x + "px," + y + "px) scale(.4)", opacity: .9 }, { transform: "translate(" + (x - 6) + "px," + (y + 8) + "px) scale(1.4)", opacity: 0 }],
+      { duration: 900, easing: "ease-out" }).onfinish = () => p.remove();
+  }
+
+  // ---- Barcode: each character adds its own group of bars (only the new group animates) ----
+  barsSvg.innerHTML = '<rect class="ghost" x="0" y="0" width="1.5" height="44"/><rect class="ghost" x="3" y="0" width="1.5" height="44"/>' +
+    '<rect class="ghost" x="127.5" y="0" width="1.5" height="44"/><rect class="ghost" x="130.5" y="0" width="1.5" height="44"/>' +
+    Array.from({ length: LEN }, (_, k) => '<g id="bg' + k + '"></g>').join("");
+  const drawn = Array(LEN).fill("");
+  function drawGroup(k) {
+    const ch = vals[k];
+    if (drawn[k] === ch) return;
+    drawn[k] = ch;
+    let html = "";
+    if (ch) {
+      let h = (ch.charCodeAt(0) * 2654435761 + k * 97) >>> 0;
+      let x = 7 + k * 20;
+      const end = x + 19;
+      while (x < end - 1) {
+        const w = 0.8 + (h & 3) * 0.7;
+        const gap = 0.7 + ((h >> 2) & 3) * 0.55;
+        if (x + w > end) break;
+        html += '<rect class="b" style="animation-delay:' + Math.round((x - 7 - k * 20) * 9) + 'ms" x="' + x.toFixed(2) + '" y="0" width="' + w.toFixed(2) + '" height="44"/>';
+        x += w + gap;
+        h = (h * 1103515245 + 12345) >>> 0;
+      }
+    }
+    $("bg" + k).innerHTML = html;
+  }
+
+  // ---- Cells: typing, paste, backspace and arrows (letters and numbers) ----
+  const clean = (s) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  function setChar(i, c) {
+    vals[i] = c;
+    cells[i].value = c;
+    if (c) restart(wraps[i], "pop");
+    drawGroup(i);
+  }
+  function mark(i) { wraps.forEach((w, n) => w.classList.toggle("cur", n === i && demoOn)); }
+  function focusCell(i) {
+    i = Math.max(0, Math.min(LEN - 1, i));
+    mark(i);
+    if (!demoOn) { cells[i].focus(); cells[i].select(); }
+  }
+  function clearCells() { for (let i = 0; i < LEN; i++) setChar(i, ""); }
+  function fillFrom(start, chars) {
+    let i = start;
+    for (const c of chars) { if (i >= LEN) break; setChar(i, c); i++; }
+    focusCell(i);
+    checkFull();
+  }
+  function checkFull() { if (!busy && !done && vals.every((v) => v)) return quiet(verify(gen)); return null; }
+  cells.forEach((cell, i) => {
+    cell.addEventListener("focus", () => requestAnimationFrame(() => cell.select()));
+    cell.addEventListener("input", (e) => {
+      if (busy || done) { cell.value = vals[i]; return; }
+      const all = clean(cell.value);
+      if (e.inputType === "insertText" && e.data && e.data.length === 1) {
+        const c = clean(e.data);
+        if (!c) { cell.value = vals[i]; return; }
+        setChar(i, c); focusCell(i + 1); checkFull();
+      } else if (all.length > 1) {
+        fillFrom(all.length >= LEN ? 0 : i, all);
+      } else {
+        setChar(i, all);
+        if (all) { focusCell(i + 1); checkFull(); }
+      }
+    });
+    cell.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); goBtn.click(); return; }
+      if (busy || done) return;
+      switch (e.key) {
+        case "Backspace":
+          e.preventDefault();
+          if (vals[i]) setChar(i, "");
+          else if (i > 0) { setChar(i - 1, ""); focusCell(i - 1); }
+          break;
+        case "Delete": e.preventDefault(); setChar(i, ""); break;
+        case "ArrowLeft": e.preventDefault(); focusCell(i - 1); break;
+        case "ArrowRight": e.preventDefault(); focusCell(i + 1); break;
+        case "Home": e.preventDefault(); focusCell(0); break;
+        case "End": e.preventDefault(); focusCell(LEN - 1); break;
+      }
+    });
+    cell.addEventListener("paste", (e) => {
+      e.preventDefault();
+      if (busy || done) return;
+      const text = clean(e.clipboardData ? e.clipboardData.getData("text") : "");
+      if (text) fillFrom(text.length >= LEN ? 0 : i, text);
+      else say("Only letters and numbers can be pasted here.", "bad");
+    });
+  });
+
+  // ---- Check in: laser scan, stamp, take-off ----
+  async function verify(g) {
+    busy = true;
+    goBtn.disabled = true;
+    mark(-1);
+    say("Scanning your pass…");
+    restart(barcode, "scan");
+    await pause(1800, g, true);
+    barcode.classList.remove("scan");
+    const entry = vals.join("");
+    if (entry === code) {
+      done = true;
+      barcode.classList.add("good");
+      cellsEl.classList.add("ok");
+      pass.classList.add("ok");
+      say("Booking found. Have a good flight!", "good");
+      await pause(520, g, true);
+      await fly(g);
+      if (g !== gen) return;
+      restart($("toCity"), "arrive");
+      restart($("seat"), "pop");
+      say("You're checked in. Boarding at 09:40, gate B7.", "good");
+      goBtn.disabled = false;
+      goBtn.textContent = "Check in another passenger";
+      busy = false;
+      if (!demoOn) goBtn.focus();
+    } else {
+      barcode.classList.add("bad");
+      cells.forEach((c) => c.setAttribute("aria-invalid", "true"));
+      restart(cellsEl, "bad");
+      say("No booking found for " + entry + ". Check your e-ticket.", "bad");
+      await pause(900, g, true);
+      barcode.classList.remove("bad");
+      cellsEl.classList.remove("bad");
+      cells.forEach((c) => c.removeAttribute("aria-invalid"));
+      clearCells();
+      busy = false;
+      goBtn.disabled = false;
+      focusCell(0);
+    }
+  }
+
+  goBtn.addEventListener("click", () => {
+    if (busy) return;
+    if (done) { fresh(); focusCell(0); return; }
+    const missing = vals.filter((v) => !v).length;
+    if (missing) { say("The booking reference has 6 characters. " + missing + " still to go.", "bad"); restart(cellsEl, "bad"); focusCell(vals.indexOf("")); return; }
+    quiet(verify(gen));
+  });
+
+  // ---- Fresh pass ----
+  function fresh() {
+    done = false;
+    busy = false;
+    do { code = ""; for (let i = 0; i < LEN; i++) code += ABC[Math.floor(Math.random() * ABC.length)]; } while (!/\d/.test(code) || !/[A-Z]/.test(code));
+    $("demo").textContent = code;
+    pass.classList.remove("ok");
+    cellsEl.classList.remove("ok", "bad");
+    barcode.classList.remove("good", "bad", "scan");
+    goBtn.disabled = false;
+    goBtn.textContent = "Check in";
+    clearCells();
+    placePlane(0);
+    say("Type the booking reference from your e-ticket.");
+  }
+  function hardReset() { gen++; fresh(); mark(-1); }
+
+  // ---- Auto-demo ----
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); hardReset(); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) =>
+    window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  async function runDemo() {
+    const g = gen;
+    round++;
+    const typo = round % 3 === 2;
+    const text = typo ? code.slice(0, 5) + (code[5] === "A" ? "B" : "A") : code;
+    for (let i = 0; i < LEN; i++) {
+      setChar(i, text[i]);
+      mark(i + 1 < LEN ? i + 1 : -1);
+      await pause(190, g);
+    }
+    await verify(g);
+    if (typo) {
+      await pause(700, g);
+      for (let i = 0; i < LEN; i++) { setChar(i, code[i]); mark(i + 1 < LEN ? i + 1 : -1); await pause(150, g); }
+      await verify(g);
+    }
+    await pause(2600, g);
+    fresh();
+    demoTimer = setTimeout(() => quiet(runDemo()), 900);
+  }
+
+  fresh();
+  demoTimer = setTimeout(() => quiet(runDemo()), 250);
+})();
+</script>
+</body>
+</html>

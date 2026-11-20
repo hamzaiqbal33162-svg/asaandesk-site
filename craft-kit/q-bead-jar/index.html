@@ -1,0 +1,445 @@
+<!doctype html>
+<!-- Chill & Craft · Bead Jar · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bead Jar · stats that fill jars with beads</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: warm sand (light) and cocoa night (dark); bead colours live in the script ---------- */
+  :root {
+    --bg: #f3e9d7; --bg-2: #fffaf1; --ink: #3b2a1a; --muted: #8a7660; --card: #fffdf8; --line: rgba(59, 42, 26, 0.12);
+    --glass: rgba(255, 255, 255, 0.4); --glass-edge: rgba(59, 42, 26, 0.3); --floor: rgba(90, 60, 20, 0.2);
+    --shelf-1: #e3c69c; --shelf-2: #b98d5c; --good: #1d8f63; --focus: #3b2a1a;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #120e0a; --bg-2: #261d15; --ink: #f6ebdb; --muted: #b8a38a; --card: #2a2119; --line: rgba(255, 235, 210, 0.1);
+    --glass: rgba(255, 255, 255, 0.05); --glass-edge: rgba(255, 235, 210, 0.32); --floor: rgba(0, 0, 0, 0.55);
+    --shelf-1: #6d5236; --shelf-2: #3f2d1c; --good: #4fd29a; --focus: #ffd27a;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink); -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    background: radial-gradient(75% 60% at 50% 25%, var(--bg-2), var(--bg));
+  }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 3px; }
+
+  .stage { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 14px 20px; }
+  .head { text-align: center; max-width: 540px; }
+  .eyebrow { margin: 0 0 8px; font-size: 12px; font-weight: 750; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: 0; font-size: clamp(25px, 4.3vw, 40px); line-height: 1.07; letter-spacing: -0.03em; font-weight: 800; }
+  .lede { margin: 8px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.45; }
+
+  /* ---------- Year tabs with a bead that rolls to the chosen year ---------- */
+  .years { position: relative; display: inline-flex; gap: 4px; margin-top: 18px; padding: 4px 4px 12px; }
+  .years button { appearance: none; border: 0; background: none; font: inherit; font-size: 15px; font-weight: 750; color: var(--muted); padding: 8px 16px; border-radius: 10px; cursor: pointer; font-variant-numeric: tabular-nums; transition: color 0.3s, transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .years button[aria-selected="true"] { color: var(--ink); transform: translateY(-2px); }
+  .years button:hover { color: var(--ink); }
+  .track { position: absolute; left: 14px; right: 14px; bottom: 6px; height: 2px; border-radius: 2px; background: var(--line); }
+  .roller {
+    position: absolute; bottom: 1px; left: 0; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff 0 12%, #f06a7a 30%, #c22f45 85%);
+    transform: translateX(var(--x, 0px)) rotate(var(--spin, 0deg));
+    transition: transform 0.75s cubic-bezier(0.3, 1.3, 0.45, 1);
+    box-shadow: 0 3px 5px -2px rgba(150, 30, 50, 0.5);
+  }
+
+  /* ---------- Jars ---------- */
+  /* the canvas reaches 60px above each jar for falling beads and the popping lid, so leave room above */
+  .jars { display: grid; grid-template-columns: repeat(4, 176px); gap: 66px 26px; justify-content: center; margin-top: 64px; }
+  .stat { margin: 0; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .jar { position: relative; display: block; width: 150px; height: 172px; padding: 0; border: 0; border-radius: 26px; background: none; cursor: pointer; transform-origin: 50% 100%; }
+  .jar canvas { position: absolute; left: 0; bottom: 0; width: 150px; height: 232px; pointer-events: none; }
+  .jar::after { /* the shelf it stands on */ content: ""; position: absolute; left: -16px; right: -16px; bottom: -9px; height: 9px; border-radius: 5px; background: linear-gradient(180deg, var(--shelf-1), var(--shelf-2)); box-shadow: 0 8px 12px -8px var(--floor); }
+  .jar.wobble { animation: wobble 0.55s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  @keyframes wobble { 20% { transform: rotate(-4deg); } 45% { transform: rotate(3deg); } 70% { transform: rotate(-1.5deg); } }
+  .jar.shake { animation: shake 0.5s ease-in-out; }
+  @keyframes shake { 15%, 55% { transform: translateX(-5px) rotate(-3deg); } 35%, 75% { transform: translateX(5px) rotate(3deg); } }
+  .stat figcaption { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .num { font-size: 30px; line-height: 1.05; font-weight: 820; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .num small { font-size: 15px; font-weight: 700; color: var(--muted); letter-spacing: 0; }
+  .lbl { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .chip { margin-top: 5px; font-size: 11.5px; font-weight: 750; padding: 3px 8px; border-radius: 999px; background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good); transform: scale(0.6); opacity: 0; transition: transform 0.5s cubic-bezier(0.3, 1.8, 0.5, 1), opacity 0.25s; }
+  .chip.flat { background: var(--line); color: var(--muted); }
+  .chip.pop { transform: none; opacity: 1; }
+
+  .ghost { position: fixed; left: 0; top: 0; z-index: 40; width: 26px; height: 26px; margin: -3px 0 0 -4px; pointer-events: none; opacity: 0; transform: translate(var(--gx, 80vw), var(--gy, 110vh)); transition: transform 0.7s cubic-bezier(0.55, 0, 0.25, 1), opacity 0.35s; }
+  .ghost.show { opacity: 1; }
+  .ghost svg { width: 100%; height: 100%; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35)); transition: transform 0.15s; }
+  .ghost.tap svg { transform: scale(0.8); }
+  .ghost::after { content: ""; position: absolute; left: -10px; top: -11px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid #e0475b; opacity: 0; }
+  .ghost.tap::after { animation: tapring 0.5s ease-out; }
+  @keyframes tapring { from { opacity: 0.95; transform: scale(0.3); } to { opacity: 0; transform: scale(1.7); } }
+
+  /* ---------- Phones: two jars per shelf ---------- */
+  @media (max-width: 820px) {
+    .stage { padding: 12px 14px; }
+    .lede .long { display: none; }
+    .jars { grid-template-columns: repeat(2, 150px); gap: 48px 34px; margin-top: 46px; }
+    .jar { width: 124px; height: 136px; }
+    .jar canvas { width: 124px; height: 182px; }
+    .head h1 { font-size: 27px; }
+    .lede { font-size: 13.5px; }
+    .years { margin-top: 12px; }
+    .stat figcaption { margin-top: 15px; }
+    .num { font-size: 25px; }
+    .lbl { font-size: 12px; }
+    .chip { margin-top: 3px; }
+  }
+  @media (max-width: 360px) { .jars { gap: 14px 18px; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <header class="head">
+    <p class="eyebrow">By the numbers</p>
+    <h1>Our year, one bead at a time</h1>
+    <p class="lede"><span class="long">Each jar fills to its share of the goal. </span>Pick a year, or tap a jar to shake it.</p>
+  </header>
+  <div class="years" role="tablist" aria-label="Year">
+    <span class="track" aria-hidden="true"><span class="roller" id="roller"></span></span>
+  </div>
+  <section class="jars" id="jars" aria-label="Stats"></section>
+  <p class="sr-only" aria-live="polite" id="status"></p>
+</main>
+<div class="ghost" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 2.5v17l4.6-4.3 3 6.6 3.1-1.4-3-6.4 6.3-.4z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (s, r) { return (r || document).querySelector(s); };
+    var YEARS = [2024, 2025, 2026];
+    // c = [main, light, dark] bead colours; cap = what a full jar stands for
+    var STATS = [
+      { label: "Orders delivered", short: "orders", cap: 50000, c: ["#e0475b", "#ff8b98", "#a8253a"], v: { 2024: 18400, 2025: 31900, 2026: 48200 } },
+      { label: "Shops on board", short: "shops", cap: 2500, c: ["#1fa67a", "#6fe0b5", "#0f7352"], v: { 2024: 640, 2025: 1180, 2026: 2140 } },
+      { label: "Cities served", short: "cities", cap: 40, c: ["#3a6cf4", "#8fb0ff", "#2047b8"], v: { 2024: 14, 2025: 23, 2026: 37 } },
+      { label: "Average rating", short: "rating", cap: 5, dec: 1, of: " / 5", c: ["#f2a41f", "#ffd27a", "#c47f00"], v: { 2024: 4.1, 2025: 4.5, 2026: 4.8 } }
+    ];
+    var jarsEl = $("#jars"), status = $("#status"), roller = $("#roller"), tablist = $(".years");
+    var year = null, tabs = [], J = [], theme = {};
+
+    /* ---------- Tabs ---------- */
+    YEARS.forEach(function (y, i) {
+      var b = document.createElement("button");
+      b.type = "button"; b.setAttribute("role", "tab"); b.textContent = y;
+      b.setAttribute("aria-selected", "false"); b.tabIndex = -1; b.setAttribute("aria-controls", "jars");
+      b.addEventListener("click", function () { setYear(y); });
+      b.addEventListener("keydown", function (e) {
+        var k = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+        if (!k) return;
+        e.preventDefault();
+        var n = tabs[(i + k + tabs.length) % tabs.length];
+        n.focus(); n.click();
+      });
+      tablist.appendChild(b); tabs.push(b);
+    });
+    function moveRoller(i) {
+      var b = tabs[i], track = roller.parentNode, x = b.offsetLeft + b.offsetWidth / 2 - track.offsetLeft;
+      var prev = parseFloat(roller.style.getPropertyValue("--x")) || x;
+      var spin = (parseFloat(roller.style.getPropertyValue("--spin")) || 0) + (x - prev) / 6 * 57.3; // rolls without slipping
+      roller.style.setProperty("--x", x + "px");
+      roller.style.setProperty("--spin", spin + "deg");
+    }
+
+    /* ---------- Jars: canvas, geometry and bead packing ---------- */
+    STATS.forEach(function (s, i) {
+      var fig = document.createElement("figure");
+      fig.className = "stat";
+      fig.innerHTML = '<button class="jar" type="button" aria-label="Shake the ' + s.label.toLowerCase() + ' jar"><canvas aria-hidden="true"></canvas></button>' +
+        '<figcaption><b class="num">0</b><span class="lbl">' + s.label + '</span><span class="chip">&nbsp;</span></figcaption>';
+      jarsEl.appendChild(fig);
+      var jar = { s: s, i: i, btn: $(".jar", fig), cv: $("canvas", fig), num: $(".num", fig), chip: $(".chip", fig),
+        beads: [], slots: [], count: 0, shown: 0, lid: { y: 0, vy: 0, r: 0, vr: 0, ty: 0, tr: 0 }, sparks: [], tween: null };
+      jar.ctx = jar.cv.getContext("2d");
+      jar.btn.addEventListener("click", function () { shake(jar); });
+      J.push(jar);
+    });
+
+    function readTheme() {
+      var cs = getComputedStyle(document.documentElement);
+      ["--glass", "--glass-edge", "--floor", "--ink"].forEach(function (k) { theme[k] = cs.getPropertyValue(k).trim(); });
+    }
+    // one glossy bead drawn once per colour, then stamped with drawImage
+    function sprite(main, light, dark, r, dpr) {
+      var c = document.createElement("canvas"), s = Math.ceil((r * 2 + 2) * dpr);
+      c.width = c.height = s;
+      var x = c.getContext("2d");
+      x.scale(dpr, dpr);
+      var g = x.createRadialGradient(r * 0.68, r * 0.6, r * 0.05, r + 1, r + 1, r);
+      g.addColorStop(0, "#ffffff"); g.addColorStop(0.22, light); g.addColorStop(0.68, main); g.addColorStop(1, dark);
+      x.fillStyle = g; x.beginPath(); x.arc(r + 1, r + 1, r, 0, Math.PI * 2); x.fill();
+      return c;
+    }
+    function layoutJar(jar) {
+      var W = jar.cv.clientWidth || 150, H = jar.cv.clientHeight || 232, dpr = Math.min(window.devicePixelRatio || 1, 2);
+      jar.cv.width = Math.round(W * dpr); jar.cv.height = Math.round(H * dpr);
+      jar.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      var top = H - (jar.btn.clientHeight || 172); // room above the jar for falling beads
+      var g = jar.g = { W: W, H: H, top: top, l: 4, r: W - 4, t: top + 26, b: H - 3, rad: 26, nl: W * 0.25, nr: W * 0.75 };
+      g.br = W < 140 ? 5.4 : 6.2; // bead radius
+      jar.sprites = [sprite(jar.s.c[0], jar.s.c[1], jar.s.c[2], g.br, dpr), sprite(jar.s.c[1], "#ffffff", jar.s.c[0], g.br, dpr), sprite(jar.s.c[2], jar.s.c[1], jar.s.c[2], g.br, dpr)];
+      // hexagonal packing from the bottom up, skipping the rounded corners and the shoulder
+      var slots = [], r = g.br, dy = r * 1.74, row = 0;
+      for (var y = g.b - r - 4; y > g.t + 18; y -= dy, row++) {
+        for (var x = g.l + r + 6 + (row % 2 ? r : 0); x < g.r - r - 5; x += r * 2 + 0.6) {
+          var cx = x < g.l + g.rad ? g.l + g.rad : x > g.r - g.rad ? g.r - g.rad : x, cy = y > g.b - g.rad ? g.b - g.rad : y;
+          if (Math.hypot(x - cx, y - cy) > g.rad - r - 4) continue;
+          slots.push({ x: x + (Math.random() - 0.5) * 0.8, y: y + (Math.random() - 0.5) * 0.6, k: Math.random() });
+        }
+      }
+      // bottom rows first; random order within a row so the fill looks poured
+      slots.sort(function (a, b) { return Math.round(b.y) - Math.round(a.y) || a.k - b.k; });
+      jar.slots = slots;
+      jar.beads.forEach(function (bd, n) { var s = slots[n]; if (s) { bd.tx = s.x; bd.ty = s.y; if (bd.st === "rest") { bd.x = s.x; bd.y = s.y; } } });
+    }
+    function beadsFor(jar, v) { return Math.round(Math.min(1, v / jar.s.cap) * jar.slots.length); }
+
+    /* ---------- Changing the year ---------- */
+    function fmt(jar, v) {
+      var s = jar.s;
+      return (s.dec ? v.toFixed(s.dec) : Math.round(v).toLocaleString("en-US")) + (s.of ? "<small>" + s.of + "</small>" : "");
+    }
+    function setYear(y) {
+      if (y === year) return;
+      year = y;
+      var idx = YEARS.indexOf(y);
+      tabs.forEach(function (t, i) { t.setAttribute("aria-selected", String(i === idx)); t.tabIndex = i === idx ? 0 : -1; });
+      moveRoller(idx);
+      J.forEach(function (jar, k) {
+        var v = jar.s.v[y], want = beadsFor(jar, v), from = jar.shown;
+        var base = jar.s.v[y - 1]; // the chip always compares with the year before
+        jar.chip.classList.remove("pop");
+        setTimeout(function () {
+          var lead = reduce.matches ? 0 : 260;
+          // anticipation: the jar wobbles and its lid pops up
+          if (!reduce.matches) { jar.btn.classList.remove("wobble"); void jar.btn.offsetWidth; jar.btn.classList.add("wobble"); }
+          jar.lid.ty = -30; jar.lid.tr = (k % 2 ? 0.32 : -0.32);
+          setTimeout(function () {
+            pour(jar, want); // main: beads fall in or hop out
+            countTo(jar, from, v, 1300);
+          }, lead);
+          setTimeout(function () { // finish: the lid drops back, sparkles and the change chip pops
+            jar.lid.ty = 0; jar.lid.tr = 0;
+            sparkle(jar);
+            var txt, flat = false;
+            if (base == null) { txt = "First full year"; flat = true; }
+            else if (jar.s.dec) { var d = v - base; txt = (d >= 0 ? "+" : "") + d.toFixed(1) + " vs " + (y - 1); flat = d < 0; }
+            else { var p = Math.round((v - base) / base * 100); txt = (p >= 0 ? "+" : "") + p + "% vs " + (y - 1); flat = p < 0; }
+            jar.chip.textContent = txt;
+            jar.chip.classList.toggle("flat", flat);
+            jar.chip.classList.add("pop");
+          }, reduce.matches ? 0 : lead + 1500);
+        }, reduce.matches ? 0 : k * 130);
+      });
+      status.textContent = y + ": " + J.map(function (jar) {
+        var v = jar.s.v[y];
+        return jar.s.dec ? "average rating " + v.toFixed(1) + " out of 5" : v.toLocaleString("en-US") + " " + jar.s.label.toLowerCase();
+      }).join(", ") + ".";
+    }
+    function pour(jar, want) {
+      var have = jar.beads.length, g = jar.g;
+      if (want > have) {
+        var span = Math.min(1100, 30 * (want - have) + 300);
+        for (var n = have; n < want; n++) {
+          var s = jar.slots[n], x0 = g.nl + g.br + Math.random() * (g.nr - g.nl - g.br * 2);
+          jar.beads.push({ tx: s.x, ty: s.y, x0: x0, x: x0, y: -g.br * 2, y0: -g.br * 2, vy: 0, vx: 0, a: 1, st: reduce.matches ? "rest" : "wait",
+            wait: (n - have) / (want - have) * span, hops: 0, sp: jar.sprites[n % 7 === 0 ? 1 : n % 3 === 0 ? 2 : 0] });
+          if (reduce.matches) { var b = jar.beads[jar.beads.length - 1]; b.x = s.x; b.y = s.y; }
+        }
+      } else if (want < have) {
+        // the top beads hop out of the open jar, last in first out
+        var leaving = jar.beads.splice(want);
+        leaving.forEach(function (b, n) {
+          if (reduce.matches) return;
+          // they head for the neck and out over the rim
+          b.st = "out"; b.wait = n * 14; b.vy = -(540 + Math.random() * 240); b.vx = (g.W / 2 - b.x) * 1.6 + (Math.random() - 0.5) * 90;
+          jar.out = jar.out || []; jar.out.push(b);
+        });
+      }
+      jar.count = want;
+    }
+    function countTo(jar, from, to, ms) {
+      if (reduce.matches) { jar.shown = to; jar.num.innerHTML = fmt(jar, to); return; }
+      jar.tween = { from: from, to: to, t0: performance.now(), ms: ms };
+    }
+    function shake(jar) {
+      jar.btn.classList.remove("shake"); void jar.btn.offsetWidth; jar.btn.classList.add("shake");
+      if (reduce.matches) return;
+      jar.beads.forEach(function (b) { if (b.st === "rest") { b.st = "fall"; b.vy = -(80 + Math.random() * 200); b.hops = 0; b.x0 = b.x = b.tx; b.y0 = b.y; } });
+      jar.lid.vy -= 160;
+      status.textContent = "Shook the " + jar.s.label.toLowerCase() + " jar.";
+    }
+    function sparkle(jar) {
+      if (reduce.matches) return;
+      var g = jar.g;
+      for (var n = 0; n < 7; n++) jar.sparks.push({ x: g.nl + Math.random() * (g.nr - g.nl), y: g.top + 6 + Math.random() * 20, vx: (Math.random() - 0.5) * 60, vy: -40 - Math.random() * 60, life: 0, s: 3 + Math.random() * 3 });
+    }
+
+    /* ---------- One loop draws every jar ---------- */
+    var last = performance.now(), idle = 0;
+    function jarPath(c, g) {
+      c.beginPath();
+      c.moveTo(g.nl, g.top + 12);
+      c.lineTo(g.nl, g.t - 4);
+      c.quadraticCurveTo(g.l, g.t - 2, g.l, g.t + 16);
+      c.lineTo(g.l, g.b - g.rad);
+      c.quadraticCurveTo(g.l, g.b, g.l + g.rad, g.b);
+      c.lineTo(g.r - g.rad, g.b);
+      c.quadraticCurveTo(g.r, g.b, g.r, g.b - g.rad);
+      c.lineTo(g.r, g.t + 16);
+      c.quadraticCurveTo(g.r, g.t - 2, g.nr, g.t - 4);
+      c.lineTo(g.nr, g.top + 12);
+    }
+    function drawBead(c, b, r) { c.globalAlpha = b.a; c.drawImage(b.sp, b.x - r - 1, b.y - r - 1, r * 2 + 2, r * 2 + 2); }
+    function frame(now) {
+      var dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      // idle life: every few seconds a top bead somewhere gives a little hop
+      idle += dt;
+      if (idle > 2.6 && !reduce.matches) {
+        idle = 0;
+        var jj = J[Math.floor(Math.random() * J.length)], tb = jj.beads[jj.beads.length - 1 - Math.floor(Math.random() * 4)];
+        if (tb && tb.st === "rest") { tb.st = "fall"; tb.vy = -150; tb.hops = 0; tb.x0 = tb.x; tb.y0 = tb.y; }
+      }
+      J.forEach(function (jar) {
+        var c = jar.ctx, g = jar.g, r = g.br;
+        if (!g) return;
+        // number tween
+        if (jar.tween) {
+          var k = Math.min(1, (now - jar.tween.t0) / jar.tween.ms), e = 1 - Math.pow(1 - k, 3);
+          jar.shown = jar.tween.from + (jar.tween.to - jar.tween.from) * e;
+          jar.num.innerHTML = fmt(jar, jar.shown);
+          if (k >= 1) jar.tween = null;
+        }
+        // lid spring
+        var L = jar.lid;
+        L.vy += (320 * (L.ty - L.y) - 16 * L.vy) * dt; L.y += L.vy * dt;
+        L.vr += (300 * (L.tr - L.r) - 15 * L.vr) * dt; L.r += L.vr * dt;
+        // beads
+        jar.beads.forEach(function (b) {
+          if (b.st === "wait") { b.wait -= dt * 1000; if (b.wait <= 0) b.st = "fall"; return; }
+          if (b.st !== "fall") return;
+          b.vy += 2300 * dt; b.y += b.vy * dt;
+          var p = Math.max(0, Math.min(1, (b.y - b.y0) / Math.max(1, b.ty - b.y0)));
+          b.x = b.x0 + (b.tx - b.x0) * (p * p * (3 - 2 * p));
+          if (b.y >= b.ty && b.vy > 0) {
+            b.y = b.ty; b.vy = -b.vy * 0.3; b.hops++;
+            if (b.hops > 2 || Math.abs(b.vy) < 45) { b.st = "rest"; b.y = b.ty; b.x = b.tx; b.vy = 0; }
+          }
+        });
+        (jar.out || []).forEach(function (b) {
+          if (b.wait > 0) { b.wait -= dt * 1000; return; }
+          b.vy += 1500 * dt; b.y += b.vy * dt; b.x += b.vx * dt; b.a = Math.max(0, b.a - dt * 1.6);
+        });
+        if (jar.out) jar.out = jar.out.filter(function (b) { return b.a > 0 && b.y < g.H + 20; });
+
+        // draw: floor shadow, glass back, beads, glass front, lid, sparkles
+        c.clearRect(0, 0, g.W, g.H);
+        c.globalAlpha = 1;
+        c.fillStyle = theme["--floor"];
+        c.beginPath(); c.ellipse(g.W / 2, g.b + 1, g.W * 0.44, 4, 0, 0, Math.PI * 2); c.fill();
+        jarPath(c, g); c.closePath(); c.fillStyle = theme["--glass"]; c.fill();
+        c.save(); jarPath(c, g); c.closePath(); c.clip();
+        jar.beads.forEach(function (b) { if (b.st === "rest") drawBead(c, b, r); });
+        c.restore();
+        jar.beads.forEach(function (b) { if (b.st === "fall") drawBead(c, b, r); });
+        (jar.out || []).forEach(function (b) { if (b.wait <= 0) drawBead(c, b, r); });
+        c.globalAlpha = 1;
+        // glass edge and highlights
+        c.lineWidth = 2; c.strokeStyle = theme["--glass-edge"]; jarPath(c, g); c.stroke();
+        var hl = c.createLinearGradient(g.l + 8, 0, g.l + 20, 0);
+        hl.addColorStop(0, "rgba(255,255,255,0)"); hl.addColorStop(0.5, "rgba(255,255,255,0.55)"); hl.addColorStop(1, "rgba(255,255,255,0)");
+        c.fillStyle = hl; c.beginPath(); c.roundRect ? c.roundRect(g.l + 9, g.t + 18, 9, g.b - g.t - 46, 5) : c.rect(g.l + 9, g.t + 18, 9, g.b - g.t - 46); c.fill();
+        c.fillStyle = "rgba(255,255,255,0.3)"; c.beginPath(); c.ellipse(g.r - 16, g.t + 26, 3, 9, 0.2, 0, Math.PI * 2); c.fill();
+        // lid
+        c.save();
+        c.translate(g.W / 2, g.top + 9 + L.y); c.rotate(L.r);
+        var lw = g.nr - g.nl + 12, lg = c.createLinearGradient(0, -8, 0, 8);
+        lg.addColorStop(0, jar.s.c[1]); lg.addColorStop(0.45, jar.s.c[0]); lg.addColorStop(1, jar.s.c[2]);
+        c.fillStyle = lg; c.beginPath();
+        if (c.roundRect) c.roundRect(-lw / 2, -8, lw, 15, 5); else c.rect(-lw / 2, -8, lw, 15);
+        c.fill();
+        c.fillStyle = "rgba(255,255,255,0.35)"; c.fillRect(-lw / 2 + 6, -5, lw - 12, 2);
+        c.restore();
+        // sparkles
+        jar.sparks.forEach(function (s) {
+          s.life += dt; s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 40 * dt;
+          var a = Math.max(0, 1 - s.life / 0.8), z = s.s * (0.6 + a * 0.6);
+          c.globalAlpha = a; c.fillStyle = jar.s.c[1];
+          c.beginPath(); c.moveTo(s.x, s.y - z); c.lineTo(s.x + z * 0.3, s.y - z * 0.3); c.lineTo(s.x + z, s.y); c.lineTo(s.x + z * 0.3, s.y + z * 0.3);
+          c.lineTo(s.x, s.y + z); c.lineTo(s.x - z * 0.3, s.y + z * 0.3); c.lineTo(s.x - z, s.y); c.lineTo(s.x - z * 0.3, s.y - z * 0.3); c.fill();
+        });
+        jar.sparks = jar.sparks.filter(function (s) { return s.life < 0.8; });
+        c.globalAlpha = 1;
+      });
+      requestAnimationFrame(frame);
+    }
+
+    /* ---------- Auto-demo ---------- */
+    var ghost = $(".ghost"), demoOn = !reduce.matches, timers = [], round = 0;
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+    function ghostAt(x, y) { ghost.style.setProperty("--gx", x + "px"); ghost.style.setProperty("--gy", y + "px"); }
+    function ghostOver(el, fx, fy) { var r = el.getBoundingClientRect(); ghost.classList.add("show"); ghostAt(r.left + r.width * fx, r.top + r.height * fy); }
+    function tap(then) { ghost.classList.add("tap"); later(function () { ghost.classList.remove("tap"); then(); }, 170); }
+    function stopDemo() { if (!demoOn) return; demoOn = false; timers.forEach(clearTimeout); ghost.classList.remove("show", "tap"); }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) {
+      addEventListener(t, function (e) { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true });
+    });
+    function demo() {
+      if (!demoOn) return;
+      var seq = [2025, 2024, 2026], y = seq[round % 3];
+      round++;
+      var t = tabs[YEARS.indexOf(y)];
+      later(function () { ghostOver(t, 0.55, 0.6); }, 0);
+      later(function () { tap(function () { setYear(y); }); }, 780);
+      if (round % 3 === 0) {
+        later(function () { ghostOver(J[1].btn, 0.5, 0.6); }, 3300);
+        later(function () { tap(function () { shake(J[1]); }); }, 4100);
+      }
+      later(function () { ghost.classList.remove("show"); }, round % 3 === 0 ? 4800 : 3300);
+      later(demo, round % 3 === 0 ? 6200 : 5000);
+    }
+
+    /* ---------- Start ---------- */
+    readTheme();
+    J.forEach(layoutJar);
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    if (mq.addEventListener) mq.addEventListener("change", function () { setTimeout(readTheme, 0); });
+    var rt = 0;
+    addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(function () { J.forEach(layoutJar); moveRoller(YEARS.indexOf(year)); }, 120); });
+    requestAnimationFrame(frame);
+    ghostAt(innerWidth * 0.8, innerHeight + 40);
+    roller.style.transition = "none";
+    moveRoller(2);
+    void roller.offsetWidth;
+    roller.style.transition = "";
+    setTimeout(function () { setYear(2026); }, reduce.matches ? 0 : 250);
+    if (demoOn) later(demo, 3000);
+  })();
+</script>
+</body>
+</html>

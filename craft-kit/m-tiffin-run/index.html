@@ -1,0 +1,1180 @@
+<!doctype html>
+<!-- Chill & Craft · Tiffin Run · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Tiffin Run · delivery tracker with a snapping bottom sheet</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours (light first, dark below) ---------- */
+  :root {
+    --bg1: #f6f1e4;
+    --bg2: #e3efd6;
+    --glow1: rgba(122, 196, 84, 0.35);
+    --glow2: rgba(240, 106, 72, 0.18);
+    --grid: rgba(60, 90, 40, 0.07);
+    --bezel: #18201a;
+    --bezel-edge: rgba(0, 0, 0, 0.25);
+    --land: #f1efe4;
+    --block: #e4e5d6;
+    --block2: #dcdfcb;
+    --bshade: #cfd2bd;
+    --road: #ffffff;
+    --road-edge: #d8d9c8;
+    --road-mid: #efe3b8;
+    --label: #8b8f78;
+    --water: #9fd8d0;
+    --ripple: #e9fbf7;
+    --park: #c5e3a6;
+    --tree: #8fc56a;
+    --tree2: #b5dc8f;
+    --route: #2f9a3e;
+    --route-rest: #9fbf8f;
+    --pin: #e8553e;
+    --home: #2f9a3e;
+    --sheet: #fffdf8;
+    --ink: #1b2417;
+    --muted: #6d7564;
+    --line: #e7e4d8;
+    --chip: #f5f2e8;
+    --soft: #e3f2d9;
+    --accent: #2f9a3e;
+    --accent-ink: #ffffff;
+    --accent-deep: #23772f;
+    --gold: #f2b01e;
+    --grip: #cdc9bb;
+    --shadow: rgba(40, 50, 20, 0.28);
+    --ghost: rgba(27, 36, 23, 0.16);
+    --ghost-edge: rgba(27, 36, 23, 0.55);
+    --focus: #1f6fd1;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg1: #0b1015;
+    --bg2: #0f1a14;
+    --glow1: rgba(89, 242, 122, 0.14);
+    --glow2: rgba(255, 107, 87, 0.1);
+    --grid: rgba(150, 255, 180, 0.05);
+    --bezel: #04070a;
+    --bezel-edge: rgba(255, 255, 255, 0.09);
+    --land: #141c25;
+    --block: #1c2632;
+    --block2: #212d3b;
+    --bshade: #0f151c;
+    --road: #2a3646;
+    --road-edge: #0d1218;
+    --road-mid: #3c4a5c;
+    --label: #6f8196;
+    --water: #12384a;
+    --ripple: #2b6f84;
+    --park: #163525;
+    --tree: #1f5136;
+    --tree2: #2a6a45;
+    --route: #59f27a;
+    --route-rest: #2d5a43;
+    --pin: #ff6b57;
+    --home: #59f27a;
+    --sheet: #131a21;
+    --ink: #e9f1ea;
+    --muted: #8b9a8e;
+    --line: #233040;
+    --chip: #1a232d;
+    --soft: #173322;
+    --accent: #59f27a;
+    --accent-ink: #062010;
+    --accent-deep: #59f27a;
+    --gold: #ffc53d;
+    --grip: #3a4757;
+    --shadow: rgba(0, 0, 0, 0.7);
+    --ghost: rgba(255, 255, 255, 0.2);
+    --ghost-edge: rgba(255, 255, 255, 0.75);
+    --focus: #8fc1ff;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg1);
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- Stage ---------- */
+  .stage {
+    position: relative;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(32px, 6vw, 96px);
+    padding: 16px;
+    overflow: hidden;
+    background:
+      radial-gradient(55% 50% at 12% 18%, var(--glow1), transparent 70%),
+      radial-gradient(45% 55% at 88% 85%, var(--glow2), transparent 70%),
+      linear-gradient(160deg, var(--bg1), var(--bg2));
+  }
+  /* a faint street grid drifting behind everything */
+  .stage::before {
+    content: "";
+    position: absolute;
+    inset: -60px;
+    background-image: linear-gradient(var(--grid) 1.5px, transparent 1.5px), linear-gradient(90deg, var(--grid) 1.5px, transparent 1.5px);
+    background-size: 48px 48px;
+    -webkit-mask-image: radial-gradient(closest-side, #000 30%, transparent);
+    mask-image: radial-gradient(closest-side, #000 30%, transparent);
+    animation: drift 26s linear infinite;
+  }
+  @keyframes drift { to { transform: translate(48px, 48px); } }
+
+  /* ---------- Side caption (wide screens only) ---------- */
+  .cap { position: relative; z-index: 1; max-width: 300px; display: none; }
+  @media (min-width: 900px) { .cap { display: block; } }
+  .kick { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-deep); font-weight: 800; }
+  .cap h1 { font-size: 46px; line-height: 1; letter-spacing: -0.045em; margin: 10px 0 12px; }
+  .cap p { color: var(--muted); font-size: 15px; line-height: 1.55; margin: 0 0 20px; }
+  .cap ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+  .cap li {
+    display: flex; align-items: center; gap: 10px; width: max-content; max-width: 100%;
+    padding: 9px 14px 9px 9px; border-radius: 14px; font-size: 13.5px; font-weight: 650;
+    background: color-mix(in srgb, var(--sheet) 75%, transparent); border: 1px solid var(--line);
+    box-shadow: 0 10px 24px -18px var(--shadow);
+  }
+  .cap li svg { width: 26px; height: 26px; flex: none; border-radius: 8px; background: var(--soft); padding: 5px; fill: none; stroke: var(--accent-deep); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------- Phone ---------- */
+  .phone {
+    position: relative;
+    z-index: 1;
+    flex: none;
+    width: min(390px, 100%);
+    height: clamp(540px, calc(100vh - 32px), 760px);
+    height: clamp(540px, calc(100dvh - 32px), 760px);
+    border: 9px solid var(--bezel);
+    border-radius: 48px;
+    background: var(--land);
+    box-shadow: 0 0 0 1px var(--bezel-edge), 0 50px 90px -40px var(--shadow), 0 20px 40px -30px var(--shadow);
+    overflow: hidden;
+    overflow: clip;
+    isolation: isolate;
+  }
+  @media (max-width: 480px) {
+    .stage { padding: 0; }
+    .phone { width: 100%; height: 100vh; height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+  }
+
+  .status {
+    position: absolute; top: 0; left: 0; right: 0; height: 42px; z-index: 6;
+    display: flex; align-items: center; justify-content: space-between; padding: 2px 24px 0 28px;
+    font-size: 14px; font-weight: 700; letter-spacing: -0.01em;
+    pointer-events: none;
+  }
+  .status::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(var(--land) 35%, transparent); opacity: var(--sf, 1); }
+  .status svg { height: 12px; fill: currentColor; }
+
+  /* map and everything that recedes when the sheet is full */
+  .mapwrap { position: absolute; inset: 0; transform-origin: 50% 0; overflow: hidden; will-change: transform; }
+  .map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .map .b1 { fill: var(--block); } .map .b2 { fill: var(--block2); } .map .bs { fill: var(--bshade); }
+  .map .park { fill: var(--park); } .map .bank { fill: none; stroke: var(--park); stroke-width: 40; }
+  .map .tree { fill: var(--tree); } .map .tree2 { fill: var(--tree2); }
+  .map .water { fill: none; stroke: var(--water); stroke-width: 24; }
+  .map .ripple { fill: none; stroke: var(--ripple); stroke-width: 1.5; stroke-dasharray: 5 16; opacity: 0.8; animation: flow 6s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -84; } }
+  .map .casing { fill: none; stroke: var(--road-edge); stroke-width: 16; }
+  .map .casing.big { stroke-width: 22; }
+  .map .road { fill: none; stroke: var(--road); stroke-width: 12; }
+  .map .road.big { stroke-width: 18; }
+  .map .mid { fill: none; stroke: var(--road-mid); stroke-width: 1.5; stroke-dasharray: 8 8; }
+  .map .lbl { font-size: 7.5px; font-weight: 800; letter-spacing: 0.14em; fill: var(--label); paint-order: stroke; stroke: var(--road); stroke-width: 3px; }
+  .map .area { font-size: 11px; font-weight: 800; letter-spacing: 0.32em; fill: var(--label); opacity: 0.55; }
+  .map .route-rest { fill: none; stroke: var(--route-rest); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 1 8; animation: ants 1s linear infinite; }
+  @keyframes ants { to { stroke-dashoffset: -9; } }
+  .map .route-glow { fill: none; stroke: var(--route); stroke-width: 11; stroke-linecap: round; stroke-linejoin: round; opacity: 0.22; }
+  .map .route-done { fill: none; stroke: var(--route); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+  .map .pin-body { stroke: #fff; stroke-width: 2; }
+  .map .rest .pin-body { fill: var(--pin); }
+  .map .home .pin-body { fill: var(--home); }
+  .map .pin-glyph { fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  :root[data-theme="dark"] .map .home .pin-glyph { stroke: #062010; }
+  .map .pin-shadow { fill: rgba(0, 0, 0, 0.18); }
+  .map .pulse { fill: none; stroke: var(--home); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: pulse 2.2s ease-out infinite; }
+  .map .pulse.p2 { animation-delay: 1.1s; }
+  @keyframes pulse { from { transform: scale(0.6); opacity: 0.9; } to { transform: scale(2.8); opacity: 0; } }
+  .map .hopper { transform-box: fill-box; transform-origin: 50% 100%; }
+  .map .hopper.hop { animation: hop 0.9s cubic-bezier(0.3, 1.6, 0.5, 1) 2; }
+  @keyframes hop { 30% { transform: translateY(-10px) scale(1.12, 0.92); } 60% { transform: translateY(0) scale(0.92, 1.08); } }
+  .map .wedge { fill: var(--route); opacity: 0.22; }
+  .map .rider-halo { fill: var(--route); opacity: 0.18; transform-box: fill-box; transform-origin: center; animation: halo 1.8s ease-in-out infinite; }
+  @keyframes halo { 50% { transform: scale(1.25); opacity: 0.08; } }
+  .map .rider-dot { fill: var(--accent); stroke: #fff; stroke-width: 3; }
+  .map .bike { fill: none; stroke: var(--accent-ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; animation: bob 0.5s ease-in-out infinite alternate; }
+  @keyframes bob { to { transform: translateY(-0.8px); } }
+  .map .rider-in { transform-box: fill-box; transform-origin: center; }
+  .map .rider-in.hop { animation: hop 0.8s cubic-bezier(0.3, 1.6, 0.5, 1) 2; }
+  /* chat bubbles that float over the rider */
+  .map .bub { transform-box: fill-box; transform-origin: 50% 100%; animation: bub-in 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) both; transition: transform 0.45s cubic-bezier(0.3, 1.4, 0.5, 1), opacity 0.3s; }
+  .map .bub.out { opacity: 0; }
+  @keyframes bub-in { from { opacity: 0; scale: 0.3; } }
+  .map .bub rect { fill: var(--sheet); stroke: var(--line); }
+  .map .bub text { font-size: 9.5px; font-weight: 700; fill: var(--ink); }
+  .map .bub.mine rect { fill: var(--accent); stroke: none; }
+  .map .bub.mine text { fill: var(--accent-ink); }
+  .map .bub .tdot { fill: var(--muted); animation: tdot 0.9s ease-in-out infinite; }
+  .map .bub .tdot:nth-child(3) { animation-delay: 0.15s; } .map .bub .tdot:nth-child(4) { animation-delay: 0.3s; }
+  @keyframes tdot { 50% { opacity: 0.25; } }
+
+  .scrim { position: absolute; inset: 0; z-index: 3; background: #081008; opacity: 0; pointer-events: none; }
+
+  .toppill {
+    position: absolute; top: 48px; left: 14px; right: 14px; z-index: 4;
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    border-radius: 18px; font-size: 12.5px; font-weight: 650;
+    background: color-mix(in srgb, var(--sheet) 88%, transparent);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px -16px var(--shadow); border: 1px solid var(--line);
+    transform-origin: 50% 0;
+  }
+  .toppill .live { width: 9px; height: 9px; border-radius: 50%; background: var(--pin); box-shadow: 0 0 0 0 var(--pin); animation: live 1.6s infinite; flex: none; }
+  @keyframes live { 70% { box-shadow: 0 0 0 7px transparent; } }
+  .toppill span:nth-child(2) { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toppill small { color: var(--muted); font-weight: 650; font-size: 12px; white-space: nowrap; }
+
+  /* ---------- Bottom sheet ---------- */
+  .sheet {
+    position: absolute;
+    left: 0; right: 0; top: 52px;
+    bottom: -220px;            /* extra length so rubber-banding up never shows a gap */
+    padding-bottom: 220px;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    background: var(--sheet);
+    border-radius: 28px 28px 0 0;
+    box-shadow: 0 -14px 44px -16px var(--shadow), 0 -1px 0 var(--line);
+    will-change: transform;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .handle {
+    flex: none; align-self: center; position: relative;
+    width: 76px; height: 26px; margin-top: 3px; padding: 0;
+    border: 0; border-radius: 13px; background: none; cursor: grab; touch-action: none;
+  }
+  .handle i {
+    position: absolute; top: 11px; width: 21px; height: 5px; border-radius: 3px; background: var(--grip);
+    transition: background 0.3s;
+  }
+  /* the two halves of the pill tilt into a down chevron as the sheet reaches full height */
+  .handle .hl { left: 17px; transform-origin: 100% 50%; transform: translateX(calc(var(--chev, 0) * 1px)) rotate(calc(var(--chev, 0) * 22deg)); }
+  .handle .hr { right: 17px; transform-origin: 0 50%; transform: translateX(calc(var(--chev, 0) * -1px)) rotate(calc(var(--chev, 0) * -22deg)); }
+  .handle.pop { animation: grip-pop 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes grip-pop { 40% { transform: scaleX(1.25) scaleY(0.8); } }
+  .sheet.dragging .handle i { background: var(--accent); }
+
+  .head { flex: none; display: grid; padding: 2px 20px 16px; touch-action: none; cursor: grab; }
+  .head > .view { grid-area: 1 / 1; transition: opacity 0.3s, transform 0.5s cubic-bezier(0.3, 1.4, 0.5, 1), visibility 0s linear 0s; }
+  .row { display: flex; align-items: center; gap: 14px; }
+  .eta {
+    flex: none; width: 62px; height: 62px; border-radius: 19px; overflow: hidden;
+    background: var(--accent); color: var(--accent-ink);
+    display: grid; place-content: center; text-align: center; line-height: 1;
+    box-shadow: 0 10px 22px -12px var(--accent);
+  }
+  .eta b { display: block; font-size: 27px; font-weight: 850; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+  .eta b.roll { animation: roll 0.55s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  @keyframes roll { from { transform: translateY(80%); opacity: 0; } }
+  .eta small { font-size: 11px; font-weight: 750; opacity: 0.85; margin-top: 2px; display: block; }
+  .who { flex: 1; min-width: 0; }
+  .who strong { display: block; font-size: 16.5px; letter-spacing: -0.015em; }
+  .who span { display: block; font-size: 12.5px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .avatar { flex: none; width: 48px; height: 48px; }
+  .bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 15px; }
+  .bar i { position: relative; height: 5px; border-radius: 3px; background: var(--accent); overflow: hidden; }
+  .bar i:last-child { background: var(--line); }
+  .bar i b { position: absolute; inset: 0; border-radius: inherit; background: var(--accent); transform-origin: 0 50%; transform: scaleX(0); }
+  .bar i b::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+    animation: shine 1.4s linear infinite;
+  }
+  @keyframes shine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .meta { display: flex; justify-content: space-between; margin-top: 9px; font-size: 12px; color: var(--muted); font-weight: 600; }
+
+  /* delivered view (swaps in over the tracking view) */
+  .done-view { visibility: hidden; opacity: 0; transform: translateY(16px) scale(0.97); }
+  .sheet.delivered .done-view { visibility: visible; opacity: 1; transform: none; }
+  .sheet.delivered .track-view { visibility: hidden; opacity: 0; transform: translateY(-14px) scale(0.97); transition: opacity 0.25s, transform 0.4s, visibility 0s linear 0.3s; }
+  .okmark { flex: none; width: 62px; height: 62px; }
+  .okmark circle { fill: var(--soft); stroke: var(--accent); stroke-width: 4; stroke-dasharray: 170; stroke-dashoffset: 170; transform: rotate(-90deg); transform-origin: center; }
+  .okmark path { fill: none; stroke: var(--accent-deep); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; }
+  .sheet.delivered .okmark { animation: ok-pop 0.7s 0.55s cubic-bezier(0.3, 1.7, 0.5, 1) backwards; }
+  .sheet.delivered .okmark circle { stroke-dashoffset: 0; transition: stroke-dashoffset 0.6s 0.1s ease-out; }
+  .sheet.delivered .okmark path { stroke-dashoffset: 0; transition: stroke-dashoffset 0.35s 0.6s ease-out; }
+  @keyframes ok-pop { 40% { transform: scale(1.18) rotate(-6deg); } }
+  .rate { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+  .stars { display: flex; gap: 2px; }
+  .star { width: 32px; height: 32px; padding: 3px; border: 0; background: none; border-radius: 9px; cursor: pointer; color: var(--grip); }
+  .star svg { width: 100%; height: 100%; fill: currentColor; display: block; transition: transform 0.25s; }
+  .star.on { color: var(--gold); }
+  .star.on svg { animation: star-pop 0.5s cubic-bezier(0.3, 1.8, 0.5, 1) backwards; animation-delay: var(--d, 0s); }
+  @keyframes star-pop { from { transform: scale(0.3) rotate(-40deg); } }
+  .again {
+    flex: none; border: 0; border-radius: 12px; padding: 9px 14px; font: inherit; font-size: 13px; font-weight: 750;
+    background: var(--ink); color: var(--sheet); cursor: pointer; transition: transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+  .again:active { transform: scale(0.93); }
+
+  .body {
+    flex: 1; min-height: 0; padding: 2px 20px 28px;
+    overflow: hidden; overflow: clip;
+    touch-action: none;
+    overscroll-behavior: contain;
+  }
+  .sheet.is-full .body { overflow: hidden auto; touch-action: pan-y; }
+  .sec-t { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 800; margin: 8px 0 12px; }
+  .sec-t.gap { margin-top: 22px; }
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .steps li { position: relative; display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center; padding: 0 0 14px; }
+  .steps li::after {
+    content: ""; position: absolute; left: 17px; top: 40px; bottom: 2px; width: 2px; border-radius: 2px;
+    background: linear-gradient(var(--accent) calc(var(--fill, 1) * 100%), var(--line) 0);
+  }
+  .steps li:last-child::after { display: none; }
+  .dot { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: var(--chip); color: var(--muted); }
+  .dot svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .steps li.done .dot { background: var(--accent); color: var(--accent-ink); }
+  .steps li.now .dot { background: var(--soft); color: var(--accent-deep); animation: ping 1.8s infinite; }
+  @keyframes ping { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 9px transparent; } }
+  .sheet.delivered .steps li.now .dot { background: var(--accent); color: var(--accent-ink); animation: ok-pop 0.6s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .steps b { display: block; font-size: 14.5px; }
+  .steps small { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .steps time { font-size: 12px; color: var(--muted); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+  .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; }
+  .act {
+    display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; padding: 0 10px;
+    border-radius: 15px; border: 1px solid var(--line); background: var(--chip); color: var(--ink);
+    font: inherit; font-size: 14px; font-weight: 750; cursor: pointer; font-variant-numeric: tabular-nums;
+    transition: transform 0.3s cubic-bezier(0.3, 1.7, 0.5, 1), background 0.25s, color 0.25s;
+  }
+  .act svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .act:active { transform: scale(0.94); }
+  .act.ring svg { animation: wiggle 0.45s ease-in-out infinite; }
+  @keyframes wiggle { 25% { transform: rotate(-14deg); } 75% { transform: rotate(14deg); } }
+  .act.live { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+  .chips { display: flex; gap: 8px; }
+  .chip {
+    flex: 1; height: 42px; border-radius: 13px; border: 1.5px solid var(--line); background: none; color: var(--ink);
+    font: inherit; font-size: 13.5px; font-weight: 750; cursor: pointer;
+    transition: transform 0.3s cubic-bezier(0.3, 1.7, 0.5, 1), background 0.2s, color 0.2s, border-color 0.2s;
+  }
+  .chip:active { transform: scale(0.92); }
+  .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); animation: chip-pop 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes chip-pop { 40% { transform: scale(1.08); } }
+  .tipnote { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--muted); margin: 11px 2px 0; }
+  .tipnote b, .ln b { color: var(--ink); font-variant-numeric: tabular-nums; display: inline-block; }
+  .bump { animation: bump 0.5s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes bump { 35% { transform: scale(1.14); color: var(--accent-deep); } }
+
+  .receipt { margin-top: 12px; border-radius: 18px; background: var(--chip); padding: 12px 16px 14px; }
+  .ln { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; padding: 5px 0; }
+  .ln span { color: var(--muted); }
+  .ln.item span { color: var(--ink); }
+  .ln.total { border-top: 1.5px dashed var(--grip); margin-top: 6px; padding-top: 11px; font-weight: 850; font-size: 15.5px; }
+  .ln.total span { color: var(--ink); }
+  .addr { display: flex; gap: 12px; align-items: center; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .addr svg { width: 34px; height: 34px; flex: none; border-radius: 11px; padding: 8px; background: var(--chip); fill: none; stroke: var(--pin); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .addr b { display: block; color: var(--ink); font-size: 13.5px; }
+
+  /* confetti layer and the demo finger */
+  .fx { position: absolute; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; }
+  .bit { position: absolute; width: 7px; height: 11px; border-radius: 2px; margin: -5px 0 0 -3px; }
+  .ghost {
+    position: absolute; left: -23px; top: -23px; width: 46px; height: 46px; z-index: 9;
+    pointer-events: none; opacity: 0; transition: opacity 0.35s;
+  }
+  .ghost::before {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle, var(--ghost), transparent 72%);
+    border: 2px solid var(--ghost-edge);
+    box-shadow: 0 8px 20px -6px var(--shadow);
+    transition: transform 0.2s cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+  .ghost.show { opacity: 1; }
+  .ghost.press::before { transform: scale(0.76); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="cap">
+    <div class="kick">Bottom sheet · 3 snap points</div>
+    <h1>Tiffin Run</h1>
+    <p>Kashif is riding your karahi across Gulberg. Pull the order sheet between peek, half and full while the map keeps moving behind it.</p>
+    <ul>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Drag or flick the handle</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"/></svg>Arrow keys move one snap</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/></svg>Tip, call and rate the rider</li>
+    </ul>
+  </div>
+
+  <section class="phone" id="phone" aria-label="Tiffin Run order tracker">
+    <div class="status" aria-hidden="true">
+      <span>9:41</span>
+      <svg viewBox="0 0 64 14"><rect x="0" y="9" width="3.5" height="5" rx="1"/><rect x="5.5" y="6" width="3.5" height="8" rx="1"/><rect x="11" y="3" width="3.5" height="11" rx="1"/><rect x="16.5" y="0" width="3.5" height="14" rx="1"/><path d="M30 5.5a10 10 0 0 1 13 0l-1.6 1.7a7.6 7.6 0 0 0-9.8 0zM33.2 8.8a5.4 5.4 0 0 1 6.6 0L36.5 12.3z"/><rect x="47" y="1.5" width="15" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="49" y="3.5" width="9" height="7" rx="1.5"/><rect x="62.6" y="5" width="1.4" height="4" rx=".7"/></svg>
+    </div>
+
+    <div class="mapwrap" id="mapwrap">
+      <svg class="map" id="map" viewBox="0 0 390 760" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
+        <rect width="390" height="760" fill="var(--land)" style="fill: var(--land)"/>
+        <g id="g-blocks"></g>
+        <!-- canal with green banks and a gentle current -->
+        <path class="bank" d="M-20 300C120 292 260 308 410 298"/>
+        <g id="g-trees"></g>
+        <path class="water" d="M-20 300C120 292 260 308 410 298"/>
+        <path class="ripple" d="M-20 297C120 289 260 305 410 295"/>
+        <path class="ripple" d="M-20 304C120 296 260 312 410 302" style="animation-duration: 8s"/>
+        <!-- roads: casing first, then the light road on top -->
+        <g>
+          <path class="casing" d="M80 -20V780M300 -20V780M-20 60H410M-20 220H410M-20 380H410M-20 470H410M-20 560H410M-20 660H410M-20 268C120 260 260 276 410 266"/>
+          <path class="casing big" d="M200 -20V780M-20 150H410"/>
+          <path class="road" d="M80 -20V780M300 -20V780M-20 60H410M-20 220H410M-20 380H410M-20 470H410M-20 560H410M-20 660H410M-20 268C120 260 260 276 410 266"/>
+          <path class="road big" d="M200 -20V780M-20 150H410"/>
+          <path class="mid" d="M200 -20V780M-20 150H410"/>
+        </g>
+        <text class="lbl" x="252" y="152.6" text-anchor="middle">MM ALAM RD</text>
+        <text class="lbl" x="200" y="440" text-anchor="middle" transform="rotate(-90 200 440) translate(0 2.6)">MAIN BLVD</text>
+        <text class="lbl" x="56" y="266.8" text-anchor="middle">CANAL RD</text>
+        <text class="lbl" x="340" y="382.6" text-anchor="middle">STREET 7</text>
+        <text class="area" x="140" y="425" text-anchor="middle" style="letter-spacing: 0.24em">GULBERG III</text>
+        <text class="area" x="300" y="520" text-anchor="middle">CANAL VIEW</text>
+        <!-- the route: remaining part marches, the ridden part fills in green -->
+        <path id="route-base" class="route-rest" d="M40 150L188 150Q200 150 200 162L200 208Q200 220 212 220L288 220Q300 220 300 232L300 240"/>
+        <path id="route-glow" class="route-glow" d="M40 150L188 150Q200 150 200 162L200 208Q200 220 212 220L288 220Q300 220 300 232L300 240"/>
+        <path id="route-done" class="route-done" d="M40 150L188 150Q200 150 200 162L200 208Q200 220 212 220L288 220Q300 220 300 232L300 240"/>
+        <!-- restaurant pin -->
+        <g class="pin rest" transform="translate(40 139)">
+          <ellipse class="pin-shadow" cx="0" cy="1" rx="7" ry="2.6"/>
+          <g class="hopper" id="rest-pin">
+            <path class="pin-body" d="M0 0C-3-6-12-10-12-21a12 12 0 1 1 24 0C12-10 3-6 0 0Z"/>
+            <path class="pin-glyph" d="M-5.5-27v3.5a1.6 1.6 0 0 0 3.2 0V-27M-3.9-22v7M4-27c-2.4.4-3 3.6-3 6.5h3V-15"/>
+          </g>
+        </g>
+        <!-- home pin -->
+        <g class="pin home" transform="translate(324 242)">
+          <ellipse class="pulse" cx="0" cy="0" rx="10" ry="4"/>
+          <ellipse class="pulse p2" cx="0" cy="0" rx="10" ry="4"/>
+          <ellipse class="pin-shadow" cx="0" cy="1" rx="7" ry="2.6"/>
+          <g class="hopper" id="home-pin">
+            <path class="pin-body" d="M0 0C-3-6-12-10-12-21a12 12 0 1 1 24 0C12-10 3-6 0 0Z"/>
+            <path class="pin-glyph" d="M-6.5-20.5L0-26.5l6.5 6M-4.5-22.5v7h9v-7M-1.2-15.5v-3.6h2.4v3.6"/>
+          </g>
+        </g>
+        <!-- the rider -->
+        <g id="rider" transform="translate(40 150)">
+          <path id="wedge" class="wedge" d="M0 0L-10-25A27 27 0 0 1 10-25Z"/>
+          <g class="rider-in" id="rider-in">
+            <circle class="rider-halo" r="19"/>
+            <circle class="rider-dot" r="13.5"/>
+            <g id="bike" class="bike"><circle cx="-5.2" cy="3.6" r="3"/><circle cx="5.6" cy="3.6" r="3"/><path d="M-5.2 3.6L-1.6-2.4H3L5.6 3.6M-1.6-2.4h-3.2M3-2.4l-1-3h2.6"/></g>
+          </g>
+          <g id="bubbles"></g>
+        </g>
+      </svg>
+    </div>
+    <div class="scrim" id="scrim"></div>
+
+    <div class="toppill" id="toppill" aria-hidden="true">
+      <span class="live"></span>
+      <span>Live · Degh &amp; Tandoor to Home</span>
+      <small>#4127</small>
+    </div>
+
+    <section class="sheet" id="sheet" aria-label="Order details">
+      <button class="handle" id="handle" type="button" aria-label="Order sheet at peek. Press to open more."><i class="hl"></i><i class="hr"></i></button>
+
+      <div class="head" id="head">
+        <div class="view track-view">
+          <div class="row">
+            <div class="eta" aria-hidden="true"><b id="eta">12</b><small>min</small></div>
+            <div class="who"><strong>Kashif is on the way</strong><span id="dist">2.1 km away · arriving 9:53</span></div>
+            <svg class="avatar" viewBox="0 0 48 48" aria-hidden="true">
+              <defs><linearGradient id="av" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb36b"/><stop offset="1" stop-color="#e8553e"/></linearGradient></defs>
+              <circle cx="22" cy="22" r="21" fill="url(#av)"/>
+              <text x="22" y="27.5" text-anchor="middle" font-size="15" font-weight="800" fill="#fff">KA</text>
+              <circle cx="37" cy="37" r="10" fill="var(--sheet)" style="fill: var(--sheet)"/>
+              <circle cx="37" cy="37" r="8" fill="var(--accent)" style="fill: var(--accent)"/>
+              <path d="M33.6 39.5l2-3.4h2.4l1.6 3.4M32.4 39.5a1.4 1.4 0 1 0 0 .1M41 39.5a1.4 1.4 0 1 0 0 .1" fill="none" stroke="var(--accent-ink)" style="stroke: var(--accent-ink)" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="bar" aria-hidden="true"><i></i><i></i><i></i><i><b id="barfill"></b></i></div>
+          <div class="meta"><span>From Degh &amp; Tandoor</span><span>Cash · PKR <span id="meta-total">2,049</span></span></div>
+        </div>
+
+        <div class="view done-view">
+          <div class="row">
+            <svg class="okmark" viewBox="0 0 62 62" aria-hidden="true"><circle cx="31" cy="31" r="27"/><path d="M19 32l8 8 16-17"/></svg>
+            <div class="who"><strong>Delivered. Enjoy!</strong><span>Kashif left it at gate 14 · 9:53</span></div>
+          </div>
+          <div class="rate">
+            <div class="stars" id="stars" role="group" aria-label="Rate Kashif"></div>
+            <button class="again" id="again" type="button">Track another</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="body" id="body">
+        <h2 class="sec-t">Order progress</h2>
+        <ol class="steps" id="steps">
+          <li class="done"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg></span><div><b>Order placed</b><small>Degh &amp; Tandoor confirmed it</small></div><time>9:31</time></li>
+          <li class="done"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c1 3.5 5 5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-3.5 2-5 1 1.5 1.5 2 2 2 0-2.5-.5-4.5 1-7z"/></svg></span><div><b>Cooking</b><small>Your karahi went on the flame</small></div><time>9:35</time></li>
+          <li class="done" id="step-pick"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 12H6.2zM9 8V6a3 3 0 0 1 6 0v2"/></svg></span><div><b>Picked up</b><small>Kashif has your food</small></div><time>9:44</time></li>
+          <li class="now"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg></span><div><b>Arriving</b><small id="arrive-sub">About 12 min · 2.1 km to go</small></div><time>9:53</time></li>
+        </ol>
+        <div class="acts">
+          <button class="act" id="call" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg><span>Call</span></button>
+          <button class="act" id="msg" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg><span>Message</span></button>
+        </div>
+
+        <h2 class="sec-t gap">Tip for Kashif</h2>
+        <div class="chips" role="group" aria-label="Tip amount">
+          <button class="chip" type="button" data-tip="50" aria-pressed="false">PKR 50</button>
+          <button class="chip" type="button" data-tip="100" aria-pressed="false">PKR 100</button>
+          <button class="chip" type="button" data-tip="150" aria-pressed="false">PKR 150</button>
+        </div>
+        <p class="tipnote"><span>Every rupee goes to the rider</span><span>Total <b id="total1">PKR 2,049</b></span></p>
+
+        <h2 class="sec-t gap">Your order</h2>
+        <div class="receipt">
+          <div class="ln item"><span>Chicken karahi, half</span><b>PKR 1,450</b></div>
+          <div class="ln item"><span>Naan ×4</span><b>PKR 160</b></div>
+          <div class="ln item"><span>Raita</span><b>PKR 120</b></div>
+          <div class="ln item"><span>Mint lemonade</span><b>PKR 220</b></div>
+          <div class="ln"><span>Delivery</span><b>PKR 99</b></div>
+          <div class="ln"><span>Tip</span><b id="tipline">PKR 0</b></div>
+          <div class="ln total"><span>Total, cash</span><b id="total2">PKR 2,049</b></div>
+        </div>
+        <div class="addr"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg><span><b>House 14, Street 7</b>Gulberg III, Lahore · gate on the left</span></div>
+      </div>
+    </section>
+
+    <div class="fx" id="fx" aria-hidden="true"></div>
+    <div class="ghost" id="ghost" aria-hidden="true"></div>
+    <p class="sr-only" id="live" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+  (function () {
+    "use strict";
+    var $ = function (id) { return document.getElementById(id); };
+    var phone = $("phone"), sheet = $("sheet"), handle = $("handle"), head = $("head"), body = $("body");
+    var mapwrap = $("mapwrap"), scrim = $("scrim"), toppill = $("toppill"), live = $("live"), ghost = $("ghost");
+    var statusBar = phone.querySelector(".status");
+    var acted = false;           // vibration only after a real tap (browsers block it before that)
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    var NS = "http://www.w3.org/2000/svg";
+    var SHEET_TOP = 52;          // px from the top of the screen to the sheet at full height
+    var TRIP = 28000;            // how long the ride takes (ms)
+    var ITEMS = 1450 + 160 + 120 + 220, FEE = 99;
+
+    function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+    function say(t) { live.textContent = t; }
+    function fmt(n) { return "PKR " + Math.round(n).toLocaleString("en-US"); }
+    // short vibration on phones that support it; harmless everywhere else
+    function buzz(p) { if (!acted) return; try { if (typeof navigator.vibrate === "function") navigator.vibrate(p); } catch (e) {} }
+    function svgEl(tag, attrs, parent) {
+      var n = document.createElementNS(NS, tag);
+      for (var k in attrs) n.setAttribute(k, attrs[k]);
+      if (parent) parent.appendChild(n);
+      return n;
+    }
+    function retrigger(el, cls) { el.classList.remove(cls); void el.getBoundingClientRect(); el.classList.add(cls); }
+
+    /* ================= The city map (blocks and trees are generated) ================= */
+    var seed = 11;
+    function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+    (function buildMap() {
+      var gB = $("g-blocks"), gT = $("g-trees");
+      var XS = [[-20, 72], [88, 192], [208, 292], [308, 410]];
+      var YS = [[-20, 52], [68, 142], [158, 212], [228, 258], [322, 372], [388, 462], [478, 552], [568, 652], [668, 790]];
+      function tree(x, y, r) {
+        svgEl("circle", { cx: x, cy: y + 1.5, r: r, class: "bs" }, gT);
+        svgEl("circle", { cx: x, cy: y, r: r, class: "tree" }, gT);
+        svgEl("circle", { cx: x - r * 0.3, cy: y - r * 0.3, r: r * 0.45, class: "tree2" }, gT);
+      }
+      YS.forEach(function (ys, j) {
+        XS.forEach(function (xs, i) {
+          var x0 = xs[0] + 4, x1 = xs[1] - 4, y0 = ys[0] + 4, y1 = ys[1] - 4;
+          if ((i === 2 && j === 2) || (i === 0 && j === 5) || (i === 3 && j === 7)) {
+            svgEl("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: 10, class: "park" }, gB);
+            for (var t = 0; t < 7; t++) tree(x0 + 8 + rnd() * (x1 - x0 - 16), y0 + 8 + rnd() * (y1 - y0 - 16), 4 + rnd() * 4);
+            return;
+          }
+          var n = 1 + Math.floor(rnd() * 3), horiz = x1 - x0 > y1 - y0;
+          var len = horiz ? x1 - x0 : y1 - y0, gap = 5, size = (len - gap * (n - 1)) / n;
+          for (var k = 0; k < n; k++) {
+            var a = (horiz ? x0 : y0) + k * (size + gap);
+            var bx = horiz ? a : x0, by = horiz ? y0 : a, bw = horiz ? size : x1 - x0, bh = horiz ? y1 - y0 : size;
+            svgEl("rect", { x: bx.toFixed(1), y: (by + 2.5).toFixed(1), width: bw.toFixed(1), height: bh.toFixed(1), rx: 4, class: "bs" }, gB);
+            svgEl("rect", { x: bx.toFixed(1), y: by.toFixed(1), width: bw.toFixed(1), height: bh.toFixed(1), rx: 4, class: rnd() > 0.5 ? "b1" : "b2" }, gB);
+          }
+        });
+      });
+      // a row of trees on each canal bank
+      for (var x = 6; x < 400; x += 22) {
+        var yy = 300 + Math.sin(x / 60) * 4;
+        tree(x + rnd() * 6, yy - 18, 4 + rnd() * 2);
+        tree(x + 10 + rnd() * 6, yy + 18, 4 + rnd() * 2);
+      }
+    })();
+
+    /* ================= Bottom sheet: snap points, drag, spring ================= */
+    var snaps = { full: 0, half: 0, peek: 0 }, ORDER = ["peek", "half", "full"];
+    var snapName = "peek", y = 0, vy = 0, target = 0, settled = true, drag = null;
+
+    function measure() {
+      var visibleMax = phone.clientHeight - SHEET_TOP;
+      var peekVis = head.offsetTop + head.offsetHeight + 4;
+      var halfVis = Math.min(visibleMax - 56, Math.max(peekVis + 170, Math.round(phone.clientHeight * 0.6)));
+      snaps.full = 0;
+      snaps.half = visibleMax - halfVis;
+      snaps.peek = visibleMax - peekVis;
+    }
+    // iOS-like resistance past the ends
+    function rubber(d) { var dim = 140; return (1 - 1 / ((d * 0.55) / dim + 1)) * dim; }
+
+    function paint() {
+      sheet.style.transform = "translate3d(0," + y.toFixed(2) + "px,0)";
+      var r = clamp((snaps.peek - y) / (snaps.peek || 1), 0, 1);   // 0 at peek, 1 at full
+      var f = clamp((snaps.half - y) / (snaps.half || 1), 0, 1);   // 0 at half or lower, 1 at full
+      // the map drifts up at a slower speed than the sheet, then recedes and blurs at full height
+      mapwrap.style.transform = "translate3d(0," + (-r * 34).toFixed(1) + "px,0) scale(" + (1 - f * 0.06).toFixed(4) + ")";
+      mapwrap.style.filter = f > 0.01 ? "blur(" + (f * 2.4).toFixed(2) + "px) saturate(" + (1 - f * 0.35).toFixed(3) + ")" : "none";
+      mapwrap.style.borderRadius = (f * 30).toFixed(1) + "px";
+      scrim.style.opacity = (f * 0.4).toFixed(3);
+      toppill.style.opacity = (1 - f * 1.3).toFixed(3);
+      toppill.style.transform = "translateY(" + (-f * 18).toFixed(1) + "px) scale(" + (1 - f * 0.06).toFixed(3) + ")";
+      handle.style.setProperty("--chev", f.toFixed(3));
+      statusBar.style.setProperty("--sf", (1 - f).toFixed(3));
+    }
+
+    // spring toward the target snap (semi-implicit Euler, small steps)
+    var K = 430, C = 2 * 0.68 * Math.sqrt(430);
+    function stepSpring(dt) {
+      if (drag || settled) return;
+      var n = Math.max(1, Math.ceil(dt / 0.008)), s = dt / n;
+      for (var i = 0; i < n; i++) { var a = -K * (y - target) - C * vy; vy += a * s; y += vy * s; }
+      if (Math.abs(vy) < 6 && Math.abs(y - target) < 0.4) { y = target; vy = 0; settled = true; }
+      paint();
+    }
+
+    var LABELS = { peek: "Order sheet at peek. Press to open more.", half: "Order sheet at half height. Press to open fully.", full: "Order sheet fully open. Press to close to peek." };
+    function goTo(name, v0, quiet) {
+      var changed = name !== snapName;
+      snapName = name;
+      target = snaps[name];
+      vy = clamp(v0 || 0, -4000, 4000);
+      settled = false;
+      if (reduce.matches) { y = target; vy = 0; settled = true; paint(); }
+      sheet.classList.toggle("is-full", name === "full");
+      if (name !== "full") body.scrollTop = 0;
+      handle.setAttribute("aria-label", LABELS[name]);
+      if (changed) {
+        buzz(8);
+        retrigger(handle, "pop");
+        if (!quiet) say(name === "full" ? "Order sheet fully open" : name === "half" ? "Order sheet at half height" : "Order sheet at peek");
+      }
+    }
+    function shift(up) {
+      var i = clamp(ORDER.indexOf(snapName) + (up ? 1 : -1), 0, 2);
+      goTo(ORDER[i]);
+    }
+
+    function dragBegin(clientY, source, t0) {
+      drag = { start: clientY, from: y, lastY: clientY, lastT: t0 || performance.now(), v: 0, source: source, pid: null };
+      settled = true;
+      vy = 0;
+      sheet.classList.add("dragging");
+    }
+    function dragMove(clientY) {
+      if (!drag) return;
+      var now = performance.now(), dt = Math.max(8, now - drag.lastT);
+      drag.v = drag.v * 0.5 + ((clientY - drag.lastY) / dt) * 0.5;   // smoothed px per ms, + is down
+      drag.lastY = clientY;
+      drag.lastT = now;
+      var raw = drag.from + (clientY - drag.start);
+      if (raw < snaps.full) raw = snaps.full - rubber(snaps.full - raw);
+      else if (raw > snaps.peek) raw = snaps.peek + rubber(raw - snaps.peek);
+      y = raw;
+      paint();
+    }
+    function pickSnap(v) {
+      if (Math.abs(v) > 0.45) {                       // a flick moves at least one snap that way
+        var i;
+        if (v < 0) { for (i = 0; i < 3; i++) if (snaps[ORDER[i]] < y - 4) return ORDER[i]; return "full"; }
+        for (i = 2; i >= 0; i--) if (snaps[ORDER[i]] > y + 4) return ORDER[i];
+        return "peek";
+      }
+      var proj = y + v * 160, best = "peek", bd = Infinity;
+      ORDER.forEach(function (n) { var d = Math.abs(snaps[n] - proj); if (d < bd) { bd = d; best = n; } });
+      return best;
+    }
+    function dragEnd() {
+      if (!drag) return;
+      var v = performance.now() - drag.lastT > 90 ? 0 : drag.v;   // finger rested before lifting: no fling
+      var quiet = drag.source === "demo";
+      drag = null;
+      sheet.classList.remove("dragging");
+      goTo(pickSnap(v), v * 1000, quiet);           // springs back even when the snap is unchanged
+    }
+
+    // ---- pointer input (mouse, pen and touch outside the scrolling receipt) ----
+    var pend = null, suppressClick = false;
+    sheet.addEventListener("pointerdown", function (e) {
+      if (drag || (e.pointerType === "mouse" && e.button !== 0)) return;
+      var inBody = body.contains(e.target), full = snapName === "full";
+      if (inBody && full && e.pointerType !== "mouse") return;   // touch scrolls the receipt; touch handlers below take over at the top
+      pend = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), bodyFull: inBody && full };
+    });
+    sheet.addEventListener("pointermove", function (e) {
+      if (drag && drag.source === "pointer") { if (e.pointerId === drag.pid) dragMove(e.clientY); return; }
+      if (!pend || e.pointerId !== pend.id) return;
+      var dy = e.clientY - pend.y, dx = e.clientX - pend.x;
+      if (Math.abs(dy) < 6) { if (Math.abs(dx) > 14) pend = null; return; }
+      if (pend.bodyFull && (dy < 0 || body.scrollTop > 0)) { pend = null; return; }
+      try { sheet.setPointerCapture(e.pointerId); } catch (err) {}
+      dragBegin(pend.y, "pointer", pend.t);
+      drag.pid = e.pointerId;
+      pend = null;
+      dragMove(e.clientY);
+    });
+    function pointerUp(e) {
+      if (pend && pend.id === e.pointerId) pend = null;
+      if (drag && drag.source === "pointer" && e.pointerId === drag.pid) {
+        dragEnd();
+        suppressClick = true;                         // a drag that ends on a button is not a click
+        setTimeout(function () { suppressClick = false; }, 0);
+      }
+    }
+    sheet.addEventListener("pointerup", pointerUp);
+    sheet.addEventListener("pointercancel", pointerUp);
+    sheet.addEventListener("click", function (e) {
+      if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; }
+    }, true);
+
+    // ---- touch on the receipt at full height: pulling down at the top moves the sheet ----
+    var tpend = null;
+    body.addEventListener("touchstart", function (e) {
+      if (snapName !== "full" || drag || !e.touches[0]) return;
+      tpend = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: performance.now(), top: body.scrollTop <= 0 };
+    }, { passive: true });
+    body.addEventListener("touchmove", function (e) {
+      var t = e.touches[0];
+      if (!t) return;
+      if (drag && drag.source === "touch") { if (e.cancelable) e.preventDefault(); dragMove(t.clientY); return; }
+      if (!tpend) return;
+      var dy = t.clientY - tpend.y;
+      if (tpend.top && body.scrollTop <= 0 && dy > 6 && dy > Math.abs(t.clientX - tpend.x)) {
+        if (e.cancelable) e.preventDefault();
+        dragBegin(tpend.y, "touch", tpend.t);
+        tpend = null;
+        dragMove(t.clientY);
+      } else if (Math.abs(dy) > 6) tpend = null;
+    }, { passive: false });
+    function touchEnd() { tpend = null; if (drag && drag.source === "touch") dragEnd(); }
+    body.addEventListener("touchend", touchEnd);
+    body.addEventListener("touchcancel", touchEnd);
+
+    // ---- mouse wheel / trackpad: scroll down raises the sheet, scroll up lowers it ----
+    var wheelLock = 0;
+    sheet.addEventListener("wheel", function (e) {
+      if (snapName === "full" && body.contains(e.target) && !(e.deltaY < 0 && body.scrollTop <= 0)) return;
+      e.preventDefault();
+      var now = performance.now();
+      if (now < wheelLock || Math.abs(e.deltaY) < 4 || drag) return;
+      wheelLock = now + 480;
+      shift(e.deltaY > 0);
+    }, { passive: false });
+
+    // ---- keyboard ----
+    handle.addEventListener("click", function () { goTo(ORDER[(ORDER.indexOf(snapName) + 1) % 3]); });
+    handle.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowUp") { e.preventDefault(); shift(true); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); shift(false); }
+      else if (e.key === "Home") { e.preventDefault(); goTo("full"); }
+      else if (e.key === "End") { e.preventDefault(); goTo("peek"); }
+    });
+    phone.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && snapName !== "peek") { goTo("peek"); handle.focus(); }
+    });
+    // tabbing into a hidden part of the sheet opens it far enough to show it
+    sheet.addEventListener("focusin", function (e) {
+      if (!body.contains(e.target)) return;
+      var top = e.target.getBoundingClientRect().top - sheet.getBoundingClientRect().top;
+      var vis = function (n) { return phone.clientHeight - SHEET_TOP - snaps[n]; };
+      if (top + 48 > vis(snapName)) goTo(top + 48 <= vis("half") ? "half" : "full");
+    });
+
+    /* ================= The ride ================= */
+    var routeBase = $("route-base"), routeDone = $("route-done"), routeGlow = $("route-glow");
+    var rider = $("rider"), wedge = $("wedge"), bike = $("bike"), riderIn = $("rider-in");
+    var etaEl = $("eta"), distEl = $("dist"), barFill = $("barfill"), arriveSub = $("arrive-sub"), stepPick = $("step-pick");
+    var LEN = routeBase.getTotalLength();
+    routeDone.style.strokeDasharray = routeGlow.style.strokeDasharray = LEN + " " + LEN;
+    var trip = { p: 0, start: performance.now(), done: false, heading: 90, lastMin: -1, lastKm: "", faceLeft: false, x: 40 };
+
+    function placeRider(dt) {
+      var L = trip.p * LEN;
+      var pt = routeBase.getPointAtLength(L), ahead = routeBase.getPointAtLength(Math.min(LEN, L + 4));
+      var dx = ahead.x - pt.x, dy = ahead.y - pt.y;
+      if (Math.abs(dx) + Math.abs(dy) > 0.5) {
+        var ang = (Math.atan2(dx, -dy) * 180) / Math.PI;
+        var d = ((ang - trip.heading + 540) % 360) - 180;
+        trip.heading += d * Math.min(1, dt * 9);          // turn smoothly at corners
+        if (Math.abs(dx) > 0.5) trip.faceLeft = dx < 0;
+      }
+      trip.x = pt.x;
+      rider.setAttribute("transform", "translate(" + pt.x.toFixed(2) + " " + pt.y.toFixed(2) + ")");
+      wedge.setAttribute("transform", "rotate(" + trip.heading.toFixed(1) + ")");
+      bike.setAttribute("transform", trip.faceLeft ? "scale(-1 1)" : "");
+      routeDone.style.strokeDashoffset = routeGlow.style.strokeDashoffset = (LEN - L).toFixed(1);
+    }
+    function updateEta() {
+      var m = Math.max(1, Math.ceil(12 * (1 - trip.p) - 0.001));
+      var km = (2.1 * (1 - trip.p)).toFixed(1);
+      if (m !== trip.lastMin) {
+        trip.lastMin = m;
+        etaEl.textContent = m;
+        if (!reduce.matches) retrigger(etaEl, "roll");
+      }
+      if (km !== trip.lastKm) {
+        trip.lastKm = km;
+        distEl.textContent = km + " km away · arriving 9:53";
+        arriveSub.textContent = "About " + m + " min · " + km + " km to go";
+      }
+      barFill.style.transform = "scaleX(" + trip.p.toFixed(4) + ")";
+      stepPick.style.setProperty("--fill", trip.p.toFixed(4));
+    }
+
+    function deliver() {
+      trip.done = true;
+      sheet.classList.add("delivered");
+      buzz([14, 60, 22]);
+      say("Delivered. Kashif left your order at gate 14. You can rate the ride.");
+      retrigger($("home-pin"), "hop");
+      retrigger(riderIn, "hop");
+      setTimeout(confetti, 420);
+      clearTimeout(demo.resetTimer);
+      if (demo.on) demo.resetTimer = setTimeout(function () { if (demo.on) resetTrip(); }, 7000);
+    }
+    function resetTrip() {
+      trip.done = false; trip.p = 0; trip.start = performance.now(); trip.lastMin = -1; trip.lastKm = ""; trip.heading = 90;
+      sheet.classList.remove("delivered");
+      $("home-pin").classList.remove("hop");
+      riderIn.classList.remove("hop");
+      setRating(0, true);
+      clearTimeout(demo.resetTimer);
+      goTo("peek", 0, true);
+      say("Tracking a new order from Degh and Tandoor. About 12 minutes.");
+    }
+    $("again").addEventListener("click", resetTrip);
+
+    // confetti bursting out of the check mark
+    function confetti() {
+      if (reduce.matches) return;
+      var fx = $("fx"), pr = fx.getBoundingClientRect(), ok = sheet.querySelector(".okmark").getBoundingClientRect();
+      var ox = ok.left + ok.width / 2 - pr.left, oy = ok.top + ok.height / 2 - pr.top;
+      var colors = ["#e8553e", "#2f9a3e", "#f2b01e", "#4fb3ff", "#ff9fb2", "#59f27a"];
+      for (var i = 0; i < 38; i++) {
+        var s = document.createElement("i");
+        s.className = "bit";
+        s.style.background = colors[i % colors.length];
+        s.style.left = ox + "px";
+        s.style.top = oy + "px";
+        if (i % 3 === 0) { s.style.borderRadius = "50%"; s.style.height = "8px"; s.style.width = "8px"; }
+        fx.appendChild(s);
+        var ang = -Math.PI / 2 + (Math.random() - 0.35) * 2.1, sp = 110 + Math.random() * 170;
+        var dx = Math.cos(ang) * sp, dy = Math.sin(ang) * sp, rot = (Math.random() - 0.5) * 900;
+        var a = s.animate([
+          { transform: "translate(0,0) rotate(0deg) scale(0.5)", opacity: 1 },
+          { transform: "translate(" + (dx * 0.85).toFixed(1) + "px," + dy.toFixed(1) + "px) rotate(" + (rot * 0.5).toFixed(0) + "deg) scale(1)", opacity: 1, offset: 0.42 },
+          { transform: "translate(" + dx.toFixed(1) + "px," + (dy + 300).toFixed(1) + "px) rotate(" + rot.toFixed(0) + "deg) scale(0.8)", opacity: 0 }
+        ], { duration: 1300 + Math.random() * 600, easing: "cubic-bezier(.2,.65,.4,1)", fill: "forwards" });
+        a.onfinish = (function (n) { return function () { n.remove(); }; })(s);
+      }
+    }
+
+    // ---- rating stars ----
+    var starsBox = $("stars"), rating = 0;
+    var STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg>';
+    for (var si = 1; si <= 5; si++) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "star";
+      b.innerHTML = STAR;
+      b.dataset.n = si;
+      b.setAttribute("aria-label", si + (si === 1 ? " star" : " stars"));
+      b.setAttribute("aria-pressed", "false");
+      starsBox.appendChild(b);
+    }
+    var starBtns = starsBox.querySelectorAll(".star");
+    function setRating(n, quiet) {
+      rating = n;
+      starBtns.forEach(function (s, i) {
+        var on = i < n;
+        s.classList.remove("on");
+        s.setAttribute("aria-pressed", String(i === n - 1));
+        if (on) { void s.offsetWidth; s.style.setProperty("--d", i * 0.06 + "s"); s.classList.add("on"); }
+      });
+      if (!quiet && n) { buzz(n === 5 ? [10, 40, 10] : 8); say("Thanks. You gave Kashif " + n + (n === 1 ? " star" : " stars") + "."); }
+    }
+    starsBox.addEventListener("click", function (e) {
+      var s = e.target.closest(".star");
+      if (s) setRating(+s.dataset.n);
+    });
+
+    // ---- call and message (simulated) ----
+    var callBtn = $("call"), callTimers = [], callTick = 0;
+    function callLabel(t) { callBtn.querySelector("span").textContent = t; }
+    function endCall(silent) {
+      callTimers.forEach(clearTimeout); callTimers = [];
+      clearInterval(callTick);
+      callBtn.classList.remove("ring", "live");
+      callLabel("Call");
+      if (!silent) say("Call ended");
+    }
+    callBtn.addEventListener("click", function () {
+      if (callBtn.classList.contains("ring") || callBtn.classList.contains("live")) { endCall(); return; }
+      callBtn.classList.add("ring");
+      callLabel("Calling…");
+      say("Calling Kashif");
+      buzz(10);
+      callTimers.push(setTimeout(function () {
+        var s = 0;
+        callBtn.classList.remove("ring");
+        callBtn.classList.add("live");
+        callLabel("0:00 · End");
+        say("Connected with Kashif");
+        bubble("Hello! Almost there.", false);
+        callTick = setInterval(function () {
+          s++;
+          callLabel("0:0" + s + " · End");
+          if (s >= 5) endCall();
+        }, 1000);
+      }, 1600));
+    });
+
+    var bubbles = $("bubbles"), msgBusy = false;
+    function bubble(text, mine, typing, keep) {
+      // older bubbles float up to make room (a reply replacing the typing dots keeps its spot)
+      if (!keep) Array.prototype.forEach.call(bubbles.children, function (g) {
+        var up = (+g.dataset.up || 0) + 26;
+        g.dataset.up = up;
+        g.style.transform = "translate(0px," + -up + "px)";
+      });
+      var w = typing ? 40 : Math.round(text.length * 5.4 + 22);
+      // keep the bubble on the map even when the rider is near an edge
+      var ox = Math.round(clamp(trip.x, w / 2 + 8, 382 - w / 2) - trip.x);
+      var g = svgEl("g", { class: "bub" + (mine ? " mine" : "") }, bubbles);
+      svgEl("rect", { x: ox - w / 2, y: -46, width: w, height: 21, rx: 10.5 }, g);
+      if (typing) {
+        svgEl("circle", { cx: ox - 8, cy: -35.5, r: 2.3, class: "tdot" }, g);
+        svgEl("circle", { cx: ox, cy: -35.5, r: 2.3, class: "tdot" }, g);
+        svgEl("circle", { cx: ox + 8, cy: -35.5, r: 2.3, class: "tdot" }, g);
+      } else {
+        var t = svgEl("text", { x: ox, y: -32.3, "text-anchor": "middle" }, g);
+        t.textContent = text;
+      }
+      if (!typing) setTimeout(function () { g.classList.add("out"); setTimeout(function () { g.remove(); }, 400); }, 4200);
+      return g;
+    }
+    $("msg").addEventListener("click", function () {
+      if (msgBusy) return;
+      msgBusy = true;
+      var btn = this;
+      bubble("Gate 14, please", true);
+      btn.querySelector("span").textContent = "Sent";
+      say("Message sent to Kashif: Gate 14, please");
+      buzz(8);
+      setTimeout(function () {
+        var dots = bubble("", false, true);
+        setTimeout(function () {
+          dots.remove();
+          var reply = trip.done ? "Enjoy your meal!" : "Got it, see you soon";
+          bubble(reply, false, false, true);
+          say("Kashif replied: " + reply);
+          btn.querySelector("span").textContent = "Message";
+          msgBusy = false;
+        }, 1300);
+      }, 700);
+    });
+
+    // ---- tip chips: real totals with a number roll ----
+    var tip = 0, chips = document.querySelectorAll(".chip");
+    function rollTo(el, from, to) {
+      retrigger(el, "bump");
+      if (reduce.matches) { el.textContent = fmt(to); return; }
+      var tok = (el._tok = (el._tok || 0) + 1), t0 = performance.now();
+      (function loop(now) {
+        if (tok !== el._tok) return;
+        var k = Math.min(1, (now - t0) / 600), e = 1 - Math.pow(1 - k, 3);
+        el.textContent = fmt(from + (to - from) * e);
+        if (k < 1) requestAnimationFrame(loop);
+      })(t0);
+    }
+    chips.forEach(function (c) {
+      c.addEventListener("click", function () {
+        var v = +c.dataset.tip, old = tip;
+        tip = tip === v ? 0 : v;
+        chips.forEach(function (o) { o.setAttribute("aria-pressed", String(+o.dataset.tip === tip)); });
+        var a = ITEMS + FEE + old, z = ITEMS + FEE + tip;
+        rollTo($("total1"), a, z);
+        rollTo($("total2"), a, z);
+        rollTo($("tipline"), old, tip);
+        $("meta-total").textContent = z.toLocaleString("en-US");
+        buzz(6);
+        say(tip ? "Added a PKR " + tip + " tip. New total " + fmt(z) + "." : "Tip removed. Total " + fmt(z) + ".");
+      });
+    });
+
+    /* ================= Auto demo: a ghost finger drives the real drag code ================= */
+    var demo = { on: !reduce.matches, resetTimer: 0 };
+    function stopDemo() {
+      if (!demo.on) return;
+      demo.on = false;
+      ghost.classList.remove("show", "press");
+      if (drag && drag.source === "demo") dragEnd();
+      clearTimeout(demo.resetTimer);
+    }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) {
+      window.addEventListener(t, function (e) { if (e.isTrusted) { acted = true; stopDemo(); } }, { capture: true, passive: true });
+    });
+    function wait(ms) { return new Promise(function (res, rej) { setTimeout(function () { if (demo.on) res(); else rej("stop"); }, ms); }); }
+    function tween(ms, fn) {
+      return new Promise(function (res, rej) {
+        var t0 = performance.now();
+        (function loop(now) {
+          if (!demo.on) return rej("stop");
+          var k = Math.min(1, (now - t0) / ms);
+          fn(k);
+          if (k < 1) requestAnimationFrame(loop); else res();
+        })(t0);
+      });
+    }
+    function ease(k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }
+    function gpos(x, gy) { ghost.style.transform = "translate(" + x.toFixed(1) + "px," + gy.toFixed(1) + "px)"; }
+    function gripY() { return SHEET_TOP + y + 15; }   // where the handle is, in screen px inside the phone
+
+    async function runDemo() {
+      try {
+        await wait(480);
+        while (demo.on) {
+          var x = phone.clientWidth * 0.5, g0, dist;
+          // 1) slow drag from peek up to half
+          if (snapName !== "peek") { goTo("peek", 0, true); await wait(700); }
+          g0 = gripY();
+          gpos(x, g0 + 34);
+          ghost.classList.add("show");
+          await tween(190, function (k) { gpos(x, g0 + 34 * (1 - ease(k))); });
+          ghost.classList.add("press");
+          await wait(110);
+          dragBegin(g0, "demo");
+          dist = y - snaps.half;
+          await tween(720, function (k) { var g = g0 - dist * ease(k); gpos(x, g); dragMove(g); });
+          await wait(60);
+          dragEnd();
+          ghost.classList.remove("press");
+          await wait(640);
+          // 2) quick flick up to full
+          g0 = gripY();
+          await tween(160, function (k) { gpos(x, g0 + 6 * (1 - k)); });
+          ghost.classList.add("press");
+          await wait(90);
+          dragBegin(g0, "demo");
+          await tween(120, function (k) { var g = g0 - 84 * k; gpos(x, g); dragMove(g); });
+          dragEnd();
+          ghost.classList.remove("press");
+          await tween(300, function (k) { gpos(x, g0 - 84 - 30 * k); });
+          ghost.classList.remove("show");
+          await wait(1500);
+          // 3) drag back down to peek
+          g0 = gripY();
+          gpos(x, g0 - 20);
+          ghost.classList.add("show");
+          await tween(200, function (k) { gpos(x, g0 - 20 * (1 - k)); });
+          ghost.classList.add("press");
+          await wait(110);
+          dragBegin(g0, "demo");
+          dist = snaps.peek - y;
+          await tween(900, function (k) { var g = g0 + dist * ease(k); gpos(x, g); dragMove(g); });
+          await wait(70);
+          dragEnd();
+          ghost.classList.remove("press");
+          await wait(300);
+          ghost.classList.remove("show");
+          await wait(4200);
+        }
+      } catch (err) { /* stopped by real input */ }
+    }
+
+    /* ================= Main loop ================= */
+    var last = performance.now();
+    function frame(now) {
+      var dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      last = now;
+      stepSpring(dt);
+      if (!trip.done) {
+        trip.p = clamp((now - trip.start) / TRIP, 0, 1);
+        placeRider(dt);
+        updateEta();
+        if (trip.p >= 1) deliver();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function relayout() {
+      measure();
+      if (!drag) { y = target = snaps[snapName]; vy = 0; settled = true; }
+      paint();
+    }
+    window.addEventListener("resize", relayout);
+    relayout();
+    requestAnimationFrame(function () { relayout(); });
+    trip.start = performance.now();
+    requestAnimationFrame(frame);
+    if (demo.on) runDemo();
+  })();
+</script>
+</body>
+</html>

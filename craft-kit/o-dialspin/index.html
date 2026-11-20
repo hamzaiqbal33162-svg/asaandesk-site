@@ -1,0 +1,566 @@
+<!doctype html>
+<!-- Chill & Craft · Dialspin · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dialspin · rotary dial PIN entry</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: retro mint, cherry red and cream ---------- */
+  :root {
+    color-scheme: light;
+    --stage: #fbf0d9;
+    --stripe: rgba(214, 160, 90, .1);
+    --ink: #2c2a24;
+    --muted: #84786a;
+    --mint: #9fdcc6;
+    --mint-2: #7cc9ae;
+    --mint-dk: #4f9e83;
+    --cherry: #e23d4b;
+    --cherry-dk: #a91f2c;
+    --cream: #fff5e3;
+    --plate: #f6e8cc;
+    --ok: #2bb673;
+    --shadow: rgba(80, 60, 30, .35);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --stage: #0e1918;
+    --stripe: rgba(159, 220, 198, .05);
+    --ink: #eef3ea;
+    --muted: #9db3ab;
+    --shadow: rgba(0, 0, 0, .75);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 18px 16px;
+    overflow-x: hidden;
+    color: var(--ink);
+    background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, .35), transparent 60%), repeating-linear-gradient(90deg, transparent 0 22px, var(--stripe) 22px 44px), var(--stage);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  [data-theme="dark"] body { background: radial-gradient(circle at 50% 35%, rgba(159, 220, 198, .12), transparent 60%), repeating-linear-gradient(90deg, transparent 0 22px, var(--stripe) 22px 44px), var(--stage); }
+  button { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  .scene { width: min(100%, 330px); display: flex; flex-direction: column; align-items: center; }
+
+  /* ---------- Handset resting on the cradle ---------- */
+  .handset { position: relative; z-index: 2; width: 88%; height: 46px; margin-bottom: -18px; transition: transform .6s cubic-bezier(.3, 1.6, .5, 1); }
+  .handset svg { width: 100%; height: 100%; overflow: visible; }
+  .scene.won .handset { transform: translateY(-24px) rotate(-7deg); }
+  .rings { position: absolute; inset: -14px -10px; opacity: 0; pointer-events: none; }
+  .scene.ringing .rings { animation: ringlines .35s ease-in-out 5 alternate; }
+  @keyframes ringlines { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1.04); } }
+
+  /* ---------- Telephone body ---------- */
+  .body {
+    position: relative; width: 100%; padding: 30px 18px 20px; border-radius: 34px 34px 40px 40px;
+    background: radial-gradient(circle at 30% 15%, rgba(255, 255, 255, .45), transparent 45%), linear-gradient(170deg, var(--mint), var(--mint-2));
+    box-shadow: inset 0 -6px 0 rgba(0, 0, 0, .08), inset 0 2px 0 rgba(255, 255, 255, .5), 0 30px 46px -26px var(--shadow);
+  }
+  .scene.ringing .body { animation: buzz .07s linear 14 alternate; }
+  @keyframes buzz { from { transform: translateX(-1.5px) rotate(-.5deg); } to { transform: translateX(1.5px) rotate(.5deg); } }
+  .scene.wrong .body { animation: wobble .5s ease; }
+  @keyframes wobble { 25% { transform: rotate(-2deg); } 75% { transform: rotate(2deg); } }
+
+  /* Display window with four PIN tiles (real inputs) */
+  .display { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 auto 16px; padding: 9px 12px; width: max-content; max-width: 100%; border-radius: 16px; background: #2c2a24; box-shadow: inset 0 3px 8px rgba(0, 0, 0, .6), 0 2px 0 rgba(255, 255, 255, .4); }
+  .display .lamp { width: 10px; height: 10px; border-radius: 50%; background: #5a4a3a; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5); transition: background .3s, box-shadow .3s; }
+  .scene.won .display .lamp { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+  .scene.wrong .display .lamp { background: var(--cherry); box-shadow: 0 0 10px var(--cherry); }
+  .tiles { display: flex; gap: 7px; }
+  .tile { position: relative; }
+  .tile input {
+    width: 42px; height: 50px; padding: 0; border: 0; border-radius: 8px; outline: none; text-align: center;
+    background: linear-gradient(180deg, #fff9ec, var(--cream) 50%, #efe1c2); color: #2c2a24; caret-color: var(--cherry);
+    font: 800 26px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, .35); transition: box-shadow .2s, background .3s, color .3s;
+  }
+  .tile input:focus, .tile.cur input { box-shadow: inset 0 2px 4px rgba(0, 0, 0, .35), 0 0 0 3px var(--cherry); }
+  .tile.tick input { animation: tick .12s ease; }
+  @keyframes tick { 50% { transform: translateY(-3px); } }
+  .tile.set input { animation: settle .45s cubic-bezier(.34, 1.8, .5, 1); }
+  @keyframes settle { 40% { transform: scale(1.14); } }
+  .scene.won .tile input { background: linear-gradient(180deg, #d9ffe9, #a8f0c8); animation: lampOn .5s ease both; animation-delay: calc(var(--i) * 120ms); }
+  @keyframes lampOn { from { background: var(--cream); } 50% { box-shadow: inset 0 2px 4px rgba(0, 0, 0, .2), 0 0 18px rgba(43, 182, 115, .8); } }
+  .scene.wrong .tile input { background: linear-gradient(180deg, #ffd9dc, #ffb1b8); }
+
+  /* ---------- The rotary dial ---------- */
+  .dial { position: relative; width: min(270px, 100%); aspect-ratio: 1; margin: 0 auto; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .dial > * { position: absolute; inset: 0; }
+  .plate, .wheel svg, .stop { width: 100%; height: 100%; }
+  .wheel { will-change: transform; }
+  .wheel.settle { animation: settleBack .35s cubic-bezier(.34, 1.8, .5, 1); }
+  @keyframes settleBack { 0% { transform: rotate(-5deg); } 100% { transform: rotate(0); } }
+  .wheel.party { animation: party 1.2s cubic-bezier(.3, 1.3, .5, 1); }
+  @keyframes party { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  .stop { pointer-events: none; }
+  .stop.hit { animation: stopHit .2s ease; }
+  @keyframes stopHit { 50% { transform: translate(1px, 1.5px); } }
+
+  /* Finger holes are real buttons that ride on the wheel */
+  .hole {
+    position: absolute; width: 12.9%; height: 12.9%; padding: 0; border: 0; border-radius: 50%; cursor: grab; background: transparent;
+    transform: translate(-50%, -50%); touch-action: none;
+  }
+  .hole:active { cursor: grabbing; }
+  .hole::after { content: ""; position: absolute; inset: 8%; border-radius: 50%; background: radial-gradient(circle at 40% 35%, rgba(255, 255, 255, .85), rgba(255, 240, 220, .55) 60%, rgba(226, 61, 75, .25)); box-shadow: 0 0 0 2px rgba(255, 255, 255, .7); opacity: 0; transform: scale(.6); transition: opacity .2s, transform .25s cubic-bezier(.34, 1.7, .5, 1); }
+  .hole.active::after { opacity: 1; transform: none; }
+  .hole:focus-visible { outline: 3px solid #2c2a24; outline-offset: 1px; }
+  .hole:hover::after { opacity: .5; transform: scale(.85); }
+
+  /* Centre card with the PIN printed on it, flips to a check on success */
+  .center { inset: 31% !important; perspective: 500px; pointer-events: none; }
+  .card { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .8s cubic-bezier(.3, 1.4, .5, 1); }
+  .scene.won .card { transform: rotateY(180deg); }
+  .side { position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center; align-content: center; gap: 2px; text-align: center; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    background: radial-gradient(circle at 40% 30%, #fffdf6, var(--cream) 60%, #ead8b4); box-shadow: inset 0 0 0 3px #d9c49b, 0 4px 10px rgba(0, 0, 0, .3); }
+  .side small { font-size: 9px; font-weight: 800; letter-spacing: .22em; color: var(--cherry-dk); }
+  .side b { font: 800 20px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .12em; color: #2c2a24; }
+  .side i { font-style: normal; font-size: 9px; color: #84786a; }
+  .side.back { transform: rotateY(180deg); background: radial-gradient(circle at 40% 30%, #e9fff2, #b9f1d2 60%, #8fdcb3); box-shadow: inset 0 0 0 3px var(--ok), 0 4px 10px rgba(0, 0, 0, .3); }
+  .side.back small { color: #1b7a4b; }
+
+  /* ---------- Text below ---------- */
+  .status { min-height: 22px; margin: 16px 0 4px; font-size: 14.5px; font-weight: 700; text-align: center; }
+  .status[data-tone="good"] { color: #1b8a55; }
+  .status[data-tone="bad"] { color: var(--cherry-dk); }
+  [data-theme="dark"] .status[data-tone="good"] { color: #6fe0a5; }
+  [data-theme="dark"] .status[data-tone="bad"] { color: #ff8a94; }
+  .status.pop { animation: statusIn .45s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes statusIn { from { opacity: 0; transform: translateY(6px); } }
+  .hint { margin: 2px 0 10px; font-size: 12.5px; color: var(--muted); text-align: center; }
+  .btn { padding: 10px 18px; border: 0; border-radius: 999px; cursor: pointer; font-size: 13.5px; font-weight: 800; color: #fff; background: linear-gradient(180deg, #ef5a66, var(--cherry-dk)); box-shadow: 0 3px 0 #7c1520, 0 10px 16px -8px var(--shadow); transition: transform .12s, box-shadow .12s; }
+  .btn:active { transform: translateY(3px); box-shadow: 0 0 0 #7c1520; }
+  .btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+  .fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+  .fx span { position: absolute; left: 0; top: 0; display: block; font-weight: 900; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="scene" id="scene">
+    <div class="handset" aria-hidden="true">
+      <svg viewBox="0 0 290 46">
+        <defs><linearGradient id="hs" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b6ead8"/><stop offset="1" stop-color="#5fb898"/></linearGradient></defs>
+        <path d="M20 30c0-16 10-26 34-26h182c24 0 34 10 34 26 0 9-6 14-16 14h-30c-8 0-12-5-12-12v-4H78v4c0 7-4 12-12 12H36c-10 0-16-5-16-14z" fill="url(#hs)" stroke="#4f9e83" stroke-width="2"/>
+        <ellipse cx="51" cy="32" rx="18" ry="6" fill="#4f9e83" opacity=".45"/>
+        <ellipse cx="239" cy="32" rx="18" ry="6" fill="#4f9e83" opacity=".45"/>
+        <path d="M70 10h150" stroke="#fff" stroke-opacity=".6" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <svg class="rings" viewBox="0 0 310 74" fill="none" stroke="#e23d4b" stroke-width="3" stroke-linecap="round"><path d="M6 20c-4 10-4 24 0 34M16 26c-2 7-2 15 0 22M304 20c4 10 4 24 0 34M294 26c2 7 2 15 0 22"/></svg>
+    </div>
+
+    <div class="body" id="body">
+      <div class="display">
+        <span class="lamp" aria-hidden="true"></span>
+        <div class="tiles" id="tiles" role="group" aria-label="4-digit PIN" aria-describedby="hint">
+          <span class="tile" style="--i:0"><input inputmode="numeric" autocomplete="one-time-code" aria-label="PIN digit 1 of 4"></span>
+          <span class="tile" style="--i:1"><input inputmode="numeric" autocomplete="off" aria-label="PIN digit 2 of 4"></span>
+          <span class="tile" style="--i:2"><input inputmode="numeric" autocomplete="off" aria-label="PIN digit 3 of 4"></span>
+          <span class="tile" style="--i:3"><input inputmode="numeric" autocomplete="off" aria-label="PIN digit 4 of 4"></span>
+        </div>
+        <span class="lamp" aria-hidden="true"></span>
+      </div>
+
+      <div class="dial" id="dial">
+        <!-- Number plate under the wheel -->
+        <svg class="plate" id="plate" viewBox="-140 -140 280 280" aria-hidden="true"></svg>
+        <!-- Cherry finger wheel with holes; the hole buttons ride on it -->
+        <div class="wheel" id="wheel"><svg id="wheelSvg" viewBox="-140 -140 280 280" aria-hidden="true"></svg></div>
+        <!-- Chrome finger stop -->
+        <svg class="stop" id="stop" viewBox="-140 -140 280 280" aria-hidden="true">
+          <path d="M-92 -86a127 127 0 0 1 116 -40" stroke="#fff" stroke-opacity=".4" stroke-width="5" fill="none" stroke-linecap="round"/>
+          <g transform="rotate(60)"><path d="M104 -5h29a5 5 0 0 1 0 10h-29z" fill="#d7dde2" stroke="#7f8a92" stroke-width="1.5"/><path d="M106 -2h26" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g>
+        </svg>
+        <div class="center" aria-hidden="true">
+          <div class="card">
+            <div class="side"><small>YOUR PIN</small><b id="demo"></b><i>dial to connect</i></div>
+            <div class="side back"><small>CONNECTED</small><svg width="34" height="28" viewBox="0 0 34 28"><path d="M5 15l8 8L29 5" fill="none" stroke="#1b7a4b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+    <p class="hint" id="hint">Drag a hole to the metal stop and let go, tap a hole, or just type the PIN.</p>
+    <button type="button" class="btn" id="again" hidden>Hang up</button>
+  </main>
+  <div class="fx" id="fx" aria-hidden="true"></div>
+
+<script>
+(function () {
+  "use strict";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (id) => document.getElementById(id);
+  const scene = $("scene"), dial = $("dial"), wheel = $("wheel"), stopEl = $("stop"), statusEl = $("status"), againBtn = $("again");
+  const tileWraps = Array.from(document.querySelectorAll(".tile"));
+  const tiles = tileWraps.map((t) => t.querySelector("input"));
+  const LEN = 4;
+  const vals = Array(LEN).fill("");
+  let pin = "", state = "idle", dialBusy = false, rot = 0;
+
+  // ---- Cancellable waits ----
+  const CANCEL = { cancelled: true };
+  let gen = 0;
+  function pause(ms, g, isAnim) {
+    const t = isAnim && reduce ? Math.min(ms, 140) : ms;
+    return new Promise((ok, no) => setTimeout(() => (g === gen ? ok() : no(CANCEL)), t));
+  }
+  const quiet = (p) => p.catch((e) => { if (e !== CANCEL) throw e; });
+  function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+  function say(msg, tone) { statusEl.textContent = msg; statusEl.dataset.tone = tone || ""; restart(statusEl, "pop"); }
+
+  // ---- Dial geometry: finger stop at 60°, holes 30° apart, digit 1 nearest the stop ----
+  const STOP = 60, R = 100, HOLE = 18;
+  const LETTERS = ["", "", "ABC", "DEF", "GHI", "JKL", "MNO", "PRS", "TUV", "WXY", "OPER"];
+  const angleOf = (n) => STOP - 45 - 30 * (n - 1);            // n = 1..10 (10 is the 0)
+  const travel = (n) => 45 + 30 * (n - 1);                    // how far the wheel turns for n
+  const rad = (a) => (a * Math.PI) / 180;
+
+  // Number plate (fixed) and the wheel with its holes
+  (function build() {
+    let plate = '<circle r="136" fill="#efdcb6"/><circle r="128" fill="#f8ecd2"/><circle r="72" fill="#e6d1a8"/>';
+    let mask = '<mask id="holes"><circle r="132" fill="#fff"/>';
+    let rims = "";
+    for (let n = 1; n <= 10; n++) {
+      const a = rad(angleOf(n)), x = R * Math.cos(a), y = R * Math.sin(a);
+      plate += '<text x="' + x.toFixed(1) + '" y="' + (y + 2).toFixed(1) + '" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace" font-weight="800" font-size="19" fill="#2c2a24">' + (n % 10) + "</text>";
+      if (LETTERS[n]) plate += '<text x="' + x.toFixed(1) + '" y="' + (y + 12).toFixed(1) + '" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="700" font-size="6" letter-spacing="1" fill="#a3937a">' + LETTERS[n] + "</text>";
+      mask += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + HOLE + '" fill="#000"/>';
+      rims += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + HOLE + '" fill="none" stroke="#a91f2c" stroke-width="2.5"/>';
+    }
+    mask += "</mask>";
+    $("plate").innerHTML = plate;
+    $("wheelSvg").innerHTML =
+      '<defs><radialGradient id="cherry" cx="50%" cy="50%" r="50%"><stop offset=".55" stop-color="#e5404e"/><stop offset=".86" stop-color="#d23341"/><stop offset="1" stop-color="#9d1b28"/></radialGradient>' + mask + "</defs>" +
+      '<circle r="132" fill="url(#cherry)" mask="url(#holes)"/>' + rims +
+      '<circle r="132" fill="none" stroke="#7c1520" stroke-width="2"/>';
+    // Real buttons on top of the holes (they rotate with the wheel)
+    for (let n = 1; n <= 10; n++) {
+      const a = rad(angleOf(n));
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "hole";
+      b.dataset.n = String(n);
+      b.setAttribute("aria-label", "Dial " + (n % 10));
+      b.style.left = 50 + (R / 280) * 100 * Math.cos(a) + "%";
+      b.style.top = 50 + (R / 280) * 100 * Math.sin(a) + "%";
+      wheel.append(b);
+    }
+  })();
+  const holes = Array.from(wheel.querySelectorAll(".hole"));
+  const holeFor = (n) => holes[n - 1];
+
+  function setRot(r) { rot = r; wheel.style.transform = "rotate(" + r.toFixed(2) + "deg)"; }
+  function hitStop() { restart(stopEl, "hit"); }
+
+  // Animate the wheel between two angles
+  function turn(from, to, dur, ease, onStep, g) {
+    return new Promise((done) => {
+      if (reduce) { setRot(to); if (onStep) onStep(1); done(); return; }
+      const t0 = performance.now();
+      const step = (now) => {
+        if (g !== undefined && g !== gen) return done();
+        const k = Math.min(1, (now - t0) / dur);
+        const e = ease(k);
+        setRot(from + (to - from) * e);
+        if (onStep) onStep(k);
+        if (k < 1) requestAnimationFrame(step); else done();
+      };
+      requestAnimationFrame(step);
+    });
+  }
+  const easeInOut = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+  const returnEase = (k) => 1 - Math.pow(1 - k, 1.6);
+
+  // ---- PIN tiles ----
+  function setDigit(i, d) {
+    vals[i] = d;
+    tiles[i].value = d;
+    if (d) restart(tileWraps[i], "set");
+  }
+  const firstEmpty = () => vals.indexOf("");
+  function mark(i) { tileWraps.forEach((t, n) => t.classList.toggle("cur", n === i && demoOn)); }
+  function focusTile(i) {
+    i = Math.max(0, Math.min(LEN - 1, i));
+    mark(i);
+    if (!demoOn) { tiles[i].focus(); tiles[i].select(); }
+  }
+  function clearTiles() { for (let i = 0; i < LEN; i++) setDigit(i, ""); }
+
+  // The wheel springs back and counts pulses into the tile, like a real rotary phone
+  async function release(n, from, g) {
+    const slot = firstEmpty();
+    const digit = String(n % 10);
+    let shown = -1;
+    await turn(from, 0, 140 + from * 2.1, returnEase, (k) => {
+      if (slot < 0) return;
+      const pulses = Math.min(n, Math.ceil(n * k));
+      if (pulses !== shown && pulses > 0) {
+        shown = pulses;
+        tiles[slot].value = String(pulses % 10);
+        restart(tileWraps[slot], "tick");
+      }
+    }, g);
+    if (g !== gen) return;
+    restart(wheel, "settle");
+    if (slot >= 0 && state === "idle") {
+      setDigit(slot, digit);
+      mark(firstEmpty());
+    }
+  }
+  // Tap or keyboard: the wheel turns to the stop by itself, then returns
+  async function autoDial(n, g) {
+    if (dialBusy || state !== "idle" || firstEmpty() < 0) return;
+    dialBusy = true;
+    const hole = holeFor(n);
+    hole.classList.add("active");
+    try {
+      await turn(0, travel(n), 200 + travel(n) * 1.7, easeInOut, null, g);
+      if (g !== gen) return;
+      hitStop();
+      await pause(110, g, true);
+      hole.classList.remove("active");
+      await release(n, travel(n), g);
+    } finally {
+      hole.classList.remove("active");
+      if (g === gen) dialBusy = false;
+    }
+    if (g === gen) checkFull();
+  }
+
+  // Dragging a hole round to the stop
+  let drag = null;
+  function angleAt(e) {
+    const r = dial.getBoundingClientRect();
+    return (Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180) / Math.PI;
+  }
+  holes.forEach((hole) => {
+    const n = Number(hole.dataset.n);
+    hole.addEventListener("pointerdown", (e) => {
+      if (dialBusy || state !== "idle" || firstEmpty() < 0) return;
+      e.preventDefault();
+      hole.setPointerCapture(e.pointerId);
+      drag = { n, max: travel(n), acc: 0, last: angleAt(e), moved: false, atStop: false };
+      hole.classList.add("active");
+      dialBusy = true;
+    });
+    hole.addEventListener("pointermove", (e) => {
+      if (!drag || drag.n !== n) return;
+      const a = angleAt(e);
+      let d = a - drag.last;
+      if (d > 180) d -= 360;
+      if (d < -180) d += 360;
+      drag.last = a;
+      drag.acc = Math.max(0, Math.min(drag.max, drag.acc + d));
+      if (drag.acc > 4) drag.moved = true;
+      setRot(drag.acc);
+      const at = drag.acc >= drag.max - 0.5;
+      if (at && !drag.atStop) hitStop();
+      drag.atStop = at;
+    });
+    const end = () => {
+      if (!drag || drag.n !== n) return;
+      const d = drag;
+      drag = null;
+      hole.classList.remove("active");
+      const g = gen;
+      if (!d.moved) { dialBusy = false; quiet(autoDial(n, g)); return; }
+      const ok = d.acc >= d.max - 10;
+      if (!ok) say("Turn the hole all the way to the metal stop.", "");
+      const p = ok ? release(n, d.acc, g) : turn(d.acc, 0, 120 + d.acc * 2, returnEase, null, g);
+      p.then(() => { if (g === gen) { dialBusy = false; checkFull(); } });
+    };
+    hole.addEventListener("pointerup", end);
+    hole.addEventListener("pointercancel", end);
+    // Keyboard (Enter / Space) gives a click with detail 0
+    hole.addEventListener("click", (e) => { if (e.detail === 0) quiet(autoDial(n, gen)); });
+  });
+
+  // ---- Typing in the tiles (the wheel spins along for show) ----
+  function showSpin(d) {
+    if (dialBusy || reduce) return;
+    const n = d === "0" ? 10 : Number(d);
+    dialBusy = true;
+    const g = gen;
+    turn(0, travel(n), 120 + travel(n) * 0.8, easeInOut, null, g)
+      .then(() => turn(travel(n), 0, 120 + travel(n) * 1.1, returnEase, null, g))
+      .then(() => { if (g === gen) { dialBusy = false; restart(wheel, "settle"); checkFull(); } });
+  }
+  function fillFrom(start, digits) {
+    let i = start;
+    for (const d of digits) { if (i >= LEN) break; setDigit(i, d); i++; }
+    focusTile(i);
+    checkFull();
+  }
+  function checkFull() { if (state === "idle" && !dialBusy && vals.every((v) => v)) quiet(verify(gen)); }
+  tiles.forEach((tile, i) => {
+    tile.addEventListener("focus", () => requestAnimationFrame(() => tile.select()));
+    tile.addEventListener("input", (e) => {
+      if (state !== "idle") { tile.value = vals[i]; return; }
+      const all = tile.value.replace(/\D/g, "");
+      if (e.inputType === "insertText" && e.data && e.data.length === 1) {
+        const d = e.data.replace(/\D/g, "");
+        if (!d) { tile.value = vals[i]; return; }
+        setDigit(i, d); showSpin(d); focusTile(i + 1); checkFull();
+      } else if (all.length > 1) {
+        fillFrom(all.length >= LEN ? 0 : i, all);
+      } else {
+        setDigit(i, all);
+        if (all) { showSpin(all); focusTile(i + 1); checkFull(); }
+      }
+    });
+    tile.addEventListener("keydown", (e) => {
+      if (state !== "idle") return;
+      switch (e.key) {
+        case "Backspace":
+          e.preventDefault();
+          if (vals[i]) setDigit(i, "");
+          else if (i > 0) { setDigit(i - 1, ""); focusTile(i - 1); }
+          break;
+        case "Delete": e.preventDefault(); setDigit(i, ""); break;
+        case "ArrowLeft": e.preventDefault(); focusTile(i - 1); break;
+        case "ArrowRight": e.preventDefault(); focusTile(i + 1); break;
+        case "Home": e.preventDefault(); focusTile(0); break;
+        case "End": e.preventDefault(); focusTile(LEN - 1); break;
+      }
+    });
+    tile.addEventListener("paste", (e) => {
+      e.preventDefault();
+      if (state !== "idle") return;
+      const digits = (e.clipboardData ? e.clipboardData.getData("text") : "").replace(/\D/g, "");
+      if (digits) fillFrom(digits.length >= LEN ? 0 : i, digits);
+      else say("Only numbers can be pasted here.", "bad");
+    });
+  });
+
+  // ---- Check the PIN: the phone rings back and the handset lifts ----
+  async function verify(g) {
+    state = "checking";
+    mark(-1);
+    say("Connecting…");
+    await pause(500, g, true);
+    if (vals.join("") === pin) {
+      scene.classList.add("ringing");
+      say("Ring ring…", "good");
+      await pause(900, g, true);
+      scene.classList.remove("ringing");
+      scene.classList.add("won");
+      restart(wheel, "party");
+      say("Line open. Welcome back, Bilal.", "good");
+      await pause(400, g, true);
+      notes();
+      state = "won";
+      againBtn.hidden = false;
+      if (!demoOn) againBtn.focus();
+    } else {
+      scene.classList.add("wrong");
+      tiles.forEach((t) => t.setAttribute("aria-invalid", "true"));
+      say("Wrong number. Check the PIN on the card and dial again.", "bad");
+      await pause(900, g, true);
+      scene.classList.remove("wrong");
+      tiles.forEach((t) => t.removeAttribute("aria-invalid"));
+      clearTiles();
+      state = "idle";
+      focusTile(0);
+    }
+  }
+
+  // Musical notes float out of the handset
+  function notes() {
+    if (reduce) return;
+    const r = document.querySelector(".handset").getBoundingClientRect();
+    const COLORS = ["#e23d4b", "#4f9e83", "#c79a3a", "#2c2a24"];
+    for (let k = 0; k < 18; k++) {
+      const s = document.createElement("span");
+      s.textContent = k % 3 ? "♪" : "♫";
+      s.style.fontSize = 16 + Math.random() * 14 + "px";
+      s.style.color = COLORS[k % COLORS.length];
+      $("fx").append(s);
+      const x = r.left + Math.random() * r.width, y = r.top + r.height / 2;
+      const dx = (Math.random() - 0.5) * 120, dy = -80 - Math.random() * 120;
+      s.animate([
+        { transform: "translate(" + x + "px," + y + "px) scale(.4) rotate(-20deg)", opacity: 0 },
+        { transform: "translate(" + (x + dx * 0.4) + "px," + (y + dy * 0.4) + "px) scale(1) rotate(10deg)", opacity: 1, offset: 0.3 },
+        { transform: "translate(" + (x + dx) + "px," + (y + dy) + "px) scale(.8) rotate(-10deg)", opacity: 0 }
+      ], { duration: 1600 + Math.random() * 900, delay: k * 60, easing: "cubic-bezier(.2,.7,.4,1)", fill: "both" }).onfinish = () => s.remove();
+    }
+  }
+
+  // ---- Reset ----
+  function newPin() {
+    do { pin = ""; for (let i = 0; i < LEN; i++) pin += Math.floor(Math.random() * 10); } while (/^(\d)\1+$/.test(pin));
+    $("demo").textContent = pin;
+  }
+  function fresh(keepPin) {
+    state = "idle";
+    dialBusy = false;
+    drag = null;
+    scene.classList.remove("won", "wrong", "ringing");
+    wheel.classList.remove("party", "settle");
+    holes.forEach((h) => h.classList.remove("active"));
+    setRot(0);
+    againBtn.hidden = true;
+    clearTiles();
+    if (!keepPin) newPin();
+    say("Dial the PIN printed on the card.");
+  }
+  againBtn.addEventListener("click", () => { fresh(true); focusTile(0); });
+  function hardReset() { gen++; fresh(); mark(-1); }
+
+  // ---- Auto-demo: a fingertip dials the PIN ----
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); hardReset(); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) =>
+    window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  async function runDemo() {
+    const g = gen;
+    round++;
+    const wrong = round % 3 === 2;
+    const code = wrong ? pin.slice(0, 3) + ((+pin[3] + 5) % 10) : pin;
+    mark(0);
+    for (const d of code) {
+      await autoDial(d === "0" ? 10 : Number(d), g);
+      if (g !== gen) return;
+      await pause(160, g);
+    }
+    while (state === "checking") await pause(200, g);
+    if (wrong) {
+      await pause(400, g);
+      for (const d of pin) { await autoDial(d === "0" ? 10 : Number(d), g); await pause(160, g); }
+      while (state === "checking") await pause(200, g);
+    }
+    await pause(2600, g);
+    fresh();
+    demoTimer = setTimeout(() => quiet(runDemo()), 1000);
+  }
+
+  fresh();
+  demoTimer = setTimeout(() => quiet(runDemo()), 250);
+})();
+</script>
+</body>
+</html>
