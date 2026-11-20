@@ -1,0 +1,563 @@
+<!doctype html>
+<!-- Chill & Craft · Weigh In · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weigh In · image compression upload</title>
+<script>
+  // Theme: ?theme=light|dark overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #fff3ec;
+    --bg2: #f3cdb9;
+    --card: #fffaf7;
+    --edge: #f1dfd4;
+    --ink: #1d2340;
+    --soft: #6a6f88;
+    --well: #fff1e9;
+    --coral: #ff5f45;
+    --coral2: #e3452d;
+    --teal: #0f9d8a;
+    --enamel: #fff7ef;
+    --lcd: #22304f;
+    --lcd-ink: #9ff5d8;
+    --focus: #2563eb;
+    --shadow: 0 34px 70px -42px rgba(120, 50, 20, .55);
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg1: #1b1e36; --bg2: #06070e; --card: #13162a; --edge: #262a47; --ink: #eef0ff; --soft: #9da2c2; --well: #1a1e37;
+      --coral: #ff6f57; --coral2: #f0533b; --teal: #3fd7bf; --enamel: #1f2440; --lcd: #070a14; --lcd-ink: #7cf3cc;
+      --focus: #93c5fd; --shadow: 0 34px 70px -42px rgba(0, 0, 0, .95);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #1b1e36; --bg2: #06070e; --card: #13162a; --edge: #262a47; --ink: #eef0ff; --soft: #9da2c2; --well: #1a1e37;
+    --coral: #ff6f57; --coral2: #f0533b; --teal: #3fd7bf; --enamel: #1f2440; --lcd: #070a14; --lcd-ink: #7cf3cc;
+    --focus: #93c5fd; --shadow: 0 34px 70px -42px rgba(0, 0, 0, .95);
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { overflow-x: clip; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr);
+    color: var(--ink);
+    background: radial-gradient(60% 50% at 85% 5%, color-mix(in srgb, var(--coral) 16%, transparent), transparent 70%), radial-gradient(120% 90% at 50% 0%, var(--bg1), var(--bg2) 92%);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .stage { width: 100%; padding: 20px 16px; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr); overflow-x: clip; }
+  .card { position: relative; width: 780px; max-width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 16px 20px; padding: 18px; border-radius: 26px; background: var(--card); border: 1px solid var(--edge); box-shadow: var(--shadow); }
+  .card.drop-on { box-shadow: var(--shadow), 0 0 0 4px color-mix(in srgb, var(--coral) 40%, transparent); }
+  .head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .head h1 { margin: 0; font-size: 18px; letter-spacing: -.01em; }
+  .head p { margin: 2px 0 0; font-size: 12.5px; color: var(--soft); }
+  .cloud { flex: none; display: flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; background: var(--well); border: 1px solid var(--edge); font-size: 12px; font-weight: 750; color: var(--soft); }
+  .cloud svg { width: 20px; height: 20px; fill: none; stroke: var(--teal); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .cloud b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* ---------- Before / after compare ---------- */
+  .left { display: grid; gap: 12px; min-width: 0; align-content: start; }
+  .compare { position: relative; aspect-ratio: 4 / 3; border-radius: 18px; overflow: hidden; background: repeating-conic-gradient(color-mix(in srgb, var(--edge) 80%, transparent) 0 25%, transparent 0 50%) 0 0 / 18px 18px, var(--well); }
+  .compare img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; user-select: none; }
+  .compare .after { clip-path: inset(0 0 0 var(--split, 50%)); }
+  .compare .line { position: absolute; top: 0; bottom: 0; left: var(--split, 50%); width: 3px; margin-left: -1.5px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .15), 0 0 12px rgba(0, 0, 0, .3); pointer-events: none; }
+  .compare .knob { position: absolute; top: 50%; left: var(--split, 50%); width: 38px; height: 38px; margin: -19px 0 0 -19px; border-radius: 50%; background: #fff; box-shadow: 0 6px 14px -4px rgba(0, 0, 0, .45); display: grid; place-items: center; pointer-events: none; transition: transform .3s var(--spring); }
+  .compare .knob svg { width: 20px; height: 20px; fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  :root[data-theme="dark"] .compare .knob svg { stroke: #1d2340; }
+  .compare input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+  .compare input:focus-visible ~ .knob { transform: scale(1.15); box-shadow: 0 0 0 3px var(--focus), 0 6px 14px -4px rgba(0, 0, 0, .45); }
+  .compare:hover .knob { transform: scale(1.08); }
+  .tagl, .tagr { position: absolute; top: 10px; padding: 4px 9px; border-radius: 999px; background: rgba(20, 22, 40, .66); color: #fff; font-size: 11px; font-weight: 750; letter-spacing: .04em; pointer-events: none; font-variant-numeric: tabular-nums; }
+  .tagl { left: 10px; } .tagr { right: 10px; background: color-mix(in srgb, var(--coral2) 85%, transparent); }
+  .busy-veil { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(255, 255, 255, .0); pointer-events: none; transition: background .3s; font-size: 13px; font-weight: 700; color: var(--soft); }
+  .compare.weighing .busy-veil { background: rgba(255, 255, 255, .12); }
+  .busy-veil span { padding: 7px 12px; border-radius: 999px; background: var(--card); box-shadow: 0 6px 14px -8px rgba(0, 0, 0, .4); animation: pulse 1.2s ease-in-out infinite; }
+  .compare.ready .busy-veil span { display: none; }
+  @keyframes pulse { 50% { opacity: .55; transform: scale(.97); } }
+
+  .controls { display: grid; gap: 10px; }
+  .slider { display: grid; grid-template-columns: auto minmax(0, 1fr) 44px; align-items: center; gap: 10px; font-size: 13px; font-weight: 750; }
+  .slider output { text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"].q { width: 100%; accent-color: var(--coral); height: 26px; cursor: pointer; }
+  input[type="range"].q:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+  .segs { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; }
+  .seg { position: relative; display: flex; margin: 0; padding: 3px; border: 0; border-radius: 12px; background: var(--well); box-shadow: inset 0 0 0 1px var(--edge); min-width: 0; }
+  .seg legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .seg label { position: relative; z-index: 1; flex: 1; text-align: center; padding: 7px 0; font-size: 12px; font-weight: 750; color: var(--soft); cursor: pointer; border-radius: 9px; white-space: nowrap; transition: color .25s; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg input:checked + span { color: var(--ink); }
+  .seg input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 4px; border-radius: 5px; }
+  .seg input:disabled + span { opacity: .4; cursor: not-allowed; }
+  .seg .pill { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / var(--n)); border-radius: 9px; background: var(--card); box-shadow: 0 3px 8px -4px rgba(0, 0, 0, .4); transform: translateX(calc(var(--i, 0) * 100%)); transition: transform .5s var(--spring); }
+
+  /* ---------- The kitchen scale ---------- */
+  .right { display: grid; gap: 12px; align-content: start; min-width: 0; }
+  .scale { position: relative; padding-top: 17%; }      /* room for the photo resting on the platform */
+  .scale svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .body { fill: var(--enamel); stroke: var(--ink); stroke-width: 3; }
+  .dialface { fill: #fff; stroke: var(--ink); stroke-width: 2.5; }
+  .ticks line { stroke: #1d2340; stroke-width: 1.6; }
+  .ticks text { fill: #4b5170; font: 700 8px system-ui, -apple-system, sans-serif; text-anchor: middle; }
+  .ticks text.end-l, .ticks text.end-r { fill: var(--soft); }
+  .ticks text.end-l { text-anchor: start; }
+  .ticks text.end-r { text-anchor: end; }
+  .needle { stroke: var(--coral); stroke-width: 3.2; stroke-linecap: round; }
+  .ghost { stroke: #1d2340; stroke-width: 1.6; stroke-dasharray: 3 3; opacity: .45; }
+  .lcd { fill: var(--lcd); }
+  .lcdtext { fill: var(--lcd-ink); font: 800 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-anchor: middle; letter-spacing: .04em; }
+  .plat { fill: var(--ink); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat { padding: 8px 10px; border-radius: 12px; background: var(--well); border: 1px solid var(--edge); min-width: 0; }
+  .stat small { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--soft); }
+  .stat b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat span { display: block; font-size: 11px; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat.save { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; background: color-mix(in srgb, var(--teal) 12%, var(--well)); border-color: color-mix(in srgb, var(--teal) 35%, var(--edge)); }
+  .stat.save b { font-size: 20px; color: var(--teal); }
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn { height: 44px; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 13px; border: 1px solid var(--edge); background: var(--well); color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 750; cursor: pointer; white-space: nowrap; overflow: hidden; transition: transform .35s var(--spring), filter .2s; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: scale(.95); transition-duration: .1s; }
+  .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .btn svg { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .btn.main { grid-column: 1 / -1; height: 50px; border: 0; color: #fff; font-size: 15px; background: linear-gradient(180deg, var(--coral), var(--coral2)); box-shadow: 0 16px 26px -16px var(--coral2), inset 0 1px 0 rgba(255, 255, 255, .3); }
+  .btn.main[aria-disabled="true"] { filter: grayscale(.7); opacity: .6; cursor: not-allowed; transform: none; }
+  .btn.main[data-state="working"], .btn.main[data-state="done"] { cursor: progress; filter: none; opacity: 1; }
+  .btn.main[data-state="done"] { background: linear-gradient(180deg, #2fcf9f, #0f9d8a); box-shadow: 0 16px 26px -16px #0f9d8a; }
+  .btn .lbl { overflow: hidden; text-overflow: ellipsis; }
+  .note { grid-column: 1 / -1; margin: -4px 2px 0; min-height: 18px; font-size: 12px; color: var(--soft); }
+  .flyer { position: absolute; z-index: 5; border-radius: 6px; object-fit: cover; pointer-events: none; box-shadow: 0 12px 20px -10px rgba(0, 0, 0, .5); }
+  .bit { position: absolute; z-index: 6; width: 8px; height: 8px; border-radius: 2px; pointer-events: none; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @media (max-width: 700px) {
+    .card { grid-template-columns: minmax(0, 1fr); padding: 14px; gap: 12px; }
+    .right { grid-template-columns: 150px minmax(0, 1fr); align-items: center; }
+    .stats { grid-template-columns: 1fr; gap: 5px; }
+    .stat { padding: 6px 9px; }
+    .stat.save b { font-size: 17px; }
+    .btns { grid-column: 1 / -1; }
+    .compare { aspect-ratio: 16 / 9; }
+    .head p { display: none; }
+  }
+
+  /* Calm mode: same steps, no big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" id="card" aria-labelledby="ttl">
+    <header class="head">
+      <div><h1 id="ttl">Weigh In</h1><p>Shrink a photo before it uploads, and see what you save.</p></div>
+      <span class="cloud" id="cloud"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .6-8A6 6 0 0 0 6.2 9.4 4.3 4.3 0 0 0 7 18z" /></svg>Sent <b id="sentCount">0</b></span>
+    </header>
+
+    <div class="left">
+      <div class="compare" id="compare">
+        <img id="beforeImg" alt="Original photo">
+        <img id="afterImg" class="after" alt="Compressed photo">
+        <span class="line" aria-hidden="true"></span>
+        <input type="range" id="split" min="0" max="100" value="50" aria-label="Compare original and compressed: slide to move the divider">
+        <span class="knob" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l-5 6 5 6M15 6l5 6-5 6" /></svg></span>
+        <span class="tagl" aria-hidden="true">Original</span>
+        <span class="tagr" id="tagr" aria-hidden="true">New</span>
+        <span class="busy-veil" aria-hidden="true"><span>Developing a sample photo…</span></span>
+      </div>
+      <div class="controls">
+        <div class="slider"><label for="quality">Quality</label><input class="q" type="range" id="quality" min="10" max="95" value="72"><output id="qOut" for="quality">72</output></div>
+        <div class="segs">
+          <fieldset class="seg" id="sizeSeg" style="--n:4"><legend>Longest side</legend><span class="pill"></span>
+            <label><input type="radio" name="w" value="0"><span>Full</span></label>
+            <label><input type="radio" name="w" value="1920"><span>1920</span></label>
+            <label><input type="radio" name="w" value="1280" checked><span>1280</span></label>
+            <label><input type="radio" name="w" value="800"><span>800</span></label>
+          </fieldset>
+          <fieldset class="seg" id="fmtSeg" style="--n:2"><legend>Format</legend><span class="pill"></span>
+            <label><input type="radio" name="f" value="image/jpeg" checked><span>JPEG</span></label>
+            <label><input type="radio" name="f" value="image/webp"><span>WebP</span></label>
+          </fieldset>
+        </div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="scale" aria-hidden="true">
+        <svg viewBox="0 0 220 166" id="scaleSvg">
+          <defs><clipPath id="thumbClip"><rect x="74" y="-34" width="72" height="44" rx="5" /></clipPath></defs>
+          <g id="platform">
+            <image id="thumb" x="74" y="-34" width="72" height="44" preserveAspectRatio="xMidYMid slice" clip-path="url(#thumbClip)" />
+            <rect class="plat" x="36" y="10" width="148" height="10" rx="5" />
+            <rect class="plat" x="102" y="18" width="16" height="14" />
+          </g>
+          <rect class="body" x="16" y="30" width="188" height="134" rx="28" />
+          <!-- a half-round dial: the needle sweeps from 0 (left) to the original size (right) -->
+          <path class="dialface" d="M46 112A64 64 0 0 1 174 112Z" />
+          <g class="ticks" id="ticks"></g>
+          <line class="ghost" id="ghost" x1="110" y1="112" x2="110" y2="56" transform="rotate(90 110 112)" />
+          <g id="needleG"><line class="needle" x1="110" y1="119" x2="110" y2="56" /></g>
+          <circle cx="110" cy="112" r="6" fill="var(--coral2)" stroke="#1d2340" stroke-width="2" />
+          <rect class="lcd" x="68" y="128" width="84" height="26" rx="7" />
+          <text class="lcdtext" id="lcd" x="110" y="146">0 KB</text>
+        </svg>
+      </div>
+      <div class="stats">
+        <div class="stat"><small>Original</small><b id="oSize">…</b><span id="oDim"></span></div>
+        <div class="stat"><small>New</small><b id="nSize">…</b><span id="nDim"></span></div>
+        <div class="stat save"><small>You save</small><b id="saveOut">0%</b></div>
+      </div>
+      <div class="btns">
+        <button class="btn" id="chooseBtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3" /><circle cx="9" cy="10" r="1.8" /><path d="M21 16l-5-5-8 8" /></svg><span class="lbl">Choose</span></button>
+        <button class="btn" id="saveBtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10M7.5 9.5L12 14l4.5-4.5M4 16v3h16v-3" /></svg><span class="lbl">Download</span></button>
+        <button class="btn main" id="upBtn" type="button" data-state="idle" aria-disabled="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V5M7.5 9.5L12 5l4.5 4.5M5 19h14" /></svg><span class="lbl" id="upLbl">Upload</span></button>
+      </div>
+    </div>
+    <p class="note" id="note">Your photo is compressed on your device with a canvas; the upload is simulated.</p>
+    <input class="sr-only" type="file" id="file" accept="image/*" tabindex="-1" aria-hidden="true">
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+  // ---------- Weigh In: real in-browser image compression with a kitchen-scale read-out ----------
+  const $ = (s) => document.querySelector(s);
+  const card = $("#card"), compare = $("#compare"), beforeImg = $("#beforeImg"), afterImg = $("#afterImg"), split = $("#split"), tagr = $("#tagr");
+  const quality = $("#quality"), qOut = $("#qOut"), lcd = $("#lcd"), needleG = $("#needleG"), ghost = $("#ghost"), ticks = $("#ticks");
+  const thumb = $("#thumb"), platform = $("#platform"), oSize = $("#oSize"), oDim = $("#oDim"), nSize = $("#nSize"), nDim = $("#nDim"), saveOut = $("#saveOut");
+  const upBtn = $("#upBtn"), upLbl = $("#upLbl"), note = $("#note"), fileEl = $("#file"), statusEl = $("#status"), sentCount = $("#sentCount"), cloud = $("#cloud");
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const SPRING = "cubic-bezier(.34, 1.56, .64, 1)";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const play = (el, frames, opts) => (calm() || !el.animate ? Promise.resolve() : el.animate(frames, opts).finished.catch(() => {}));
+  const say = (t) => { statusEl.textContent = t; };
+  const kb = (n) => (n < 1024 ? Math.round(n) + " B" : n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(2) + " MB");
+  const DEFAULT_NOTE = note.textContent;
+
+  const STOP = new Error("stopped");
+  let runId = 0, busy = false, sent = 0;
+  const sleep = (ms, id) => new Promise((res, rej) => setTimeout(() => (id === runId ? res() : rej(STOP)), ms));
+  const guard = (id) => { if (id !== runId) throw STOP; };
+
+  // ---------- State: the original picture and the latest compressed copy ----------
+  let src = null;        // { bitmap (img or canvas), w, h, size, name, type }
+  let out = null;        // { blob, w, h, url }
+  let beforeUrl = "";
+
+  // ---------- Scale needle: a little spring that chases its target angle ----------
+  const CX = 110, CY = 112;                                  // the dial's pivot
+  let ang = -90, vel = 0, target = -90, springing = false;
+  const turn = () => needleG.setAttribute("transform", `rotate(${ang} ${CX} ${CY})`);
+  function aim(fraction) {
+    target = -90 + 180 * Math.max(0, Math.min(1.02, fraction));
+    if (calm()) { ang = target; turn(); return; }
+    if (!springing) { springing = true; requestAnimationFrame(spin); }
+  }
+  function spin() {
+    vel += (target - ang) * .1;
+    vel *= .8;
+    ang += vel;
+    turn();
+    if (Math.abs(vel) > .02 || Math.abs(target - ang) > .05) requestAnimationFrame(spin);
+    else { ang = target; turn(); springing = false; }
+  }
+  // dial ticks; the half mark sits inside the dial, 0 and the original size sit under its two ends
+  function drawTicks() {
+    ticks.textContent = "";
+    for (let i = 0; i <= 10; i++) {
+      const a = (-180 + i * 18) * Math.PI / 180, r1 = i % 5 ? 52 : 47, r2 = 59;
+      const l = document.createElementNS(SVGNS, "line");
+      l.setAttribute("x1", CX + Math.cos(a) * r1); l.setAttribute("y1", CY + Math.sin(a) * r1);
+      l.setAttribute("x2", CX + Math.cos(a) * r2); l.setAttribute("y2", CY + Math.sin(a) * r2);
+      ticks.appendChild(l);
+    }
+    [[0, 44, 125, "end-l"], [5, CX, 72, "mid"], [10, 176, 125, "end-r"]].forEach(([i, x, y, cls]) => {
+      const t = document.createElementNS(SVGNS, "text");
+      t.setAttribute("x", x); t.setAttribute("y", y); t.setAttribute("class", cls);
+      t.textContent = src ? kb((src.size * i) / 10) : ["0", "½", "max"][i / 5];
+      ticks.appendChild(t);
+    });
+  }
+
+  // ---------- Compression ----------
+  const opt = (name) => document.querySelector(`input[name="${name}"]:checked`).value;
+  const toBlob = (c, type, q) => new Promise((res) => c.toBlob((b) => res(b), type, q));
+  let webpOk = true;
+  let encodeToken = 0;
+  async function encode() {
+    if (!src) return;
+    const token = ++encodeToken;
+    compare.classList.add("weighing");
+    const longest = Number(opt("w")), type = opt("f"), q = Number(quality.value) / 100;
+    const k = longest && Math.max(src.w, src.h) > longest ? longest / Math.max(src.w, src.h) : 1;
+    const w = Math.max(1, Math.round(src.w * k)), h = Math.max(1, Math.round(src.h * k));
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const g = c.getContext("2d");
+    g.fillStyle = "#fff"; g.fillRect(0, 0, w, h);        // JPEG has no transparency: put it on white
+    g.imageSmoothingQuality = "high";
+    g.drawImage(src.bitmap, 0, 0, w, h);
+    const blob = await toBlob(c, type, q);
+    if (token !== encodeToken || !blob) return;
+    if (type === "image/webp" && blob.type !== "image/webp") {   // this browser cannot write WebP
+      webpOk = false;
+      const wp = document.querySelector('input[value="image/webp"]');
+      wp.disabled = true;
+      document.querySelector('input[value="image/jpeg"]').checked = true;
+      segPills();
+      note.textContent = "This browser cannot write WebP, so JPEG it is.";
+      return encode();
+    }
+    if (out && out.url) URL.revokeObjectURL(out.url);
+    out = { blob, w, h, url: URL.createObjectURL(blob), type };
+    afterImg.src = out.url;
+    compare.classList.remove("weighing");
+    compare.classList.add("ready");
+    showNumbers();
+  }
+  let encodeTimer = 0;
+  const encodeSoon = () => { clearTimeout(encodeTimer); encodeTimer = setTimeout(encode, 90); };
+  function showNumbers() {
+    const frac = out.blob.size / src.size;
+    lcd.textContent = kb(out.blob.size);
+    nSize.textContent = kb(out.blob.size);
+    nDim.textContent = out.w + "×" + out.h + " " + (out.type === "image/webp" ? "WebP" : "JPEG");
+    const pct = Math.round((1 - frac) * 100);
+    saveOut.textContent = pct >= 0 ? pct + "%" : "+" + -pct + "%";
+    tagr.textContent = "New · " + kb(out.blob.size);
+    if (!busy) {
+      upBtn.setAttribute("aria-disabled", "false");
+      upLbl.textContent = "Upload " + kb(out.blob.size);
+    }
+    aim(frac);
+    play(lcd, [{ opacity: .3 }, { opacity: 1 }], { duration: 220 });
+  }
+
+  // ---------- Loading a picture (real file or the sample) ----------
+  function setSource(bitmap, w, h, blob, name) {
+    src = { bitmap, w, h, size: blob.size, name, type: blob.type };
+    if (beforeUrl) URL.revokeObjectURL(beforeUrl);
+    beforeUrl = URL.createObjectURL(blob);
+    beforeImg.src = beforeUrl;
+    thumb.setAttribute("href", beforeUrl);
+    oSize.textContent = kb(blob.size);
+    oDim.textContent = w + "×" + h + " " + (blob.type.split("/")[1] || "image").toUpperCase();
+    drawTicks();
+    play(platform, [{ transform: "translateY(-30px)", opacity: 0 }, { transform: "translateY(4px)", opacity: 1, offset: .7 }, { transform: "none" }], { duration: 520, easing: "ease-out" });
+    encode();
+  }
+  function readFile(f) {
+    if (!f) return;
+    if (!/^image\//.test(f.type)) { note.textContent = f.name + " is not a picture."; say(note.textContent); return; }
+    stopAll();
+    const url = URL.createObjectURL(f), im = new Image();
+    im.onload = () => { URL.revokeObjectURL(url); setSource(im, im.naturalWidth, im.naturalHeight, f, f.name); note.textContent = "Read " + f.name + ". Move the quality slider and watch the scale."; say(note.textContent); };
+    im.onerror = () => { URL.revokeObjectURL(url); note.textContent = "That picture could not be opened."; say(note.textContent); };
+    im.src = url;
+  }
+  $("#chooseBtn").addEventListener("click", () => fileEl.click());
+  fileEl.addEventListener("change", () => { readFile(fileEl.files[0]); fileEl.value = ""; });
+  card.addEventListener("dragover", (e) => { e.preventDefault(); card.classList.add("drop-on"); });
+  card.addEventListener("dragleave", (e) => { if (!card.contains(e.relatedTarget)) card.classList.remove("drop-on"); });
+  card.addEventListener("drop", (e) => { e.preventDefault(); card.classList.remove("drop-on"); readFile(e.dataTransfer.files[0]); });
+  ["dragover", "drop"].forEach((t) => document.addEventListener(t, (e) => e.preventDefault()));
+
+  // The sample: a valley at sunset with fine grain, saved as a big PNG (a phone photo would be similar)
+  async function makeSample() {
+    const W = 1440, H = 960, c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    const sky = g.createLinearGradient(0, 0, 0, H * .62);
+    sky.addColorStop(0, "#2b3a78"); sky.addColorStop(.55, "#e9768a"); sky.addColorStop(1, "#ffc98b");
+    g.fillStyle = sky; g.fillRect(0, 0, W, H);
+    g.fillStyle = "rgba(255, 236, 190, .95)"; g.beginPath(); g.arc(1080, 520, 90, 0, 7); g.fill();
+    const ridge = (y, amp, col, seed) => {
+      g.fillStyle = col; g.beginPath(); g.moveTo(0, H);
+      for (let x = 0; x <= W; x += 20) g.lineTo(x, y - Math.abs(Math.sin(x / 180 + seed)) * amp - Math.sin(x / 47 + seed * 3) * amp * .12);
+      g.lineTo(W, H); g.fill();
+    };
+    ridge(560, 260, "#5b4a86", 1); ridge(610, 180, "#3f3a6e", 2.4); ridge(660, 120, "#2a2d55", 4);
+    const lake = g.createLinearGradient(0, 660, 0, H);
+    lake.addColorStop(0, "#f3a68e"); lake.addColorStop(1, "#28305e");
+    g.fillStyle = lake; g.fillRect(0, 660, W, H - 660);
+    g.fillStyle = "rgba(255, 236, 190, .35)"; for (let i = 0; i < 9; i++) g.fillRect(1000 + Math.sin(i) * 30, 690 + i * 22, 160 - i * 12, 5);
+    g.fillStyle = "#1c1f3d"; ridge(H - 60, 40, "#1c1f3d", 7);
+    // fine grain, like a real photo sensor (this is what makes the PNG heavy)
+    const d = g.getImageData(0, 0, W, H), p = d.data;
+    let s = 7;
+    for (let i = 0; i < p.length; i += 4) { s = (s * 1103515245 + 12345) & 0x7fffffff; const n = ((s >> 16) & 31) - 16; p[i] += n; p[i + 1] += n; p[i + 2] += n; }
+    g.putImageData(d, 0, 0);
+    const blob = await toBlob(c, "image/png");
+    return { c, blob };
+  }
+
+  // ---------- Controls ----------
+  function segPills() {
+    ["sizeSeg", "fmtSeg"].forEach((id) => {
+      const fs = $("#" + id), inputs = [...fs.querySelectorAll("input")];
+      fs.querySelector(".pill").style.setProperty("--i", inputs.findIndex((x) => x.checked));
+    });
+  }
+  quality.addEventListener("input", () => { qOut.textContent = quality.value; encodeSoon(); });
+  document.querySelectorAll('.seg input').forEach((r) => r.addEventListener("change", () => { segPills(); encode(); }));
+  split.addEventListener("input", () => compare.style.setProperty("--split", split.value + "%"));
+  $("#saveBtn").addEventListener("click", () => {
+    if (!out) return;
+    const a = document.createElement("a");
+    a.href = out.url;
+    a.download = (src.name.replace(/\.\w+$/, "") || "photo") + "-" + out.w + (out.type === "image/webp" ? ".webp" : ".jpg");
+    document.body.appendChild(a); a.click(); a.remove();
+    say("Saved the compressed copy, " + kb(out.blob.size) + ".");
+  });
+
+  // ---------- Upload: the photo lifts off the scale and the needle falls as the bytes leave ----------
+  async function upload(id) {
+    busy = true;
+    const btn = upBtn;                                         // keep the element before any await
+    const size = out.blob.size, saved = src.size - size;
+    btn.dataset.state = "working";
+    btn.setAttribute("aria-disabled", "true");
+    upLbl.textContent = "Lifting…";
+    say("Uploading " + kb(size) + ".");
+    // 1. Anticipation: the platform dips, the needle kicks
+    play(btn, [{ transform: "scale(1)" }, { transform: "scale(.95, .9)" }, { transform: "scale(1.02)" }, { transform: "scale(1)" }], { duration: 380, easing: "ease-out" });
+    aim(size / src.size + .12);
+    await play(platform, [{ transform: "translateY(0)" }, { transform: "translateY(7px)" }], { duration: 220, easing: "ease-in", fill: "forwards" });
+    guard(id);
+
+    // 2. A copy of the picture flies up into the cloud badge
+    const cr = card.getBoundingClientRect(), tr = thumb.getBoundingClientRect(), cl = cloud.getBoundingClientRect();
+    const fly = document.createElement("img");
+    fly.className = "flyer";
+    fly.src = out.url; fly.alt = "";
+    fly.style.left = tr.left - cr.left + "px"; fly.style.top = tr.top - cr.top + "px";
+    fly.style.width = tr.width + "px"; fly.style.height = tr.height + "px";
+    card.appendChild(fly);
+    thumb.style.opacity = 0;
+    play(platform, [{ transform: "translateY(7px)" }, { transform: "translateY(-5px)" }, { transform: "translateY(0)" }], { duration: 520, easing: SPRING, fill: "forwards" });
+    const dx = cl.left + cl.width / 2 - (tr.left + tr.width / 2), dy = cl.top + cl.height / 2 - (tr.top + tr.height / 2);
+    const flight = play(fly, [
+      { transform: "translate(0,0) scale(1) rotate(0)" },
+      { transform: `translate(${dx * .35}px, ${dy * .5 - 50}px) scale(1.15) rotate(-8deg)`, offset: .35 },
+      { transform: `translate(${dx}px, ${dy}px) scale(.2) rotate(6deg)`, opacity: .3 }
+    ], { duration: 1500, easing: "cubic-bezier(.45,0,.3,1)", fill: "forwards" });
+
+    // 3. Progress: the scale reads less and less as the bytes leave (simulated)
+    const steps = calm() ? 6 : 26;
+    for (let i = 1; i <= steps; i++) {
+      const left = size * (1 - i / steps);
+      lcd.textContent = kb(left);
+      aim(left / src.size);
+      upLbl.textContent = "Sending " + Math.round((100 * i) / steps) + "%";
+      await sleep(58, id);
+    }
+    await flight;
+    fly.remove();
+    guard(id);
+
+    // 4. Finish: the cloud badge counts it, coloured bits pop out
+    sent++;
+    sentCount.textContent = sent;
+    play(cloud, [{ transform: "scale(1)" }, { transform: "scale(1.18) rotate(-3deg)" }, { transform: "scale(1)" }], { duration: 480, easing: SPRING });
+    burst(cl, cr);
+    btn.dataset.state = "done";
+    upLbl.textContent = "Uploaded " + kb(size);
+    lcd.textContent = "SENT";
+    note.textContent = "Uploaded " + kb(size) + " instead of " + kb(src.size) + (saved > 0 ? ": " + kb(saved) + " of data saved." : ".");
+    say(note.textContent);
+    await sleep(2000, id);
+
+    // 5. Reset: the photo drops back on the scale and the needle springs to its weight
+    thumb.style.opacity = 1;
+    play(platform, [{ transform: "translateY(-24px)", opacity: .4 }, { transform: "translateY(5px)", opacity: 1, offset: .7 }, { transform: "translateY(0)" }], { duration: 520, easing: "ease-out", fill: "forwards" });
+    btn.dataset.state = "idle";
+    busy = false;
+    showNumbers();
+  }
+  function burst(cl, cr) {
+    if (calm()) return;
+    const colors = ["#ff5f45", "#0f9d8a", "#ffc98b", "#2b3a78", "#ffffff"];
+    for (let i = 0; i < 16; i++) {
+      const s = document.createElement("i");
+      s.className = "bit";
+      s.style.background = colors[i % colors.length];
+      s.style.left = cl.left - cr.left + cl.width / 2 + "px"; s.style.top = cl.top - cr.top + cl.height / 2 + "px";
+      card.appendChild(s);
+      const a = Math.PI * (.15 + Math.random() * .7), d = 40 + Math.random() * 50;
+      s.animate([
+        { transform: "translate(-50%, -50%) rotate(0)", opacity: 1 },
+        { transform: `translate(${-Math.cos(a) * d}px, ${Math.sin(a) * d}px) rotate(${300 + i * 30}deg)`, opacity: 0 }
+      ], { duration: 900 + Math.random() * 300, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = () => s.remove();
+    }
+  }
+  function stopAll() {
+    runId++;
+    busy = false;
+    card.querySelectorAll(".flyer, .bit").forEach((x) => x.remove());
+    platform.getAnimations().forEach((a) => a.cancel());
+    thumb.style.opacity = 1;
+    upBtn.dataset.state = "idle";
+    if (out) showNumbers();
+  }
+  upBtn.addEventListener("click", async () => {
+    if (busy || !out) return;
+    const id = ++runId;
+    try { await upload(id); } catch (e) { if (e !== STOP) throw e; }
+  });
+
+  // ---------- Auto demo: sweep the quality, nudge the divider, upload ----------
+  let demoOn = true, demoTimer = 0, demoStep = 0;
+  function scheduleDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(demo, ms); }
+  async function demo() {
+    if (!demoOn || busy || !src) return scheduleDemo(1200);
+    const id = ++runId;
+    try {
+      busy = true;
+      const round = demoStep++;
+      if (round % 2 === 1 && webpOk) { document.querySelector('input[value="image/webp"]').checked = true; segPills(); }
+      else { document.querySelector('input[value="image/jpeg"]').checked = true; segPills(); }
+      for (const q of [92, 60, 35, 72]) {
+        quality.value = q; qOut.textContent = q;
+        busy = false; await encode(); busy = true;
+        guard(id);
+        await sleep(420, id);
+      }
+      for (const v of [30, 70, 50]) { split.value = v; compare.style.setProperty("--split", v + "%"); await sleep(260, id); }
+      busy = false;
+      await upload(id);
+      scheduleDemo(1400);
+    } catch (e) { if (e !== STOP) throw e; }
+  }
+  function takeOver(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false;
+    clearTimeout(demoTimer);
+    stopAll();
+  }
+  ["pointerdown", "keydown", "dragenter"].forEach((t) => addEventListener(t, takeOver, true));
+
+  // ---------- Start ----------
+  segPills();
+  drawTicks();
+  aim(0);
+  makeSample().then(({ c, blob }) => {
+    if (src) return;                                   // the visitor already picked a photo
+    setSource(c, c.width, c.height, blob, "hunza-valley.png");
+    scheduleDemo(900);
+  });
+</script>
+</body>
+</html>

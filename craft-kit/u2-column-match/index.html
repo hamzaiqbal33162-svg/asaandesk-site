@@ -1,0 +1,695 @@
+<!doctype html>
+<!-- Chill & Craft · Column Match · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Column Match · CSV import</title>
+<script>
+  // Theme: ?theme=light|dark overrides the system setting
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #eef8f2;
+    --bg2: #cfe6d9;
+    --card: #ffffff;
+    --edge: #dcebe3;
+    --ink: #0f2f25;
+    --soft: #5a786c;
+    --well: #f2f9f5;
+    --accent: #0f9d6b;
+    --accent2: #0b7f57;
+    --warn: #d98a0b;
+    --warnbg: #fff3d9;
+    --focus: #2563eb;
+    --h0: #0f9d6b; --h1: #2b7de9; --h2: #8b5cf6; --h3: #e8751a; --h4: #e0457b;
+    --shadow: 0 34px 70px -42px rgba(10, 70, 45, .55);
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg1: #11241d; --bg2: #040b08; --card: #0e1a16; --edge: #1f3a30; --ink: #e4f5ec; --soft: #8fb3a4; --well: #12241e;
+      --accent: #2fd394; --accent2: #17a874; --warn: #f5b13d; --warnbg: #3a2a0c; --focus: #93c5fd;
+      --h0: #2fd394; --h1: #60a5fa; --h2: #a78bfa; --h3: #fb923c; --h4: #f472b6;
+      --shadow: 0 34px 70px -42px rgba(0, 0, 0, .9);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #11241d; --bg2: #040b08; --card: #0e1a16; --edge: #1f3a30; --ink: #e4f5ec; --soft: #8fb3a4; --well: #12241e;
+    --accent: #2fd394; --accent2: #17a874; --warn: #f5b13d; --warnbg: #3a2a0c; --focus: #93c5fd;
+    --h0: #2fd394; --h1: #60a5fa; --h2: #a78bfa; --h3: #fb923c; --h4: #f472b6;
+    --shadow: 0 34px 70px -42px rgba(0, 0, 0, .9);
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { overflow-x: clip; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr);
+    color: var(--ink);
+    background:
+      linear-gradient(transparent 31px, color-mix(in srgb, var(--accent) 7%, transparent) 32px) 0 0 / 100% 32px,
+      linear-gradient(90deg, transparent 31px, color-mix(in srgb, var(--accent) 7%, transparent) 32px) 0 0 / 32px 100%,
+      radial-gradient(120% 90% at 50% 0%, var(--bg1), var(--bg2) 92%);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .stage { width: 100%; padding: 20px 16px; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr); overflow-x: clip; }
+  .card { position: relative; width: 760px; max-width: 100%; padding: 18px 20px 16px; border-radius: 26px; background: var(--card); border: 1px solid var(--edge); box-shadow: var(--shadow); }
+  .card.drop-on { box-shadow: var(--shadow), 0 0 0 4px color-mix(in srgb, var(--accent) 40%, transparent); }
+
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+  .top h1 { margin: 0; font-size: 18px; letter-spacing: -.01em; }
+  .top p { margin: 2px 0 0; font-size: 12.5px; color: var(--soft); }
+  .steps { position: relative; display: flex; gap: 0; margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  .steps::before, .steps::after { content: ""; position: absolute; left: 32px; right: 32px; top: 12px; height: 3px; border-radius: 2px; background: var(--edge); }
+  .steps::after { right: auto; width: calc((100% - 64px) * var(--p, 0)); width: calc((100% - 26px) * var(--p, 0)); background: var(--accent); transition: width .7s cubic-bezier(.2, .8, .2, 1); }
+  .steps li { position: relative; z-index: 1; width: 64px; display: grid; justify-items: center; gap: 3px; font-size: 11px; font-weight: 750; color: var(--soft); counter-increment: s; }
+  .steps li::before { content: counter(s); width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--card); border: 2px solid var(--edge); font-size: 12px; transition: background .35s, border-color .35s, color .35s, transform .45s var(--spring); }
+  .steps li.on { color: var(--ink); }
+  .steps li.on::before { border-color: var(--accent); color: var(--accent); transform: scale(1.12); }
+  .steps li.past::before { content: "✓"; background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* ---------- File bar ---------- */
+  .filebar { display: flex; align-items: center; gap: 8px; margin: 14px 0 12px; }
+  .fchip { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 14px; background: var(--well); border: 1px solid var(--edge); }
+  .fchip svg { flex: none; width: 30px; height: 34px; }
+  .fchip b { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fchip small { display: block; font-size: 11.5px; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fchip > span { min-width: 0; }
+  .btn { flex: none; height: 42px; padding: 0 14px; border-radius: 13px; border: 1px solid var(--edge); background: var(--well); color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 750; cursor: pointer; white-space: nowrap; transition: transform .35s var(--spring), background .2s, filter .2s; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: scale(.95); transition-duration: .1s; }
+  .btn:focus-visible, select:focus-visible, .dl:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .btn.main { position: relative; overflow: hidden; height: 46px; padding: 0 18px; border: 0; color: #fff; background: linear-gradient(180deg, var(--accent), var(--accent2)); box-shadow: 0 14px 24px -14px var(--accent2), inset 0 1px 0 rgba(255, 255, 255, .3); }
+  .btn.main[aria-disabled="true"] { filter: grayscale(.8); opacity: .65; cursor: not-allowed; transform: none; }
+  .btn.main[data-state="working"], .btn.main[data-state="done"] { cursor: progress; filter: none; opacity: 1; }
+  .btn.main .bar { position: absolute; left: 0; bottom: 0; height: 4px; width: 0; background: rgba(255, 255, 255, .7); }
+
+  /* ---------- Body: drop zone or mapper ---------- */
+  .body { position: relative; min-height: 360px; }
+  .drop { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 10px; border: 2px dashed color-mix(in srgb, var(--accent) 45%, var(--edge)); border-radius: 20px; background: var(--well); text-align: center; padding: 20px; }
+  .drop .sheet { width: 92px; height: 108px; animation: bob 3.2s ease-in-out infinite; }
+  .drop b { font-size: 15px; }
+  .drop span { font-size: 12.5px; color: var(--soft); }
+  .mapper { position: relative; display: grid; grid-template-columns: minmax(0, .9fr) 78px minmax(0, 1.2fr); }
+  .mapper h3, .preview h3 { margin: 0 0 7px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--soft); }
+  .cols ul, .fields ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .chip { position: relative; height: 40px; padding: 4px 26px 4px 11px; border-radius: 11px; background: var(--well); border: 1px solid var(--edge); display: grid; align-content: center; transition: opacity .3s, border-color .3s; }
+  .chip b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip small { font-size: 11px; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip::after { content: ""; position: absolute; right: 9px; top: 50%; width: 9px; height: 9px; margin-top: -4.5px; border-radius: 50%; background: var(--edge); transition: background .3s, transform .4s var(--spring); }
+  .chip.used { border-color: color-mix(in srgb, var(--c) 55%, var(--edge)); }
+  .chip.used::after { background: var(--c); transform: scale(1.25); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 22%, transparent); }
+  .chip.unused { opacity: .55; }
+  .frow { height: 40px; display: grid; grid-template-columns: minmax(0, 1fr) 150px; align-items: center; gap: 8px; padding: 0 0 0 10px; border-radius: 11px; position: relative; }
+  .frow::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 4px; border-radius: 3px; background: var(--c); opacity: .35; transition: opacity .3s; }
+  .frow.mapped::before { opacity: 1; }
+  .frow label { min-width: 0; font-size: 13.5px; font-weight: 750; display: grid; }
+  .frow label em { font-style: normal; font-size: 11px; font-weight: 600; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .frow.missing label em { color: var(--warn); }
+  select { width: 100%; height: 36px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--edge); background: var(--well); color: var(--ink); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+  .mapper .fields { grid-column: 3; }
+  .wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .wires path { fill: none; stroke-width: 2.4; stroke-linecap: round; }
+  .wires circle { stroke: var(--card); stroke-width: 2; }
+  .wires .pulse { stroke-width: 0; }
+
+  .preview { margin-top: 14px; }
+  .tablewrap { overflow-x: auto; border-radius: 14px; border: 1px solid var(--edge); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  th { padding: 7px 10px; text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--soft); background: var(--well); white-space: nowrap; border-bottom: 1px solid var(--edge); }
+  th i { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--c); }
+  td { padding: 7px 10px; white-space: nowrap; border-bottom: 1px solid var(--edge); }
+  tr:last-child td { border-bottom: 0; }
+  td.bad { background: var(--warnbg); color: var(--warn); font-weight: 700; }
+  td.bad::before { content: "! "; }
+  td.empty { color: var(--soft); }
+
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+  .tally { min-width: 0; display: flex; align-items: center; gap: 10px; }
+  .stack { position: relative; flex: none; width: 46px; height: 46px; display: grid; place-items: center; }
+  .stack i { position: absolute; inset: 6px 4px 2px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 22%, var(--card)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--edge)); }
+  .stack i:nth-child(1) { transform: rotate(-9deg) translateY(2px); }
+  .stack i:nth-child(2) { transform: rotate(6deg); }
+  .stack b { position: relative; z-index: 1; min-width: 34px; padding: 4px 6px; border-radius: 9px; background: var(--card); border: 1px solid var(--edge); text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; box-shadow: 0 6px 12px -8px rgba(0, 0, 0, .4); }
+  .sumtxt { min-width: 0; font-size: 12.5px; color: var(--soft); line-height: 1.35; }
+  .sumtxt strong { color: var(--ink); }
+  .dl { color: var(--warn); font-weight: 750; text-decoration: none; border-bottom: 1.5px solid currentColor; }
+  .dl[hidden] { display: none; }
+
+  .done { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; align-content: center; gap: 6px; border-radius: 20px; background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(3px); text-align: center; opacity: 0; pointer-events: none; transition: opacity .35s; }
+  .done.show { opacity: 1; }
+  .done svg { width: 84px; height: 84px; }
+  .done .ring { fill: none; stroke: var(--accent); stroke-width: 5; stroke-dasharray: 220; stroke-dashoffset: 220; }
+  .done .tick { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 60; stroke-dashoffset: 60; }
+  .done.show .ring { animation: draw .7s .05s ease-out forwards; }
+  .done.show .tick { animation: draw .45s .55s ease-out forwards; }
+  .done b { font-size: 20px; }
+  .done span { font-size: 13px; color: var(--soft); }
+  .ghost { position: absolute; z-index: 5; height: 14px; border-radius: 7px; pointer-events: none; }
+  .bit { position: absolute; z-index: 6; width: 10px; height: 6px; border-radius: 2px; pointer-events: none; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  [hidden] { display: none !important; }
+  @keyframes bob { 50% { transform: translateY(-8px) rotate(-3deg); } }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @keyframes shake { 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
+  .shake { animation: shake .4s ease-in-out; }
+
+  @media (max-width: 640px) {
+    .card { padding: 16px 14px 14px; }
+    .steps li { width: 54px; }
+    .steps::before, .steps::after { left: 27px; right: 27px; }
+    .steps::after { right: auto; width: calc((100% - 54px) * var(--p, 0)); }
+    .mapper { grid-template-columns: minmax(0, 1fr); }
+    .mapper .fields { grid-column: 1; }
+    .cols, .wires { display: none; }
+    .frow { grid-template-columns: minmax(0, 1fr) 140px; }
+    .body { min-height: 330px; }
+    .filebar .btn { padding: 0 11px; }
+    .top p, .wide, .fchip svg { display: none; }
+    .frow { height: 38px; }
+    .fields ul { gap: 4px; }
+    .foot { flex-direction: column; align-items: stretch; gap: 10px; }
+    .foot .btn.main { width: 100%; }
+  }
+
+  /* Calm mode: same steps, no big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" id="card" aria-labelledby="ttl">
+    <header class="top">
+      <div><h1 id="ttl">Import contacts</h1><p>Bring your customer list in from a CSV file.</p></div>
+      <ol class="steps" id="steps" aria-label="Steps"><li>File</li><li>Match</li><li>Import</li></ol>
+    </header>
+
+    <div class="filebar">
+      <span class="fchip" id="fchip">
+        <svg viewBox="0 0 30 34" aria-hidden="true"><path d="M3 3a3 3 0 0 1 3-3h13l8 8v23a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z" fill="var(--accent)" /><path d="M19 0v6a2 2 0 0 0 2 2h6" fill="rgba(255,255,255,.4)" /><path d="M8 15h14M8 20h14M8 25h14M13 12v16M18 12v16" stroke="#fff" stroke-width="1.6" opacity=".9" /></svg>
+        <span><b id="fname">No file yet</b><small id="fmeta">CSV with a header row, up to 2 MB</small></span>
+      </span>
+      <button class="btn" id="choose" type="button">Choose<span class="wide"> CSV</span></button>
+      <button class="btn" id="sampleBtn" type="button">Sample</button>
+      <input class="sr-only" type="file" id="file" accept=".csv,.tsv,.txt,text/csv,text/plain" tabindex="-1" aria-hidden="true">
+    </div>
+
+    <div class="body" id="body">
+      <div class="drop" id="drop">
+        <svg class="sheet" viewBox="0 0 92 108" aria-hidden="true">
+          <rect x="6" y="4" width="80" height="100" rx="12" fill="var(--card)" stroke="var(--edge)" stroke-width="2" />
+          <rect x="16" y="18" width="60" height="12" rx="3" fill="var(--accent)" opacity=".85" />
+          <g fill="var(--edge)"><rect x="16" y="38" width="26" height="9" rx="2" /><rect x="46" y="38" width="30" height="9" rx="2" /><rect x="16" y="52" width="26" height="9" rx="2" /><rect x="46" y="52" width="30" height="9" rx="2" /><rect x="16" y="66" width="26" height="9" rx="2" /><rect x="46" y="66" width="30" height="9" rx="2" /></g>
+          <circle cx="70" cy="86" r="13" fill="var(--accent)" /><path d="M70 80v12M64.5 86.5L70 92l5.5-5.5" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <b>Drop a CSV file here</b>
+        <span>Comma, semicolon or tab separated. Nothing leaves your device.</span>
+      </div>
+
+      <div id="work" hidden>
+        <div class="mapper" id="mapper">
+          <div class="cols"><h3>Your columns</h3><ul id="cols"></ul></div>
+          <svg class="wires" id="wires" aria-hidden="true"></svg>
+          <div class="fields"><h3>Contact fields</h3><ul id="fields"></ul></div>
+        </div>
+        <div class="preview">
+          <h3 id="pvTitle">Preview</h3>
+          <div class="tablewrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+        </div>
+      </div>
+      <div class="done" id="done" aria-hidden="true">
+        <svg viewBox="0 0 84 84"><circle class="ring" cx="42" cy="42" r="35" /><path class="tick" d="M26 43l11 11 21-23" /></svg>
+        <b id="doneTitle">Imported</b>
+        <span id="doneSub"></span>
+      </div>
+    </div>
+
+    <footer class="foot">
+      <div class="tally">
+        <span class="stack" id="stack" aria-hidden="true"><i></i><i></i><b id="count">0</b></span>
+        <span class="sumtxt"><span id="summary">Pick a file to begin.</span> <a class="dl" id="badDl" href="#" hidden>Download rows to fix</a></span>
+      </div>
+      <button class="btn main" id="importBtn" type="button" aria-disabled="true" data-state="idle"><span id="importLbl">Import</span><span class="bar" id="ibar"></span></button>
+    </footer>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script>
+  // ---------- Column Match CSV import ----------
+  const $ = (s) => document.querySelector(s);
+  const card = $("#card"), steps = $("#steps"), fname = $("#fname"), fmeta = $("#fmeta"), fileEl = $("#file");
+  const body = $("#body"), drop = $("#drop"), work = $("#work"), mapper = $("#mapper"), colsEl = $("#cols"), fieldsEl = $("#fields"), wires = $("#wires");
+  const thead = $("#thead"), tbody = $("#tbody"), pvTitle = $("#pvTitle"), summary = $("#summary"), badDl = $("#badDl");
+  const importBtn = $("#importBtn"), importLbl = $("#importLbl"), ibar = $("#ibar"), countEl = $("#count"), stack = $("#stack");
+  const done = $("#done"), doneTitle = $("#doneTitle"), doneSub = $("#doneSub"), statusEl = $("#status");
+  const SPRING = "cubic-bezier(.34, 1.56, .64, 1)";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const play = (el, frames, opts) => (calm() || !el.animate ? Promise.resolve() : el.animate(frames, opts).finished.catch(() => {}));
+  const say = (t) => { statusEl.textContent = t; };
+  const SVGNS = "http://www.w3.org/2000/svg";
+
+  const STOP = new Error("stopped");
+  let runId = 0, busy = false;
+  const sleep = (ms, id) => new Promise((res, rej) => setTimeout(() => (id === runId ? res() : rej(STOP)), ms));
+
+  // ---------- The fields we import into ----------
+  const FIELDS = [
+    { key: "name", label: "Name", need: true, match: /^(full ?name|name|customer|client|contact name)$/i },
+    { key: "phone", label: "Phone", need: true, match: /(phone|mobile|cell|whats|number|contact)/i },
+    { key: "city", label: "City", match: /(city|town|location|area)/i },
+    { key: "email", label: "Email", match: /(e-?mail|mail)/i },
+    { key: "amount", label: "Amount (PKR)", match: /(amount|total|balance|pkr|price|due|paid)/i }
+  ];
+  FIELDS.forEach((f, i) => { f.color = "var(--h" + i + ")"; });
+
+  // ---------- CSV parsing (quotes, escaped quotes, CRLF, BOM, , ; or tab) ----------
+  function parseCSV(text) {
+    text = text.replace(/^﻿/, "");
+    const first = text.split(/\r?\n/, 1)[0];
+    const sep = [",", ";", "\t"].map((s) => [s, first.split(s).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const rows = [];
+    let row = [], cell = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) {
+        if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === sep) { row.push(cell); cell = ""; }
+      else if (ch === "\n" || ch === "\r") {
+        if (ch === "\r" && text[i + 1] === "\n") i++;
+        row.push(cell); cell = "";
+        if (row.some((c) => c.trim() !== "")) rows.push(row);
+        row = [];
+      } else cell += ch;
+    }
+    row.push(cell);
+    if (row.some((c) => c.trim() !== "")) rows.push(row);
+    return rows.map((r) => r.map((c) => c.trim()));
+  }
+
+  // ---------- Cleaning and checking one value ----------
+  function clean(key, v) {
+    v = (v || "").trim();
+    if (!v) return { text: "", ok: !FIELDS.find((f) => f.key === key).need, empty: true };
+    if (key === "phone") {
+      const d = v.replace(/[\s()-]/g, "").replace(/^(\+92|0092|92)/, "0");
+      const ok = /^03\d{9}$/.test(d);
+      return { text: ok ? "+92 " + d.slice(1, 4) + " " + d.slice(4) : v, ok };
+    }
+    if (key === "email") return { text: v.toLowerCase(), ok: /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(v) };
+    if (key === "amount") {
+      const n = Number(v.replace(/(pkr|rs\.?|,|\s)/gi, ""));
+      return { text: isFinite(n) ? "PKR " + n.toLocaleString("en-IN") : v, ok: isFinite(n) && n >= 0 };
+    }
+    if (key === "name") return { text: v.replace(/\s+/g, " "), ok: v.length > 1 };
+    return { text: v, ok: true };
+  }
+
+  // ---------- State ----------
+  let head = [], rows = [], map = {}, file = null, step = 1, ready = [], bad = [];
+  function setStep(n) {
+    step = n;
+    [...steps.querySelectorAll("li")].forEach((li, i) => {
+      li.classList.toggle("on", i === n - 1);
+      li.classList.toggle("past", i < n - 1);
+      li.setAttribute("aria-current", i === n - 1 ? "step" : "false");
+    });
+    steps.style.setProperty("--p", (n - 1) / 2);
+  }
+
+  function load(text, name, size, id) {
+    const all = parseCSV(text);
+    if (all.length < 2) { complain(name + " has no rows under its header."); return false; }
+    head = all[0].map((h, i) => h || "Column " + (i + 1));
+    rows = all.slice(1).map((r) => head.map((_, i) => r[i] || ""));
+    file = { name, size };
+    // auto-match: each field takes the first unused column whose header fits
+    map = {};
+    const used = new Set();
+    FIELDS.forEach((f) => {
+      const i = head.findIndex((h, k) => !used.has(k) && f.match.test(h));
+      map[f.key] = i; if (i >= 0) used.add(i);
+    });
+    fname.textContent = name;
+    fmeta.textContent = rows.length + " rows · " + head.length + " columns · " + (size < 1024 ? size + " bytes" : (size / 1024).toFixed(1) + " KB");
+    drop.hidden = true; work.hidden = false;
+    buildLists();
+    setStep(2);
+    refresh(true, id);
+    return true;
+  }
+  function complain(msg) {
+    summary.textContent = msg; say(msg);
+    card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake");
+  }
+
+  // Left column chips and right column field rows
+  function buildLists() {
+    colsEl.textContent = "";
+    head.forEach((h, i) => {
+      const li = document.createElement("li");
+      li.className = "chip";
+      li.innerHTML = "<b></b><small></small>";
+      li.firstChild.textContent = h;
+      li.lastChild.textContent = rows.find((r) => r[i])?.[i] || "(empty)";
+      colsEl.appendChild(li);
+    });
+    fieldsEl.textContent = "";
+    FIELDS.forEach((f) => {
+      const li = document.createElement("li");
+      li.className = "frow";
+      li.style.setProperty("--c", f.color);
+      li.innerHTML = '<label><span></span><em></em></label><select></select>';
+      const sel = li.querySelector("select"), lab = li.querySelector("label");
+      sel.id = "f-" + f.key; lab.htmlFor = sel.id;
+      lab.firstChild.textContent = f.label;
+      sel.add(new Option(f.need ? "Choose a column" : "Skip", "-1"));
+      head.forEach((h, i) => sel.add(new Option(h, String(i))));
+      sel.value = String(map[f.key]);
+      sel.addEventListener("change", () => pick(f.key, Number(sel.value), true));
+      f.row = li; f.sel = sel; f.em = lab.querySelector("em");
+      fieldsEl.appendChild(li);
+    });
+  }
+  // One column feeds one field: picking a used column frees the other field
+  function pick(key, i, byHand) {
+    if (i >= 0) FIELDS.forEach((f) => {
+      if (f.key !== key && map[f.key] === i) {
+        map[f.key] = -1; f.sel.value = "-1";
+        if (byHand) play(f.row, [{ transform: "translateX(-6px)" }, { transform: "translateX(5px)" }, { transform: "none" }], { duration: 320 });
+      }
+    });
+    map[key] = i;
+    FIELDS.find((f) => f.key === key).sel.value = String(i);
+    refresh(false, runId, key);
+  }
+
+  // ---------- Wires between columns and fields ----------
+  let wiredWidth = 0;
+  function drawWires(animateKeys) {
+    wiredWidth = mapper.clientWidth;
+    wires.textContent = "";
+    if (getComputedStyle(wires).display === "none") return;
+    const chips = [...colsEl.children];
+    // layout offsets (relative to the mapper) ignore the rows' slide-in transforms
+    FIELDS.forEach((f) => {
+      const i = map[f.key];
+      if (i < 0 || !chips[i]) return;
+      const a = chips[i], b = f.row;
+      const x1 = a.offsetLeft + a.offsetWidth, y1 = a.offsetTop + a.offsetHeight / 2, x2 = b.offsetLeft - 2, y2 = b.offsetTop + b.offsetHeight / 2;
+      const dx = (x2 - x1) * .55;
+      const p = document.createElementNS(SVGNS, "path");
+      p.setAttribute("d", `M${x1} ${y1}C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`);
+      p.style.stroke = f.color;
+      wires.appendChild(p);
+      [[x1, y1], [x2, y2]].forEach(([x, y]) => {
+        const c = document.createElementNS(SVGNS, "circle");
+        c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 4.5);
+        c.style.fill = f.color;
+        wires.appendChild(c);
+      });
+      if (animateKeys && animateKeys.includes(f.key) && !calm()) {
+        const len = p.getTotalLength();
+        p.style.strokeDasharray = len; p.style.strokeDashoffset = len;
+        const delay = animateKeys.indexOf(f.key) * 140;
+        p.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 520, delay, easing: "cubic-bezier(.6,0,.2,1)", fill: "forwards" });
+        // a bright bead runs along the new wire
+        const bead = document.createElementNS(SVGNS, "circle");
+        bead.setAttribute("r", 3); bead.classList.add("pulse"); bead.style.fill = "#fff";
+        wires.appendChild(bead);
+        const frames = [];
+        for (let k = 0; k <= 10; k++) { const pt = p.getPointAtLength((len * k) / 10); frames.push({ transform: `translate(${pt.x}px, ${pt.y}px)`, opacity: k === 10 ? 0 : 1 }); }
+        bead.animate(frames, { duration: 560, delay, easing: "cubic-bezier(.6,0,.2,1)", fill: "both" });
+      }
+    });
+  }
+  // redraw only when the width really changed (a redraw would cut short the wires' draw-in)
+  new ResizeObserver(() => { if (!work.hidden && mapper.clientWidth !== wiredWidth) drawWires(); }).observe(mapper);
+
+  // ---------- Recount rows, rebuild the preview ----------
+  function refresh(first, id, changedKey) {
+    const chips = [...colsEl.children];
+    chips.forEach((c, i) => {
+      const f = FIELDS.find((x) => map[x.key] === i);
+      c.classList.toggle("used", !!f);
+      c.classList.toggle("unused", !f);
+      if (f) c.style.setProperty("--c", f.color);
+    });
+    FIELDS.forEach((f) => {
+      const i = map[f.key];
+      f.row.classList.toggle("mapped", i >= 0);
+      f.row.classList.toggle("missing", !!f.need && i < 0);
+      f.em.textContent = i >= 0 ? "e.g. " + (clean(f.key, rows.find((r) => r[i])?.[i]).text || "(empty)") : f.need ? "Needed" : "Not imported";
+    });
+    // check every row
+    ready = []; bad = [];
+    const cols = FIELDS.filter((f) => map[f.key] >= 0);
+    rows.forEach((r) => {
+      const cells = cols.map((f) => clean(f.key, r[map[f.key]]));
+      (cells.every((c) => c.ok) ? ready : bad).push({ r, cells });
+    });
+    // preview: first three rows, with problem rows shown first so they are easy to spot
+    thead.innerHTML = "<tr>" + cols.map(() => "<th><i></i><span></span></th>").join("") + "</tr>";
+    [...thead.querySelectorAll("th")].forEach((th, k) => { th.style.setProperty("--c", cols[k].color); th.lastChild.textContent = cols[k].label; });
+    tbody.textContent = "";
+    const show = bad.slice(0, 1).concat(ready.slice(0, 2), bad.slice(1)).slice(0, 3);
+    show.forEach(({ cells }) => {
+      const tr = document.createElement("tr");
+      cells.forEach((c) => { const td = document.createElement("td"); td.textContent = c.text || "—"; if (!c.ok) td.className = "bad"; else if (c.empty) td.className = "empty"; tr.appendChild(td); });
+      tbody.appendChild(tr);
+    });
+    pvTitle.textContent = "Preview · " + Math.min(3, rows.length) + " of " + rows.length + " rows";
+    const needOk = FIELDS.every((f) => !f.need || map[f.key] >= 0);
+    summary.innerHTML = "";
+    const s1 = document.createElement("strong");
+    s1.textContent = ready.length + " ready";
+    summary.append(rows.length + " rows · ", s1, bad.length ? " · " + bad.length + " to fix" : "");
+    badDl.hidden = !bad.length;
+    if (!busy) {
+      importBtn.setAttribute("aria-disabled", needOk && ready.length ? "false" : "true");
+      importLbl.textContent = !needOk ? "Match Name and Phone" : "Import " + ready.length + " contact" + (ready.length === 1 ? "" : "s");
+    }
+    countEl.textContent = 0;
+    drawWires(first ? FIELDS.map((f) => f.key) : changedKey ? [changedKey] : null);
+    if (first && !calm()) {
+      [...colsEl.children].forEach((c, i) => play(c, [{ transform: "translateX(-24px)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 420, delay: i * 50, easing: SPRING, fill: "backwards" }));
+      [...fieldsEl.children].forEach((c, i) => play(c, [{ transform: "translateX(24px)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 420, delay: 80 + i * 50, easing: SPRING, fill: "backwards" }));
+      [...tbody.children].forEach((c, i) => play(c, [{ transform: "translateY(10px)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 380, delay: 300 + i * 70, easing: "ease-out", fill: "backwards" }));
+    }
+  }
+
+  // Rows that failed a check, as a real CSV the visitor can fix and import again
+  badDl.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (!bad.length) return;
+    const q = (s) => (/[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s);
+    const text = [head.map(q).join(","), ...bad.map((b) => b.r.map(q).join(","))].join("\n") + "\n";
+    const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = (file ? file.name.replace(/\.\w+$/, "") : "contacts") + "-to-fix.csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    say("Saved " + bad.length + " rows to fix.");
+  });
+
+  // ---------- Import: rows lift off and stack into the contact pile ----------
+  async function importRun(id) {
+    busy = true;
+    const btn = importBtn;                                     // keep the element before any await
+    btn.dataset.state = "working";
+    btn.setAttribute("aria-disabled", "true");
+    setStep(3);
+    say("Importing " + ready.length + " contacts.");
+    play(btn, [{ transform: "scale(1)" }, { transform: "scale(.94, .9)" }, { transform: "scale(1.02)" }, { transform: "scale(1)" }], { duration: 380, easing: "ease-out" });
+    [...tbody.children].forEach((tr, i) => play(tr, [{ transform: "none" }, { transform: "translateY(-4px)" }, { transform: "none" }], { duration: 360, delay: i * 60, easing: SPRING }));
+    await sleep(320, id);
+
+    const total = ready.length, cr = card.getBoundingClientRect(), tb = $(".tablewrap").getBoundingClientRect(), st = stack.getBoundingClientRect();
+    const flights = Math.min(total, 14);
+    const colors = FIELDS.map((f) => getComputedStyle(document.documentElement).getPropertyValue("--h" + FIELDS.indexOf(f)).trim());
+    for (let k = 1; k <= flights; k++) {
+      // one ghost row per beat; the counter keeps pace with the real number of rows
+      if (!calm()) {
+        const g = document.createElement("i");
+        g.className = "ghost";
+        const w = Math.min(tb.width * .6, 220);
+        g.style.width = w + "px";
+        g.style.background = `linear-gradient(90deg, ${colors[k % 5]} 0 30%, color-mix(in srgb, ${colors[(k + 1) % 5]} 45%, transparent) 30% 65%, color-mix(in srgb, ${colors[(k + 2) % 5]} 30%, transparent) 65%)`;
+        const x0 = tb.left - cr.left + 10 + (k % 3) * 14, y0 = tb.top - cr.top + 36 + (k % 3) * 30;
+        g.style.left = x0 + "px"; g.style.top = y0 + "px";
+        card.appendChild(g);
+        const dx = st.left - cr.left + 8 - x0, dy = st.top - cr.top + 16 - y0;
+        g.animate([
+          { transform: "translate(0,0) scale(1)", opacity: 0 },
+          { transform: "translate(0,-12px) scale(1)", opacity: 1, offset: .2 },
+          { transform: `translate(${dx * .6}px, ${dy * .6 - 40}px) scale(.5) rotate(-6deg)`, opacity: 1, offset: .65 },
+          { transform: `translate(${dx}px, ${dy}px) scale(.12)`, opacity: .2 }
+        ], { duration: 640, easing: "cubic-bezier(.5,0,.3,1)" }).onfinish = () => g.remove();
+      }
+      await sleep(calm() ? 40 : 120, id);
+      const n = Math.round((total * k) / flights);
+      countEl.textContent = n;
+      ibar.style.width = (100 * k) / flights + "%";
+      importLbl.textContent = "Importing " + n + " of " + total;
+      play(stack, [{ transform: "scale(1)" }, { transform: "scale(1.14) rotate(-3deg)" }, { transform: "scale(1)" }], { duration: 260, easing: SPRING });
+    }
+    await sleep(450, id);
+
+    // finish: check mark, confetti, honest totals
+    doneTitle.textContent = total + " contact" + (total === 1 ? "" : "s") + " imported";
+    doneSub.textContent = bad.length ? bad.length + " row" + (bad.length === 1 ? "" : "s") + " skipped; download them to fix" : "Every row came through clean";
+    done.classList.add("show");
+    btn.dataset.state = "done";
+    importLbl.textContent = "Imported";
+    confetti();
+    say(doneTitle.textContent + ". " + doneSub.textContent + ".");
+    await sleep(2600, id);
+
+    // reset to the match step with the same file
+    done.classList.remove("show");
+    ibar.style.width = "0";
+    btn.dataset.state = "idle";
+    busy = false;
+    setStep(2);
+    refresh(false, id);
+  }
+  function confetti() {
+    if (calm()) return;
+    const cr = card.getBoundingClientRect(), b = body.getBoundingClientRect();
+    const x = b.left - cr.left + b.width / 2, y = b.top - cr.top + b.height / 2 - 40;
+    for (let i = 0; i < 24; i++) {
+      const s = document.createElement("i");
+      s.className = "bit";
+      s.style.background = "var(--h" + (i % 5) + ")";
+      s.style.left = x + "px"; s.style.top = y + "px";
+      card.appendChild(s);
+      const a = (i / 24) * Math.PI * 2, r = 70 + Math.random() * 60;
+      s.animate([
+        { transform: "translate(-50%,-50%) rotate(0)", opacity: 1 },
+        { transform: `translate(${Math.cos(a) * r}px, ${Math.sin(a) * r * .7}px) rotate(${300 + i * 20}deg)`, opacity: 1, offset: .55 },
+        { transform: `translate(${Math.cos(a) * r * 1.2}px, ${Math.sin(a) * r * .7 + 60}px) rotate(${560 + i * 20}deg)`, opacity: 0 }
+      ], { duration: 1200 + Math.random() * 400, easing: "cubic-bezier(.2,.6,.4,1)" }).onfinish = () => s.remove();
+    }
+  }
+  function stopAll() {
+    runId++;
+    busy = false;
+    card.querySelectorAll(".ghost, .bit").forEach((g) => g.remove());
+    done.classList.remove("show");
+    ibar.style.width = "0";
+    importBtn.dataset.state = "idle";
+    if (rows.length) { setStep(2); refresh(false, runId); }
+  }
+  importBtn.addEventListener("click", async () => {
+    if (busy || importBtn.getAttribute("aria-disabled") === "true") {
+      if (!rows.length) complain("Choose a CSV file (or press Sample) first.");
+      return;
+    }
+    const id = ++runId;
+    try { await importRun(id); } catch (e) { if (e !== STOP) throw e; }
+  });
+
+  // ---------- Real files and the sample ----------
+  function readFile(f) {
+    if (!f) return;
+    if (f.size > 2 * 1048576) { complain(f.name + " is over 2 MB. Split it into smaller files."); return; }
+    if (!/\.(csv|tsv|txt)$/i.test(f.name) && !/^text\//.test(f.type)) { complain(f.name + " does not look like a CSV file."); return; }
+    stopAll();
+    const r = new FileReader();
+    r.onload = () => { if (load(String(r.result), f.name, f.size, runId)) say("Read " + f.name + ": " + rows.length + " rows. Check the matches, then import."); };
+    r.onerror = () => complain("That file could not be read.");
+    r.readAsText(f);
+  }
+  $("#choose").addEventListener("click", () => fileEl.click());
+  fileEl.addEventListener("change", () => { readFile(fileEl.files[0]); fileEl.value = ""; });
+  card.addEventListener("dragover", (e) => { e.preventDefault(); card.classList.add("drop-on"); });
+  card.addEventListener("dragleave", (e) => { if (!card.contains(e.relatedTarget)) card.classList.remove("drop-on"); });
+  card.addEventListener("drop", (e) => { e.preventDefault(); card.classList.remove("drop-on"); readFile(e.dataTransfer.files[0]); });
+  ["dragover", "drop"].forEach((t) => document.addEventListener(t, (e) => e.preventDefault()));
+
+  // A small customer list with a few rows that need fixing
+  function sampleCSV() {
+    const names = ["Ayesha Siddiqui", "Bilal Ahmed", "Hira Malik", "Usman Tariq", "Zainab Raza", "Fahad Iqbal", "Mahnoor Sheikh", "Ali Hassan", "Sana Qureshi", "Hamza Butt", "Iqra Javed", "Saad Chaudhry", "Maryam Aslam", "Omar Farooq", "Noor Fatima", "Danish Mirza", "Amna Khalid", "Taha Rehman"];
+    const cities = ["Lahore", "Karachi", "Islamabad", "Faisalabad", "Multan", "Peshawar", "Quetta", "Sialkot"];
+    const lines = ["Full name,Mobile,Town,E-mail,Order total,Notes"];
+    names.forEach((n, i) => {
+      const user = n.toLowerCase().replace(" ", ".");
+      let phone = "03" + String((i * 7) % 50).padStart(2, "0") + "-" + String(1234567 + i * 98731).slice(0, 7);
+      let mail = user + "@example.pk";
+      if (i === 4) phone = "0300-12345";               // too short
+      if (i === 11) mail = "saad.chaudhry@example";    // no domain ending
+      const amount = ((i * 3719) % 45000 + 1500).toLocaleString("en-US");
+      lines.push([n, phone, cities[i % cities.length], mail, '"' + amount + '"', i % 4 === 0 ? "Repeat customer" : ""].join(","));
+    });
+    return lines.join("\n") + "\n";
+  }
+  function loadSample(id) {
+    stopAll();
+    const t = sampleCSV();
+    load(t, "customers-november.csv", new Blob([t]).size, id === undefined ? runId : id);
+    say("Loaded the sample: " + rows.length + " customers. Check the matches, then import.");
+  }
+  $("#sampleBtn").addEventListener("click", () => loadSample());
+
+  function clearAll() {
+    head = []; rows = []; map = {}; file = null; ready = []; bad = [];
+    work.hidden = true; drop.hidden = false;
+    wires.textContent = "";
+    fname.textContent = "No file yet"; fmeta.textContent = "CSV with a header row, up to 2 MB";
+    summary.textContent = "Pick a file to begin."; badDl.hidden = true; countEl.textContent = 0;
+    importBtn.setAttribute("aria-disabled", "true"); importLbl.textContent = "Import";
+    setStep(1);
+  }
+
+  // ---------- Auto demo: load the sample, rematch a field, import, start over ----------
+  let demoOn = true, demoTimer = 0;
+  function scheduleDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(demo, ms); }
+  async function demo() {
+    if (!demoOn || busy) return scheduleDemo(1500);
+    const id = ++runId;
+    try {
+      busy = true;
+      play(drop, [{ transform: "scale(1)" }, { transform: "scale(.97)" }, { transform: "scale(1)" }], { duration: 300, easing: SPRING });
+      await sleep(260, id);
+      busy = false;
+      const t = sampleCSV();
+      load(t, "customers-november.csv", new Blob([t]).size, id);
+      busy = true;
+      await sleep(1500, id);
+      // show a re-match: City moves to Notes by mistake, then back to Town
+      pick("city", 5, true); await sleep(700, id);
+      pick("city", 2, true); await sleep(800, id);
+      busy = false;
+      await importRun(id);
+      await sleep(1200, id);
+      clearAll();
+      scheduleDemo(900);
+    } catch (e) { if (e !== STOP) throw e; }
+  }
+  function takeOver(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false;
+    clearTimeout(demoTimer);
+    if (busy || step === 3) stopAll(); else runId++;   // either way the demo chain stops here
+  }
+  ["pointerdown", "keydown", "dragenter"].forEach((t) => addEventListener(t, takeOver, true));
+
+  setStep(1);
+  scheduleDemo(250);
+</script>
+</body>
+</html>
