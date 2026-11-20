@@ -1,0 +1,572 @@
+<!doctype html>
+<!-- Chill & Craft · Unplug · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unplug · disconnect an app with undo</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: charcoal and electric yellow ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #f2efe6;
+    --card: #ffffff;
+    --bench: #ece8dc;
+    --bench-dot: rgba(60, 50, 20, .1);
+    --line: #e6e1d3;
+    --ink: #19191c;
+    --muted: #6f6c63;
+    --volt: #facc15;
+    --volt-deep: #8a6200;
+    --live: #22c55e;
+    --red: #e5484d;
+    --plate: #f7f6f2;
+    --sh: 60, 50, 20;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0c0c0e;
+    --card: #161619;
+    --bench: #111113;
+    --bench-dot: rgba(255, 240, 180, .06);
+    --line: #26262b;
+    --ink: #f4f4f5;
+    --muted: #a1a1aa;
+    --volt: #fde047;
+    --volt-deep: #fde047;
+    --live: #4ade80;
+    --red: #ff6b6b;
+    --plate: #2a2a2f;
+    --sh: 0, 0, 0;
+    --focus: #93c5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .frame { position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 20px 16px; overflow: hidden; overflow: clip; background: radial-gradient(70% 50% at 50% 30%, color-mix(in srgb, var(--volt) 16%, transparent), transparent 70%); }
+
+  .card {
+    position: relative;
+    width: min(470px, 100%);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    padding: 16px;
+    box-shadow: 0 44px 80px -52px rgba(var(--sh), .6), 0 2px 8px -4px rgba(var(--sh), .14);
+  }
+  .top { display: flex; align-items: center; gap: 10px; padding: 0 2px; }
+  .top h1 { margin: 0; font-size: 17px; font-weight: 790; }
+  .top p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .bolt { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--ink); color: var(--volt); }
+  .bolt svg { width: 20px; height: 20px; }
+
+  /* ---------- App picker ---------- */
+  .apps { display: flex; gap: 6px; margin: 14px 0 10px; flex-wrap: wrap; }
+  .app-chip { display: inline-flex; align-items: center; gap: 7px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); border-radius: 99px; padding: 6px 12px 6px 8px; font: inherit; font-size: 13px; font-weight: 680; cursor: pointer; transition: border-color .2s, background-color .2s, scale .2s var(--spring); }
+  .app-chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 3px color-mix(in srgb, var(--live) 22%, transparent); transition: background-color .3s, box-shadow .3s; }
+  .app-chip.off i { background: var(--muted); box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted) 18%, transparent); }
+  .app-chip[aria-pressed="true"] { border-color: var(--ink); background: color-mix(in srgb, var(--volt) 14%, var(--card)); }
+  .app-chip:active, .app-chip.pressed { scale: .94; }
+  .app-chip[aria-disabled="true"] { cursor: default; opacity: .6; }
+
+  /* ---------- The bench: app, cable, plug, wall socket ---------- */
+  .stage {
+    position: relative;
+    height: 190px;
+    border-radius: 18px;
+    overflow: hidden;
+    background-color: var(--bench);
+    background-image: radial-gradient(var(--bench-dot) 1.2px, transparent 1.4px);
+    background-size: 16px 16px;
+    box-shadow: inset 0 0 0 1px var(--line), inset 0 -24px 30px -26px rgba(var(--sh), .4);
+  }
+  .tile { position: absolute; left: 16px; width: 72px; height: 72px; border-radius: 20px; display: grid; place-items: center; background: linear-gradient(135deg, var(--c1), var(--c2)); color: #fff; box-shadow: 0 16px 24px -16px var(--c2), inset 0 1px 0 rgba(255, 255, 255, .35); transition: filter .5s; z-index: 2; }
+  .tile svg { width: 34px; height: 34px; }
+  .tile.dead { filter: grayscale(1) brightness(.92); }
+  .tile .port { position: absolute; right: -5px; top: 50%; width: 10px; height: 18px; margin-top: -9px; border-radius: 4px; background: #3f3f46; }
+  .wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: visible; }
+  .cable { fill: none; stroke: #2c2c31; stroke-width: 8; stroke-linecap: round; }
+  .cable-hi { fill: none; stroke: #6b6b75; stroke-width: 2; stroke-linecap: round; opacity: .7; transform: translateY(-2px); }
+  .pulse { fill: var(--volt); filter: drop-shadow(0 0 4px var(--volt)); transition: opacity .3s; }
+  .wires.quiet .pulse { opacity: 0; }
+  .plug { position: absolute; left: 0; top: 0; width: 66px; height: 30px; transform-origin: 0 50%; z-index: 3; }
+  .plug-in { position: absolute; inset: 0; transform-origin: 0 50%; }
+  .boot { position: absolute; left: 0; top: 8px; width: 14px; height: 14px; border-radius: 4px 2px 2px 4px; background: #2c2c31; }
+  .body { position: absolute; left: 12px; top: 0; width: 40px; height: 30px; border-radius: 7px; background: linear-gradient(#45454d, #232327); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); }
+  /* dark bench: a lighter plug and cable so they still read */
+  :root[data-theme="dark"] .body { background: linear-gradient(#6b6b76, #3d3d45); }
+  :root[data-theme="dark"] .boot { background: #4a4a53; }
+  :root[data-theme="dark"] .cable { stroke: #4a4a53; }
+  :root[data-theme="dark"] .cable-hi { stroke: #9a9aa6; }
+  .body::before { content: ""; position: absolute; left: 8px; top: 7px; bottom: 7px; width: 14px; background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .22) 0 2px, transparent 2px 5px); border-radius: 2px; }
+  .prong { position: absolute; left: 50px; width: 16px; height: 5px; border-radius: 0 2px 2px 0; background: linear-gradient(#fde68a, #ca8a04); }
+  .prong.a { top: 6px; } .prong.b { top: 19px; }
+  .socket { position: absolute; width: 58px; height: 100px; border-radius: 14px; background: var(--plate); box-shadow: inset 0 0 0 1px var(--line), 0 14px 22px -16px rgba(var(--sh), .6), inset 0 -6px 10px -8px rgba(var(--sh), .3); z-index: 4; }
+  .socket::before { content: ""; position: absolute; left: 6px; top: 50%; width: 22px; height: 40px; margin-top: -20px; border-radius: 8px; background: color-mix(in srgb, var(--ink) 9%, var(--plate)); box-shadow: inset 2px 0 4px rgba(0, 0, 0, .2); }
+  .socket .led { position: absolute; left: 50%; top: 12px; width: 9px; height: 9px; margin-left: -4.5px; border-radius: 50%; background: var(--live); box-shadow: 0 0 10px var(--live); transition: background-color .3s, box-shadow .3s; }
+  .socket.dead .led { background: #a1a1aa; box-shadow: none; }
+  .socket .screw { position: absolute; left: 50%; bottom: 10px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--line); }
+  .zap { position: absolute; width: 70px; height: 70px; margin: -35px 0 0 -35px; border-radius: 50%; background: radial-gradient(closest-side, #fff, var(--volt) 40%, transparent); }
+
+  /* ---------- Details and actions ---------- */
+  .row { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 0 2px; }
+  .info { min-width: 0; flex: 1; }
+  .info b { display: block; font-size: 15.5px; font-weight: 780; }
+  .info .desc { display: block; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; margin-top: 5px; padding: 3px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 750; background: color-mix(in srgb, var(--live) 15%, transparent); color: color-mix(in srgb, var(--live) 70%, var(--ink)); }
+  .chip i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .chip.off { background: color-mix(in srgb, var(--red) 13%, transparent); color: var(--red); }
+  .act { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 13px; padding: 11px 15px; font: inherit; font-size: 14px; font-weight: 780; cursor: pointer; white-space: nowrap; transition: scale .2s var(--spring), background-color .25s, color .25s, box-shadow .25s; color: var(--red); background: var(--card); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--red) 45%, transparent); }
+  .act svg { width: 18px; height: 18px; }
+  .act:hover { background: color-mix(in srgb, var(--red) 8%, var(--card)); }
+  .act:active, .act.pressed { scale: .94; }
+  .act.re { color: #1f1700; background: var(--volt); box-shadow: 0 12px 20px -14px var(--volt-deep); }
+  .act.wait { color: var(--muted); box-shadow: inset 0 0 0 1.5px var(--line); cursor: default; }
+  .dot-spin { width: 15px; height: 15px; border-radius: 50%; border: 2.2px solid var(--line); border-top-color: var(--ink); animation: spin .7s linear infinite; }
+
+  /* steps and the countdown undo bar live in a fixed-height area so nothing jumps */
+  .activity { position: relative; height: 150px; margin-top: 12px; }
+  .steps { list-style: none; margin: 0; padding: 0 2px; display: grid; gap: 7px; }
+  .step { display: flex; align-items: center; gap: 9px; font-size: 13px; opacity: 0; translate: 0 6px; transition: opacity .3s, translate .4s var(--spring); }
+  .step.show { opacity: 1; translate: 0 0; }
+  .step .dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--ink); animation: spin .7s linear infinite; flex: none; display: grid; place-items: center; }
+  .step.done .dot { animation: none; border-color: var(--ink); background: var(--ink); color: var(--volt); }
+  .step .dot svg { width: 11px; height: 11px; opacity: 0; }
+  .step.done .dot svg { opacity: 1; }
+  .note { position: absolute; left: 2px; top: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; color: color-mix(in srgb, var(--live) 70%, var(--ink)); opacity: 0; transition: opacity .3s; }
+  .note.show { opacity: 1; }
+  .idle-hint { position: absolute; left: 2px; top: 0; font-size: 12.5px; color: var(--muted); max-width: 330px; transition: opacity .3s; }
+  .ub {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 10px 10px 12px 14px;
+    border-radius: 15px;
+    background: #19191c;
+    color: #f4f4f5;
+    transform: translateY(14px) scale(.96);
+    opacity: 0;
+    visibility: hidden;
+    transition: transform .45s var(--spring), opacity .25s, visibility 0s .45s;
+  }
+  :root[data-theme="dark"] .ub { background: #26262c; }
+  .ub.show { transform: none; opacity: 1; visibility: visible; transition: transform .45s var(--spring), opacity .25s, visibility 0s; }
+  .ub-top { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .ub-top span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .undo { border: 0; border-radius: 9px; padding: 7px 12px; font: inherit; font-weight: 800; background: var(--volt); color: #1f1700; cursor: pointer; font-variant-numeric: tabular-nums; transition: scale .2s var(--spring); }
+  .undo:active, .undo.pressed { scale: .9; }
+  .track { position: relative; height: 6px; margin-top: 10px; border-radius: 3px; background: rgba(255, 255, 255, .12); }
+  .fill { position: absolute; inset: 0; border-radius: 3px; background: linear-gradient(90deg, #ca8a04, var(--volt)); transform-origin: 0 50%; }
+  .tip { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: radial-gradient(closest-side, #fff, var(--volt) 55%, transparent); animation: flicker .18s steps(2) infinite; }
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .layer { position: absolute; inset: 0; pointer-events: none; }
+  .spark { position: absolute; width: 3px; height: 12px; border-radius: 2px; background: var(--volt); box-shadow: 0 0 6px var(--volt); }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes flicker { 50% { opacity: .55; } }
+
+  @media (max-width: 420px) {
+    .act { padding: 10px 12px; }
+    .card { padding: 14px; }
+  }
+  /* Calm mode: every step still happens, without the big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <main class="card" aria-labelledby="title">
+    <header class="top">
+      <span class="bolt" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 2L4 14h6.5L9.5 22 20 9.5h-6.6z" /></svg></span>
+      <div>
+        <h1 id="title">Connected apps</h1>
+        <p>Noor Crafts · Lahore</p>
+      </div>
+    </header>
+
+    <div class="apps" id="apps" aria-label="Apps"></div>
+
+    <div class="stage" id="stage" aria-hidden="true">
+      <svg class="wires" id="wires">
+        <path class="cable" id="cable" />
+        <path class="cable-hi" id="cableHi" />
+        <circle class="pulse" r="3.4" /><circle class="pulse" r="3.4" /><circle class="pulse" r="3.4" />
+      </svg>
+      <div class="tile" id="tile"><span id="tileIcon"></span><i class="port"></i></div>
+      <div class="plug" id="plug"><div class="plug-in" id="plugIn"><i class="prong a"></i><i class="prong b"></i><i class="boot"></i><i class="body"></i></div></div>
+      <div class="socket" id="socket"><i class="led"></i><i class="screw"></i></div>
+    </div>
+
+    <div class="row">
+      <div class="info">
+        <b id="appName">LedgerLink</b>
+        <span class="desc" id="appDesc">Syncs orders and invoices · since August</span>
+        <span class="chip" id="chip"><i aria-hidden="true"></i><span id="chipText">Connected</span></span>
+      </div>
+      <button class="act" id="act" type="button"></button>
+    </div>
+
+    <div class="activity">
+      <p class="idle-hint" id="hint">Disconnecting stops syncing at once. You get a few seconds to undo it.</p>
+      <ul class="steps" id="steps" aria-label="Disconnect progress"></ul>
+      <p class="note" id="note">Plugged back in · nothing was lost</p>
+      <div class="ub" id="ub">
+        <div class="ub-top"><span id="ubText">LedgerLink disconnected</span><button class="undo" id="undoBtn" type="button">Undo · <b id="sec">8</b>s</button></div>
+        <div class="track"><i class="fill" id="fill"></i><i class="tip" id="tip"></i></div>
+      </div>
+    </div>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </main>
+  <div class="layer" id="layer" aria-hidden="true"></div>
+</div>
+
+<script>
+  // ---------- Unplug: disconnecting an app pulls a real-looking plug, with a countdown to undo ----------
+  (function () {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const frame = $("frame"), layer = $("layer"), stage = $("stage"), wiresEl = $("wires"), cable = $("cable"), cableHi = $("cableHi");
+    const tile = $("tile"), tileIcon = $("tileIcon"), plug = $("plug"), plugIn = $("plugIn"), socket = $("socket");
+    const appsEl = $("apps"), appName = $("appName"), appDesc = $("appDesc"), chip = $("chip"), chipText = $("chipText"), act = $("act");
+    const hint = $("hint"), stepsEl = $("steps"), note = $("note"), ub = $("ub"), ubText = $("ubText"), undoBtn = $("undoBtn"), sec = $("sec"), fill = $("fill"), tip = $("tip"), status = $("status");
+    const pulses = [...wiresEl.querySelectorAll(".pulse")];
+
+    const ICONS = {
+      book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11M9 8h6"/></svg>',
+      truck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/></svg>',
+      card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h4"/></svg>'
+    };
+    const APPS = [
+      { id: "ledger", name: "LedgerLink", desc: "Syncs orders and invoices · since August", c1: "#a5b4fc", c2: "#4f46e5", icon: "book", hooks: 4 },
+      { id: "courier", name: "Courier Hub", desc: "Books riders for deliveries · since June", c1: "#fdba74", c2: "#ea580c", icon: "truck", hooks: 2 },
+      { id: "pay", name: "Pay Relay", desc: "Takes card and wallet payments · since March", c1: "#5eead4", c2: "#0d9488", icon: "card", hooks: 3 }
+    ];
+    const conn = { ledger: true, courier: true, pay: true };
+    const UNDO_MS = 8000;
+
+    const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+    const calm = () => calmQ.matches;
+    const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 200) : ms));
+    function play(el, frames, opts) {
+      if (calm() || !el.animate) return Promise.resolve();
+      const a = el.animate(frames, opts);
+      return new Promise((res) => { a.onfinish = res; a.oncancel = res; });
+    }
+    const say = (m) => { if (!demo.on) status.textContent = m; };
+    const press = (el) => { el.classList.add("pressed"); setTimeout(() => el.classList.remove("pressed"), 170); };
+    const S = { app: "ledger", busy: false, count: null, gen: 0 };
+    const A = () => APPS.find((a) => a.id === S.app);
+
+    // ---------- Springs: the plug pose and the cable sag ----------
+    const sp = { x: { x: 0, v: 0, t: 0 }, y: { x: 0, v: 0, t: 0 }, r: { x: 0, v: 0, t: 0 }, sag: { x: 34, v: 0, t: 34 } };
+    const G = {};
+    function geo() {
+      const W = stage.clientWidth, H = stage.clientHeight;
+      G.W = W; G.H = H;
+      G.sy = Math.round(H * 0.42);
+      G.sx = W - 74;
+      G.port = { x: 16 + 72 + 5, y: G.sy };
+      tile.style.top = G.sy - 36 + "px";
+      socket.style.left = G.sx + "px";
+      socket.style.top = G.sy - 50 + "px";
+    }
+    function targets(on) {
+      const home = G.sx - 52, pull = Math.min(74, (home - G.port.x) * 0.38);   // pull out less on narrow benches
+      if (on) { sp.x.t = home; sp.y.t = G.sy; sp.r.t = 0; sp.sag.t = 34; }
+      else { sp.x.t = home - pull; sp.y.t = G.sy + 50; sp.r.t = 34; sp.sag.t = 62; }
+    }
+    function snap() { ["x", "y", "r", "sag"].forEach((k) => { sp[k].x = sp[k].t; sp[k].v = 0; }); }
+    function step(s, dt, k, c) { const a = (s.t - s.x) * k - s.v * c; s.v += a * dt; s.x += s.v * dt; }
+    const bez = (p, t) => {
+      const u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+      return { x: a * p[0].x + b * p[1].x + c * p[2].x + d * p[3].x, y: a * p[0].y + b * p[1].y + c * p[2].y + d * p[3].y };
+    };
+    let last = performance.now(), quiet = false;
+    function frameLoop(now) {
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      if (calm()) snap();
+      else {
+        step(sp.x, dt, 170, 15); step(sp.y, dt, 150, 11); step(sp.r, dt, 110, 5.5); step(sp.sag, dt, 80, 4.2);
+      }
+      const sway = conn[S.app] && !calm() ? Math.sin(now / 950) * 3 : 0;
+      const x = sp.x.x, y = sp.y.x, r = sp.r.x, rad = (r * Math.PI) / 180, sag = sp.sag.x + sway;
+      plug.style.transform = `translate(${x.toFixed(1)}px, ${(y - 15).toFixed(1)}px) rotate(${r.toFixed(2)}deg)`;
+      const reach = Math.max(18, Math.min(64, (x - G.port.x) * 0.36));   // control arms scale with the cable length
+      const P = [G.port, { x: G.port.x + reach, y: G.port.y + sag }, { x: x - Math.cos(rad) * reach, y: y - Math.sin(rad) * reach + sag * 0.55 }, { x, y }];
+      const d = `M${P[0].x} ${P[0].y}C${P[1].x.toFixed(1)} ${P[1].y.toFixed(1)} ${P[2].x.toFixed(1)} ${P[2].y.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      cable.setAttribute("d", d);
+      cableHi.setAttribute("d", d);
+      pulses.forEach((c, i) => {
+        const p = bez(P, ((now / 1500 + i / 3) % 1) * 0.92 + 0.04);
+        c.setAttribute("cx", p.x.toFixed(1));
+        c.setAttribute("cy", p.y.toFixed(1));
+      });
+      wiresEl.classList.toggle("quiet", quiet || !conn[S.app] || calm());
+      requestAnimationFrame(frameLoop);
+    }
+
+    // ---------- Render the picker, the tile and the actions ----------
+    const PLUG_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/><path d="M4 4l16 16"/></svg>';
+    const RE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/></svg>';
+    APPS.forEach((a) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "app-chip";
+      b.dataset.id = a.id;
+      b.innerHTML = `<i aria-hidden="true"></i>${a.name}`;
+      b.addEventListener("click", () => { press(b); pick(a.id); });
+      appsEl.appendChild(b);
+    });
+    function paintChips() {
+      appsEl.querySelectorAll(".app-chip").forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.dataset.id === S.app));
+        b.classList.toggle("off", !conn[b.dataset.id]);
+        b.setAttribute("aria-disabled", String(!!(S.busy || S.count)));
+        b.setAttribute("aria-label", `${APPS.find((a) => a.id === b.dataset.id).name}, ${conn[b.dataset.id] ? "connected" : "disconnected"}`);
+      });
+    }
+    function paintApp() {
+      const a = A(), on = conn[a.id];
+      tile.style.setProperty("--c1", a.c1);
+      tile.style.setProperty("--c2", a.c2);
+      tileIcon.innerHTML = ICONS[a.icon];
+      tile.classList.toggle("dead", !on);
+      socket.classList.toggle("dead", !on);
+      appName.textContent = a.name;
+      appDesc.textContent = a.desc;
+      chip.classList.toggle("off", !on);
+      chipText.textContent = on ? "Connected" : "Disconnected";
+      setAct(on ? "disconnect" : "reconnect");
+      paintChips();
+    }
+    function setAct(kind) {
+      act.className = "act" + (kind === "reconnect" ? " re" : kind === "wait" ? " wait" : "");
+      act.dataset.kind = kind;
+      act.innerHTML = kind === "disconnect" ? `${PLUG_ICON}Disconnect` : kind === "reconnect" ? `${RE_ICON}Reconnect` : `<span class="dot-spin"></span>${act.dataset.label || "Working…"}`;
+      act.setAttribute("aria-disabled", String(kind === "wait"));
+    }
+    async function pick(id) {
+      if (S.busy || S.count || id === S.app) return;
+      S.busy = true;
+      paintChips();
+      await play(tile, [{ transform: "none" }, { transform: "rotateY(90deg) scale(.9)" }], { duration: 180, easing: "ease-in" });
+      S.app = id;
+      paintApp();
+      clearSteps();
+      targets(conn[id]);
+      play(tile, [{ transform: "rotateY(-90deg) scale(.9)" }, { transform: "none" }], { duration: 420, easing: "cubic-bezier(.3, 1.5, .5, 1)" });
+      say(`${A().name} is ${conn[id] ? "connected" : "disconnected"}`);
+      S.busy = false;
+      paintChips();
+    }
+
+    // ---------- Disconnect: wiggle, pop out with sparks, the cable goes slack, steps tick, countdown ----------
+    function sparks(x, y, n) {
+      if (calm()) return;
+      const f = frame.getBoundingClientRect();
+      for (let i = 0; i < n; i++) {
+        const s = document.createElement("i");
+        s.className = "spark";
+        s.style.left = x - f.left - 1.5 + "px";
+        s.style.top = y - f.top - 6 + "px";
+        layer.appendChild(s);
+        const a = Math.PI + (Math.random() - 0.5) * Math.PI * 1.2, d = 26 + Math.random() * 42, deg = (a * 180) / Math.PI + 90;
+        const an = s.animate([
+          { transform: `rotate(${deg}deg) translateY(0) scaleY(1)`, opacity: 1 },
+          { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d}px) rotate(${deg}deg) scaleY(.3)`, opacity: 0 }
+        ], { duration: 380 + Math.random() * 260, easing: "cubic-bezier(.2, .8, .3, 1)" });
+        an.onfinish = an.oncancel = () => s.remove();
+      }
+    }
+    function zap(x, y) {
+      if (calm()) return;
+      const f = frame.getBoundingClientRect(), z = document.createElement("i");
+      z.className = "zap";
+      z.style.left = x - f.left + "px";
+      z.style.top = y - f.top + "px";
+      layer.appendChild(z);
+      const an = z.animate([{ transform: "scale(.3)", opacity: 1 }, { transform: "scale(1.6)", opacity: 0 }], { duration: 420, easing: "ease-out" });
+      an.onfinish = an.oncancel = () => z.remove();
+    }
+    function socketPoint() { const r = socket.getBoundingClientRect(); return { x: r.left + 2, y: r.top + r.height / 2 }; }
+    const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    function clearSteps() { stepsEl.innerHTML = ""; note.classList.remove("show"); hint.style.opacity = "1"; }
+    async function runSteps(gen) {
+      const a = A();
+      const list = ["Access token revoked", `Webhooks removed (${a.hooks})`, "Your synced orders stay in your shop"];
+      hint.style.opacity = "0";
+      stepsEl.innerHTML = list.map((t) => `<li class="step"><span class="dot" aria-hidden="true">${CHECK}</span><span>${t}</span></li>`).join("");
+      const items = [...stepsEl.children];
+      for (const li of items) {
+        if (gen !== S.gen) return;
+        li.classList.add("show");
+        await wait(420);
+        if (gen !== S.gen) return;
+        li.classList.add("done");
+        play(li.querySelector(".dot"), [{ transform: "scale(.6)" }, { transform: "scale(1.25)", offset: 0.5 }, { transform: "none" }], { duration: 360, easing: "ease-out" });
+      }
+    }
+    async function disconnect() {
+      if (S.busy || S.count || !conn[S.app]) return;
+      const a = A(), gen = ++S.gen;
+      S.busy = true;
+      act.dataset.label = "Unplugging…";
+      setAct("wait");
+      paintChips();
+      say(`Disconnecting ${a.name}`);
+      // anticipation: the cable goes tight and the plug wiggles in the socket
+      quiet = true;
+      sp.sag.t = 16;
+      await play(plugIn, [{ transform: "none" }, { transform: "rotate(-5deg)" }, { transform: "rotate(5deg)" }, { transform: "rotate(-3deg) translateX(-3px)" }, { transform: "translateX(2px)" }, { transform: "none" }], { duration: 420, easing: "ease-in-out" });
+      // pop: the plug flies out, sparks at the socket, everything goes dark
+      conn[a.id] = false;
+      targets(false);
+      sp.x.v = -760; sp.y.v = -160; sp.r.v = 420; sp.sag.v = -120;
+      const sp0 = socketPoint();
+      sparks(sp0.x, sp0.y, 14);
+      zap(sp0.x, sp0.y);
+      quiet = false;
+      paintApp();
+      setAct("wait");
+      play(stage, [{ transform: "none" }, { transform: "translateX(-3px)" }, { transform: "translateX(2px)" }, { transform: "none" }], { duration: 260 });
+      await wait(420);
+      S.busy = false;
+      runSteps(gen);
+      await wait(380);
+      if (gen !== S.gen) return;
+      startCountdown(a);
+      say(`${a.name} disconnected. Undo within ${UNDO_MS / 1000} seconds.`);
+    }
+    function startCountdown(a) {
+      const t0 = performance.now();
+      ubText.textContent = `${a.name} disconnected`;
+      ub.classList.add("show");
+      S.count = { t0, timer: setInterval(tick, 80) };
+      paintChips();
+      tick();
+      function tick() {
+        const left = Math.max(0, UNDO_MS - (performance.now() - t0)), k = left / UNDO_MS;
+        fill.style.transform = `scaleX(${k.toFixed(4)})`;
+        tip.style.left = (k * 100).toFixed(2) + "%";
+        sec.textContent = Math.ceil(left / 1000);
+        if (left <= 0) finalize();
+      }
+    }
+    function stopCountdown() {
+      if (!S.count) return;
+      clearInterval(S.count.timer);
+      S.count = null;
+      ub.classList.remove("show");
+      paintChips();
+    }
+    function finalize() {
+      stopCountdown();
+      setAct("reconnect");
+      say(`${A().name} is disconnected. Reconnect any time.`);
+    }
+
+    // ---------- Undo and Reconnect: the plug flies home, zap, the cable snaps taut ----------
+    async function plugIn_(kind) {
+      const a = A(), gen = ++S.gen;
+      S.busy = true;
+      stopCountdown();
+      act.dataset.label = kind === "undo" ? "Plugging in…" : "Connecting…";
+      setAct("wait");
+      paintChips();
+      if (kind === "reconnect") {
+        clearSteps();
+        hint.style.opacity = "0";
+        sp.y.t -= 14; sp.r.t = 10;           // the plug lifts, ready
+        await wait(650);
+      }
+      conn[a.id] = true;
+      targets(true);
+      sp.x.v = 420; sp.y.v = -80; sp.r.v = -200;
+      await wait(calm() ? 0 : 260);
+      const p = socketPoint();
+      zap(p.x, p.y);
+      sparks(p.x, p.y, 8);
+      sp.sag.v = -260;
+      paintApp();
+      play(socket, [{ transform: "none" }, { transform: "translateX(3px)" }, { transform: "none" }], { duration: 220, easing: "ease-out" });
+      stepsEl.innerHTML = "";
+      note.textContent = kind === "undo" ? "Plugged back in · nothing was lost" : `${a.name} reconnected · syncing again`;
+      note.classList.add("show");
+      hint.style.opacity = "0";
+      say(note.textContent);
+      S.busy = false;
+      paintChips();
+      await wait(2200);
+      if (gen === S.gen && conn[a.id]) clearSteps();
+    }
+    act.addEventListener("click", (e) => {
+      const btn = e.currentTarget;
+      if (S.busy || btn.dataset.kind === "wait") return;
+      press(btn);
+      if (btn.dataset.kind === "disconnect") disconnect();
+      else if (btn.dataset.kind === "reconnect") plugIn_("reconnect");
+    });
+    undoBtn.addEventListener("click", () => { if (S.count && !S.busy) { press(undoBtn); plugIn_("undo"); } });
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && S.count && !S.busy) { e.preventDefault(); plugIn_("undo"); }
+    });
+
+    // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+    const demo = { on: true, timer: 0, k: 0 };
+    function stopDemo() { if (!demo.on) return; demo.on = false; clearTimeout(demo.timer); }
+    addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    function scheduleDemo(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+    async function runDemo() {
+      if (!demo.on) return;
+      if (S.busy) return scheduleDemo(600);
+      if (S.count) { press(undoBtn); await wait(160); if (!demo.on) return; await plugIn_("undo"); return scheduleDemo(2600); }
+      if (!conn[S.app]) { press(act); await wait(160); if (!demo.on) return; await plugIn_("reconnect"); return scheduleDemo(2600); }
+      const round = demo.k % 3;
+      demo.k += 1;
+      if (round === 2) {
+        const next = APPS[(APPS.findIndex((a) => a.id === S.app) + 1) % APPS.length].id;
+        press(appsEl.querySelector(`[data-id="${next}"]`));
+        await pick(next);
+        await wait(900); if (!demo.on) return;
+      }
+      press(act);
+      await wait(170); if (!demo.on) return;
+      await disconnect();
+      // first round: undo after a few seconds; second round: let the countdown run out, then reconnect
+      if (round !== 1) { await wait(2600); if (!demo.on) return; return runDemo(); }
+      return scheduleDemo(UNDO_MS + 1600);
+    }
+
+    geo();
+    targets(true);
+    snap();
+    paintApp();
+    addEventListener("resize", () => { geo(); targets(conn[S.app]); });
+    requestAnimationFrame(frameLoop);
+    scheduleDemo(700);
+  })();
+</script>
+</body>
+</html>

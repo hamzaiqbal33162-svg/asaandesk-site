@@ -1,0 +1,726 @@
+<!doctype html>
+<!-- Chill & Craft · Magnet Bin · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magnet Bin · drag a file onto the bin</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #e7ebfb;
+    --aura1: #b9c3ff;
+    --aura2: #ffc7dc;
+    --card: #ffffff;
+    --tile: #f6f7ff;
+    --tile-hover: #eef0ff;
+    --line: #e1e4f5;
+    --ink: #141834;
+    --muted: #646a92;
+    --cyan: #0fb2d2;
+    --indigo: #4d50e3;
+    --pink: #ff4a87;
+    --well1: #ffffff;
+    --well2: #dce2fd;
+    --sh: 30, 34, 96;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #090b1c;
+    --aura1: #23287a;
+    --aura2: #5a1840;
+    --card: #12152d;
+    --tile: #181c3a;
+    --tile-hover: #1f2448;
+    --line: #262a50;
+    --ink: #eef0ff;
+    --muted: #9196c0;
+    --cyan: #3edcf6;
+    --indigo: #8286ff;
+    --pink: #ff6ba0;
+    --well1: #232861;
+    --well2: #0e112c;
+    --sh: 0, 0, 0;
+    --focus: #93c5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  /* ---------- Stage ---------- */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* the frame clips everything that flies (tiles, sparks, the demo hand) so the page never gets wider */
+  .frame { position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 22px 16px; overflow: hidden; overflow: clip; }
+  .aura { position: absolute; width: 460px; height: 460px; border-radius: 50%; filter: blur(80px); opacity: .6; pointer-events: none; }
+  .a1 { background: var(--aura1); left: -150px; top: -170px; animation: drift1 17s ease-in-out infinite alternate; }
+  .a2 { background: var(--aura2); right: -170px; bottom: -190px; animation: drift2 21s ease-in-out infinite alternate; }
+
+  /* ---------- Card ---------- */
+  .card {
+    position: relative;
+    width: min(580px, 100%);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    padding: 18px 20px 14px;
+    box-shadow: 0 44px 80px -50px rgba(var(--sh), .6), 0 2px 8px -4px rgba(var(--sh), .14);
+  }
+  .top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .folder { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, var(--cyan), var(--indigo)); box-shadow: 0 10px 18px -10px var(--indigo); }
+  .folder svg { width: 22px; height: 22px; }
+  .top h1 { margin: 0; font-size: 17px; font-weight: 760; letter-spacing: -.01em; }
+  .top p { margin: 1px 0 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .restore {
+    margin-left: auto;
+    border: 1px solid var(--line);
+    background: var(--tile);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 650;
+    padding: 8px 13px;
+    border-radius: 99px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background-color .2s, transform .2s var(--spring);
+  }
+  .restore:hover { background: var(--tile-hover); }
+  .restore:active { transform: scale(.94); }
+  .restore svg { width: 15px; height: 15px; }
+  .restore[hidden] { display: none; }
+
+  /* ---------- File tiles ---------- */
+  .wrap { position: relative; min-height: 128px; }
+  .grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .slot { position: relative; }
+  .slot[hidden] { display: none; }
+  .slot.up { z-index: 6; }
+  .tile {
+    position: relative;
+    width: 100%;
+    height: 128px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--tile);
+    color: var(--ink);
+    font: inherit;
+    padding: 14px 8px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background-color .2s, box-shadow .25s, translate .3s var(--spring);
+  }
+  .tile:hover { background: var(--tile-hover); translate: 0 -3px; box-shadow: 0 16px 24px -18px rgba(var(--sh), .55); }
+  .tile.lifted { cursor: grabbing; translate: 0 0; transition: box-shadow .25s, background-color .2s; box-shadow: 0 30px 40px -22px rgba(var(--sh), .65), 0 0 0 2px var(--cyan); background: var(--card); }
+  .tile:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .doc { width: 46px; height: 56px; margin-bottom: 8px; filter: drop-shadow(0 7px 8px rgba(var(--sh), .22)); transition: transform .35s var(--spring); }
+  .tile:hover .doc { transform: rotate(-5deg) translateY(-2px); }
+  .tile .fold { transition: transform .3s var(--spring); transform-box: fill-box; transform-origin: 100% 0; }
+  .tile:hover .fold { transform: scale(1.25); }
+  .nm { max-width: 100%; font-size: 12.5px; font-weight: 680; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sz { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .empty { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 4px; border: 2px dashed var(--line); border-radius: 18px; color: var(--muted); font-size: 14px; text-align: center; animation: fadeIn .4s ease-out; }
+  .empty b { color: var(--ink); font-size: 15px; }
+  .empty[hidden] { display: none; }
+
+  /* ---------- The magnetic bin ---------- */
+  .dock { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 26px 0 4px; }
+  .chev { display: flex; flex-direction: column; align-items: center; height: 16px; margin-top: -14px; margin-bottom: 4px; }
+  .chev i { width: 10px; height: 10px; border-right: 2.5px solid var(--muted); border-bottom: 2.5px solid var(--muted); transform: rotate(45deg); opacity: .25; margin-top: -4px; animation: chev 1.6s ease-in-out infinite; }
+  .chev i:nth-child(2) { animation-delay: .2s; }
+  .well {
+    --p: 0;
+    position: relative;
+    width: 148px;
+    height: 148px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at 50% 36%, var(--well1), var(--well2) 78%);
+    box-shadow: inset 0 -12px 26px -16px rgba(var(--sh), .45), inset 0 2px 0 rgba(255, 255, 255, .5), 0 22px 40px -26px rgba(var(--sh), .7);
+    transition: box-shadow .3s;
+  }
+  .ring { position: absolute; inset: -8px; border-radius: 50%; border: 1.5px solid var(--cyan); pointer-events: none; animation: field 3.2s ease-out infinite; }
+  .r2 { animation-delay: -1.07s; }
+  .r3 { animation-delay: -2.14s; }
+  .well.charged .ring { animation-duration: 1.2s; }
+  .well.locked { box-shadow: inset 0 -12px 26px -16px rgba(var(--sh), .45), 0 0 0 7px rgba(255, 74, 135, .16), 0 0 54px rgba(255, 74, 135, .5); }
+  .well.locked .ring { border-color: var(--pink); }
+  .shock { position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--pink); opacity: 0; pointer-events: none; }
+  .bin { width: 70px; height: 78px; overflow: visible; transform-origin: 50% 100%; animation: breathe 3.4s ease-in-out infinite; }
+  .lid { transform-box: fill-box; transform-origin: 6% 100%; transform: translateY(calc(var(--lid, 0) * -4px)) rotate(calc(var(--lid, 0) * -36deg)); transition: transform .34s var(--spring); }
+  .bin.slam .lid { transition: transform .22s cubic-bezier(.5, 1.8, .6, 1); }
+  .mouth { opacity: calc(var(--lid, 0) * .9); transition: opacity .25s; }
+  .count {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 99px;
+    display: grid;
+    place-items: center;
+    background: var(--pink);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 6px 14px -6px var(--pink), 0 0 0 3px var(--card);
+    transition: transform .3s var(--spring), opacity .2s;
+  }
+  .count.zero { transform: scale(0); opacity: 0; }
+  .label { margin: 4px 0 0; min-height: 20px; font-size: 14px; font-weight: 650; color: var(--muted); text-align: center; transition: color .2s; }
+  .label.hot { color: var(--pink); }
+  .tip { margin: 0; font-size: 12.5px; color: var(--muted); text-align: center; }
+  kbd { font: 600 11.5px/1 system-ui, sans-serif; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--line); border-bottom-width: 2px; background: var(--tile); color: var(--ink); }
+
+  /* ---------- Undo toast ---------- */
+  .toast-slot { height: 54px; margin-top: 10px; overflow: hidden; }
+  .toast {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 46px;
+    padding: 0 6px 0 14px;
+    border-radius: 14px;
+    background: #171a3a;
+    color: #f1f2ff;
+    font-size: 13.5px;
+    transform: translateY(120%);
+    opacity: 0;
+    transition: transform .45s var(--spring), opacity .25s;
+  }
+  :root[data-theme="dark"] .toast { background: #2a2f66; }
+  .toast.show { transform: none; opacity: 1; }
+  .toast span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toast svg { width: 18px; height: 18px; flex: none; }
+  .undo { border: 0; border-radius: 10px; padding: 8px 14px; font: inherit; font-weight: 750; color: #171a3a; background: linear-gradient(135deg, #8ff0ff, #b9bcff); cursor: pointer; transition: transform .2s var(--spring); }
+  .undo:hover { transform: translateY(-1px); }
+  .undo:active, .undo.pressed { transform: scale(.9); }
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- Flying bits and the demo hand ---------- */
+  .layer { position: absolute; inset: 0; pointer-events: none; }
+  .spark { position: absolute; width: 7px; height: 7px; border-radius: 2px; }
+  .hand { position: absolute; left: 0; top: 0; width: 30px; height: 34px; opacity: 0; transition: opacity .25s; z-index: 10; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .3)); }
+  .hand.on { opacity: 1; }
+  .hand svg { width: 100%; height: 100%; transform-origin: 10% 8%; transition: transform .15s; }
+  .hand.down svg { transform: scale(.86); }
+  .hand::after { content: ""; position: absolute; left: -12px; top: -12px; width: 26px; height: 26px; border-radius: 50%; background: var(--cyan); opacity: 0; transform: scale(.3); transition: opacity .3s, transform .3s; }
+  .hand.down::after { opacity: .35; transform: scale(1); }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @keyframes drift1 { to { transform: translate(120px, 90px) scale(1.15); } }
+  @keyframes drift2 { to { transform: translate(-110px, -80px) scale(.9); } }
+  @keyframes field { 0% { transform: scale(.9); opacity: calc(.16 + var(--p) * .6); } 100% { transform: scale(1.34); opacity: 0; } }
+  @keyframes breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+  @keyframes chev { 0%, 100% { opacity: .15; } 50% { opacity: .7; } }
+  @keyframes fadeIn { from { opacity: 0; transform: scale(.96); } }
+
+  @media (max-width: 520px) {
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .wrap { min-height: 268px; }
+    .tile { height: 120px; }
+    .card { padding: 16px 14px 12px; }
+    .restore .txt { display: none; }
+  }
+  /* Calm mode: every step still happens, without the big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <div class="aura a1" aria-hidden="true"></div>
+  <div class="aura a2" aria-hidden="true"></div>
+
+  <main class="card" aria-labelledby="title">
+    <header class="top">
+      <span class="folder" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M12 10v6M9 13l3 3 3-3" /></svg>
+      </span>
+      <div>
+        <h1 id="title">Downloads</h1>
+        <p id="sub">4 files · 15.9 MB</p>
+      </div>
+      <button class="restore" id="restore" type="button" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4h4" /></svg>
+        <span class="txt">Restore all</span>
+      </button>
+    </header>
+
+    <div class="wrap">
+      <ul class="grid" id="grid" aria-label="Files"></ul>
+      <div class="empty" id="empty" hidden><b>All clear</b><span>Downloads is empty. Restore brings them back.</span></div>
+    </div>
+
+    <div class="dock">
+      <div class="chev" aria-hidden="true"><i></i><i></i></div>
+      <div class="well" id="well" aria-hidden="true">
+        <i class="ring"></i><i class="ring r2"></i><i class="ring r3"></i><i class="shock" id="shock"></i>
+        <svg class="bin" id="bin" viewBox="0 0 64 72">
+          <defs>
+            <linearGradient id="binG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3fdcf6" /><stop offset="1" stop-color="#5256e8" /></linearGradient>
+            <linearGradient id="lidG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7f83ff" /><stop offset="1" stop-color="#4d50e3" /></linearGradient>
+            <radialGradient id="mouthG" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff4a87" stop-opacity=".95" /><stop offset="1" stop-color="#ff4a87" stop-opacity="0" /></radialGradient>
+          </defs>
+          <ellipse class="mouth" cx="32" cy="27" rx="24" ry="9" fill="url(#mouthG)" />
+          <path d="M12 26h40l-3.6 37.4A6 6 0 0 1 42.4 69H21.6a6 6 0 0 1-6-5.6z" fill="url(#binG)" />
+          <path d="M12 26h40l-.5 5H12.5z" fill="#000" opacity=".14" />
+          <g stroke="#fff" stroke-width="2.6" stroke-linecap="round" opacity=".55"><path d="M24 36v24M32 36v24M40 36v24" /></g>
+          <g class="lid">
+            <rect x="8" y="17" width="48" height="8" rx="4" fill="url(#lidG)" />
+            <path d="M25 17v-3.2A3 3 0 0 1 28 11h8a3 3 0 0 1 3 2.8V17" fill="none" stroke="#4d50e3" stroke-width="3" />
+            <rect x="12" y="18.6" width="22" height="2" rx="1" fill="#fff" opacity=".45" />
+          </g>
+        </svg>
+        <span class="count zero" id="count">0</span>
+      </div>
+      <p class="label" id="label">Drag a file onto the bin</p>
+      <p class="tip" id="tip">Or focus a file and press <kbd>Delete</kbd> · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes</p>
+    </div>
+
+    <div class="toast-slot">
+      <div class="toast" id="toast">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#8ff0ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
+        <span id="toastText">Moved to the bin</span>
+        <button class="undo" id="undo" type="button" tabindex="-1">Undo</button>
+      </div>
+    </div>
+  </main>
+
+  <div class="layer" id="layer" aria-hidden="true">
+    <div class="hand" id="hand">
+      <svg viewBox="0 0 30 34"><path d="M3 2l22 15-9.6 1.8L21 30l-4.6 2.2-5.4-11.4L3 27z" fill="#fff" stroke="#151935" stroke-width="2" stroke-linejoin="round" /></svg>
+    </div>
+  </div>
+  <p class="sr-only" id="status" aria-live="polite"></p>
+</div>
+
+<script>
+  // ---------- Magnet Bin: drag a file near the bin, feel it pull, drop it in ----------
+  (function () {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const frame = $("frame"), layer = $("layer"), grid = $("grid"), well = $("well"), bin = $("bin"), countEl = $("count");
+    const label = $("label"), toast = $("toast"), toastText = $("toastText"), undoBtn = $("undo"), restoreBtn = $("restore");
+    const sub = $("sub"), empty = $("empty"), status = $("status"), hand = $("hand"), shock = $("shock");
+
+    const FILES = [
+      { id: "inv", name: "Invoice-Nov.pdf", kb: 248, type: "PDF", c1: "#ff7a7a", c2: "#e23c5a" },
+      { id: "img", name: "Mehndi-night.jpg", kb: 3170, type: "JPG", c1: "#c99bff", c2: "#8b5cf6" },
+      { id: "xls", name: "Stock-list.xlsx", kb: 86, type: "XLS", c1: "#4ee0a8", c2: "#0e9f6e" },
+      { id: "zip", name: "Logo-pack.zip", kb: 12400, type: "ZIP", c1: "#ffd060", c2: "#f08c1c" }
+    ];
+    const byId = Object.fromEntries(FILES.map((f) => [f.id, f]));
+    const LABEL = "Drag a file onto the bin";
+
+    const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+    const calm = () => calmQ.matches;
+    const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 250) : ms));
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    const SPRING = CSS.supports("transition-timing-function", "linear(0, 1)")
+      ? "linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1)"
+      : "cubic-bezier(.34, 1.56, .64, 1)";
+    // Web Animations helper that never rejects (a rejected .finished would log an error)
+    function play(el, frames, opts) {
+      if (calm() || !el.animate) return Promise.resolve();
+      const a = el.animate(frames, opts);
+      return new Promise((res) => { a.onfinish = res; a.oncancel = res; });
+    }
+    const tf = (x, y, r, s) => `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${r.toFixed(1)}deg) scale(${s.toFixed(3)})`;
+    const size = (kb) => (kb < 1000 ? kb + " KB" : (kb / 1000).toFixed(1) + " MB");
+    function say(msg) { if (!demo.on) status.textContent = msg; }
+    function setLabel(t, hot) { label.textContent = t; label.classList.toggle("hot", !!hot); }
+
+    // ---------- Build the tiles ----------
+    function docSvg(f) {
+      return `<svg class="doc" viewBox="0 0 48 58" aria-hidden="true">
+        <defs><linearGradient id="g-${f.id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${f.c1}"/><stop offset="1" stop-color="${f.c2}"/></linearGradient></defs>
+        <path d="M9 2h21l15 15v33a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6V8a6 6 0 0 1 6-6z" fill="url(#g-${f.id})"/>
+        <path class="fold" d="M30 2v9.5a5.5 5.5 0 0 0 5.5 5.5H45z" fill="#fff" opacity=".5"/>
+        <rect x="9" y="25" width="22" height="3" rx="1.5" fill="#fff" opacity=".6"/>
+        <rect x="9" y="31" width="15" height="3" rx="1.5" fill="#fff" opacity=".42"/>
+        <text x="24" y="49" text-anchor="middle" font-size="9.5" font-weight="800" fill="#fff" font-family="system-ui, sans-serif">${f.type}</text>
+      </svg>`;
+    }
+    const slots = new Map();
+    FILES.forEach((f) => {
+      const li = document.createElement("li");
+      li.className = "slot";
+      li.dataset.id = f.id;
+      li.innerHTML = `<button class="tile" type="button" aria-label="${f.name}, ${size(f.kb)}. Drag to the bin or press Delete">${docSvg(f)}<span class="nm">${f.name}</span><span class="sz">${size(f.kb)}</span></button>`;
+      grid.appendChild(li);
+      slots.set(f.id, li);
+      wireTile(li.querySelector(".tile"), li);
+    });
+
+    const S = { busy: false, drag: null, binned: [] };
+    const visibleSlots = () => [...slots.values()].filter((li) => !li.hidden);
+    function binCenter() { const r = bin.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height * 0.44 }; }
+    function frameXY(x, y) { const r = frame.getBoundingClientRect(); return { x: x - r.left, y: y - r.top }; }
+
+    // ---------- FLIP: let the other tiles glide into their new places ----------
+    function flip(mutate) {
+      const before = new Map(visibleSlots().map((li) => [li, li.getBoundingClientRect()]));
+      mutate();
+      visibleSlots().forEach((li, i) => {
+        const a = before.get(li);
+        if (!a) return;
+        const b = li.getBoundingClientRect();
+        const dx = a.left - b.left, dy = a.top - b.top;
+        if (Math.abs(dx) + Math.abs(dy) > 0.5) play(li, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], { duration: 620, delay: i * 45, easing: SPRING, fill: "backwards" });
+      });
+    }
+
+    // ---------- The magnetic field reacts to distance ----------
+    function setField(p, locked) {
+      well.style.setProperty("--p", p.toFixed(3));
+      well.classList.toggle("charged", p > 0.05);
+      well.classList.toggle("locked", locked);
+      bin.style.setProperty("--lid", locked ? 1 : (p * 0.55).toFixed(3));
+    }
+
+    // ---------- Dragging ----------
+    function beginDrag(t, li, x, y, demoDrag) {
+      const r = t.getBoundingClientRect();
+      // ox/oy/s = what is drawn now, tx/ty/ts = where the finger and the magnet want it (follow() eases between them)
+      S.drag = { t, li, x0: x, y0: y, sx: r.left + r.width / 2, sy: r.top + r.height / 2, started: false, ox: 0, oy: 0, s: 1, tx: 0, ty: 0, ts: 1, raf: 0, tilt: 0, lx: x, lt: performance.now(), locked: false, demo: !!demoDrag };
+    }
+    function follow(d) {
+      d.raf = 0;
+      if (S.drag !== d) return;
+      const k = calm() ? 1 : d.locked ? 0.3 : 0.55;
+      d.ox += (d.tx - d.ox) * k; d.oy += (d.ty - d.oy) * k; d.s += (d.ts - d.s) * k;
+      d.t.style.transform = tf(d.ox, d.oy, d.tilt, d.s);
+      if (Math.abs(d.tx - d.ox) + Math.abs(d.ty - d.oy) + Math.abs(d.ts - d.s) * 50 > 0.4) d.raf = requestAnimationFrame(() => follow(d));
+    }
+    function moveDrag(x, y) {
+      const d = S.drag;
+      if (!d) return;
+      const dx = x - d.x0, dy = y - d.y0;
+      if (!d.started) {
+        if (Math.hypot(dx, dy) < 6) return;
+        d.started = true;
+        d.t.classList.add("lifted");
+        d.li.classList.add("up");
+        setLabel("Bring it closer to the bin");
+      }
+      const now = performance.now(), dt = Math.max(16, now - d.lt);
+      const vx = (x - d.lx) / dt;
+      d.lx = x; d.lt = now;
+      d.tilt += (clamp(vx * 16, -14, 14) - d.tilt) * 0.25;   // the tile leans into the motion
+      const cx = d.sx + dx, cy = d.sy + dy, b = binCenter();
+      const dist = Math.hypot(b.x - cx, b.y - cy);
+      const p = clamp(1 - (dist - 70) / 210, 0, 1);
+      const wasLocked = d.locked;
+      d.locked = dist < 108;
+      let tx = dx, ty = dy, ts = 1.07;
+      if (d.locked) { tx += (b.x - cx) * 0.55; ty += (b.y - cy) * 0.55; ts = 0.72; }  // the magnet pulls it in
+      d.tx = tx; d.ty = ty; d.ts = ts;
+      if (!d.raf) d.raf = requestAnimationFrame(() => follow(d));
+      setField(p, d.locked);
+      if (d.locked !== wasLocked) setLabel(d.locked ? "Let go to delete" : "Bring it closer to the bin", d.locked);
+    }
+    function endDrag(cancel) {
+      const d = S.drag;
+      S.drag = null;
+      if (!d || !d.started) return;
+      if (!d.demo) d.t.dataset.dragged = "1";   // swallow the click that follows a real drag
+      d.t.classList.remove("lifted");
+      setField(0, false);
+      if (d.locked && !cancel) binTile(d.li, { x: d.ox, y: d.oy, r: d.tilt, s: d.s });
+      else springBack(d);
+    }
+    async function springBack(d) {
+      S.busy = true;
+      const from = d.t.style.transform;
+      d.t.style.transform = "";
+      setLabel("Missed the bin, it bounced back");
+      await play(d.t, [{ transform: from }, { transform: "none" }], { duration: 620, easing: SPRING });
+      d.li.classList.remove("up");
+      S.busy = false;
+      setTimeout(() => { if (!S.drag && label.textContent.startsWith("Missed")) setLabel(LABEL); }, 1200);
+    }
+
+    function wireTile(t, li) {
+      t.addEventListener("pointerdown", (e) => {
+        if (S.busy || S.drag || e.button > 0) return;
+        beginDrag(t, li, e.clientX, e.clientY, false);
+        try { t.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
+      });
+      t.addEventListener("pointermove", (e) => { if (S.drag && S.drag.t === t && !S.drag.demo) moveDrag(e.clientX, e.clientY); });
+      t.addEventListener("pointerup", () => { if (S.drag && S.drag.t === t) endDrag(false); });
+      t.addEventListener("pointercancel", () => { if (S.drag && S.drag.t === t) endDrag(true); });
+      t.addEventListener("click", (e) => {
+        const btn = e.currentTarget;
+        if (btn.dataset.dragged) { delete btn.dataset.dragged; return; }
+        setLabel("Now drag it onto the bin, or press Delete");
+        btn.focus();
+      });
+      t.addEventListener("keydown", (e) => {
+        if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); if (!S.busy && !S.drag) binTile(li, null); }
+      });
+    }
+
+    // ---------- Into the bin: spiral down, gulp, sparks ----------
+    async function binTile(li, from) {
+      S.busy = true;
+      const t = li.querySelector(".tile"), f = byId[li.dataset.id];
+      from = from || { x: 0, y: 0, r: 0, s: 1 };
+      const r = t.getBoundingClientRect();
+      const sx = r.left + r.width / 2 - from.x, sy = r.top + r.height / 2 - from.y;   // the empty slot's centre
+      const b = binCenter(), bx = b.x - sx, by = b.y - sy - 6;
+      li.classList.add("up");
+      bin.classList.remove("slam");
+      setField(1, true);
+      const far = Math.hypot(bx - from.x, by - from.y) > 150;
+      const kf = [{ transform: tf(from.x, from.y, from.r, from.s), opacity: 1, offset: 0 }];
+      let ax = from.x, ay = from.y;
+      if (far) { ax = (from.x + bx) / 2; ay = Math.min(from.y, by) - 70; kf.push({ transform: tf(ax, ay, from.r + 30, 1.06), opacity: 1, offset: 0.34 }); }
+      const a0 = Math.atan2(ay - by, ax - bx), start = far ? 0.44 : 0.12, endAt = 0.9, n = 5;
+      for (let k = 1; k <= n; k++) {
+        const q = k / (n + 1), ang = a0 + q * Math.PI * 2.3, rad = 54 * (1 - q);
+        kf.push({ transform: tf(bx + Math.cos(ang) * rad, by + Math.sin(ang) * rad * 0.45, from.r + q * 400, 0.64 * (1 - q) + 0.12), opacity: 1, offset: start + ((k - 1) / (n - 1)) * (endAt - start) });
+      }
+      kf.push({ transform: tf(bx, by + 12, from.r + 440, 0.04), opacity: 0, offset: 1 });
+      t.style.transform = "";
+      say(`Deleting ${f.name}`);
+      await play(t, kf, { duration: far ? 920 : 720, easing: "cubic-bezier(.45, .05, .55, .95)" });
+      t.style.opacity = "0";
+      gulp(f);
+      S.binned.push(f.id);
+      flip(() => { li.hidden = true; li.classList.remove("up"); });
+      t.style.opacity = "";
+      updateCounts();
+      showToast(`${f.name} moved to the bin`);
+      say(`${f.name} moved to the bin. Press Undo to bring it back.`);
+      await wait(460);
+      S.busy = false;
+    }
+    function gulp(f) {
+      const b = binCenter();
+      bin.classList.add("slam");
+      setField(0, false);
+      play(bin, [
+        { transform: "scale(1)" },
+        { transform: "scale(1.16, .8) translateY(4px)", offset: 0.22 },
+        { transform: "scale(.92, 1.12) translateY(-6px)", offset: 0.5 },
+        { transform: "scale(1.03, .97)", offset: 0.75 },
+        { transform: "scale(1)" }
+      ], { duration: 680, easing: "ease-out" });
+      play(shock, [{ transform: "scale(.7)", opacity: 0.9 }, { transform: "scale(1.45)", opacity: 0 }], { duration: 640, easing: "cubic-bezier(.2, .8, .3, 1)" });
+      sparks(b.x, b.y - 18, 16, [css("--cyan"), css("--pink"), f.c1, "#ffffff"]);
+      play(countEl, [{ transform: "scale(.4)" }, { transform: "scale(1.4)", offset: 0.45 }, { transform: "scale(1)" }], { duration: 560, easing: "ease-out" });
+      setLabel("Gone. It is in the bin now");
+      setTimeout(() => { if (!S.drag && label.textContent.startsWith("Gone")) setLabel(LABEL); }, 1800);
+    }
+    function sparks(x, y, n, colors) {
+      if (calm()) return;
+      const p = frameXY(x, y);
+      for (let i = 0; i < n; i++) {
+        const s = document.createElement("i");
+        s.className = "spark";
+        s.style.left = p.x - 3.5 + "px";
+        s.style.top = p.y - 3.5 + "px";
+        s.style.background = colors[i % colors.length];
+        if (i % 3 === 0) s.style.borderRadius = "50%";
+        layer.appendChild(s);
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.5, d = 46 + Math.random() * 60;
+        const an = s.animate([
+          { transform: "translate(0, 0) rotate(0) scale(1)", opacity: 1 },
+          { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d}px) rotate(${Math.random() * 360}deg) scale(.9)`, opacity: 1, offset: 0.6 },
+          { transform: `translate(${Math.cos(a) * d * 1.15}px, ${Math.sin(a) * d + 30}px) rotate(${Math.random() * 540}deg) scale(.2)`, opacity: 0 }
+        ], { duration: 700 + Math.random() * 400, easing: "cubic-bezier(.2, .7, .3, 1)" });
+        an.onfinish = an.oncancel = () => s.remove();
+      }
+    }
+
+    // ---------- Out of the bin: Undo and Restore all ----------
+    async function restoreTile(id) {
+      const li = slots.get(id), t = li.querySelector(".tile");
+      flip(() => { li.hidden = false; });
+      const r = t.getBoundingClientRect(), b = binCenter();
+      const bx = b.x - (r.left + r.width / 2), by = b.y - (r.top + r.height / 2);
+      bin.classList.remove("slam");
+      bin.style.setProperty("--lid", 1);
+      setTimeout(() => { bin.classList.add("slam"); bin.style.setProperty("--lid", 0); }, 380);
+      li.classList.add("up");
+      await play(t, [
+        { transform: tf(bx, by, -200, 0.08), opacity: 0 },
+        { transform: tf(bx * 0.5, Math.min(by * 0.5, 0) - 96, -24, 1.08), opacity: 1, offset: 0.55 },
+        { transform: tf(0, 0, 0, 1), opacity: 1 }
+      ], { duration: 760, easing: "cubic-bezier(.3, .7, .4, 1)" });
+      await play(t, [{ transform: "scale(1.08, .9)" }, { transform: "none" }], { duration: 420, easing: SPRING });
+      li.classList.remove("up");
+    }
+    async function undo() {
+      if (S.busy || S.drag || !S.binned.length) return;
+      S.busy = true;
+      hideToast();
+      const id = S.binned.pop();
+      updateCounts();
+      setLabel(`${byId[id].name} is back`);
+      say(`${byId[id].name} restored`);
+      await restoreTile(id);
+      S.busy = false;
+      setTimeout(() => { if (!S.drag && label.textContent.endsWith("is back")) setLabel(LABEL); }, 1400);
+    }
+    async function restoreAll() {
+      if (S.busy || S.drag || !S.binned.length) return;
+      S.busy = true;
+      hideToast();
+      const ids = S.binned.slice().reverse();
+      S.binned = [];
+      updateCounts();
+      setLabel("Everything is back");
+      say("All files restored");
+      const runs = [];
+      for (const id of ids) { runs.push(restoreTile(id)); await wait(170); }
+      await Promise.all(runs);
+      S.busy = false;
+      setTimeout(() => { if (!S.drag && label.textContent === "Everything is back") setLabel(LABEL); }, 1400);
+    }
+    undoBtn.addEventListener("click", () => { undo(); });
+    restoreBtn.addEventListener("click", () => { restoreAll(); });
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+    });
+
+    let toastTimer = 0;
+    function showToast(text) {
+      toastText.textContent = text;
+      toast.classList.add("show");
+      undoBtn.tabIndex = 0;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(hideToast, 7000);
+    }
+    function hideToast() { toast.classList.remove("show"); undoBtn.tabIndex = -1; clearTimeout(toastTimer); }
+    function updateCounts() {
+      const left = FILES.filter((f) => !S.binned.includes(f.id));
+      const kb = left.reduce((s, f) => s + f.kb, 0);
+      sub.textContent = left.length ? `${left.length} file${left.length > 1 ? "s" : ""} · ${size(kb)}` : "Empty";
+      countEl.textContent = S.binned.length;
+      countEl.classList.toggle("zero", !S.binned.length);
+      restoreBtn.hidden = !S.binned.length;
+      restoreBtn.setAttribute("aria-label", `Restore all ${S.binned.length} files`);
+      empty.hidden = left.length > 0;
+    }
+
+    // ---------- The demo hand ----------
+    function handAt(x, y) { const p = frameXY(x, y); hand.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)`; }
+    async function handMove(x, y, ms) {
+      const from = hand.style.transform;
+      handAt(x, y);
+      if (from) await play(hand, [{ transform: from }, { transform: hand.style.transform }], { duration: ms, easing: "cubic-bezier(.55, 0, .2, 1)" });
+    }
+    async function demoDrag(li) {
+      const t = li.querySelector(".tile"), r = t.getBoundingClientRect();
+      const sx = r.left + r.width * 0.56, sy = r.top + r.height * 0.45;
+      handAt(sx + 70, sy + 110);
+      hand.classList.add("on");
+      await handMove(sx, sy, 620); if (!demo.on) return;
+      hand.classList.add("down");
+      await wait(180); if (!demo.on) return;
+      beginDrag(t, li, sx, sy, true);
+      const b = binCenter(), ex = b.x + 4, ey = b.y + 6;
+      const cx = (sx + ex) / 2 + (sx < ex ? -70 : 70), cy = Math.min(sy, ey) - 30;
+      const dur = calm() ? 1 : 1250;
+      let spent = 0, last = performance.now();
+      await new Promise((res) => {
+        const step = (now) => {
+          if (!demo.on || !S.drag) return res();
+          spent += Math.min(40, Math.max(0, now - last));   // a slow frame never makes the hand jump
+          last = now;
+          const k = calm() ? 1 : clamp(spent / dur, 0, 1), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+          const x = (1 - e) * (1 - e) * sx + 2 * (1 - e) * e * cx + e * e * ex;
+          const y = (1 - e) * (1 - e) * sy + 2 * (1 - e) * e * cy + e * e * ey;
+          moveDrag(x, y);
+          handAt(x, y);
+          if (k < 1) requestAnimationFrame(step); else res();
+        };
+        requestAnimationFrame(step);
+      });
+      if (!demo.on) return;
+      await wait(360); if (!demo.on) return;
+      hand.classList.remove("down");
+      endDrag(false);
+      await wait(500);
+      hand.classList.remove("on");
+    }
+    async function demoUndo() {
+      if (!toast.classList.contains("show")) return;
+      const u = undoBtn.getBoundingClientRect(), ux = u.left + u.width / 2, uy = u.top + u.height / 2;
+      handAt(ux + 40, uy + 70);
+      hand.classList.add("on");
+      await handMove(ux, uy, 620); if (!demo.on) return;
+      hand.classList.add("down"); undoBtn.classList.add("pressed");
+      await wait(170);
+      hand.classList.remove("down"); undoBtn.classList.remove("pressed");
+      if (!demo.on) return;
+      undo();
+      await wait(500);
+      hand.classList.remove("on");
+    }
+
+    // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+    const demo = { on: true, timer: 0, k: 1 };
+    function stopDemo() {
+      if (!demo.on) return;
+      demo.on = false;
+      clearTimeout(demo.timer);
+      hand.classList.remove("on", "down");
+      undoBtn.classList.remove("pressed");
+      if (S.drag && S.drag.demo) endDrag(true);
+    }
+    addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    function scheduleDemo(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+    async function runDemo() {
+      if (!demo.on) return;
+      if (S.busy || S.drag) return scheduleDemo(700);
+      const vis = visibleSlots();
+      if (vis.length < 3) { await restoreAll(); return scheduleDemo(2200); }
+      const li = vis[demo.k % vis.length];
+      demo.k += 1;
+      await demoDrag(li); if (!demo.on) return;
+      await wait(2300); if (!demo.on) return;
+      await demoUndo(); if (!demo.on) return;
+      scheduleDemo(3400);
+    }
+    updateCounts();
+    scheduleDemo(380);
+  })();
+</script>
+</body>
+</html>

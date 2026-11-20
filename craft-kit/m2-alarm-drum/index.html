@@ -1,0 +1,569 @@
+<!doctype html>
+<!-- Chill & Craft · Alarm Drum · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Alarm Drum · an alarm setter with spinning 3D drums</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: light first, dark below ---------- */
+  :root {
+    --bg-a: #fbf1e1; --bg-b: #f6dccb; --dot: rgba(60, 30, 10, 0.07); --glow: rgba(232, 84, 58, 0.22);
+    --screen: #fdf6ea; --card: #fffdf8; --edge: #eedfc9; --ink: #2b1d14; --muted: #87705c;
+    --tomato: #e8543a; --tomato-2: #c63f28; --cream: #fff6e8; --lens: rgba(232, 84, 58, 0.1); --track: #e9dccb;
+    --focus: #c63f28; --bezel: #24170f; --bezel-edge: #4a3424; --shadow: rgba(90, 40, 10, 0.28);
+    --ghost-b: rgba(43, 29, 20, 0.6); --ghost-f: rgba(43, 29, 20, 0.12);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #120c08; --bg-b: #24140c; --dot: rgba(255, 220, 190, 0.05); --glow: rgba(255, 110, 70, 0.14);
+    --screen: #17100b; --card: #221811; --edge: #33241a; --ink: #fbefe2; --muted: #b59c86;
+    --tomato: #ff6a4d; --tomato-2: #ff8a6b; --cream: #2b1d14; --lens: rgba(255, 106, 77, 0.12); --track: #3a2a1f;
+    --focus: #ffb199; --bezel: #050302; --bezel-edge: #33241a; --shadow: rgba(0, 0, 0, 0.7);
+    --ghost-b: rgba(255, 255, 255, 0.85); --ghost-f: rgba(255, 255, 255, 0.18);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg-a); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button, input { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+  button { cursor: pointer; }
+
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 72px; padding: 22px 16px; background: radial-gradient(var(--dot) 1px, transparent 1.4px) 0 0 / 20px 20px, linear-gradient(160deg, var(--bg-a), var(--bg-b)); }
+  .glow { position: absolute; width: 60vmax; height: 60vmax; left: 50%; top: 45%; margin: -30vmax 0 0 -30vmax; border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 62%); pointer-events: none; animation: wander 17s ease-in-out infinite alternate; }
+  @keyframes wander { to { transform: translate(6vmax, -5vmax) scale(1.1); } }
+  .caption { display: none; position: relative; z-index: 1; max-width: 300px; }
+  .eyebrow { margin: 0 0 12px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow i { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; background: var(--tomato); }
+  .caption h2 { margin: 0 0 14px; font-size: 48px; line-height: 1; letter-spacing: -0.035em; }
+  .caption p { margin: 0 0 22px; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .caption ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .caption li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .caption kbd { font: inherit; font-size: 12px; font-weight: 750; min-width: 70px; text-align: center; padding: 4px 10px; border-radius: 9px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 2px 0 var(--edge); }
+  @media (min-width: 900px) { .caption { display: block; } }
+
+  /* ---------- Phone ---------- */
+  .phone {
+    position: relative; z-index: 1; width: min(390px, 100%);
+    height: clamp(540px, calc(100vh - 44px), 760px); height: clamp(540px, calc(100dvh - 44px), 760px);
+    display: flex; flex-direction: column; background: var(--screen); border-radius: 46px; overflow: hidden; isolation: isolate;
+    box-shadow: 0 0 0 10px var(--bezel), 0 0 0 11px var(--bezel-edge), 0 50px 90px -30px var(--shadow);
+  }
+  .phone.ringing { animation: ringbg 0.6s ease-in-out 4; }
+  @keyframes ringbg { 50% { background: color-mix(in srgb, var(--tomato) 12%, var(--screen)); } }
+  .status { flex: none; height: 46px; padding: 8px 30px 0 34px; display: flex; align-items: center; justify-content: space-between; font-size: 14.5px; font-weight: 700; }
+  .status svg { width: 62px; height: 13px; fill: currentColor; }
+  @media (max-width: 480px) {
+    .stage { padding: 0; }
+    .phone { width: 100%; height: 100vh; height: 100dvh; border-radius: 0; box-shadow: none; }
+    .status { padding: 6px 20px 0 22px; }
+  }
+
+  .head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 18px 10px; }
+  .head h1 { margin: 0; font-size: 27px; font-weight: 850; letter-spacing: -0.035em; }
+  .next { position: relative; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px 0 6px; border: 1px solid var(--edge); border-radius: 999px; background: var(--card); font-size: 12px; font-weight: 750; text-align: left; }
+  .next .bell { position: relative; width: 28px; height: 28px; border-radius: 50%; background: var(--tomato); display: grid; place-items: center; }
+  .next .bell svg { width: 16px; height: 16px; fill: #fff; transform-origin: 50% 10%; }
+  .next .bell::before, .next .bell::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--tomato); opacity: 0; }
+  .phone.ringing .next .bell svg { animation: shake 0.16s linear 14; }
+  .phone.ringing .next .bell::before { animation: pulse 1.2s ease-out 2; }
+  .phone.ringing .next .bell::after { animation: pulse 1.2s ease-out 0.6s 2; }
+  @keyframes shake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-18deg); } 75% { transform: rotate(18deg); } }
+  @keyframes pulse { from { transform: scale(1); opacity: 0.8; } to { transform: scale(2.6); opacity: 0; } }
+  .next .bell svg.idle { animation: idleBell 6s ease-in-out infinite; }
+  @keyframes idleBell { 0%, 88%, 100% { transform: rotate(0); } 91% { transform: rotate(-14deg); } 94% { transform: rotate(12deg); } 97% { transform: rotate(-6deg); } }
+  .next small { display: block; font-size: 10.5px; font-weight: 700; color: var(--muted); }
+
+  /* ---------- Drums ---------- */
+  .picker { flex: none; margin: 0 12px; padding: 10px 10px 12px; border-radius: 26px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 16px 30px -24px var(--shadow); }
+  .drums { position: relative; display: flex; align-items: stretch; justify-content: center; gap: 4px; height: clamp(160px, 100vh - 560px, 200px); }
+  .lens { position: absolute; left: 4px; right: 4px; top: 50%; height: 42px; margin-top: -21px; border-radius: 14px; background: var(--lens); pointer-events: none; transition: background 0.15s; }
+  .lens.tick { background: color-mix(in srgb, var(--tomato) 18%, transparent); }
+  .drum { position: relative; flex: 1; max-width: 96px; height: 100%; perspective: 520px; overflow: hidden; touch-action: none; cursor: ns-resize; border-radius: 14px; outline-offset: -2px; -webkit-mask-image: linear-gradient(transparent, #000 26%, #000 74%, transparent); mask-image: linear-gradient(transparent, #000 26%, #000 74%, transparent); }
+  .drum.ap { max-width: 70px; flex: 0.7; }
+  .drum .cyl { position: absolute; left: 0; right: 0; top: 50%; height: 0; transform-style: preserve-3d; }
+  .drum .it { position: absolute; left: 0; right: 0; top: -17px; height: 34px; display: grid; place-items: center; font-size: 27px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; backface-visibility: hidden; -webkit-backface-visibility: hidden; color: var(--ink); user-select: none; -webkit-user-select: none; }
+  .drum.ap .it { font-size: 19px; font-weight: 800; }
+  .colon { align-self: center; font-size: 28px; font-weight: 800; color: var(--tomato); margin-top: -4px; animation: tickc 2s steps(2) infinite; }
+  @keyframes tickc { 50% { opacity: 0.35; } }
+
+  .days { display: flex; justify-content: space-between; gap: 4px; margin-top: 10px; }
+  .day { flex: 1; height: 34px; border: 0; border-radius: 12px; background: var(--track); font-size: 12.5px; font-weight: 800; color: var(--muted); transition: background 0.25s, color 0.25s, transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .day[aria-pressed="true"] { background: var(--tomato); color: #fff; transform: translateY(-2px); }
+  .day:active { transform: scale(0.88); }
+  .lbl { display: flex; align-items: center; gap: 8px; margin-top: 8px; height: 40px; padding: 0 12px; border-radius: 12px; background: var(--track); }
+  .lbl svg { width: 16px; height: 16px; fill: none; stroke: var(--muted); stroke-width: 2; flex: none; }
+  .lbl input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font-size: 14px; font-weight: 650; }
+  .lbl:focus-within { box-shadow: 0 0 0 2px var(--focus); }
+
+  .set { flex: none; position: relative; margin: 10px 12px 0; height: 50px; border: 0; border-radius: 17px; background: linear-gradient(180deg, var(--tomato), var(--tomato-2)); color: #fff; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 12px 22px -12px var(--tomato), inset 0 1px 0 rgba(255, 255, 255, 0.35); transition: transform 0.35s cubic-bezier(0.3, 1.7, 0.5, 1); overflow: hidden; }
+  .set:active, .set.press { transform: scale(0.95); }
+  .set svg { width: 18px; height: 18px; fill: #fff; transform-origin: 50% 10%; }
+  .set.go svg { animation: shake 0.16s linear 4; }
+  .set .sh { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%); transform: translateX(-120%); }
+  .set.go .sh { animation: sheen 0.7s ease-out; }
+  @keyframes sheen { to { transform: translateX(120%); } }
+
+  /* ---------- Alarm list ---------- */
+  .list { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 12px 16px; scrollbar-width: none; }
+  .list::-webkit-scrollbar { display: none; }
+  .al { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 10px 10px 10px 14px; border-radius: 20px; background: var(--card); border: 1px solid var(--edge); overflow: hidden; transition: opacity 0.3s, box-shadow 0.3s; }
+  .al.off { opacity: 0.62; }
+  .al.hl { box-shadow: 0 0 0 2px var(--tomato); }
+  .al .tm { border: 0; background: none; padding: 0; text-align: left; flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; border-radius: 10px; }
+  .al .tm b { font-size: 26px; font-weight: 750; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .al .tm b small { font-size: 13px; font-weight: 800; margin-left: 3px; color: var(--muted); }
+  .al .tm span { min-width: 0; font-size: 12px; font-weight: 650; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .al .tm span em { display: block; font-style: normal; color: var(--ink); font-weight: 700; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; }
+  .sw { flex: none; position: relative; width: 52px; height: 32px; border: 0; padding: 0; border-radius: 16px; background: var(--track); transition: background 0.3s; }
+  .sw i { position: absolute; left: 3px; top: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); transition: transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1), width 0.2s; }
+  .sw[aria-checked="true"] { background: var(--tomato); }
+  .sw[aria-checked="true"] i { transform: translateX(20px); }
+  .sw:active i { width: 32px; }
+  .sw[aria-checked="true"]:active i { transform: translateX(14px); }
+  .sleep { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 20px; background: color-mix(in srgb, var(--tomato) 9%, var(--card)); border: 1px dashed color-mix(in srgb, var(--tomato) 40%, transparent); font-size: 13px; font-weight: 650; color: var(--muted); }
+  .sleep svg { width: 30px; height: 30px; flex: none; }
+  .sleep b { display: block; font-size: 14.5px; color: var(--ink); }
+  .flyer { position: absolute; z-index: 30; font-size: 27px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--tomato); pointer-events: none; white-space: nowrap; }
+
+  .ghost { position: absolute; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; z-index: 40; pointer-events: none; background: var(--ghost-f); border: 2px solid var(--ghost-b); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2); opacity: 0; transition: opacity 0.3s; }
+  .ghost::after { content: ""; position: absolute; inset: 11px; border-radius: 50%; background: var(--ghost-b); opacity: 0.5; transform: scale(0.45); transition: transform 0.18s; }
+  .ghost.on { opacity: 1; }
+  .ghost.press::after { transform: scale(1); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glow, .colon, .next .bell svg.idle, .phone.ringing, .phone.ringing .next .bell svg, .phone.ringing .next .bell::before, .phone.ringing .next .bell::after, .set.go svg, .set.go .sh { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="glow" aria-hidden="true"></div>
+  <section class="caption" aria-hidden="true">
+    <p class="eyebrow"><i></i>Mobile interactions</p>
+    <h2>Alarm Drum</h2>
+    <p>An alarm setter with real spinning drums. Flick one and it coasts, ticks past every number and settles in the lens. Set it and the time drops into your list.</p>
+    <ul>
+      <li><kbd>Flick</kbd> a drum up or down</li>
+      <li><kbd>Scroll</kbd> over a drum with a mouse</li>
+      <li><kbd>↑ ↓</kbd> on a focused drum</li>
+      <li><kbd>Tap</kbd> an alarm to load it back</li>
+    </ul>
+  </section>
+
+  <div class="phone" id="phone">
+    <div class="status" aria-hidden="true">
+      <span id="clock">9:41</span>
+      <svg viewBox="0 0 62 13"><rect x="0" y="8" width="3" height="5" rx="1"/><rect x="5" y="5.5" width="3" height="7.5" rx="1"/><rect x="10" y="3" width="3" height="10" rx="1"/><rect x="15" y="0.5" width="3" height="12.5" rx="1"/><path d="M29 4.2a9 9 0 0 1 12 0l-1.4 1.5a7 7 0 0 0-9.2 0zM31.6 7a5.2 5.2 0 0 1 6.8 0L35 10.6z"/><rect x="44" y="1" width="16" height="11" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="45.8" y="2.8" width="10.5" height="7.4" rx="1.8"/><rect x="60.6" y="4.6" width="1.4" height="3.8" rx="0.7"/></svg>
+    </div>
+    <div class="head">
+      <h1>Alarms</h1>
+      <button class="next" type="button" id="preview" aria-label="Preview the alarm ring">
+        <span class="bell"><svg class="idle" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a1.6 1.6 0 0 1 1.6 1.6v.6A7 7 0 0 1 19 11v4.4l1.8 2.6H3.2L5 15.4V11a7 7 0 0 1 5.4-6.8v-.6A1.6 1.6 0 0 1 12 2zm-2.6 17h5.2a2.6 2.6 0 0 1-5.2 0z"/></svg></span>
+        <span><small>Next alarm</small><span id="nextT">in 6 h 40 m</span></span>
+      </button>
+    </div>
+
+    <div class="picker">
+      <div class="drums" id="drums">
+        <div class="lens" id="lens" aria-hidden="true"></div>
+        <div class="drum" id="dH" tabindex="0" role="spinbutton" aria-label="Hour"><div class="cyl"></div></div>
+        <span class="colon" aria-hidden="true">:</span>
+        <div class="drum" id="dM" tabindex="0" role="spinbutton" aria-label="Minutes"><div class="cyl"></div></div>
+        <div class="drum ap" id="dA" tabindex="0" role="spinbutton" aria-label="AM or PM"><div class="cyl"></div></div>
+      </div>
+      <div class="days" id="days" role="group" aria-label="Repeat on"></div>
+      <label class="lbl"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12V5a1 1 0 0 1 1-1h7l8 8-8 8z"/><circle cx="8.5" cy="8.5" r="1.4"/></svg><span class="sr-only">Alarm label</span><input id="label" type="text" value="Morning walk" maxlength="28" /></label>
+    </div>
+    <button class="set" type="button" id="setBtn"><span class="sh"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a1.6 1.6 0 0 1 1.6 1.6v.6A7 7 0 0 1 19 11v4.4l1.8 2.6H3.2L5 15.4V11a7 7 0 0 1 5.4-6.8v-.6A1.6 1.6 0 0 1 12 2zm-2.6 17h5.2a2.6 2.6 0 0 1-5.2 0z"/></svg><span id="setT">Set alarm for 7:00 AM</span></button>
+    <div class="list" id="list" role="list" aria-label="Your alarms"></div>
+    <div class="ghost" id="ghost" aria-hidden="true"></div>
+    <p class="sr-only" id="live" aria-live="polite"></p>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var phone = $("phone"), live = $("live"), ghost = $("ghost"), lens = $("lens");
+  function announce(t) { live.textContent = t; }
+  function mod(a, n) { return ((a % n) + n) % n; }
+
+  // ---------- A soft tick (only after you touch the page; browsers block sound before that) ----------
+  var actx = null, lastTick = 0;
+  function wakeAudio() {
+    if (actx) return;
+    try { var AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); } catch (e) { actx = null; }
+  }
+  function tick() {
+    lens.classList.add("tick"); setTimeout(function () { lens.classList.remove("tick"); }, 70);
+    var now = performance.now();
+    if (!actx || actx.state !== "running" || now - lastTick < 28) return;
+    lastTick = now;
+    try {
+      var o = actx.createOscillator(), g = actx.createGain();
+      o.type = "square"; o.frequency.value = 2400;
+      g.gain.setValueAtTime(0.025, actx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.025);
+      o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + 0.03);
+    } catch (e) {}
+  }
+
+  // ---------- Drum: a 3D cylinder of numbers with drag, flick, inertia and snap ----------
+  var ITEM = 34, STEP = 20, R = (ITEM / 2) / Math.tan((STEP / 2) * Math.PI / 180);
+  function Drum(el, n, loop, label, start) {
+    var d = this;
+    d.el = el; d.n = n; d.loop = loop; d.label = label;
+    d.v = start; d.vel = 0; d.mode = "rest"; d.target = start; d.drag = null; d.lastInt = Math.round(start);
+    d.cyl = el.querySelector(".cyl");
+    d.cyl.style.transform = "translateZ(" + (-R).toFixed(1) + "px)";
+    d.items = [];
+    for (var k = -5; k <= 5; k++) { var it = document.createElement("div"); it.className = "it"; d.cyl.appendChild(it); d.items.push(it); }
+    d.paint();
+    el.addEventListener("pointerdown", function (e) {
+      if (e.button > 0) return;
+      wakeAudio(); if (actx && actx.state === "suspended") actx.resume().catch(function () {});
+      d.grab(e.clientY, false, e.pointerId);
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    el.addEventListener("pointermove", function (e) { if (d.drag && !d.drag.demo && e.pointerId === d.drag.id) d.move(e.clientY); });
+    el.addEventListener("pointerup", function (e) { if (d.drag && !d.drag.demo && e.pointerId === d.drag.id) d.release(); });
+    el.addEventListener("pointercancel", function (e) { if (d.drag && !d.drag.demo && e.pointerId === d.drag.id) d.release(); });
+    el.addEventListener("wheel", function (e) { e.preventDefault(); d.mode = "coast"; d.vel += (e.deltaY > 0 ? 1 : -1) * Math.min(14, 3 + Math.abs(e.deltaY) / 30); run(); }, { passive: false });
+    el.addEventListener("keydown", function (e) {
+      var s = { ArrowUp: 1, ArrowDown: -1, PageUp: 5, PageDown: -5 }[e.key];
+      if (s) { e.preventDefault(); d.spinTo(d.value() + s, true); }
+      else if (e.key === "Home") { e.preventDefault(); d.spinTo(0, true); }
+      else if (e.key === "End") { e.preventDefault(); d.spinTo(d.n - 1, true); }
+    });
+  }
+  Drum.prototype.value = function () { return this.loop ? mod(Math.round(this.v), this.n) : Math.max(0, Math.min(this.n - 1, Math.round(this.v))); };
+  Drum.prototype.paint = function () {
+    var d = this, base = Math.round(d.v);
+    d.items.forEach(function (it, j) {
+      var idx = base + j - 5, ang = (d.v - idx) * STEP;
+      var out = !d.loop && (idx < 0 || idx > d.n - 1);
+      if (Math.abs(ang) > 88 || out) { it.style.visibility = "hidden"; return; }
+      it.style.visibility = "visible";
+      it.textContent = d.label(mod(idx, d.n));
+      it.style.transform = "rotateX(" + ang.toFixed(2) + "deg) translateZ(" + R.toFixed(1) + "px)";
+      var c = Math.cos(ang * Math.PI / 180);
+      it.style.opacity = (0.18 + 0.82 * Math.pow(c, 3)).toFixed(3);
+      it.style.color = Math.abs(ang) < STEP / 2 ? "var(--ink)" : "var(--muted)";
+    });
+    var val = d.value();
+    if (val !== d.shown) {
+      d.shown = val;
+      d.el.setAttribute("aria-valuenow", String(parseInt(d.label(val), 10) || val));
+      d.el.setAttribute("aria-valuetext", d.label(val));
+      paintSet();
+    }
+    var near = Math.round(d.v);
+    if (near !== d.lastInt) { d.lastInt = near; if (d.mode !== "rest") tick(); }
+  };
+  Drum.prototype.grab = function (y, isDemo, id) {
+    this.drag = { y0: y, v0: this.v, y: y, t: performance.now(), vel: 0, demo: isDemo, id: id };
+    this.mode = "drag"; this.vel = 0; run();
+  };
+  Drum.prototype.move = function (y) {
+    var D = this.drag; if (!D) return;
+    var now = performance.now(), dt = Math.max(1, now - D.t) / 1000;
+    var inst = -(y - D.y) / ITEM / dt;   // items per second
+    D.vel = D.vel * 0.6 + inst * 0.4; D.y = y; D.t = now;
+    var v = D.v0 - (y - D.y0) / ITEM;
+    if (!this.loop) { if (v < 0) v = v * 0.35; if (v > this.n - 1) v = this.n - 1 + (v - this.n + 1) * 0.35; }
+    this.v = v; this.paint();
+  };
+  Drum.prototype.release = function () {
+    var D = this.drag; this.drag = null; if (!D) return;
+    if (performance.now() - D.t > 90) D.vel = 0;   // held still before letting go: no flick
+    this.vel = Math.max(-40, Math.min(40, D.vel));
+    if (Math.abs(this.vel) < 1.5) { this.mode = "snap"; this.target = Math.round(this.v); }
+    else this.mode = "coast";
+    run();
+  };
+  // spin to a value along the shortest way round (or with an extra turn for flair)
+  Drum.prototype.spinTo = function (val, short, extra) {
+    var cur = Math.round(this.v), t;
+    if (this.loop) { var delta = mod(val - cur, this.n); if (delta > this.n / 2) delta -= this.n; t = cur + delta + (extra || 0) * this.n; }
+    else t = Math.max(0, Math.min(this.n - 1, val));
+    this.target = t; this.mode = "snap"; this.vel = 0;
+    if (reduce) { this.v = t; this.mode = "rest"; this.paint(); return; }
+    this.soft = !short; run();
+  };
+  Drum.prototype.step = function (dt) {
+    var d = this;
+    if (d.mode === "coast") {
+      d.v += d.vel * dt; d.vel *= Math.pow(0.06, dt);   // friction
+      if (!d.loop && (d.v < 0 || d.v > d.n - 1)) { d.mode = "snap"; d.target = Math.max(0, Math.min(d.n - 1, Math.round(d.v))); }
+      else if (Math.abs(d.vel) < 2.2) { d.mode = "snap"; d.target = Math.round(d.v + d.vel * 0.12); }
+    } else if (d.mode === "snap") {
+      var k = d.soft ? 60 : 230, c = d.soft ? 12 : 26;
+      d.vel += (-k * (d.v - d.target) - c * d.vel) * dt; d.v += d.vel * dt;
+      if (Math.abs(d.vel) < 0.02 && Math.abs(d.v - d.target) < 0.002) { d.v = d.target; d.vel = 0; d.mode = "rest"; d.soft = false; }
+    }
+    d.paint();
+    return d.mode !== "rest";
+  };
+  var H = new Drum($("dH"), 12, true, function (i) { return String(i + 1); }, 6);
+  var M = new Drum($("dM"), 60, true, function (i) { return String(i).padStart(2, "0"); }, 0);
+  var A = new Drum($("dA"), 2, false, function (i) { return i ? "PM" : "AM"; }, 0);
+  var DRUMS = [H, M, A], raf = 0, prevT = 0;
+  function run() {
+    if (raf) return;
+    prevT = performance.now();
+    raf = requestAnimationFrame(function f(t) {
+      var dt = Math.min(0.034, (t - prevT) / 1000); prevT = t;
+      var busy = false;
+      DRUMS.forEach(function (d) { if (d.mode !== "drag" && d.step(dt)) busy = true; if (d.mode === "drag") busy = true; });
+      if (busy) raf = requestAnimationFrame(f); else raf = 0;
+    });
+  }
+  function picked() { return { h: H.value() + 1, m: M.value(), pm: A.value() === 1 }; }
+  function fmtT(t) { return t.h + ":" + String(t.m).padStart(2, "0") + " " + (t.pm ? "PM" : "AM"); }
+  function paintSet() { if (!H || !M || !A) return; $("setT").textContent = "Set alarm for " + fmtT(picked()); }
+
+  // ---------- Repeat days ----------
+  var DAYN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], DAYS = ["M", "T", "W", "T", "F", "S", "S"];
+  var dayBtns = DAYS.map(function (ch, i) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "day"; b.textContent = ch;
+    b.setAttribute("aria-pressed", i < 5 ? "true" : "false"); b.setAttribute("aria-label", DAYN[i]);
+    b.addEventListener("click", function () { var on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", String(on)); announce(DAYN[i] + (on ? " on" : " off")); });
+    $("days").appendChild(b);
+    return b;
+  });
+  function chosenDays() { var s = []; dayBtns.forEach(function (b, i) { if (b.getAttribute("aria-pressed") === "true") s.push(i); }); return s; }
+  function daysText(ds) {
+    if (!ds.length) return "Once";
+    if (ds.length === 7) return "Every day";
+    if (ds.join() === "0,1,2,3,4") return "Weekdays";
+    if (ds.join() === "5,6") return "Weekends";
+    return ds.map(function (i) { return DAYN[i].slice(0, 3); }).join(" ");
+  }
+
+  // ---------- When does it ring next? ----------
+  function nextRing(a) {
+    var now = new Date(), h24 = (a.h % 12) + (a.pm ? 12 : 0);
+    for (var add = 0; add <= 7; add++) {
+      var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + add, h24, a.m, 0, 0);
+      if (d <= now) continue;
+      var wd = (d.getDay() + 6) % 7;   // Monday = 0
+      if (!a.days.length || a.days.indexOf(wd) >= 0) return d - now;
+    }
+    return null;
+  }
+  function inText(ms) {
+    if (ms === null) return "not set";
+    var mins = Math.round(ms / 60000), d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60;
+    return "in " + (d ? d + " d " : "") + (h ? h + " h " : "") + m + " m";
+  }
+
+  // ---------- Alarm list ----------
+  var DEFAULTS = [
+    { h: 6, m: 30, pm: false, days: [0, 1, 2, 3, 4], label: "Office van", on: true },
+    { h: 8, m: 0, pm: false, days: [5, 6], label: "Brunch with Sana", on: false },
+    { h: 4, m: 45, pm: false, days: [], label: "Flight to Skardu", on: false }
+  ];
+  var alarms = [];
+  function cardFor(a) {
+    var el = document.createElement("div");
+    el.className = "al" + (a.on ? "" : " off"); el.setAttribute("role", "listitem");
+    el.innerHTML = '<button class="tm" type="button"><b>' + a.h + ":" + String(a.m).padStart(2, "0") + "<small>" + (a.pm ? "PM" : "AM") + '</small></b><span><em></em><span class="when"></span></span></button>' +
+      '<button class="sw" type="button" role="switch" aria-checked="' + a.on + '"><i></i></button>';
+    a.el = el;
+    var tm = el.querySelector(".tm"), sw = el.querySelector(".sw");
+    tm.setAttribute("aria-label", "Load " + fmtT(a) + " into the drums");
+    sw.setAttribute("aria-label", a.label + " alarm at " + fmtT(a));
+    tm.addEventListener("click", function () { load(a); });
+    sw.addEventListener("click", function () { a.on = !a.on; paintAlarm(a); paintNext(); announce(a.label + " alarm " + (a.on ? "on, rings " + inText(nextRing(a)) : "off")); });
+    paintAlarm(a);
+    return el;
+  }
+  function paintAlarm(a) {
+    var el = a.el;
+    el.classList.toggle("off", !a.on);
+    el.querySelector(".sw").setAttribute("aria-checked", String(a.on));
+    el.querySelector("em").textContent = a.label;
+    el.querySelector(".when").textContent = daysText(a.days) + (a.on ? " · rings " + inText(nextRing(a)) : "");
+  }
+  function paintNext() {
+    var best = null;
+    alarms.forEach(function (a) { if (!a.on) return; var ms = nextRing(a); if (ms !== null && (best === null || ms < best)) best = ms; });
+    $("nextT").textContent = best === null ? "No alarms on" : inText(best);
+    var line = sleepEl.querySelector("span span");
+    if (best === null) { sleepEl.querySelector("b").textContent = "No bedtime yet"; line.textContent = "Turn an alarm on to get a bedtime"; }
+    else {
+      var wake = new Date(Date.now() + best), bed = new Date(wake - 7.75 * 3600000);   // 7.5 hours of sleep plus 15 minutes to drift off
+      var h = bed.getHours(), m = bed.getMinutes();
+      sleepEl.querySelector("b").textContent = "Bedtime " + (h % 12 || 12) + ":" + String(m).padStart(2, "0") + (h < 12 ? " AM" : " PM");
+      line.textContent = "for 7½ hours of sleep before your " + (wake.getHours() % 12 || 12) + ":" + String(wake.getMinutes()).padStart(2, "0") + " alarm";
+    }
+  }
+  function resetAlarms() {
+    $("list").innerHTML = "";
+    alarms = DEFAULTS.map(function (a) { var o = {}; for (var k in a) o[k] = a[k]; o.days = a.days.slice(); return o; });
+    alarms.forEach(function (a) { $("list").appendChild(cardFor(a)); });
+    $("list").appendChild(sleepEl);
+    paintNext();
+  }
+  // a bedtime suggestion worked out from the next alarm that is on
+  var sleepEl = document.createElement("div");
+  sleepEl.className = "sleep";
+  sleepEl.innerHTML = '<svg viewBox="0 0 30 30" aria-hidden="true"><path d="M22 18.5A9 9 0 0 1 11.5 8 9 9 0 1 0 22 18.5z" fill="#8b7cf6"/><circle cx="22" cy="7" r="1.4" fill="#fbbf24"/><circle cx="26" cy="12" r="1" fill="#fbbf24"/></svg><span><b>Bedtime</b><span></span></span>';
+  function load(a) {
+    H.spinTo(a.h - 1, false); M.spinTo(a.m, false); A.spinTo(a.pm ? 1 : 0, false);
+    dayBtns.forEach(function (b, i) { b.setAttribute("aria-pressed", String(a.days.indexOf(i) >= 0)); });
+    $("label").value = a.label;
+    flash(a.el);
+    announce("Loaded " + fmtT(a) + ", " + a.label);
+  }
+  function flash(el) { el.classList.add("hl"); setTimeout(function () { el.classList.remove("hl"); }, 900); }
+
+  // ---------- Set: the bell rings, the time flies down and a card opens up for it ----------
+  var setBtn = $("setBtn"), setting = false;
+  setBtn.addEventListener("click", function () { setAlarm(); });
+  function setAlarm() {
+    if (setting) return;
+    DRUMS.forEach(function (d) { if (d.mode !== "rest") { d.v = d.target !== undefined && d.mode === "snap" ? d.target : Math.round(d.v); d.mode = "rest"; d.vel = 0; d.paint(); } });
+    var t = picked(), ds = chosenDays(), label = $("label").value.trim() || "Alarm";
+    var same = alarms.filter(function (a) { return a.h === t.h && a.m === t.m && a.pm === t.pm; })[0];
+    setting = true;
+    setBtn.classList.remove("go"); void setBtn.offsetWidth; setBtn.classList.add("go");
+    if (same) {
+      same.days = ds; same.label = label; same.on = true; paintAlarm(same); paintNext(); flash(same.el);
+      same.el.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+      announce("Updated the " + fmtT(t) + " alarm. Rings " + inText(nextRing(same)));
+      setTimeout(function () { setting = false; }, 500);
+      return;
+    }
+    var a = { h: t.h, m: t.m, pm: t.pm, days: ds, label: label, on: false };
+    alarms.unshift(a);
+    if (alarms.length > 5) { var old = alarms.pop(); old.el.remove(); }
+    var el = cardFor(a), list = $("list");
+    list.insertBefore(el, list.firstChild);
+    list.scrollTop = 0;
+    var h = el.offsetHeight;
+    // the new card opens up and pushes the others down
+    if (!reduce) el.animate([{ height: "0px", paddingTop: "0px", paddingBottom: "0px", marginBottom: "0px", opacity: 0 }, { height: h + "px", paddingTop: "10px", paddingBottom: "10px", marginBottom: "8px", opacity: 1 }], { duration: 420, easing: "cubic-bezier(.3,1.2,.5,1)" });
+    // the time leaves the lens and drops into the card
+    var pr = phone.getBoundingClientRect(), lr = lens.getBoundingClientRect();
+    var fly = document.createElement("div"); fly.className = "flyer";
+    fly.textContent = t.h + ":" + String(t.m).padStart(2, "0");
+    fly.style.left = (lr.left - pr.left + lr.width / 2 - 34) + "px"; fly.style.top = (lr.top - pr.top + 2) + "px";
+    phone.appendChild(fly);
+    var finish = function () {
+      fly.remove();
+      a.on = true; paintAlarm(a); paintNext();
+      announce("Alarm set for " + fmtT(t) + ", " + daysText(ds).toLowerCase() + ". Rings " + inText(nextRing(a)));
+      setting = false;
+    };
+    if (reduce) { finish(); return; }
+    setTimeout(function () {
+      var tr = el.querySelector(".tm b").getBoundingClientRect();
+      var dx = tr.left - lr.left - lr.width / 2 + 34, dy = tr.top - lr.top - 2;
+      fly.animate([
+        { transform: "none", opacity: 1 },
+        { transform: "translate(" + (dx * 0.4).toFixed(0) + "px," + (dy * 0.25 - 30).toFixed(0) + "px) scale(1.15)", opacity: 1, offset: 0.35 },
+        { transform: "translate(" + dx.toFixed(0) + "px," + dy.toFixed(0) + "px) scale(.95)", opacity: 0.2 }
+      ], { duration: 620, easing: "cubic-bezier(.5,0,.3,1)" }).onfinish = finish;
+    }, 120);
+  }
+
+  // ---------- Preview ring ----------
+  var ringT = 0;
+  $("preview").addEventListener("click", function () {
+    phone.classList.remove("ringing"); void phone.offsetWidth; phone.classList.add("ringing");
+    clearTimeout(ringT); ringT = setTimeout(function () { phone.classList.remove("ringing"); }, 2500);
+    if (actx && actx.state === "running") {
+      try {
+        for (var i = 0; i < 6; i++) {
+          var o = actx.createOscillator(), g = actx.createGain(), t0 = actx.currentTime + i * 0.32;
+          o.type = "triangle"; o.frequency.value = i % 2 ? 1320 : 1760;
+          g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.05, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.25);
+          o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0 + 0.27);
+        }
+      } catch (e) {}
+    }
+    announce("Ringing preview");
+  });
+  document.addEventListener("pointerdown", function (e) { if (e.isTrusted) { wakeAudio(); if (actx && actx.state === "suspended") actx.resume().catch(function () {}); } }, true);
+
+  // ---------- Clock ----------
+  function clock() { var d = new Date(); $("clock").textContent = (d.getHours() % 12 || 12) + ":" + String(d.getMinutes()).padStart(2, "0"); }
+  clock(); setInterval(function () { clock(); alarms.forEach(paintAlarm); paintNext(); }, 30000);
+
+  resetAlarms(); paintSet();
+
+  // ---------- Auto demo ----------
+  var demo = { on: !reduce, t: [], raf: 0 };
+  function later(ms, fn) { demo.t.push(setTimeout(function () { if (demo.on) fn(); }, ms)); }
+  function ptIn(el, fx, fy) { var r = el.getBoundingClientRect(); return { x: r.left + r.width * fx, y: r.top + r.height * fy }; }
+  function gAt(q, ms) { if (!ghost.classList.contains("on")) ms = 0; var r = phone.getBoundingClientRect(); ghost.style.transition = "opacity .3s, transform " + (ms || 0) + "ms cubic-bezier(.4,.1,.2,1)"; ghost.style.transform = "translate(" + (q.x - r.left).toFixed(1) + "px," + (q.y - r.top).toFixed(1) + "px)"; ghost.classList.add("on"); }
+  function gHide() { ghost.classList.remove("on", "press"); }
+  function stopDemo() {
+    if (!demo.on) return;
+    demo.on = false; demo.t.forEach(clearTimeout); demo.t = []; cancelAnimationFrame(demo.raf); gHide();
+    DRUMS.forEach(function (d) { if (d.drag && d.drag.demo) d.release(); });
+  }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (ty) { addEventListener(ty, function (e) { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }); });
+  function dTap(getEl, at, fn) {
+    later(at, function () {
+      var el = getEl(); gAt(ptIn(el, 0.5, 0.5), 520);
+      later(560, function () { ghost.classList.add("press"); later(150, function () { ghost.classList.remove("press"); fn(el); }); });
+    });
+    return at + 720;
+  }
+  // drag a drum by dy pixels over dur ms; a short fast drag becomes a flick
+  function dSpin(drum, dy, at, dur) {
+    later(at, function () {
+      var a = ptIn(drum.el, 0.5, dy < 0 ? 0.72 : 0.3); gAt(a, 480);
+      later(520, function () {
+        ghost.classList.add("press"); drum.grab(a.y, true);
+        var t0 = performance.now();
+        demo.raf = requestAnimationFrame(function f(t) {
+          if (!demo.on) return;
+          var k = Math.min(1, (t - t0) / dur), e = dur < 300 ? k : (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+          var q = { x: a.x, y: a.y + dy * e }; gAt(q, 0); drum.move(q.y);
+          if (k < 1) demo.raf = requestAnimationFrame(f); else { ghost.classList.remove("press"); drum.release(); later(300, gHide); }
+        });
+      });
+    });
+    return at + 520 + dur + 200;
+  }
+  function demoLoop() {
+    if (!demo.on) return;
+    if (alarms.length !== DEFAULTS.length) resetAlarms();
+    dayBtns.forEach(function (b, i) { b.setAttribute("aria-pressed", String(i < 5)); });
+    $("label").value = "Morning walk";
+    var t = 300;
+    H.spinTo(6, false); M.spinTo(40, false); A.spinTo(0, false);
+    t = dSpin(H, -70, t + 900, 170);          // a quick flick: the hours coast and tick
+    t = dSpin(M, -170, t + 1500, 900);        // a slow drag on the minutes
+    t = dTap(function () { return dayBtns[5]; }, t + 500, function (b) { b.click(); });
+    t = dTap(function () { return setBtn; }, t + 300, function () { setAlarm(); });
+    t = dTap(function () { return alarms[alarms.length - 1].el.querySelector(".tm"); }, t + 1600, function (b) { b.click(); });
+    t = dTap(function () { return $("preview"); }, t + 1600, function (b) { b.click(); });
+    later(t + 3000, demoLoop);
+  }
+  if (demo.on) later(400, demoLoop);
+})();
+</script>
+</body>
+</html>

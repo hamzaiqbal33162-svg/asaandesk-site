@@ -1,0 +1,458 @@
+<!doctype html>
+<!-- Chill & Craft · Hand Over · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hand Over · remove a team member</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: sky, cobalt and sunflower ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #e8f1ff;
+    --sun: #ffe08a;
+    --sky: #bfe3ff;
+    --card: #ffffff;
+    --soft: #f4f8ff;
+    --line: #e0e8f5;
+    --ink: #0f1d38;
+    --muted: #5b6a88;
+    --cobalt: #2563eb;
+    --gold: #f5b700;
+    --red: #e5484d;
+    --red-soft: #fff0f0;
+    --sh: 20, 50, 120;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #07101f;
+    --sun: #3a2c05;
+    --sky: #0c2a4d;
+    --card: #0f1a2e;
+    --soft: #13203a;
+    --line: #1f2d4a;
+    --ink: #e8f0ff;
+    --muted: #93a3c2;
+    --cobalt: #60a5fa;
+    --gold: #fcd34d;
+    --red: #ff6b6b;
+    --red-soft: #2b1520;
+    --sh: 0, 0, 0;
+    --focus: #93c5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .frame { position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 20px 16px; overflow: hidden; overflow: clip; }
+  .sunspot { position: absolute; border-radius: 50%; filter: blur(70px); pointer-events: none; }
+  .s1 { width: 380px; height: 380px; right: -120px; top: -140px; background: var(--sun); animation: drift 18s ease-in-out infinite alternate; }
+  .s2 { width: 460px; height: 460px; left: -180px; bottom: -200px; background: var(--sky); animation: drift 22s ease-in-out infinite alternate-reverse; }
+
+  .card {
+    position: relative;
+    width: min(450px, 100%);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    padding: 18px 16px 12px;
+    box-shadow: 0 44px 80px -52px rgba(var(--sh), .6), 0 2px 8px -4px rgba(var(--sh), .12);
+  }
+  .top { display: flex; align-items: center; gap: 12px; padding: 0 4px 14px; border-bottom: 1px solid var(--line); }
+  .top h1 { margin: 0; font-size: 17px; font-weight: 790; letter-spacing: -.01em; }
+  .top p { margin: 0; font-size: 12.5px; color: var(--muted); display: flex; gap: 4px; }
+  .num { display: inline-block; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); }
+  .stack { margin-left: auto; display: flex; padding-left: 8px; }
+  .sav { width: 30px; height: 30px; margin-left: -8px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 10.5px; font-weight: 800; background: linear-gradient(135deg, var(--a), var(--b)); box-shadow: 0 0 0 2.5px var(--card); overflow: hidden; transition: width .45s var(--spring), margin .45s var(--spring), opacity .3s; }
+  .sav.out { width: 0; margin-left: 0; opacity: 0; }
+
+  /* ---------- Member rows ---------- */
+  .list { list-style: none; margin: 6px 0 0; padding: 0; }
+  .mem { position: relative; overflow: hidden; border-radius: 16px; transition: background-color .3s; }
+  .mem[hidden] { display: none; }
+  .mem.open { background: var(--red-soft); }
+  .main { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 11px; padding: 9px 8px; min-height: 60px; }
+  .av { position: relative; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 13.5px; font-weight: 800; background: linear-gradient(135deg, var(--a), var(--b)); transition: filter .4s; }
+  .av::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2.5px solid var(--gold); opacity: 0; transform: scale(.8); }
+  .mem.leaving .av { filter: grayscale(1) opacity(.6); }
+  .mem.leaving .who, .mem.leaving .tasks { opacity: .5; }
+  .who { min-width: 0; transition: opacity .3s; }
+  .who b { display: block; font-size: 14.5px; font-weight: 720; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who small { display: block; font-size: 12.5px; color: var(--muted); }
+  .tasks { display: inline-flex; align-items: baseline; gap: 4px; padding: 4px 10px; border-radius: 99px; background: var(--soft); border: 1px solid var(--line); font-size: 12px; color: var(--muted); white-space: nowrap; transition: opacity .3s; }
+  .tasks b { color: var(--ink); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .owner { font-size: 11.5px; font-weight: 750; color: var(--cobalt); padding: 4px 9px; border-radius: 99px; background: color-mix(in srgb, var(--cobalt) 12%, transparent); }
+  .rm { width: 36px; height: 36px; border: 0; border-radius: 11px; background: transparent; color: var(--muted); display: grid; place-items: center; cursor: pointer; transition: background-color .2s, color .2s, scale .2s var(--spring); }
+  .rm svg { width: 20px; height: 20px; transition: rotate .35s var(--spring); }
+  .rm:hover, .rm.pressed { background: var(--red-soft); color: var(--red); }
+  .rm:active, .rm.pressed { scale: .88; }
+  .mem.open .rm { color: var(--red); background: var(--card); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--red) 35%, transparent); }
+  .spacer { width: 36px; }
+
+  /* the drawer that asks who gets the tasks */
+  .drawer { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s cubic-bezier(.3, .8, .3, 1); }
+  .mem.open .drawer { grid-template-rows: 1fr; }
+  .dr-in { min-height: 0; overflow: hidden; }
+  .dr { padding: 2px 10px 12px 59px; display: grid; gap: 10px; }
+  .dr p { margin: 0; font-size: 13px; color: var(--muted); }
+  .dr p b { color: var(--ink); }
+  .picks { display: flex; flex-wrap: wrap; gap: 6px; border: 0; margin: 0; padding: 0; }
+  .picks legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .pick { display: grid; justify-items: center; gap: 4px; width: 62px; padding: 6px 2px 5px; border-radius: 12px; cursor: pointer; font-size: 11.5px; font-weight: 650; color: var(--muted); transition: background-color .2s, color .2s; }
+  .pick:hover { background: var(--card); }
+  .pick input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .pick .av { width: 34px; height: 34px; font-size: 11.5px; transition: box-shadow .25s, scale .35s var(--spring); }
+  .pick input:checked + .av { box-shadow: 0 0 0 2.5px var(--card), 0 0 0 5px var(--cobalt); scale: 1.08; }
+  .pick input:checked ~ span { color: var(--ink); }
+  .pick input:focus-visible + .av { outline: 3px solid var(--focus); outline-offset: 5px; }
+  .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { border: 0; border-radius: 11px; padding: 9px 15px; font: inherit; font-size: 13.5px; font-weight: 760; cursor: pointer; transition: scale .2s var(--spring), filter .2s; }
+  .btn:hover { filter: brightness(1.06); }
+  .btn:active, .btn.pressed { scale: .93; }
+  .btn.red { background: var(--red); color: #fff; box-shadow: 0 10px 18px -12px var(--red); }
+  .btn.plain { background: transparent; color: var(--muted); }
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- Toast ---------- */
+  .toast-slot { position: relative; height: 52px; margin-top: 8px; overflow: hidden; }
+  .hint { position: absolute; inset: 0 0 8px; display: flex; align-items: center; justify-content: center; margin: 0; font-size: 12.5px; color: var(--muted); text-align: center; transition: opacity .25s; }
+  .toast-slot:has(.toast.show) .hint { opacity: 0; }
+  .toast { position: relative; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 6px 0 14px; border-radius: 13px; background: #0f1d38; color: #eef4ff; font-size: 13px; transform: translateY(120%); opacity: 0; transition: transform .45s var(--spring), opacity .25s; }
+  :root[data-theme="dark"] .toast { background: #1e3460; }
+  .toast.show { transform: none; opacity: 1; }
+  .toast span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .undo { border: 0; border-radius: 9px; padding: 7px 13px; font: inherit; font-weight: 780; background: var(--gold); color: #2a1f00; cursor: pointer; transition: scale .2s var(--spring); }
+  .undo:active, .undo.pressed { scale: .9; }
+
+  /* ---------- Flying task cards ---------- */
+  .layer { position: absolute; inset: 0; pointer-events: none; }
+  .fly { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 6px; border-radius: 9px; background: var(--card); border: 1px solid var(--line); font-size: 11.5px; font-weight: 700; white-space: nowrap; box-shadow: 0 10px 18px -10px rgba(var(--sh), .6); }
+  .fly i { width: 4px; height: 16px; border-radius: 2px; background: var(--b); }
+  .ring { position: absolute; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; border: 2.5px solid var(--gold); }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @keyframes drift { to { transform: translate(60px, 50px) scale(1.1); } }
+
+  @media (max-width: 420px) {
+    .main { gap: 9px; }
+    .dr { padding-left: 8px; }
+    .tasks { padding: 4px 8px; }
+  }
+  /* Calm mode: every step still happens, without the big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <div class="sunspot s1" aria-hidden="true"></div>
+  <div class="sunspot s2" aria-hidden="true"></div>
+  <main class="card" aria-labelledby="title">
+    <header class="top">
+      <div>
+        <h1 id="title">Studio team</h1>
+        <p><span class="num" id="memNum">5</span> members · <span class="num" id="taskNum">15</span> open tasks</p>
+      </div>
+      <div class="stack" id="stack" aria-hidden="true"></div>
+    </header>
+    <ul class="list" id="list"></ul>
+    <div class="toast-slot">
+      <p class="hint" aria-hidden="true">Nobody leaves work behind: their tasks go to a teammate</p>
+      <div class="toast" id="toast"><span id="toastText">Removed</span><button class="undo" id="undoBtn" type="button">Undo</button></div>
+    </div>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </main>
+  <div class="layer" id="layer" aria-hidden="true"></div>
+</div>
+
+<script>
+  // ---------- Hand Over: removing someone asks who takes their work, then the tasks fly across ----------
+  (function () {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const frame = $("frame"), layer = $("layer"), list = $("list"), stack = $("stack"), toast = $("toast"), toastText = $("toastText"), undoBtn = $("undoBtn");
+    const memNum = $("memNum"), taskNum = $("taskNum"), status = $("status");
+
+    const PEOPLE = [
+      { id: "hira", name: "Hira Siddiqui", first: "Hira", role: "Owner · you", a: "#f9a8d4", b: "#db2777", owner: true },
+      { id: "usman", name: "Usman Tariq", first: "Usman", role: "Developer", a: "#7dd3fc", b: "#2563eb" },
+      { id: "ali", name: "Ali Raza", first: "Ali", role: "Marketing", a: "#6ee7b7", b: "#059669" },
+      { id: "mahnoor", name: "Mahnoor Shah", first: "Mahnoor", role: "Support", a: "#fcd34d", b: "#d97706" },
+      { id: "fahad", name: "Fahad Iqbal", first: "Fahad", role: "Intern", a: "#c4b5fd", b: "#7c3aed" }
+    ];
+    const P = Object.fromEntries(PEOPLE.map((p) => [p.id, p]));
+    const TASKS = {
+      hira: ["Brand refresh", "Q4 plan", "Hiring"],
+      usman: ["Fix login bug", "Invoice export", "Checkout API", "Dark mode"],
+      ali: ["Eid campaign", "Reels plan"],
+      mahnoor: ["Refund #882", "Chat macros", "FAQ update", "Call backlog", "Survey"],
+      fahad: ["Test plan"]
+    };
+    const initials = (n) => n.split(" ").map((w) => w[0]).join("");
+
+    const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+    const calm = () => calmQ.matches;
+    const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 200) : ms));
+    function play(el, frames, opts) {
+      if (calm() || !el.animate) return Promise.resolve();
+      const a = el.animate(frames, opts);
+      return new Promise((res) => { a.onfinish = res; a.oncancel = res; });
+    }
+    const say = (m) => { if (!demo.on) status.textContent = m; };
+    const press = (el) => { el.classList.add("pressed"); setTimeout(() => el.classList.remove("pressed"), 170); };
+    const rowOf = (id) => list.querySelector(`.mem[data-id="${id}"]`);
+    const savOf = (id) => stack.querySelector(`.sav[data-id="${id}"]`);
+    function centerOf(el) { const r = el.getBoundingClientRect(), f = frame.getBoundingClientRect(); return { x: r.left - f.left + r.width / 2, y: r.top - f.top + r.height / 2 }; }
+
+    const S = { members: PEOPLE.map((p) => p.id), open: null, busy: false, undo: null };
+
+    // ---------- Build the rows and the avatar stack ----------
+    const RM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9.5" cy="8" r="3.6"/><path d="M3 19.5c.8-3.4 3.4-5.2 6.5-5.2s5.7 1.8 6.5 5.2M16 11h5.5"/></svg>';
+    PEOPLE.forEach((p) => {
+      const li = document.createElement("li");
+      li.className = "mem";
+      li.dataset.id = p.id;
+      li.style.setProperty("--a", p.a);
+      li.style.setProperty("--b", p.b);
+      li.innerHTML = `<div class="main">
+          <span class="av" aria-hidden="true">${initials(p.name)}</span>
+          <div class="who"><b>${p.name}</b><small>${p.role}</small></div>
+          <span class="tasks"><b class="n">${TASKS[p.id].length}</b><span class="tw">tasks</span></span>
+          ${p.owner ? '<span class="spacer" aria-hidden="true"></span>' : `<button class="rm" type="button" aria-expanded="false" aria-controls="dr-${p.id}" aria-label="Remove ${p.name}">${RM}</button>`}
+        </div>
+        <div class="drawer" id="dr-${p.id}"><div class="dr-in" inert></div></div>`;
+      list.appendChild(li);
+      const sav = document.createElement("span");
+      sav.className = "sav";
+      sav.dataset.id = p.id;
+      sav.style.setProperty("--a", p.a);
+      sav.style.setProperty("--b", p.b);
+      sav.textContent = p.first[0];   // one letter reads better where the circles overlap
+      stack.appendChild(sav);
+    });
+    function counts() {
+      PEOPLE.forEach((p) => {
+        const n = TASKS[p.id].length, li = rowOf(p.id);
+        li.querySelector(".n").textContent = n;
+        li.querySelector(".tw").textContent = n === 1 ? "task" : "tasks";
+      });
+    }
+    function roll(el, value) {
+      if (el.textContent === String(value)) return;
+      play(el, [{ transform: "translateY(0)", opacity: 1 }, { transform: "translateY(-60%)", opacity: 0 }], { duration: 160, easing: "ease-in" }).then(() => {
+        el.textContent = value;
+        play(el, [{ transform: "translateY(60%)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 300, easing: "cubic-bezier(.3, 1.6, .5, 1)" });
+      });
+    }
+    function totals() {
+      roll(memNum, S.members.length);
+      roll(taskNum, S.members.reduce((t, id) => t + TASKS[id].length, 0));
+    }
+
+    // ---------- Open the drawer: who gets the work? ----------
+    function drawerHtml(id) {
+      const p = P[id], n = TASKS[id].length, others = S.members.filter((m) => m !== id);
+      return `<div class="dr">
+          <p><b>${p.first} has ${n} open task${n === 1 ? "" : "s"}.</b> Hand ${n === 1 ? "it" : "them"} to:</p>
+          <fieldset class="picks"><legend>Hand ${p.first}'s tasks to</legend>
+            ${others.map((o, i) => `<label class="pick" style="--a:${P[o].a};--b:${P[o].b}"><input type="radio" name="to-${id}" value="${o}"${i === 0 ? " checked" : ""}><span class="av" aria-hidden="true">${initials(P[o].name)}</span><span>${P[o].first}</span></label>`).join("")}
+          </fieldset>
+          <div class="acts"><button class="btn red go" type="button">Remove ${p.first}</button><button class="btn plain cancel" type="button">Cancel</button></div>
+        </div>`;
+    }
+    async function openDrawer(id, fromUser) {
+      if (S.busy) return;
+      if (S.open === id) return closeDrawer(true);
+      if (S.open) await closeDrawer(false);
+      S.open = id;
+      hideToast();
+      const li = rowOf(id), inner = li.querySelector(".dr-in"), btn = li.querySelector(".rm");
+      inner.innerHTML = drawerHtml(id);
+      inner.inert = false;
+      inner.querySelector(".go").addEventListener("click", () => removeMember(id));
+      inner.querySelector(".cancel").addEventListener("click", () => closeDrawer(true));
+      li.classList.add("open");
+      btn.setAttribute("aria-expanded", "true");
+      play(li.querySelector(".av"), [{ transform: "none" }, { transform: "rotate(-10deg) scale(.94)" }, { transform: "rotate(8deg)" }, { transform: "none" }], { duration: 460, easing: "ease-in-out" });
+      inner.querySelectorAll(".pick").forEach((el, i) => play(el, [{ transform: "translateY(10px) scale(.8)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 420, delay: 120 + i * 60, easing: "cubic-bezier(.3, 1.5, .5, 1)", fill: "backwards" }));
+      say(`Remove ${P[id].name}? Choose who gets ${TASKS[id].length} open tasks.`);
+      if (fromUser) setTimeout(() => { const r = inner.querySelector("input:checked"); if (r) r.focus({ preventScroll: true }); }, 120);
+    }
+    async function closeDrawer(focusBack) {
+      const id = S.open;
+      if (!id) return;
+      S.open = null;
+      const li = rowOf(id), inner = li.querySelector(".dr-in"), btn = li.querySelector(".rm");
+      li.classList.remove("open");
+      inner.inert = true;
+      if (btn) btn.setAttribute("aria-expanded", "false");
+      if (focusBack && btn) btn.focus({ preventScroll: true });
+      await wait(460);
+    }
+
+    // ---------- Remove: tasks fan out, fly to the new owner, the seat leaves, the row folds away ----------
+    function flyTask(text, color, from, to, i, n) {
+      const el = document.createElement("div");
+      el.className = "fly";
+      el.style.setProperty("--b", color);
+      el.innerHTML = `<i></i>${text}`;
+      layer.appendChild(el);
+      const w = el.offsetWidth, h = el.offsetHeight;
+      const fan = { x: from.x + (i - (n - 1) / 2) * 34, y: from.y - 46 - Math.abs(i - (n - 1) / 2) * 6 };
+      const mid = { x: (fan.x + to.x) / 2 + 40, y: Math.min(fan.y, to.y) - 60 };
+      const at = (p, r, s) => `translate(${(p.x - w / 2).toFixed(1)}px, ${(p.y - h / 2).toFixed(1)}px) rotate(${r}deg) scale(${s})`;
+      const rot = (i - (n - 1) / 2) * 8;
+      if (calm()) { el.remove(); return Promise.resolve(); }
+      const an = el.animate([
+        { transform: at(from, 0, 0.2), opacity: 0, offset: 0 },
+        { transform: at(fan, rot, 1), opacity: 1, offset: 0.3 },
+        { transform: at(fan, rot, 1), opacity: 1, offset: 0.42 },
+        { transform: at(mid, rot / 2 - 6, 0.95), opacity: 1, offset: 0.72 },
+        { transform: at(to, 0, 0.25), opacity: 0.2, offset: 1 }
+      ], { duration: 1300, delay: i * 170, easing: "cubic-bezier(.45, 0, .35, 1)", fill: "backwards" });
+      return new Promise((res) => { an.onfinish = an.oncancel = () => { el.remove(); res(); }; });
+    }
+    function landed(id) {
+      const li = rowOf(id), av = li.querySelector(".av"), c = centerOf(av);
+      play(av, [{ transform: "none" }, { transform: "scale(1.2)", offset: 0.35 }, { transform: "scale(.95)", offset: 0.7 }, { transform: "none" }], { duration: 420, easing: "ease-out" });
+      play(li.querySelector(".tasks"), [{ transform: "none" }, { transform: "scale(1.18)" }, { transform: "none" }], { duration: 360, easing: "ease-out" });
+      if (calm()) return;
+      const ring = document.createElement("i");
+      ring.className = "ring";
+      ring.style.left = c.x + "px";
+      ring.style.top = c.y + "px";
+      layer.appendChild(ring);
+      const an = ring.animate([{ transform: "scale(.8)", opacity: 1 }, { transform: "scale(1.9)", opacity: 0 }], { duration: 560, easing: "cubic-bezier(.2, .8, .3, 1)" });
+      an.onfinish = an.oncancel = () => ring.remove();
+    }
+    async function moveTasks(fromId, toId, names) {
+      const from = centerOf(rowOf(fromId).querySelector(".av")), to = centerOf(rowOf(toId).querySelector(".av"));
+      const color = P[fromId].b;
+      await Promise.all(names.map((t, i) => flyTask(t, color, from, to, i, names.length).then(() => {
+        const k = TASKS[fromId].indexOf(t);
+        if (k >= 0) TASKS[fromId].splice(k, 1);
+        TASKS[toId].push(t);
+        counts();
+        landed(toId);
+      })));
+    }
+    async function removeMember(id) {
+      if (S.busy || S.open !== id) return;
+      const li = rowOf(id), picked = li.querySelector(`input[name="to-${id}"]:checked`);
+      if (!picked) return;
+      const to = picked.value, names = TASKS[id].slice(), index = S.members.indexOf(id);
+      S.busy = true;
+      say(`Removing ${P[id].name}. Moving ${names.length} tasks to ${P[to].first}.`);
+      li.classList.add("leaving");
+      await closeDrawer(false);
+      await moveTasks(id, to, names);
+      // the seat in the header stack floats away and the stack closes up
+      const sav = savOf(id);
+      await play(sav, [{ transform: "none", opacity: 1 }, { transform: "translateY(-30px) rotate(14deg) scale(.8)", opacity: 0 }], { duration: 420, easing: "cubic-bezier(.4, 0, .6, 1)" });
+      sav.classList.add("out");
+      // the row folds shut while the others slide up
+      const h = li.offsetHeight;
+      await play(li, [{ height: h + "px", opacity: 1, transform: "none" }, { height: "0px", opacity: 0, transform: "scale(.96)" }], { duration: 480, easing: "cubic-bezier(.5, 0, .3, 1)" });
+      li.hidden = true;
+      S.members.splice(index, 1);
+      totals();
+      S.undo = { id, to, names, index };
+      showToast(`${P[id].first} removed · ${names.length} task${names.length === 1 ? "" : "s"} moved to ${P[to].first}`);
+      say(`${P[id].name} removed. ${names.length} tasks now with ${P[to].first}. Undo is available.`);
+      S.busy = false;
+    }
+    async function undo() {
+      if (S.busy || !S.undo) return;
+      const { id, to, names, index } = S.undo;
+      S.undo = null;
+      S.busy = true;
+      hideToast();
+      const li = rowOf(id);
+      li.hidden = false;
+      li.classList.remove("leaving");
+      S.members.splice(index, 0, id);
+      const h = li.offsetHeight;
+      await play(li, [{ height: "0px", opacity: 0, transform: "scale(.96)" }, { height: h + "px", opacity: 1, transform: "none" }], { duration: 460, easing: "cubic-bezier(.3, .8, .3, 1)" });
+      const sav = savOf(id);
+      sav.classList.remove("out");
+      play(sav, [{ transform: "translateY(-24px) scale(.6)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 520, easing: "cubic-bezier(.3, 1.6, .5, 1)" });
+      totals();
+      await moveTasks(to, id, names);
+      totals();
+      say(`${P[id].name} is back with ${names.length} tasks`);
+      S.busy = false;
+    }
+
+    let toastTimer = 0;
+    function showToast(text) {
+      toastText.textContent = text;
+      toast.classList.add("show");
+      undoBtn.disabled = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(hideToast, 8000);
+    }
+    function hideToast() { toast.classList.remove("show"); undoBtn.disabled = true; clearTimeout(toastTimer); }
+
+    list.addEventListener("click", (e) => {
+      const b = e.target.closest(".rm");
+      if (!b) return;
+      press(b);
+      openDrawer(b.closest(".mem").dataset.id, true);
+    });
+    undoBtn.addEventListener("click", () => undo());
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && S.open && !S.busy) closeDrawer(true);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+    });
+
+    // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+    const demo = { on: true, timer: 0, k: 0 };
+    function stopDemo() { if (!demo.on) return; demo.on = false; clearTimeout(demo.timer); }
+    addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    function scheduleDemo(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+    async function runDemo() {
+      if (!demo.on) return;
+      if (S.busy) return scheduleDemo(600);
+      if (S.undo) { press(undoBtn); await wait(170); await undo(); return scheduleDemo(2000); }
+      if (S.open) await closeDrawer(false);
+      const plan = demo.k % 2 === 0 ? { id: "usman", to: "ali" } : { id: "mahnoor", to: "hira" };
+      demo.k += 1;
+      const li = rowOf(plan.id);
+      if (!li || li.hidden) return scheduleDemo(1200);
+      press(li.querySelector(".rm"));
+      await wait(160); if (!demo.on) return;
+      await openDrawer(plan.id, false);
+      await wait(900); if (!demo.on || S.open !== plan.id) return;
+      const r = li.querySelector(`input[value="${plan.to}"]`);
+      if (r && !r.checked) { r.checked = true; await wait(800); if (!demo.on || S.open !== plan.id) return; }
+      const go = li.querySelector(".go");
+      if (!go) return;
+      press(go);
+      await wait(170); if (!demo.on || S.open !== plan.id) return;
+      await removeMember(plan.id);
+      scheduleDemo(2400);
+    }
+
+    counts();
+    hideToast();
+    scheduleDemo(600);
+  })();
+</script>
+</body>
+</html>

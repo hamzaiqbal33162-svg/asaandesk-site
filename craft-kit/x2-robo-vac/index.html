@@ -1,0 +1,531 @@
+<!doctype html>
+<!-- Chill & Craft · Robo Vac · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robo Vac · empty the trash</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: periwinkle floor, mint robot light ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #e4e6fb;
+    --card: #ffffff;
+    --line: #e1e3f6;
+    --ink: #191b33;
+    --muted: #666a8e;
+    --floor1: #eceefe;
+    --floor2: #e2e5fb;
+    --grout: rgba(110, 115, 190, .14);
+    --clean: rgba(255, 255, 255, .75);
+    --mint: #10c995;
+    --mint-ink: #04382a;
+    --amber: #f5a524;
+    --sh: 40, 44, 110;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0a0c1d;
+    --card: #12152b;
+    --line: #24284a;
+    --ink: #eceeff;
+    --muted: #979bc4;
+    --floor1: #171a36;
+    --floor2: #13162e;
+    --grout: rgba(150, 160, 255, .09);
+    --clean: rgba(150, 255, 220, .12);
+    --mint: #34e0ad;
+    --mint-ink: #022a1f;
+    --amber: #fbbf24;
+    --sh: 0, 0, 0;
+    --focus: #93c5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .frame { position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 20px 16px; overflow: hidden; overflow: clip; background: radial-gradient(90% 60% at 50% 100%, color-mix(in srgb, var(--mint) 14%, transparent), transparent 70%); }
+
+  .card {
+    position: relative;
+    width: min(480px, 100%);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    padding: 16px;
+    box-shadow: 0 44px 80px -52px rgba(var(--sh), .65), 0 2px 8px -4px rgba(var(--sh), .14);
+  }
+  .top { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; padding: 0 2px; }
+  .ic { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--mint) 16%, var(--card)); color: var(--mint); }
+  .ic svg { width: 20px; height: 20px; }
+  .top h1 { margin: 0; font-size: 17px; font-weight: 790; }
+  .top p { margin: 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .go {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 0;
+    border-radius: 13px;
+    padding: 10px 15px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 790;
+    color: var(--mint-ink);
+    background: var(--mint);
+    box-shadow: 0 12px 22px -14px var(--mint), inset 0 -3px 0 rgba(0, 0, 0, .12);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: scale .2s var(--spring), filter .2s, background-color .3s, color .3s;
+  }
+  .go svg { width: 18px; height: 18px; }
+  .go:hover { filter: brightness(1.05); }
+  .go:active, .go.pressed { scale: .93; }
+  .go.busy { background: var(--ink); color: var(--card); box-shadow: none; cursor: default; }
+  .go.alt { background: var(--card); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line); }
+
+  /* ---------- The floor ---------- */
+  .floor {
+    position: relative;
+    height: 290px;
+    border-radius: 20px;
+    overflow: hidden;
+    background-color: var(--floor1);
+    background-image: linear-gradient(var(--grout) 1.5px, transparent 1.5px), linear-gradient(90deg, var(--grout) 1.5px, transparent 1.5px), linear-gradient(45deg, var(--floor2) 25%, transparent 25%, transparent 75%, var(--floor2) 75%), linear-gradient(45deg, var(--floor2) 25%, transparent 25%, transparent 75%, var(--floor2) 75%);
+    background-size: 48px 48px, 48px 48px, 96px 96px, 96px 96px;
+    background-position: 0 0, 0 0, 0 0, 48px 48px;
+    box-shadow: inset 0 0 0 1px var(--line), inset 0 -30px 40px -30px rgba(var(--sh), .25);
+  }
+  .trail { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .trail path { fill: none; stroke: var(--clean); stroke-width: 52; stroke-linecap: round; stroke-linejoin: round; }
+  .shine { position: absolute; inset: 0; background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%); transform: translateX(-120%); pointer-events: none; }
+  .dock { position: absolute; left: 14px; bottom: 0; width: 84px; height: 20px; border-radius: 14px 14px 0 0; background: linear-gradient(#3a3e5e, #1f2236); box-shadow: 0 -4px 12px -6px rgba(0, 0, 0, .45); }
+  .dock::before { content: ""; position: absolute; left: 22px; right: 22px; top: 6px; height: 4px; border-radius: 2px; background: var(--muted); opacity: .6; transition: background-color .3s, box-shadow .3s, opacity .3s; }
+  .dock.charging::before { background: var(--mint); opacity: 1; box-shadow: 0 0 10px var(--mint); animation: charge 1.4s ease-in-out infinite; }
+
+  /* trash on the floor: each item is a button that restores it */
+  .junk { position: absolute; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 12px; }
+  .junk svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 5px 5px rgba(var(--sh), .25)); animation: idle 3.2s ease-in-out infinite; animation-delay: calc(var(--i) * -.45s); }
+  .junk::after { content: attr(data-tip); position: absolute; left: 50%; bottom: 100%; margin-bottom: 4px; padding: 4px 8px; border-radius: 7px; background: var(--ink); color: var(--card); font-size: 11px; font-weight: 700; white-space: nowrap; translate: -50% 4px; opacity: 0; pointer-events: none; transition: opacity .15s, translate .2s; }
+  .junk:hover::after, .junk:focus-visible::after { opacity: 1; translate: -50% 0; }
+  .junk[hidden] { display: none; }
+  .junk:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* the robot */
+  .bot { position: absolute; left: 0; top: 0; width: 64px; height: 64px; pointer-events: none; z-index: 3; }
+  .bot svg { width: 100%; height: 100%; overflow: visible; }
+  .brush { transform-box: view-box; transform-origin: 0 0; animation: spin 1.6s linear infinite; }   /* spins round its hub */
+  .bot.on .brush { animation-duration: .28s; }
+  .led { transition: fill .3s; }
+  .bot .ping { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; border: 2.5px solid var(--mint); opacity: 0; }
+
+  /* ---------- Footer: robot status and its dust bin ---------- */
+  .foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 0 4px; font-size: 13px; }
+  .state { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; min-width: 0; }
+  .state i { width: 9px; height: 9px; border-radius: 50%; background: var(--mint); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 25%, transparent); }
+  .state.work i { background: var(--amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 25%, transparent); animation: blink .6s ease-in-out infinite; }
+  .state span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meter { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .meter b { display: block; width: 76px; height: 8px; border-radius: 4px; background: var(--floor2); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+  .meter b i { display: block; height: 100%; width: 0; border-radius: 4px; background: linear-gradient(90deg, var(--mint), #7ef3cf); transition: width .3s ease-out; }
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .layer { position: absolute; inset: 0; pointer-events: none; }
+  .dust { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }
+  .spark { position: absolute; width: 7px; height: 7px; border-radius: 2px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes idle { 0%, 100% { transform: rotate(var(--r)) translateY(0); } 50% { transform: rotate(calc(var(--r) + 4deg)) translateY(-2px); } }
+  @keyframes charge { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+  @keyframes blink { 50% { opacity: .35; } }
+
+  @media (max-width: 420px) {
+    .floor { height: 270px; }
+    .meter span { display: none; }
+    .card { padding: 14px; }
+  }
+  /* Calm mode: every step still happens, without the big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <main class="card" aria-labelledby="title">
+    <header class="top">
+      <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 12.5h9l1-12.5" /></svg></span>
+      <div>
+        <h1 id="title">Trash</h1>
+        <p id="sub">7 items · 248 MB</p>
+      </div>
+      <button class="go" id="go" type="button"><span id="goText">Empty trash</span></button>
+    </header>
+
+    <div class="floor" id="floor">
+      <svg class="trail" id="trailSvg" aria-hidden="true"><path id="trail" d="" /></svg>
+      <div class="dock charging" id="dock" aria-hidden="true"></div>
+      <div class="bot" id="bot" aria-hidden="true">
+        <i class="ping" id="ping"></i>
+        <svg viewBox="0 0 64 64">
+          <defs>
+            <radialGradient id="body" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#4a4f74" /><stop offset="1" stop-color="#1b1e31" /></radialGradient>
+            <radialGradient id="ledGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#34e0ad" stop-opacity=".8" /><stop offset="1" stop-color="#34e0ad" stop-opacity="0" /></radialGradient>
+          </defs>
+          <ellipse cx="33" cy="36" rx="30" ry="28" fill="#000" opacity=".18" />
+          <g transform="translate(48 9)"><g class="brush" stroke="#9aa0d0" stroke-width="1.6" stroke-linecap="round"><path d="M0 0L7 0M0 0L-3.5 6M0 0L-3.5 -6" /></g></g>
+          <g transform="translate(48 55)"><g class="brush" stroke="#9aa0d0" stroke-width="1.6" stroke-linecap="round"><path d="M0 0L7 0M0 0L-3.5 6M0 0L-3.5 -6" /></g></g>
+          <circle cx="32" cy="32" r="29" fill="url(#body)" />
+          <path d="M45 6.2A29 29 0 0 1 45 57.8" fill="none" stroke="#9aa0d0" stroke-width="4.5" stroke-linecap="round" />
+          <circle cx="30" cy="32" r="17" fill="#262a44" stroke="#3a3f63" stroke-width="1.5" />
+          <path d="M20 24a13 13 0 0 1 12-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".25" />
+          <circle cx="30" cy="32" r="7" fill="#15182a" stroke="#4a4f74" stroke-width="2" />
+          <circle cx="50" cy="32" r="7" fill="url(#ledGlow)" />
+          <circle class="led" id="led" cx="50" cy="32" r="2.8" fill="#34e0ad" />
+        </svg>
+      </div>
+      <i class="shine" id="shine"></i>
+    </div>
+
+    <div class="foot">
+      <span class="state" id="state"><i aria-hidden="true"></i><span id="stateText">Docked · battery 92%</span></span>
+      <span class="meter"><span>Robot bin</span><b><i id="meter"></i></b></span>
+    </div>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </main>
+  <div class="layer" id="layer" aria-hidden="true"></div>
+</div>
+
+<script>
+  // ---------- Robo Vac: "Empty trash" sends a little robot round the floor to hoover up every file ----------
+  (function () {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const frame = $("frame"), layer = $("layer"), floor = $("floor"), bot = $("bot"), led = $("led"), ping = $("ping"), dock = $("dock"), trail = $("trail"), shine = $("shine");
+    const go = $("go"), goText = $("goText"), sub = $("sub"), stateEl = $("state"), stateText = $("stateText"), meter = $("meter"), status = $("status");
+    // the pose (position + heading) lives on .bot; wiggles, spins and gulps play on the drawing inside it
+    const botSvg = bot.querySelector("svg");
+
+    const JUNK = [
+      { name: "Old-notes.txt", mb: 12, kind: "paper", x: 0.2, y: 0.3 },
+      { name: "Blurry-1.jpg", mb: 38, kind: "photo", x: 0.42, y: 0.25 },
+      { name: "Draft-v3.docx", mb: 9, kind: "doc", x: 0.64, y: 0.33 },
+      { name: "Backup.zip", mb: 120, kind: "zip", x: 0.85, y: 0.27 },
+      { name: "Receipt.pdf", mb: 4, kind: "pdf", x: 0.8, y: 0.7 },
+      { name: "Screenshot.png", mb: 52, kind: "shot", x: 0.55, y: 0.65 },
+      { name: "Promo mail", mb: 13, kind: "mail", x: 0.32, y: 0.72 }
+    ];
+    const ART = {
+      paper: '<circle cx="22" cy="23" r="13" fill="#fbfaf5" stroke="#c9c6b8" stroke-width="1.5"/><path d="M13 20l6 3 4-6 3 7 5-2M15 29l5-3 5 4 5-3" fill="none" stroke="#b9b5a5" stroke-width="1.4" stroke-linejoin="round"/>',
+      photo: '<rect x="8" y="10" width="28" height="24" rx="4" fill="#fff" stroke="#d6d8ef" stroke-width="1.5"/><rect x="11" y="13" width="22" height="15" rx="2" fill="#93c5fd"/><path d="M11 28l7-7 5 5 3-3 7 5z" fill="#22c55e"/><circle cx="28" cy="17" r="2.4" fill="#fde68a"/>',
+      doc: '<path d="M12 6h14l7 7v23a3 3 0 0 1-3 3H12a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3z" fill="#fff" stroke="#d6d8ef" stroke-width="1.5"/><path d="M26 6v7h7" fill="#e0e7ff"/><path d="M14 20h14M14 25h14M14 30h9" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/>',
+      zip: '<path d="M12 6h14l7 7v23a3 3 0 0 1-3 3H12a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3z" fill="#fbbf24"/><path d="M26 6v7h7" fill="#fde68a"/><path d="M19 9h3M19 13h3M19 17h3M19 21h3" stroke="#92400e" stroke-width="2"/><rect x="17.5" y="24" width="6" height="7" rx="1.5" fill="#92400e"/>',
+      pdf: '<path d="M12 6h14l7 7v23a3 3 0 0 1-3 3H12a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3z" fill="#fff" stroke="#fecaca" stroke-width="1.5"/><rect x="11" y="23" width="20" height="9" rx="2" fill="#ef4444"/><text x="21" y="30.2" text-anchor="middle" font-size="6.5" font-weight="800" fill="#fff" font-family="system-ui, sans-serif">PDF</text>',
+      shot: '<rect x="7" y="9" width="30" height="24" rx="4" fill="#1e293b"/><rect x="10" y="12" width="24" height="15" rx="2" fill="#a78bfa"/><path d="M10 22h24" stroke="#fff" stroke-width="1.4" opacity=".6"/><rect x="18" y="33" width="8" height="3" fill="#1e293b"/>',
+      mail: '<rect x="7" y="11" width="30" height="21" rx="4" fill="#fff" stroke="#d6d8ef" stroke-width="1.5"/><path d="M8 13l14 10 14-10" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linejoin="round"/>'
+    };
+    const ROT = [-14, 9, -6, 12, -10, 7, -4];
+
+    const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+    const calm = () => calmQ.matches;
+    const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 200) : ms));
+    function play(el, frames, opts) {
+      if (calm() || !el.animate) return Promise.resolve();
+      const a = el.animate(frames, opts);
+      return new Promise((res) => { a.onfinish = res; a.oncancel = res; });
+    }
+    const say = (m) => { if (!demo.on) status.textContent = m; };
+    const press = (el) => { el.classList.add("pressed"); setTimeout(() => el.classList.remove("pressed"), 170); };
+
+    // ---------- Items on the floor ----------
+    const items = JUNK.map((j, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "junk";
+      b.dataset.tip = "Restore " + j.name;
+      b.setAttribute("aria-label", `${j.name}, ${j.mb} MB. Press to restore it`);
+      b.style.setProperty("--i", i);
+      b.style.setProperty("--r", ROT[i] + "deg");
+      b.innerHTML = `<svg viewBox="0 0 44 44" aria-hidden="true">${ART[j.kind]}</svg>`;
+      floor.insertBefore(b, bot);
+      const it = Object.assign({}, j, { el: b, state: "floor" });
+      b.addEventListener("click", () => restore(it));
+      return it;
+    });
+    const S = { busy: false, mode: "full", battery: 92, bin: 0 };
+    const left = () => items.filter((i) => i.state === "floor");
+    function place() {
+      const W = floor.clientWidth, H = floor.clientHeight;
+      items.forEach((it) => { it.px = it.x * W; it.py = it.y * H; it.el.style.left = it.px + "px"; it.el.style.top = it.py + "px"; });
+    }
+    function updateSub() {
+      const l = left(), mb = l.reduce((t, i) => t + i.mb, 0);
+      sub.textContent = l.length ? `${l.length} item${l.length === 1 ? "" : "s"} · ${mb} MB` : "Empty";
+      if (!S.busy) setGo(l.length ? "empty" : "refill");
+    }
+    const ICON_BROOM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="7.5"/><circle cx="12" cy="13" r="2.4"/><path d="M12 3v2.5"/></svg>';
+    function setGo(kind) {
+      go.classList.toggle("busy", kind === "busy");
+      go.classList.toggle("alt", kind === "refill");
+      go.setAttribute("aria-disabled", String(kind === "busy"));
+      goText.innerHTML = kind === "busy" ? "Cleaning…" : kind === "refill" ? "Refill trash" : `${ICON_BROOM}Empty trash`;
+      goText.style.display = "inline-flex";
+      goText.style.alignItems = "center";
+      goText.style.gap = "8px";
+    }
+
+    // ---------- Robot pose ----------
+    const R = { x: 0, y: 0, a: -90 };
+    function dockPose() { const H = floor.clientHeight; return { x: 56, y: H - 52 }; }   // parked just above the dock base
+    function pose() { bot.style.transform = `translate(${(R.x - 32).toFixed(1)}px, ${(R.y - 32).toFixed(1)}px) rotate(${R.a.toFixed(1)}deg)`; }
+    function setLed(c) { led.setAttribute("fill", c); }
+    function pingOnce(color) {
+      ping.style.borderColor = color;
+      return play(ping, [{ transform: "scale(.8)", opacity: 0.9 }, { transform: "scale(1.9)", opacity: 0 }], { duration: 620, easing: "cubic-bezier(.2, .8, .3, 1)" });
+    }
+
+    // a smooth path through the waypoints (Chaikin corner cutting) with arc-length lookup
+    function smooth(pts, n) {
+      for (let k = 0; k < n; k++) {
+        const out = [pts[0]];
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i], b = pts[i + 1];
+          out.push({ x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25 }, { x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75 });
+        }
+        out.push(pts[pts.length - 1]);
+        pts = out;
+      }
+      const len = [0];
+      for (let i = 1; i < pts.length; i++) len.push(len[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+      return { pts, len, total: len[len.length - 1] };
+    }
+    function at(path, s) {
+      const { pts, len } = path;
+      s = Math.max(0, Math.min(path.total, s));
+      let i = 1;
+      while (i < len.length - 1 && len[i] < s) i++;
+      const k = (s - len[i - 1]) / (len[i] - len[i - 1] || 1);
+      return { x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * k, y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * k };
+    }
+    let trailPts = [];
+    function drawTrail() { trail.setAttribute("d", trailPts.length ? "M" + trailPts.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join("L") : ""); }
+    function drive(path, speed, onStep) {
+      if (calm()) { const e = at(path, path.total); R.x = e.x; R.y = e.y; pose(); return Promise.resolve(); }
+      return new Promise((res) => {
+        let s = 0, last = performance.now();
+        const step = (now) => {
+          const dt = Math.min(0.05, (now - last) / 1000);
+          last = now;
+          s += speed * dt;
+          const p = at(path, s), ahead = at(path, s + 14);
+          R.x = p.x; R.y = p.y;
+          if (Math.hypot(ahead.x - p.x, ahead.y - p.y) > 0.5) {
+            const target = (Math.atan2(ahead.y - p.y, ahead.x - p.x) * 180) / Math.PI;
+            const diff = ((target - R.a + 540) % 360) - 180;
+            R.a += diff * Math.min(1, dt * 9);
+          }
+          pose();
+          if (onStep) onStep(dt);
+          if (s < path.total) requestAnimationFrame(step); else res();
+        };
+        requestAnimationFrame(step);
+      });
+    }
+    function dustPuff() {
+      if (calm() || Math.random() > 0.35) return;
+      const f = frame.getBoundingClientRect(), fl = floor.getBoundingClientRect();
+      const back = { x: R.x - Math.cos((R.a * Math.PI) / 180) * 30, y: R.y - Math.sin((R.a * Math.PI) / 180) * 30 };
+      const d = document.createElement("i");
+      d.className = "dust";
+      d.style.left = fl.left - f.left + back.x - 2.5 + (Math.random() - 0.5) * 20 + "px";
+      d.style.top = fl.top - f.top + back.y - 2.5 + (Math.random() - 0.5) * 20 + "px";
+      layer.appendChild(d);
+      const an = d.animate([{ transform: "scale(1)", opacity: 0.45 }, { transform: `translate(${(Math.random() - 0.5) * 16}px, ${-8 - Math.random() * 10}px) scale(.2)`, opacity: 0 }], { duration: 700, easing: "ease-out" });
+      an.onfinish = an.oncancel = () => d.remove();
+    }
+    function suck(it) {
+      it.state = "sucked";
+      const dx = R.x - it.px, dy = R.y - it.py;
+      play(it.el, [
+        { transform: "none", opacity: 1 },
+        { transform: `translate(${dx * 0.4}px, ${dy * 0.4}px) rotate(160deg) scale(.7)`, opacity: 1, offset: 0.5 },
+        { transform: `translate(${dx}px, ${dy}px) rotate(380deg) scale(.1)`, opacity: 0 }
+      ], { duration: 320, easing: "cubic-bezier(.5, 0, .9, .5)" }).then(() => { it.el.hidden = true; });
+      S.bin += it.mb;
+      meter.style.width = Math.min(100, (S.bin / 248) * 100) + "%";
+      play(botSvg, [{ transform: "scale(1)" }, { transform: "scale(1.08)" }, { transform: "scale(1)" }], { duration: 260, easing: "ease-out" });
+      updateSub();
+      stateText.textContent = `Cleaning · ${it.name} gone`;
+    }
+
+    // ---------- Empty trash: wake, leave the dock, sweep two lanes, come home, spin ----------
+    async function clean() {
+      if (S.busy || !left().length) return;
+      S.busy = true;
+      setGo("busy");
+      say(`Emptying trash: ${left().length} items`);
+      stateEl.classList.add("work");
+      stateText.textContent = "Waking up…";
+      dock.classList.remove("charging");
+      // anticipation: two beeps and a wiggle
+      setLed("#f5a524");
+      await pingOnce("#f5a524");
+      setLed("#34e0ad");
+      pingOnce("#34e0ad");
+      await play(botSvg, [{ transform: "rotate(0deg)" }, { transform: "rotate(-8deg)" }, { transform: "rotate(8deg)" }, { transform: "rotate(0deg)" }], { duration: 360, easing: "ease-in-out" });
+      bot.classList.add("on");
+      trail.getAnimations().forEach((a) => a.cancel());
+      const W = floor.clientWidth, H = floor.clientHeight, d = dockPose(), y1 = H * 0.29, y2 = H * 0.69, x0 = 56, x1 = W - 46;
+      const path = smooth([{ x: d.x, y: d.y }, { x: x0, y: y1 + 30 }, { x: x0 + 20, y: y1 }, { x: x1, y: y1 }, { x: x1, y: y2 }, { x: x0 + 30, y: y2 }, { x: d.x, y: d.y - 10 }, { x: d.x, y: d.y }], 3);
+      trailPts = [{ x: R.x, y: R.y }];
+      trail.style.opacity = "1";
+      await drive(path, 230, () => {
+        const lastP = trailPts[trailPts.length - 1];
+        if (Math.hypot(R.x - lastP.x, R.y - lastP.y) > 6) { trailPts.push({ x: R.x, y: R.y }); drawTrail(); }
+        left().forEach((it) => { if (Math.hypot(it.px - R.x, it.py - R.y) < 42) suck(it); });
+        dustPuff();
+      });
+      left().forEach((it) => suck(it));   // anything the path missed (or calm mode)
+      // home: a happy spin on the dock, lights, shine across the floor
+      bot.classList.remove("on");
+      // a full happy spin that ends facing up, the docked heading
+      const delta = ((-90 - R.a + 540) % 360) - 180;
+      await play(botSvg, [{ transform: "rotate(0deg)" }, { transform: `rotate(${360 + delta}deg)` }], { duration: 760, easing: "cubic-bezier(.4, 0, .2, 1)" });
+      R.a = -90;
+      pose();
+      dock.classList.add("charging");
+      pingOnce("#34e0ad");
+      sparks();
+      play(shine, [{ transform: "translateX(-120%)" }, { transform: "translateX(120%)" }], { duration: 1100, easing: "cubic-bezier(.4, 0, .2, 1)" });
+      play(trail, [{ opacity: 1 }, { opacity: 0 }], { duration: 1600, delay: 300, fill: "forwards" }).then(() => {
+        if (S.busy) return;   // a new run already took over the trail
+        trailPts = []; drawTrail(); trail.getAnimations().forEach((a) => a.cancel());
+      });
+      const freed = S.bin;
+      S.battery = Math.max(60, S.battery - 3);
+      stateEl.classList.remove("work");
+      stateText.textContent = `Trash empty · ${freed} MB freed`;
+      say(`Trash empty. ${freed} megabytes freed.`);
+      S.busy = false;
+      S.mode = "empty";
+      updateSub();
+      await wait(1400);
+      // empty the robot bin into the dock
+      meter.style.width = "0%";
+      S.bin = 0;
+      if (!S.busy && S.mode === "empty") stateText.textContent = `Docked · battery ${S.battery}%`;
+    }
+    function sparks() {
+      if (calm()) return;
+      const f = frame.getBoundingClientRect(), fl = floor.getBoundingClientRect(), colors = ["#34e0ad", "#a5f3d8", "#ffffff", "#f5a524"];
+      for (let i = 0; i < 16; i++) {
+        const s = document.createElement("i");
+        s.className = "spark";
+        s.style.background = colors[i % colors.length];
+        s.style.left = fl.left - f.left + R.x - 3.5 + "px";
+        s.style.top = fl.top - f.top + R.y - 3.5 + "px";
+        layer.appendChild(s);
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.3, dd = 40 + Math.random() * 50;
+        const an = s.animate([
+          { transform: "translate(0, 0) rotate(0)", opacity: 1 },
+          { transform: `translate(${Math.cos(a) * dd}px, ${Math.sin(a) * dd}px) rotate(${Math.random() * 360}deg)`, opacity: 1, offset: 0.6 },
+          { transform: `translate(${Math.cos(a) * dd * 1.1}px, ${Math.sin(a) * dd + 30}px) rotate(${Math.random() * 600}deg) scale(.4)`, opacity: 0 }
+        ], { duration: 900 + Math.random() * 400, easing: "cubic-bezier(.2, .7, .3, 1)" });
+        an.onfinish = an.oncancel = () => s.remove();
+      }
+    }
+
+    // ---------- Refill (for the demo) and restoring one item by hand ----------
+    async function refill() {
+      if (S.busy) return;
+      S.busy = true;
+      setGo("busy");
+      goText.textContent = "Refilling…";
+      place();
+      await Promise.all(items.map((it, i) => {
+        it.state = "floor";
+        it.el.hidden = false;
+        return play(it.el, [
+          { transform: "translateY(-260px) rotate(-40deg)", opacity: 0 },
+          { transform: "translateY(0) rotate(6deg) scale(1.1, .86)", opacity: 1, offset: 0.62 },
+          { transform: "translateY(-14px) rotate(-3deg)", offset: 0.8 },
+          { transform: "none" }
+        ], { duration: 760, delay: i * 90, easing: "cubic-bezier(.4, 0, .4, 1)", fill: "backwards" });
+      }));
+      S.mode = "full";
+      S.busy = false;
+      stateText.textContent = `Docked · battery ${S.battery}%`;
+      updateSub();
+      say("Trash refilled with 7 items");
+    }
+    async function restore(it) {
+      if (S.busy || it.state !== "floor") return;
+      it.state = "restored";
+      updateSub();
+      stateText.textContent = `${it.name} restored to Files`;
+      say(`${it.name} restored to Files`);
+      await play(it.el, [
+        { transform: "none", opacity: 1 },
+        { transform: "translateY(-22px) scale(1.18) rotate(-6deg)", opacity: 1, offset: 0.35 },
+        { transform: "translateY(-120px) scale(.5) rotate(10deg)", opacity: 0 }
+      ], { duration: 640, easing: "cubic-bezier(.3, .7, .4, 1)" });
+      it.el.hidden = true;
+      if (!left().length) { S.mode = "empty"; updateSub(); }
+    }
+    go.addEventListener("click", (e) => {
+      const btn = e.currentTarget;
+      if (S.busy) return;
+      press(btn);
+      if (left().length) clean(); else refill();
+    });
+
+    // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+    const demo = { on: true, timer: 0, k: 0 };
+    function stopDemo() { if (!demo.on) return; demo.on = false; clearTimeout(demo.timer); }
+    addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    function scheduleDemo(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+    async function runDemo() {
+      if (!demo.on) return;
+      if (S.busy) return scheduleDemo(700);
+      if (!left().length) { press(go); await refill(); return scheduleDemo(1800); }
+      if (demo.k % 2 === 1) {
+        const it = left()[3];
+        if (it) { it.el.classList.add("pressed"); await restore(it); await wait(700); if (!demo.on) return; }
+      }
+      demo.k += 1;
+      press(go);
+      await wait(160); if (!demo.on) return;
+      await clean();
+      scheduleDemo(2400);
+    }
+
+    function init() {
+      place();
+      const d = dockPose();
+      R.x = d.x; R.y = d.y; R.a = -90;
+      pose();
+      updateSub();
+    }
+    addEventListener("resize", () => { if (!S.busy) init(); });
+    init();
+    scheduleDemo(700);
+  })();
+</script>
+</body>
+</html>

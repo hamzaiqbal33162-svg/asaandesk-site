@@ -1,0 +1,519 @@
+<!doctype html>
+<!-- Chill & Craft · Spark Tiles · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spark Tiles · stat panel with live sparklines</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: sea-glass and deep teal (light), green-black glass with neon (dark) ---------- */
+  :root {
+    --bg: #e6f2ef; --bg-2: #f6fbf9; --aur1: rgba(139, 212, 80, 0.35); --aur2: rgba(25, 167, 160, 0.3); --aur3: rgba(123, 108, 246, 0.22);
+    --panel: rgba(255, 255, 255, 0.72); --tile: #ffffff; --edge: rgba(13, 59, 58, 0.09); --ink: #0d3433; --muted: #5d7a77; --soft: #eef6f4;
+    --lime: #5fae1f; --teal: #13948e; --violet: #6a5ae0; --tang: #f07a22; --up: #138a55; --down: #d4434f;
+    --shadow: rgba(13, 59, 58, 0.25); --focus: #13948e; --grid: rgba(13, 59, 58, 0.06);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #050d0c; --bg-2: #0b1a18; --aur1: rgba(139, 212, 80, 0.16); --aur2: rgba(25, 167, 160, 0.2); --aur3: rgba(123, 108, 246, 0.16);
+    --panel: rgba(12, 27, 25, 0.72); --tile: #0f201e; --edge: rgba(255, 255, 255, 0.07); --ink: #e6f5f2; --muted: #8fb0ab; --soft: #142b28;
+    --lime: #a6e86a; --teal: #3fd6cc; --violet: #9b8dff; --tang: #ffa25c; --up: #47d68e; --down: #ff6b78;
+    --shadow: rgba(0, 0, 0, 0.6); --focus: #a6e86a; --grid: rgba(255, 255, 255, 0.05);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 3px; }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- Stage: slow aurora behind a glass panel ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; overflow: hidden; overflow: clip;
+    background: radial-gradient(80% 60% at 50% 0%, var(--bg-2), var(--bg)); }
+  .aur { position: absolute; inset: -20%; pointer-events: none; background: radial-gradient(30% 35% at 20% 30%, var(--aur1), transparent 70%), radial-gradient(35% 40% at 80% 25%, var(--aur2), transparent 70%), radial-gradient(40% 40% at 55% 85%, var(--aur3), transparent 70%); filter: blur(20px); animation: aur 20s ease-in-out infinite alternate; }
+  @keyframes aur { to { transform: translate(4%, -3%) rotate(6deg) scale(1.08); } }
+  .gridbg { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 34px 34px; -webkit-mask: radial-gradient(60% 60% at 50% 50%, #000, transparent); mask: radial-gradient(60% 60% at 50% 50%, #000, transparent); }
+
+  .panel { position: relative; width: min(1060px, 100%); padding: 20px; border-radius: 28px; background: var(--panel); border: 1px solid var(--edge); -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3);
+    box-shadow: 0 50px 90px -60px var(--shadow); animation: rise 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.1) backwards; }
+  @keyframes rise { from { opacity: 0; transform: translateY(40px) scale(0.97); } }
+
+  /* ---------- Header and controls ---------- */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .ttl h1 { margin: 0; font-size: 21px; letter-spacing: -0.02em; font-weight: 820; display: flex; align-items: center; gap: 10px; }
+  .ttl p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+  .beat { width: 8px; height: 8px; border-radius: 50%; background: var(--up); position: relative; flex: none; }
+  .beat::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--up); animation: beat 2s ease-out infinite; }
+  .live-on .beat::after { animation-duration: 0.9s; }
+  @keyframes beat { to { transform: scale(3); opacity: 0; } }
+  .ctrl { display: flex; align-items: center; gap: 8px; }
+  .seg { position: relative; display: flex; padding: 4px; border-radius: 14px; background: var(--soft); }
+  .seg button { position: relative; z-index: 1; width: 46px; height: 32px; border: 0; background: none; cursor: pointer; border-radius: 10px; font-size: 13px; font-weight: 760; color: var(--muted); transition: color 0.3s; }
+  .seg button[aria-pressed="true"] { color: var(--ink); }
+  .seg .pill { position: absolute; top: 4px; bottom: 4px; left: 4px; width: 46px; border-radius: 10px; background: var(--tile); box-shadow: 0 4px 12px -6px var(--shadow), 0 0 0 1px var(--edge); transform: translateX(var(--x, 0px)) scaleX(var(--sx, 1)); transition: transform 0.55s cubic-bezier(0.3, 1.5, 0.45, 1); }
+  .icon-btn { width: 40px; height: 40px; border: 0; border-radius: 13px; cursor: pointer; background: var(--soft); color: var(--muted); display: grid; place-items: center; transition: background 0.3s, color 0.3s, transform 0.4s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .icon-btn:active { transform: scale(0.9); }
+  .icon-btn[aria-pressed="true"] { background: var(--ink); color: var(--tile); }
+  .icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px 0 6px; border: 0; border-radius: 13px; cursor: pointer; background: var(--soft); font-size: 13px; font-weight: 760; color: var(--muted); transition: color 0.3s; }
+  .switch .trk { position: relative; width: 36px; height: 22px; border-radius: 999px; background: color-mix(in srgb, var(--muted) 35%, transparent); transition: background 0.3s; }
+  .switch .trk::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25); transition: transform 0.45s cubic-bezier(0.3, 1.7, 0.5, 1), width 0.2s; }
+  .switch:active .trk::after { width: 20px; }
+  .switch[aria-checked="true"] { color: var(--ink); }
+  .switch[aria-checked="true"] .trk { background: var(--up); box-shadow: 0 0 14px -2px var(--up); }
+  .switch[aria-checked="true"] .trk::after { transform: translateX(14px); }
+  .switch[aria-checked="true"]:active .trk::after { transform: translateX(10px); }
+
+  /* ---------- Tiles ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .tile { position: relative; padding: 14px 14px 10px; border-radius: 20px; background: var(--tile); border: 1px solid var(--edge); box-shadow: 0 20px 34px -30px var(--shadow); overflow: hidden;
+    animation: rise 0.8s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards; animation-delay: calc(var(--i) * 90ms + 150ms); transition: transform 0.5s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .tile::before { /* a soft glow of the tile's colour */ content: ""; position: absolute; right: -70px; top: -80px; width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, var(--c), transparent 68%); opacity: 0.12; pointer-events: none; animation: glow 7s ease-in-out infinite alternate; animation-delay: calc(var(--i) * -1.7s); }
+  @keyframes glow { to { transform: translate(-16px, 10px) scale(1.15); } }
+  .dip .tile { transform: translateY(4px) scale(0.985); transition-duration: 0.14s; transition-delay: calc(var(--i) * 40ms); }
+  .tile header { display: flex; align-items: center; gap: 8px; }
+  .tile h2 { margin: 0; font-size: 13px; font-weight: 720; color: var(--muted); white-space: nowrap; }
+  .ico { width: 26px; height: 26px; border-radius: 9px; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--c) 14%, transparent); color: var(--c); }
+  .ico svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .val { margin: 10px 0 0; font-size: 25px; font-weight: 840; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; white-space: nowrap; line-height: 1.1; }
+  .val small { font-size: 13px; font-weight: 780; color: var(--muted); letter-spacing: 0; margin-right: 3px; }
+  .sub { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+  .chip { perspective: 200px; flex: none; }
+  .chip span { display: inline-flex; align-items: center; gap: 3px; padding: 3px 7px; border-radius: 7px; font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums; transition: transform 0.2s ease-in; transform-origin: 50% 50%; }
+  .chip span.up { background: color-mix(in srgb, var(--up) 14%, transparent); color: var(--up); }
+  .chip span.down { background: color-mix(in srgb, var(--down) 14%, transparent); color: var(--down); }
+  .chip span.turn { transform: rotateX(90deg); }
+  .chip svg { width: 10px; height: 10px; fill: currentColor; transition: transform 0.3s; }
+  .chip .down svg { transform: rotate(180deg); }
+  .sub em { font-style: normal; overflow: hidden; text-overflow: ellipsis; }
+  .sub em i { font-style: normal; }
+  .rl .sh { display: none; }
+
+  .spark { position: relative; height: 70px; margin: 10px -4px 0; border-radius: 10px; cursor: crosshair; touch-action: pan-y; }
+  .spark svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .spark .line { fill: none; stroke: var(--c); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+  .spark .area { opacity: 0.9; }
+  .spark .prev { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 3 4; opacity: 0; transition: opacity 0.45s; }
+  .cmp .spark .prev { opacity: 0.55; }
+  .spark .end { fill: var(--c); }
+  .spark .endring { fill: none; stroke: var(--c); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: endring 2.2s ease-out infinite; }
+  @keyframes endring { from { transform: scale(0.6); opacity: 0.8; } to { transform: scale(2.6); opacity: 0; } }
+  .spark .cross { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0; transition: opacity 0.2s; }
+  .spark .hot { fill: var(--tile); stroke: var(--c); stroke-width: 2.6; opacity: 0; transition: opacity 0.2s; }
+  .spark.scrub .cross { opacity: 0.45; } .spark.scrub .hot { opacity: 1; }
+  .spark.scrub .end, .spark.scrub .endring { opacity: 0.25; }
+  .tip { position: absolute; top: -8px; left: 0; z-index: 2; transform: translate(-50%, -100%) scale(0.85); padding: 6px 9px; border-radius: 10px; background: var(--ink); color: var(--tile); font-size: 11.5px; font-weight: 700; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.2s, transform 0.3s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .tip small { display: block; font-size: 10.5px; font-weight: 600; opacity: 0.7; }
+  .spark.scrub .tip { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+  .spark:focus-visible { outline-offset: 2px; }
+
+  /* ---------- Insight line ---------- */
+  .foot { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 11px 14px; border-radius: 16px; background: var(--soft); font-size: 13px; min-height: 44px; overflow: hidden; }
+  .foot svg { width: 18px; height: 18px; flex: none; fill: var(--tang); animation: spark 3s ease-in-out infinite; }
+  @keyframes spark { 50% { transform: rotate(45deg) scale(1.15); } }
+  .say { position: relative; flex: 1; min-width: 0; height: 20px; }
+  .say span { position: absolute; left: 0; right: 0; top: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 20px; transition: transform 0.5s cubic-bezier(0.3, 1.4, 0.5, 1), opacity 0.3s; }
+  .say span.old { transform: translateY(-110%); opacity: 0; }
+  .say span.new { transform: translateY(110%); opacity: 0; }
+  .say b { font-weight: 760; }
+  .upd { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  /* the demo pointer */
+  .ghost { position: fixed; left: 0; top: 0; z-index: 40; width: 26px; height: 26px; pointer-events: none; opacity: 0; transform: translate(var(--gx, 70vw), var(--gy, 105vh)); transition: transform var(--gt, 0.8s) cubic-bezier(0.55, 0, 0.25, 1), opacity 0.35s; }
+  .ghost.show { opacity: 1; }
+  .ghost svg { width: 100%; height: 100%; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35)); transition: transform 0.15s; }
+  .ghost.tap svg { transform: scale(0.8); }
+  .ghost::after { content: ""; position: absolute; left: -10px; top: -11px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--teal); opacity: 0; }
+  .ghost.tap::after { animation: ring 0.5s ease-out; }
+  @keyframes ring { from { opacity: 0.95; transform: scale(0.3); } to { opacity: 0; transform: scale(1.7); } }
+
+  @media (max-width: 900px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+  @media (min-width: 901px) { .spark { height: 86px; } .val { font-size: 28px; } }
+  @media (max-width: 560px) {
+    .panel { padding: 16px 14px; border-radius: 24px; }
+    .top { margin-bottom: 12px; gap: 12px; }
+    .ctrl { width: 100%; }
+    .ctrl .switch { margin-left: auto; }
+    .tile { padding: 12px 12px 8px; border-radius: 18px; }
+    .val { font-size: 21px; }
+    .val small { font-size: 11.5px; }
+    .spark { height: 58px; }
+    .upd { display: none; }
+    .sub .lst, .rl .lg { display: none; }
+    .rl .sh { display: inline; }
+    .say { height: 38px; }
+    .say span { white-space: normal; line-height: 19px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  }
+  @media (max-width: 360px) { .seg button { width: 40px; } .seg .pill { width: 40px; } .tile h2 { font-size: 12px; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <span class="aur" aria-hidden="true"></span><span class="gridbg" aria-hidden="true"></span>
+  <section class="panel" id="panel" aria-labelledby="ttl">
+    <div class="top">
+      <div class="ttl">
+        <h1 id="ttl">Store pulse</h1>
+        <p><span class="beat" aria-hidden="true"></span>Saba Kitchenware · Karachi</p>
+      </div>
+      <div class="ctrl">
+        <div class="seg" role="group" aria-label="Date range" id="seg">
+          <span class="pill" aria-hidden="true"></span>
+          <button type="button" data-r="7" aria-pressed="false">7D</button>
+          <button type="button" data-r="30" aria-pressed="true">30D</button>
+          <button type="button" data-r="90" aria-pressed="false">90D</button>
+        </div>
+        <button class="icon-btn" id="cmp" type="button" aria-pressed="false" aria-label="Compare with the period before" title="Compare with the period before"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 6-8 3 3"/><path d="M3 20l5-4 4 2 6-5 3 2" stroke-dasharray="2 3" opacity=".6"/></svg></button>
+        <button class="switch" id="live" type="button" role="switch" aria-checked="false"><span class="trk" aria-hidden="true"></span>Live</button>
+      </div>
+    </div>
+
+    <div class="tiles" id="tiles">
+      <article class="tile" data-k="rev" style="--i:0; --c: var(--lime)">
+        <header><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 7h16v11H4z"/><circle cx="12" cy="12.5" r="2.6"/><path d="M7 7l2-3h6l2 3"/></svg></span><h2>Revenue</h2></header>
+        <p class="val" aria-hidden="true"></p>
+        <p class="sub"><span class="chip"><span class="up"></span></span><em>vs <span class="lst">last </span><i class="rl">30 days</i></em></p>
+      </article>
+      <article class="tile" data-k="ord" style="--i:1; --c: var(--teal)">
+        <header><span class="ico"><svg viewBox="0 0 24 24"><path d="M5 8h14l-1.2 11H6.2z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg></span><h2>Orders</h2></header>
+        <p class="val" aria-hidden="true"></p>
+        <p class="sub"><span class="chip"><span class="up"></span></span><em>vs <span class="lst">last </span><i class="rl">30 days</i></em></p>
+      </article>
+      <article class="tile" data-k="vis" style="--i:2; --c: var(--violet)">
+        <header><span class="ico"><svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg></span><h2>Visitors</h2></header>
+        <p class="val" aria-hidden="true"></p>
+        <p class="sub"><span class="chip"><span class="up"></span></span><em>vs <span class="lst">last </span><i class="rl">30 days</i></em></p>
+      </article>
+      <article class="tile" data-k="cvr" style="--i:3; --c: var(--tang)">
+        <header><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg></span><h2>Conversion</h2></header>
+        <p class="val" aria-hidden="true"></p>
+        <p class="sub"><span class="chip"><span class="up"></span></span><em>vs <span class="lst">last </span><i class="rl">30 days</i></em></p>
+      </article>
+    </div>
+
+    <div class="foot">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L3 11l6.8-2.2z"/></svg>
+      <div class="say" id="say" aria-live="polite"></div>
+      <span class="upd" id="upd">Updated just now</span>
+    </div>
+  </section>
+  <p class="sr-only" aria-live="polite" id="status"></p>
+</main>
+<div class="ghost" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 2.5v17l4.6-4.3 3 6.6 3.1-1.4-3-6.4 6.3-.4z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (s, r) { return (r || document).querySelector(s); };
+    var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+    var NS = "http://www.w3.org/2000/svg", N = 30;
+    var panel = $("#panel"), tilesEl = $("#tiles"), statusEl = $("#status");
+    function say(t) { statusEl.textContent = t; }
+
+    /* ---------- Data: smooth made-up series, the same every visit ---------- */
+    function rng(seed) { return function () { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+    // per-day size of each metric, and how its value is shown
+    var METRICS = {
+      rev: { name: "Revenue", day: 158000, sum: true, fmt: function (v) { return v >= 1e6 ? ["PKR", (v / 1e6).toFixed(2) + "M"] : ["PKR", Math.round(v / 1000) + "k"]; }, tipf: function (v) { return "PKR " + Math.round(v).toLocaleString("en-US"); } },
+      ord: { name: "Orders", day: 43, sum: true, fmt: function (v) { return ["", Math.round(v).toLocaleString("en-US")]; }, tipf: function (v) { return Math.round(v) + " orders"; } },
+      vis: { name: "Visitors", day: 1270, sum: true, fmt: function (v) { return ["", v >= 1e4 ? (v / 1000).toFixed(1) + "k" : Math.round(v).toLocaleString("en-US")]; }, tipf: function (v) { return Math.round(v).toLocaleString("en-US") + " visitors"; } },
+      cvr: { name: "Conversion", day: 3.4, sum: false, fmt: function (v) { return ["", v.toFixed(2) + "%"]; }, tipf: function (v) { return v.toFixed(2) + "% converted"; } }
+    };
+    var RANGES = { 7: { hours: 168, label: "7 days" }, 30: { hours: 720, label: "30 days" }, 90: { hours: 2160, label: "90 days" } };
+    function series(key, r, prev) {
+      var R = rng((key.charCodeAt(0) * 131 + key.charCodeAt(2) * 7 + r * 17 + (prev ? 991 : 0)) | 1), out = [], ph = R() * 6;
+      for (var i = 0; i < N; i++) {
+        var t = i / (N - 1);
+        var v = 1 + 0.16 * Math.sin(t * (r === 7 ? 9 : r === 30 ? 7 : 4) + ph) + 0.08 * Math.sin(t * 17 + ph * 2) + (R() - 0.5) * 0.14 + (prev ? -0.05 : 0.09) * t;
+        if (r === 7 && key !== "cvr") v *= 0.75 + 0.45 * Math.max(0, Math.sin((i % 4) / 4 * Math.PI * 2 - 1)); // busy evenings
+        out.push(Math.max(0.2, v));
+      }
+      return out;
+    }
+    function total(key, r, arr) {
+      var m = METRICS[key], mean = arr.reduce(function (a, b) { return a + b; }, 0) / arr.length;
+      return m.sum ? m.day * (RANGES[r].hours / 24) * mean : m.day * mean;
+    }
+    // the real value one point stands for (shown in the tooltip)
+    function pointVal(key, r, v) { var m = METRICS[key]; return m.sum ? m.day * (RANGES[r].hours / 24 / N) * v : m.day * v; }
+    function pointLabel(r, i) {
+      var d = new Date(Date.now() - (N - 1 - i) * RANGES[r].hours / N * 3600e3);
+      if (r === 7) return d.toLocaleDateString("en-GB", { weekday: "short" }) + " " + d.toLocaleTimeString("en-US", { hour: "numeric" });
+      if (r === 90) return "Week of " + d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+      return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+    }
+
+    /* ---------- Build each tile's sparkline ---------- */
+    var tiles = $$(".tile").map(function (el) {
+      var key = el.dataset.k, sp = document.createElement("div");
+      sp.className = "spark"; sp.tabIndex = 0;
+      sp.setAttribute("role", "slider"); sp.setAttribute("aria-label", METRICS[key].name + " over time");
+      sp.setAttribute("aria-valuemin", "1"); sp.setAttribute("aria-valuemax", String(N));
+      sp.innerHTML = '<svg aria-hidden="true"><defs><linearGradient id="g-' + key + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".32"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient>' +
+        '<clipPath id="c-' + key + '"><rect x="0" y="-20" width="100" height="200"/></clipPath></defs>' +
+        '<g clip-path="url(#c-' + key + ')"><path class="prev"/><path class="area" fill="url(#g-' + key + ')"/><path class="line"/></g>' +
+        '<line class="cross" y1="0"/><circle class="endring" r="4"/><circle class="end" r="3.6"/><circle class="hot" r="4.6"/></svg><div class="tip"></div>';
+      sp.style.color = "var(--c)";
+      el.appendChild(sp);
+      var t = { el: el, key: key, sp: sp, svg: $("svg", sp), line: $(".line", sp), area: $(".area", sp), prev: $(".prev", sp), end: $(".end", sp), ring: $(".endring", sp), hot: $(".hot", sp), cross: $(".cross", sp), tip: $(".tip", sp), clip: $("clipPath rect", sp),
+        val: $(".val", el), chip: $(".chip span", el), cur: [], prevCur: [], from: [], to: [], pfrom: [], pto: [], lo: 0.6, hi: 1.4, total: 0, shown: 0, w: 200, h: 70, idx: -1, shift: 0 };
+      for (var i = 0; i < N; i++) { t.cur.push(0.25); t.prevCur.push(0.25); }
+      return t;
+    });
+
+    function measure(t) {
+      var r = t.sp.getBoundingClientRect();
+      t.w = Math.max(60, r.width); t.h = Math.max(30, r.height);
+      t.svg.setAttribute("viewBox", "0 0 " + t.w + " " + t.h);
+      t.clip.setAttribute("width", t.w - 3);
+      t.cross.setAttribute("y2", t.h);
+    }
+    // smooth curve through the points (Catmull-Rom turned into cubic Beziers)
+    function curve(pts) {
+      var d = "M" + pts[0][0].toFixed(1) + " " + pts[0][1].toFixed(1);
+      for (var i = 0; i < pts.length - 1; i++) {
+        var p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+        d += "C" + (p1[0] + (p2[0] - p0[0]) / 6).toFixed(1) + " " + (p1[1] + (p2[1] - p0[1]) / 6).toFixed(1) + " " + (p2[0] - (p3[0] - p1[0]) / 6).toFixed(1) + " " + (p2[1] - (p3[1] - p1[1]) / 6).toFixed(1) + " " + p2[0].toFixed(1) + " " + p2[1].toFixed(1);
+      }
+      return d;
+    }
+    function xy(t, arr, i, off) {
+      var pad = 6, dx = (t.w - pad * 2) / (N - 1);
+      var y = t.h - 6 - (arr[i] - t.lo) / (t.hi - t.lo) * (t.h - 16);
+      return [pad + (i - off) * dx, Math.max(2, Math.min(t.h - 2, y))];
+    }
+    function draw(t) {
+      // the scale eases toward the drawn values, so a range change re-fits gently
+      var all = t.cur.concat(document.body.classList.contains("cmp-on") ? t.prevCur : []), mn = Math.min.apply(null, all), mx = Math.max.apply(null, all), sp = (mx - mn) || 0.5;
+      t.lo += (mn - sp * 0.12 - t.lo) * 0.18; t.hi += (mx + sp * 0.12 - t.hi) * 0.18;
+      var pts = t.cur.map(function (_, i) { return xy(t, t.cur, i, t.shift); });
+      var d = curve(pts);
+      t.line.setAttribute("d", d);
+      t.area.setAttribute("d", d + "L" + pts[pts.length - 1][0].toFixed(1) + " " + t.h + "L" + pts[0][0].toFixed(1) + " " + t.h + "Z");
+      t.prev.setAttribute("d", curve(t.prevCur.map(function (_, i) { return xy(t, t.prevCur, i, 0); })));
+      // the end dot stays at the right edge and rides up or down to the newest value
+      var last = xy(t, t.cur, N - 1, 0);
+      if (t.cur.length > N) { var nb = xy(t, t.cur, N, 1); last = [last[0], last[1] + (nb[1] - last[1]) * t.shift]; }
+      t.end.setAttribute("cx", last[0]); t.end.setAttribute("cy", last[1]);
+      t.ring.setAttribute("cx", last[0]); t.ring.setAttribute("cy", last[1]);
+      if (t.idx >= 0) placeScrub(t);
+    }
+    function setVal(t, v) {
+      var f = METRICS[t.key].fmt(v);
+      t.val.innerHTML = (f[0] ? "<small>" + f[0] + "</small>" : "") + f[1];
+    }
+
+    /* ---------- One animation loop morphs every line and counts every number ---------- */
+    var range = 30, live = false, morphT0 = 0, morphDur = 900, liveT0 = 0, raf = 0;
+    function ease(k) { var c = 1.35; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); } // ease-out-back
+    function loop(now) {
+      raf = 0;
+      var km = Math.max(0, Math.min(1, (now - morphT0) / (reduce.matches ? 1 : morphDur))), e = ease(km), busy = km < 1;
+      tiles.forEach(function (t) {
+        if (t.to.length) for (var i = 0; i < N; i++) { t.cur[i] = t.from[i] + (t.to[i] - t.from[i]) * e; t.prevCur[i] = t.pfrom[i] + (t.pto[i] - t.pfrom[i]) * e; }
+        t.shownNow = t.start + (t.total - t.start) * Math.min(1, e);
+        setVal(t, t.shownNow);
+      });
+      // live mode: the newest point slides in from the right
+      if (live && tiles[0].cur.length > N) {
+        var kl = Math.min(1, (now - liveT0) / 800), el = 1 - Math.pow(1 - kl, 3);
+        tiles.forEach(function (t) { t.shift = el; });
+        if (kl >= 1) tiles.forEach(function (t) { t.cur.shift(); t.shift = 0; t.from = t.cur.slice(); t.to = t.cur.slice(); });
+        else busy = true;
+      }
+      tiles.forEach(draw);
+      if (busy || Math.abs(tiles[0].hi - tiles[0].lo) > 0 && settleLeft-- > 0) raf = requestAnimationFrame(loop);
+    }
+    var settleLeft = 0;
+    function kick() { settleLeft = 40; if (!raf) raf = requestAnimationFrame(loop); }
+
+    function setRange(r, quiet) {
+      range = r;
+      $$("#seg button").forEach(function (b) { b.setAttribute("aria-pressed", String(+b.dataset.r === r)); });
+      placePill(true);
+      $$(".rl").forEach(function (x) { x.innerHTML = "<span class=\"lg\">" + RANGES[r].label + "</span><span class=\"sh\">" + r + "d</span>"; });
+      // anticipation: the tiles dip in a wave, then the lines morph and the numbers count
+      tilesEl.classList.add("dip");
+      setTimeout(function () { tilesEl.classList.remove("dip"); }, 170);
+      tiles.forEach(function (t) {
+        if (t.cur.length > N) t.cur.length = N; // drop a live point that was still sliding in
+        t.shift = 0;
+        t.from = t.cur.slice(); t.pfrom = t.prevCur.slice();
+        t.to = series(t.key, r, false); t.pto = series(t.key, r, true);
+        t.start = t.shownNow || 0; t.total = total(t.key, r, t.to);
+        var before = total(t.key, r, t.pto), ch = (t.total - before) / before * 100;
+        flipChip(t, ch);
+        t.idx = -1; t.sp.classList.remove("scrub");
+        t.sp.setAttribute("aria-valuenow", String(N)); t.sp.setAttribute("aria-valuetext", "Latest: " + METRICS[t.key].tipf(pointVal(t.key, r, t.to[N - 1])));
+      });
+      morphT0 = performance.now() + 120;
+      kick();
+      insight();
+      if (!quiet) say("Showing the last " + RANGES[r].label + ". Revenue " + METRICS.rev.fmt(tiles[0].total).join(" ") + ".");
+    }
+    function flipChip(t, ch) {
+      var up = t.key === "cvr" ? ch >= 0 : ch >= 0;
+      var html = '<svg viewBox="0 0 10 10"><path d="M5 1.5L9 8H1z"/></svg>' + Math.abs(ch).toFixed(1) + "%";
+      if (!t.chip.innerHTML || reduce.matches) { t.chip.className = up ? "up" : "down"; t.chip.innerHTML = html; return; }
+      t.chip.classList.add("turn");
+      setTimeout(function () { t.chip.className = up ? "up" : "down"; t.chip.innerHTML = html; t.chip.classList.add("turn"); void t.chip.offsetWidth; t.chip.classList.remove("turn"); }, 210);
+    }
+
+    /* ---------- Range switch pill ---------- */
+    var seg = $("#seg"), pill = $(".pill", seg);
+    function placePill(animate) {
+      var b = $('button[aria-pressed="true"]', seg), x = b.offsetLeft - 4;
+      if (!animate || reduce.matches) { pill.style.setProperty("--x", x + "px"); return; }
+      pill.style.setProperty("--sx", "1.35");
+      pill.style.setProperty("--x", x + "px");
+      setTimeout(function () { pill.style.setProperty("--sx", "1"); }, 200);
+    }
+    $$("#seg button").forEach(function (b) { b.addEventListener("click", function () { if (+b.dataset.r !== range) setRange(+b.dataset.r); }); });
+
+    /* ---------- Compare with the period before ---------- */
+    var cmpBtn = $("#cmp");
+    function setCompare(on) {
+      cmpBtn.setAttribute("aria-pressed", String(on));
+      tilesEl.classList.toggle("cmp", on);
+      document.body.classList.toggle("cmp-on", on);
+      kick();
+      say(on ? "Dashed lines show the " + RANGES[range].label + " before." : "Comparison hidden.");
+    }
+    cmpBtn.addEventListener("click", function () { setCompare(cmpBtn.getAttribute("aria-pressed") !== "true"); });
+
+    /* ---------- Live: a new point arrives every 1.6 s and the line scrolls left ---------- */
+    var liveBtn = $("#live"), liveTimer = 0, updAt = Date.now();
+    function setLive(on) {
+      live = on;
+      liveBtn.setAttribute("aria-checked", String(on));
+      panel.classList.toggle("live-on", on);
+      clearInterval(liveTimer);
+      if (on) { liveTimer = setInterval(liveTick, 1600); liveTick(); }
+      say(on ? "Live updates on." : "Live updates paused.");
+    }
+    liveBtn.addEventListener("click", function () { setLive(!live); });
+    function liveTick() {
+      if (tiles[0].cur.length > N) return;
+      tiles.forEach(function (t) {
+        var last = t.cur[N - 1], v = Math.max(0.3, last + (Math.random() - 0.45) * 0.22);
+        var dropped = t.cur[0];
+        t.cur.push(v); t.from = []; t.to = [];
+        t.start = t.shownNow; t.total = t.total + (METRICS[t.key].sum ? pointVal(t.key, range, v - dropped) : METRICS[t.key].day * (v - dropped) / N);
+        t.idx = -1; t.sp.classList.remove("scrub");
+      });
+      morphT0 = performance.now(); morphDur = 500;
+      liveT0 = performance.now();
+      updAt = Date.now();
+      kick();
+      setTimeout(function () { morphDur = 900; }, 520);
+    }
+    setInterval(function () {
+      var s = Math.round((Date.now() - updAt) / 1000);
+      $("#upd").textContent = s < 3 ? "Updated just now" : "Updated " + (s < 60 ? s + "s" : Math.round(s / 60) + "m") + " ago";
+    }, 1000);
+
+    /* ---------- Scrubbing: pointer, touch or arrow keys show a point's value ---------- */
+    function placeScrub(t) {
+      var p = xy(t, t.cur, t.idx, t.shift);
+      t.cross.setAttribute("x1", p[0]); t.cross.setAttribute("x2", p[0]);
+      t.hot.setAttribute("cx", p[0]); t.hot.setAttribute("cy", p[1]);
+      var x = Math.max(44, Math.min(t.w - 44, p[0]));
+      t.tip.style.left = x + "px";
+    }
+    function scrubTo(t, i) {
+      i = Math.max(0, Math.min(N - 1, i));
+      var fresh = t.idx !== i;
+      t.idx = i;
+      t.sp.classList.add("scrub");
+      var v = pointVal(t.key, range, t.cur[i]), txt = METRICS[t.key].tipf(v), lab = pointLabel(range, i);
+      if (fresh) { t.tip.innerHTML = txt + "<small>" + lab + "</small>"; t.sp.setAttribute("aria-valuenow", String(i + 1)); t.sp.setAttribute("aria-valuetext", lab + ": " + txt); }
+      placeScrub(t);
+    }
+    function endScrub(t) { t.idx = -1; t.sp.classList.remove("scrub"); }
+    tiles.forEach(function (t) {
+      function at(e) { var r = t.sp.getBoundingClientRect(); return Math.round(((e.clientX - r.left - 6) / (r.width - 12)) * (N - 1)); }
+      t.sp.addEventListener("pointermove", function (e) { scrubTo(t, at(e)); });
+      t.sp.addEventListener("pointerdown", function (e) { scrubTo(t, at(e)); });
+      t.sp.addEventListener("pointerleave", function () { endScrub(t); });
+      t.sp.addEventListener("blur", function () { endScrub(t); });
+      t.sp.addEventListener("keydown", function (e) {
+        var k = e.key, i = t.idx < 0 ? N - 1 : t.idx;
+        if (k === "ArrowLeft" || k === "ArrowDown") i--; else if (k === "ArrowRight" || k === "ArrowUp") i++; else if (k === "Home") i = 0; else if (k === "End") i = N - 1; else if (k === "Escape") { endScrub(t); return; } else return;
+        e.preventDefault(); scrubTo(t, i);
+      });
+    });
+
+    /* ---------- Insight line: the best point of the range, sliding in ---------- */
+    function insight() {
+      var t = tiles[0], best = 0;
+      t.to.forEach(function (v, i) { if (v > t.to[best]) best = i; });
+      var o = tiles[1], up = (o.total - total("ord", range, o.pto)) / total("ord", range, o.pto) * 100;
+      var html = "Best " + (range === 7 ? "slot" : range === 90 ? "week" : "day") + ": <b>" + pointLabel(range, best) + "</b>, " + METRICS.rev.tipf(pointVal("rev", range, t.to[best])) + " in sales. Orders " + (up >= 0 ? "up " : "down ") + Math.abs(up).toFixed(1) + "%.";
+      var box = $("#say"), old = $("span", box), s = document.createElement("span");
+      s.innerHTML = html; s.className = "new"; box.appendChild(s);
+      void s.offsetWidth; s.className = "";
+      if (old) { old.className = "old"; setTimeout(function () { old.remove(); }, 520); }
+    }
+
+    /* ---------- Auto-demo: plays on load and every few seconds; any real input stops it ---------- */
+    var ghost = $(".ghost"), demoOn = !reduce.matches, timers = [];
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+    function ghostAt(x, y, dur) { ghost.style.setProperty("--gt", (dur || 0.8) + "s"); ghost.style.setProperty("--gx", Math.min(innerWidth - 30, x) + "px"); ghost.style.setProperty("--gy", y + "px"); }
+    function ghostTo(el, then) {
+      var r = el.getBoundingClientRect();
+      ghost.classList.add("show"); ghostAt(r.left + r.width * 0.6, r.top + r.height * 0.6);
+      later(function () { ghost.classList.add("tap"); later(function () { ghost.classList.remove("tap"); if (demoOn && then) then(); }, 170); }, 820);
+    }
+    function demoScrub(t, startAt) {
+      var r = t.sp.getBoundingClientRect(), steps = 14;
+      later(function () { ghost.classList.add("show"); ghostAt(r.left + r.width * 0.2, r.top + r.height * 0.5); }, startAt);
+      for (var s = 0; s <= steps; s++) (function (s) {
+        later(function () {
+          var f = 0.2 + s / steps * 0.68;
+          ghostAt(r.left + r.width * f, r.top + r.height * (0.45 + 0.1 * Math.sin(s)), 0.16);
+          scrubTo(t, Math.round(f * (N - 1)));
+        }, startAt + 850 + s * 140);
+      })(s);
+      later(function () { endScrub(t); }, startAt + 850 + steps * 140 + 500);
+    }
+    function stopDemo() { if (!demoOn) return; demoOn = false; timers.forEach(clearTimeout); ghost.classList.remove("show", "tap"); }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, function (e) { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }); });
+    function demo() {
+      if (!demoOn) return;
+      later(function () { ghostTo($('#seg [data-r="7"]'), function () { setRange(7); }); }, 200);
+      demoScrub(tiles[0], 2000);
+      later(function () { ghostTo(cmpBtn, function () { setCompare(true); }); }, 5400);
+      later(function () { ghostTo(liveBtn, function () { setLive(true); }); }, 7000);
+      later(function () { ghostTo($('#seg [data-r="90"]'), function () { setRange(90); }); }, 11200);
+      later(function () { ghostTo(liveBtn, function () { setLive(false); }); }, 13200);
+      later(function () { ghostTo($('#seg [data-r="30"]'), function () { setCompare(false); setRange(30); }); }, 14800);
+      later(function () { ghost.classList.remove("show"); }, 16200);
+      later(demo, 18500);
+    }
+
+    /* ---------- Start ---------- */
+    function layout() { tiles.forEach(measure); placePill(false); kick(); }
+    layout();
+    addEventListener("resize", layout);
+    // the lines grow up out of a flat baseline on load
+    setRange(30, true);
+    if (demoOn) later(demo, 1600);
+  })();
+</script>
+</body>
+</html>

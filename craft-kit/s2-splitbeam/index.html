@@ -1,0 +1,399 @@
+<!doctype html>
+<!-- Chill & Craft · Splitbeam · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Splitbeam · Post once, a prism splits it to every channel</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg: #f2f0fa;
+    --card: #ffffff;
+    --well: #f6f5fc;
+    --ink: #1c1a2e;
+    --muted: #6e6a86;
+    --line: rgba(28, 26, 46, 0.11);
+    --glass: rgba(120, 110, 200, 0.14);
+    --beam: #a99cff;
+    --shadow: rgba(60, 50, 140, 0.32);
+    --ok: #18a86b;
+    --warn: #d98a00;
+    --bad: #e2463b;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0b12;
+    --card: #14141f;
+    --well: #101019;
+    --ink: #ecebf7;
+    --muted: #9a98b0;
+    --line: rgba(236, 235, 247, 0.1);
+    --glass: rgba(170, 160, 255, 0.12);
+    --beam: #ffffff;
+    --shadow: rgba(0, 0, 0, 0.75);
+    --ok: #3fd69a;
+    --warn: #ffb53d;
+    --bad: #ff6b5e;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, textarea { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 3px solid #7b6cff; outline-offset: 2px; }
+
+  /* ---------- Stage: a faint spectrum behind glass ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 22px 16px; overflow: hidden; isolation: isolate; }
+  .stage::before { content: ""; position: absolute; z-index: -1; left: 50%; top: 55%; width: 120vmax; height: 40vmax; margin: -20vmax 0 0 -60vmax; background: conic-gradient(from 90deg at 50% 0%, #ff5a4e, #ffb020, #2fcf6a, #1fc2d6, #3d7bff, #a35cff, #ff5a4e); filter: blur(80px); opacity: 0.16; animation: hue 14s linear infinite; }
+  @keyframes hue { to { filter: blur(80px) hue-rotate(360deg); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px) scale(0.97); } }
+
+  .card { position: relative; width: min(600px, 100%); padding: 18px; border-radius: 28px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 50px 80px -50px var(--shadow); animation: rise 0.85s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+  .beams { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .beams path { fill: none; stroke-linecap: round; }
+
+  /* ---------- Composer ---------- */
+  .comp { position: relative; z-index: 2; padding: 12px; border-radius: 20px; background: var(--well); box-shadow: inset 0 0 0 1.5px var(--line); transition: box-shadow 0.4s, transform 0.4s; }
+  .comp.lit { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.6), 0 0 0 4px var(--glass), 0 18px 40px -20px var(--shadow); }
+  .who { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+  .av { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: linear-gradient(140deg, #ff9a6b, #a35cff); color: #fff; font-size: 0.7rem; font-weight: 900; flex: none; }
+  .who b { font-size: 0.86rem; }
+  .who small { margin-left: auto; font-size: 0.72rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .who small.over { color: var(--bad); }
+  .body { display: flex; gap: 10px; }
+  textarea { flex: 1; min-width: 0; height: 84px; padding: 0; border: 0; outline: none; resize: none; background: none; font-size: 0.9rem; line-height: 1.45; }
+  .cover { position: relative; flex: none; width: 84px; height: 84px; border-radius: 14px; overflow: hidden; display: none; }
+  .cover.on { display: block; animation: pop 0.55s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  @keyframes pop { from { transform: scale(0.4); opacity: 0; } }
+  .cover svg { width: 100%; height: 100%; display: block; }
+  .tools { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .tool { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 1.5px solid var(--line); border-radius: 999px; background: var(--card); font-size: 0.74rem; font-weight: 800; cursor: pointer; transition: border-color 0.2s, color 0.2s; }
+  .tool svg { width: 15px; height: 15px; }
+  .tool[aria-pressed="true"] { border-color: #1fc2d6; color: #0f97a8; }
+  :root[data-theme="dark"] .tool[aria-pressed="true"] { color: #5fe3f2; }
+  .tools .hint { margin-left: auto; font-size: 0.7rem; color: var(--muted); }
+
+  /* ---------- Prism ---------- */
+  .prismrow { position: relative; z-index: 2; display: grid; place-items: start center; height: 132px; padding-top: 8px; }
+  .prism { width: 92px; height: 80px; overflow: visible; animation: bob 5s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-4px) rotate(-2deg); } }
+  .prism.flash { animation: flash 0.6s ease-out; }
+  @keyframes flash { 30% { transform: scale(1.14) rotate(4deg); filter: brightness(1.6); } }
+  .sheen { animation: turn 6s linear infinite; transform-origin: 46px 50px; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+
+  /* ---------- Channels ---------- */
+  .chans { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .ch { position: relative; display: grid; justify-items: center; gap: 4px; padding: 10px 4px 9px; border: 1.5px solid var(--line); border-radius: 16px; background: var(--card); cursor: pointer; text-align: center; overflow: hidden; transition: border-color 0.25s, transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.25s; }
+  .ch:hover { transform: translateY(-2px); }
+  .ch[aria-pressed="false"] { opacity: 0.55; }
+  .ch[aria-pressed="false"] .ico { filter: grayscale(1); }
+  .ch[aria-pressed="true"] { border-color: color-mix(in srgb, var(--c) 70%, transparent); box-shadow: 0 10px 20px -14px var(--c); }
+  .ico { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .ico svg { width: 19px; height: 19px; }
+  .ch b { font-size: 0.72rem; font-weight: 800; line-height: 1.15; }
+  .st { min-height: 1em; font-size: 0.62rem; font-weight: 750; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .st.warn { color: var(--warn); } .st.bad { color: var(--bad); } .st.live { color: var(--ok); }
+  .fill { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--c); transform: scaleX(0); transform-origin: 0 50%; }
+  .tick { position: absolute; right: 6px; top: 6px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--ok); transform: scale(0); }
+  .tick svg { width: 11px; height: 11px; }
+
+  .publish { position: relative; z-index: 2; display: flex; width: 100%; align-items: center; justify-content: center; gap: 9px; height: 50px; margin-top: 14px; border: 0; border-radius: 16px; background: linear-gradient(90deg, #ff5a4e, #ffb020, #2fcf6a, #1fc2d6, #3d7bff, #a35cff, #ff5a4e); background-size: 200% 100%; color: #fff; font-weight: 900; font-size: 0.95rem; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); cursor: pointer; box-shadow: 0 16px 26px -16px rgba(90, 70, 220, 0.9), inset 0 -3px 0 rgba(0, 0, 0, 0.14); transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); animation: slide 8s linear infinite; }
+  @keyframes slide { to { background-position: 200% 0; } }
+  .publish:hover { transform: translateY(-2px); }
+  .publish:active { transform: scale(0.96); }
+  .publish svg { width: 19px; height: 19px; }
+
+  .fx { position: fixed; inset: 0; z-index: 30; overflow: hidden; pointer-events: none; }
+  .mote { position: absolute; left: 0; top: 0; width: 7px; height: 7px; border-radius: 50%; }
+  .toast { position: fixed; left: 50%; bottom: 18px; z-index: 40; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 999px; background: var(--ink); color: var(--card); font-size: 0.84rem; font-weight: 700; transform: translate(-50%, 200%); transition: transform 0.6s cubic-bezier(0.3, 1.5, 0.4, 1); }
+  .toast.show { transform: translate(-50%, 0); }
+
+  @media (max-width: 560px) {
+    .card { padding: 14px; }
+    .chans { grid-template-columns: repeat(3, 1fr); }
+    .prismrow { height: 112px; padding-top: 4px; }
+    .prism { width: 80px; height: 70px; }
+    .tools .hint { display: none; }
+    .cover { width: 70px; height: 84px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stage::before, .card, .prism, .sheen, .publish, .cover.on { animation: none !important; }
+    .ch, .ico, .comp, .toast { transition-duration: 0.01s; }
+    .fx { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <section class="card" id="card" aria-labelledby="who">
+      <svg class="beams" id="beams" aria-hidden="true"></svg>
+      <div class="comp" id="comp">
+        <div class="who"><span class="av" aria-hidden="true">KC</span><b id="who">Kiran Crafts</b><small id="count"></small></div>
+        <div class="body">
+          <label class="sr-only" for="text">Post text</label>
+          <textarea id="text" maxlength="600"></textarea>
+          <span class="cover" id="cover" aria-hidden="true"><svg viewBox="0 0 84 84"><defs><linearGradient id="cv" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb020" /><stop offset="1" stop-color="#a35cff" /></linearGradient></defs><rect width="84" height="84" fill="url(#cv)" /><rect x="16" y="30" width="52" height="38" rx="6" fill="#fff4df" /><rect x="16" y="30" width="52" height="10" rx="4" fill="#ff5a4e" /><path d="M42 30v38" stroke="#ffb020" stroke-width="5" /><circle cx="42" cy="24" r="7" fill="none" stroke="#fff4df" stroke-width="3" /><path d="M58 12a8 8 0 1 0 6 12 7 7 0 1 1-6-12Z" fill="#fff4df" /></svg></span>
+        </div>
+        <div class="tools">
+          <button class="tool" id="coverBtn" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="m4 18 5-5 4 4 3-3 4 4" /></svg><span id="coverText">Add cover</span></button>
+          <span class="hint">Pick channels below</span>
+        </div>
+      </div>
+      <div class="prismrow" aria-hidden="true">
+        <svg class="prism" id="prism" viewBox="0 0 92 80">
+          <defs>
+            <linearGradient id="pg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".9" /><stop offset=".5" stop-color="#cfc8ff" stop-opacity=".55" /><stop offset="1" stop-color="#8f7dff" stop-opacity=".7" /></linearGradient>
+            <clipPath id="pc"><path d="M46 4 88 76H4Z" /></clipPath>
+          </defs>
+          <path d="M46 4 88 76H4Z" fill="url(#pg)" stroke="rgba(255,255,255,.9)" stroke-width="2" stroke-linejoin="round" />
+          <g clip-path="url(#pc)"><g class="sheen"><path d="M46 50 46 -30 60 -30Z" fill="#fff" opacity=".55" /><path d="M46 50 110 50 110 64Z" fill="#a35cff" opacity=".35" /><path d="M46 50 -20 60 -20 76Z" fill="#ffb020" opacity=".35" /></g></g>
+          <path d="M46 4 88 76" stroke="#7b6cff" stroke-width="1.2" opacity=".5" />
+        </svg>
+      </div>
+      <div class="chans" id="chans" role="group" aria-label="Channels"></div>
+      <button class="publish" id="publish" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg><span id="pubText">Publish</span></button>
+    </section>
+    <div class="toast" id="toast" role="status"></div>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+    <div class="fx" id="fx" aria-hidden="true"></div>
+  </main>
+
+<script>
+  // ---------- Splitbeam: write once; a prism splits the post into coloured beams, one per channel ----------
+  const $ = (s) => document.querySelector(s);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const SPRING = window.CSS && CSS.supports && CSS.supports("transition-timing-function", "linear(0, 1)")
+    ? "linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077 24.3%, 1.104 27.8%, 1.107 31.2%, 1.096, 1.073 38.1%, 1.017 47.1%, 0.996 55.4%, 0.991 61.4%, 1 80%, 1)"
+    : "cubic-bezier(.34, 1.56, .64, 1)";
+  function play(el, frames, opts) {
+    if (calm() || !el || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  const say = (t) => { $("#status").textContent = t; };
+  let toastT = 0;
+  function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("show"), 2800); }
+  const NS = "http://www.w3.org/2000/svg";
+
+  const POST = "Eid boxes are back! Twelve handmade sweets in a painted tin, PKR 2,400. Order by Thursday for delivery anywhere in Lahore. Gift notes are free.";
+  const MORE = " Pre-orders for Karachi and Islamabad open next week with the same price, free gift wrap and a handwritten card in every box. Message us to save a tin before they sell out.";
+  const text = $("#text"), count = $("#count");
+  text.value = POST;
+
+  // ---------- Channels: each has a colour, an icon and its own rules ----------
+  const ICONS = {
+    blog: '<path d="M6 3h9l4 4v14H6Z" /><path d="M14 3v5h5M9 12h7M9 16h5" />',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m4 7 8 6 8-6" />',
+    chat: '<path d="M4 5h11v8H8l-4 3Z" /><path d="M15 9h5v8l-3-2h-6v-2" />',
+    photo: '<rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="m4 18 5-5 4 4 3-3 4 4" />',
+    short: '<path d="M4 7h16M4 12h11M4 17h7" />',
+    video: '<rect x="3" y="5" width="18" height="14" rx="3" /><path d="m10 9 5 3-5 3Z" fill="currentColor" />'
+  };
+  const CH = [
+    { id: "blog", name: "Blog", c: "#ff5a4e" },
+    { id: "mail", name: "Newsletter", c: "#f5a300" },
+    { id: "chat", name: "Team chat", c: "#22c062" },
+    { id: "photo", name: "Photo feed", c: "#16b5ca", cover: true },
+    { id: "short", name: "Short posts", c: "#3d7bff", limit: 280 },
+    { id: "video", name: "Video page", c: "#a35cff", cover: true }
+  ];
+  const chans = $("#chans");
+  CH.forEach((ch, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "ch";
+    b.style.setProperty("--c", ch.c);
+    b.setAttribute("aria-pressed", String(i < 3));
+    b.innerHTML = '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICONS[ch.id] + '</svg></span><b>' + ch.name + '</b><span class="st"></span><span class="fill"></span><span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></span>';
+    b.addEventListener("click", () => { if (busy) return; b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true")); play(b.querySelector(".ico"), [{ transform: "scale(.8)" }, { transform: "scale(1.15)" }, { transform: "none" }], { duration: 420, easing: SPRING }); refresh(); say(ch.name + (b.getAttribute("aria-pressed") === "true" ? " on" : " off")); });
+    ch.el = b;
+    chans.appendChild(b);
+  });
+  const on = () => CH.filter((ch) => ch.el.getAttribute("aria-pressed") === "true");
+  let hasCover = false;
+  // why a channel cannot take this post right now ("" when it can)
+  function problem(ch) {
+    if (ch.limit && text.value.length > ch.limit) return "Over by " + (text.value.length - ch.limit);
+    if (ch.cover && !hasCover) return "Needs a cover";
+    if (!text.value.trim()) return "Write something";
+    return "";
+  }
+  function refresh() {
+    const n = text.value.length;
+    count.textContent = n + " characters";
+    count.classList.toggle("over", n > 280 && on().some((c) => c.limit));
+    CH.forEach((ch) => {
+      if (ch.state) return; // busy posting or live
+      const st = ch.el.querySelector(".st"), p = problem(ch);
+      st.className = "st" + (p ? (ch.limit ? " bad" : " warn") : "");
+      st.textContent = p || (ch.limit ? n + "/" + ch.limit : "Ready");
+      ch.el.setAttribute("aria-label", ch.name + ", " + (p || "ready"));
+    });
+    const sel = on(), ok = sel.filter((c) => !problem(c));
+    $("#pubText").textContent = !sel.length ? "Pick a channel" : "Publish to " + ok.length + (ok.length === 1 ? " channel" : " channels") + (sel.length > ok.length ? " · " + (sel.length - ok.length) + " skipped" : "");
+  }
+  text.addEventListener("input", refresh);
+  $("#coverBtn").addEventListener("click", () => setCover(!hasCover));
+  function setCover(v) {
+    hasCover = v;
+    $("#cover").classList.toggle("on", v);
+    $("#coverBtn").setAttribute("aria-pressed", String(v));
+    $("#coverText").textContent = v ? "Cover added" : "Add cover";
+    refresh();
+    say(v ? "Cover image added" : "Cover image removed");
+  }
+
+  // ---------- Beams ----------
+  const card = $("#card"), beams = $("#beams"), fx = $("#fx");
+  function relRect(el) { const a = el.getBoundingClientRect(), c = card.getBoundingClientRect(); return { x: a.left - c.left, y: a.top - c.top, w: a.width, h: a.height }; }
+  function beam(d, colour, width, dur, delay) {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", d);
+    p.setAttribute("stroke", colour);
+    p.setAttribute("stroke-width", width);
+    p.style.filter = "drop-shadow(0 0 6px " + colour + ")";
+    beams.appendChild(p);
+    const len = p.getTotalLength();
+    p.style.strokeDasharray = len + " " + len;
+    p.style.strokeDashoffset = len;
+    if (calm()) { p.style.strokeDashoffset = 0; return Promise.resolve(p); }
+    return p.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: dur, delay: delay || 0, easing: "cubic-bezier(.3,.6,.2,1)", fill: "forwards" }).finished.catch(() => {}).then(() => p);
+  }
+  function clearBeams() {
+    [...beams.children].forEach((p) => {
+      if (calm()) { p.remove(); return; }
+      p.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 500, fill: "forwards" }).onfinish = () => p.remove();
+    });
+  }
+
+  // ---------- Publish ----------
+  let busy = false;
+  async function publish() {
+    if (busy) return;
+    const sel = on();
+    if (!sel.length) { say("Pick at least one channel"); toast("Pick at least one channel"); CH.forEach((c, i) => play(c.el, [{ transform: "none" }, { transform: "translateY(-5px)" }, { transform: "none" }], { duration: 360, delay: i * 50 })); return; }
+    const good = sel.filter((c) => !problem(c)), skipped = sel.filter((c) => problem(c));
+    if (!good.length) { say("None of the picked channels can take this post yet"); skipped.forEach((c) => shake(c.el)); toast(skipped.map((c) => c.name + ": " + problem(c).toLowerCase()).join(" · ")); return; }
+    busy = true;
+    const btn = $("#publish"), comp = $("#comp"), prism = $("#prism");
+    beams.setAttribute("viewBox", "0 0 " + card.clientWidth + " " + card.clientHeight);
+    beams.innerHTML = "";
+    // 1. Anticipation: the post glows and lifts, the prism wakes up
+    comp.classList.add("lit");
+    $("#pubText").textContent = "Splitting…";
+    await play(comp, [{ transform: "none" }, { transform: "translateY(-5px) scale(1.01)" }, { transform: "translateY(-2px)" }], { duration: 380, easing: "ease-out" });
+    // 2. Main: a white beam drops into the prism, then splits into one colour per channel
+    const c = relRect(comp), pr = relRect(prism);
+    const px = pr.x + pr.w / 2, top = pr.y + pr.h * 0.18, bottom = pr.y + pr.h * 0.86;
+    await beam("M" + px + " " + (c.y + c.h - 2) + " L" + px + " " + top, getComputedStyle(card).getPropertyValue("--beam").trim() || "#ffffff", 5, 300);
+    prism.classList.remove("flash"); void prism.getBBox(); prism.classList.add("flash");
+    skipped.forEach((ch) => shake(ch.el));
+    const flights = good.map((ch, i) => {
+      const t = relRect(ch.el);
+      const tx = t.x + t.w / 2, ty = t.y + 2;
+      const sx = px + (i - (good.length - 1) / 2) * 6;
+      // a straight ray from the prism base to the top of the tile, like light fanning out of glass
+      const d = "M" + sx + " " + bottom + " L" + tx + " " + ty;
+      return beam(d, ch.c, 4.2, 560, i * 90).then(() => post(ch, i));
+    });
+    // 3 + 4. Each channel fills its bar, then goes live with a tick and a burst of light
+    await Promise.all(flights);
+    const msg = "Live on " + good.length + (good.length === 1 ? " channel" : " channels") + (skipped.length ? " · " + skipped.map((c) => c.name).join(", ") + " skipped" : "");
+    toast(msg);
+    say(msg + ".");
+    $("#pubText").textContent = "Published";
+    play(btn, [{ transform: "scale(1)" }, { transform: "scale(1.04)" }, { transform: "scale(1)" }], { duration: 420, easing: SPRING });
+    comp.classList.remove("lit");
+    await wait(calm() ? 1200 : 2200);
+    // 5. Reset: the beams fade and the tiles go back to Ready
+    clearBeams();
+    good.forEach((ch, i) => setTimeout(() => {
+      ch.state = "";
+      const fill = ch.el.querySelector(".fill"), tick = ch.el.querySelector(".tick");
+      fill.style.transition = "transform .4s ease"; fill.style.transform = "scaleX(0)";
+      play(tick, [{ transform: "scale(1)" }, { transform: "scale(0)" }], { duration: 260 }).then(() => { tick.style.transform = "scale(0)"; });
+      refresh();
+    }, i * 80));
+    await wait(good.length * 80 + 300);
+    busy = false;
+    refresh();
+    if (demoOn) queueDemo(2200);
+  }
+  $("#publish").addEventListener("click", publish);
+  $("#prism").addEventListener("animationend", (e) => { if (e.animationName === "flash") $("#prism").classList.remove("flash"); });
+
+  function post(ch, i) {
+    ch.state = "posting";
+    const st = ch.el.querySelector(".st"), fill = ch.el.querySelector(".fill"), tick = ch.el.querySelector(".tick");
+    st.className = "st";
+    play(ch.el.querySelector(".ico"), [{ transform: "scale(1)" }, { transform: "scale(1.25) rotate(-8deg)" }, { transform: "scale(1)" }], { duration: 500, easing: SPRING });
+    const dur = calm() ? 300 : 700 + ((i * 397) % 600);
+    return new Promise((res) => {
+      const t0 = performance.now();
+      const step = (now) => {
+        const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 2);
+        fill.style.transition = "none"; fill.style.transform = "scaleX(" + e + ")";
+        st.textContent = "Posting " + Math.round(e * 100) + "%";
+        if (p < 1) { requestAnimationFrame(step); return; }
+        ch.state = "live";
+        st.className = "st live"; st.textContent = "Live";
+        ch.el.setAttribute("aria-label", ch.name + ", live");
+        tick.style.transform = "scale(1)";
+        play(tick, [{ transform: "scale(0) rotate(-60deg)" }, { transform: "scale(1) rotate(0)" }], { duration: 520, easing: SPRING });
+        const r = ch.el.getBoundingClientRect();
+        motes(r.left + r.width / 2, r.top + 20, ch.c);
+        res();
+      };
+      requestAnimationFrame(step);
+    });
+  }
+  function shake(el) { play(el, [{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "translateX(-3px)" }, { transform: "none" }], { duration: 420 }); }
+  function motes(x, y, col) {
+    if (calm()) return;
+    for (let k = 0; k < 10; k++) {
+      const m = document.createElement("i");
+      m.className = "mote"; m.style.background = k % 3 ? col : "#fff"; m.style.boxShadow = "0 0 8px " + col;
+      fx.appendChild(m);
+      const a = (k / 10) * Math.PI * 2, d = 22 + Math.random() * 26;
+      m.animate([{ transform: "translate(" + (x - 3) + "px," + (y - 3) + "px) scale(.6)", opacity: 1 }, { transform: "translate(" + (x - 3 + Math.cos(a) * d) + "px," + (y - 3 + Math.sin(a) * d) + "px) scale(.2)", opacity: 0 }], { duration: 700 + Math.random() * 200, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = () => m.remove();
+    }
+  }
+
+  // ---------- Auto-demo: publish; then a long post skips Short posts; then add a cover for the photo channels ----------
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) => window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  function queueDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(runDemo, ms); }
+  const pick = (ids) => CH.forEach((ch) => ch.el.setAttribute("aria-pressed", String(ids.includes(ch.id))));
+  async function typeMore(add) {
+    for (let k = 0; k < add.length; k += 3) { if (!demoOn) return false; text.value += add.slice(k, k + 3); refresh(); await wait(16); }
+    return true;
+  }
+  async function runDemo() {
+    if (!demoOn || busy) return;
+    const r = round++ % 3;
+    if (r === 0) { text.value = POST; setCover(false); pick(["blog", "mail", "chat"]); refresh(); }
+    else if (r === 1) { pick(["blog", "mail", "chat", "short"]); refresh(); await wait(500); if (!(await typeMore(MORE))) return; }
+    else { text.value = POST; refresh(); await wait(300); setCover(true); await wait(500); pick(["blog", "chat", "photo", "short", "video"]); refresh(); }
+    await wait(900);
+    if (demoOn) publish();
+  }
+
+  refresh();
+  queueDemo(900);
+</script>
+</body>
+</html>

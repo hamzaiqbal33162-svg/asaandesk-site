@@ -1,0 +1,822 @@
+<!doctype html>
+<!-- Chill & Craft · Scan Me · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Scan Me · A share card that draws a real QR code</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg: #edf4e9;
+    --dot: rgba(15, 43, 46, 0.11);
+    --blob1: rgba(190, 236, 52, 0.42);
+    --blob2: rgba(56, 168, 156, 0.26);
+    --card: #ffffff;
+    --panel: rgba(255, 255, 255, 0.72);
+    --field: #f3f7f0;
+    --ink: #0f2b2e;
+    --muted: #5d7375;
+    --line: rgba(15, 43, 46, 0.12);
+    --lime: #c4f135;
+    --lime-ink: #5d8000;
+    --shadow: rgba(24, 66, 50, 0.45);
+    --ok: #13a36f;
+    --err: #d9412b;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0a191b;
+    --dot: rgba(196, 241, 53, 0.08);
+    --blob1: rgba(170, 220, 30, 0.18);
+    --blob2: rgba(40, 160, 150, 0.2);
+    --card: #12282b;
+    --panel: rgba(18, 40, 43, 0.72);
+    --field: #0c1f21;
+    --ink: #e9f5ee;
+    --muted: #93aba8;
+    --line: rgba(233, 245, 238, 0.12);
+    --lime: #c8f542;
+    --lime-ink: #c8f542;
+    --shadow: rgba(0, 0, 0, 0.7);
+    --ok: #3ad69a;
+    --err: #ff7a62;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, input { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 3px solid var(--lime-ink); outline-offset: 3px; }
+
+  /* ---------- Stage: a drifting dot grid with two soft blobs ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 28px 16px; overflow: hidden; isolation: isolate; }
+  .stage::before { content: ""; position: absolute; inset: -40px; z-index: -2; background-image: radial-gradient(var(--dot) 1.4px, transparent 1.6px); background-size: 22px 22px; animation: drift 18s linear infinite; }
+  @keyframes drift { to { transform: translate(22px, 22px); } }
+  .blob { position: absolute; z-index: -1; width: 46vmax; height: 46vmax; border-radius: 50%; filter: blur(40px); pointer-events: none; }
+  .blob.a { left: -12vmax; top: -16vmax; background: radial-gradient(circle, var(--blob1), transparent 66%); animation: roam 14s ease-in-out infinite alternate; }
+  .blob.b { right: -14vmax; bottom: -18vmax; background: radial-gradient(circle, var(--blob2), transparent 66%); animation: roam 17s ease-in-out infinite alternate-reverse; }
+  @keyframes roam { to { transform: translate(6vmax, 4vmax) scale(1.1); } }
+
+  .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 26px; width: 100%; max-width: 760px; }
+
+  /* ---------- Share card ---------- */
+  .lift { animation: rise 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+  .lift.late { animation-delay: 0.12s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(26px) scale(0.97); } }
+  .card { position: relative; width: min(344px, calc(100vw - 32px)); padding: 20px 22px 20px; border-radius: 30px; background: var(--card); box-shadow: 0 50px 80px -52px var(--shadow), 0 0 0 1px var(--line); transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.3, 1); animation: float 6.5s ease-in-out infinite; }
+  @keyframes float { 50% { translate: 0 -6px; } }
+  .head { display: flex; align-items: center; gap: 12px; }
+  .avatar { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 15px; background: conic-gradient(from 210deg, #f6b544, #e8735a, #c4f135, #f6b544); color: #0f2b2e; font-weight: 900; font-size: 0.92rem; letter-spacing: 0.02em; box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.45); }
+  .head h1 { margin: 0; font-size: 1.06rem; letter-spacing: -0.01em; }
+  .head p { margin: 2px 0 0; font-size: 0.78rem; color: var(--muted); }
+  .pill { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); font-size: 0.72rem; font-weight: 800; }
+  .pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: beat 1.8s ease-in-out infinite; }
+  @keyframes beat { 50% { transform: scale(1.6); opacity: 0.5; } }
+
+  /* The white plate keeps the code readable in both themes */
+  .plate { position: relative; width: min(246px, 100%); aspect-ratio: 1; margin: 16px auto 12px; padding: 20px; border-radius: 24px; background: #fff; box-shadow: inset 0 0 0 1px rgba(15, 43, 46, 0.08), 0 20px 34px -24px rgba(15, 43, 46, 0.55); overflow: hidden; transition: transform 0.4s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  .plate canvas { display: block; width: 100%; height: 100%; transition: filter 0.35s, opacity 0.35s; }
+  .plate.stale canvas { filter: blur(2.5px) saturate(0.4); opacity: 0.55; }
+  .sheen { position: absolute; inset: 0; background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.75) 50%, transparent 62%); transform: translateX(-130%); animation: sheen 5.5s ease-in-out 2.6s infinite; pointer-events: none; }
+  @keyframes sheen { 0%, 72% { transform: translateX(-130%); } 92%, 100% { transform: translateX(130%); } }
+  .corners { position: absolute; inset: 9px; opacity: 0; transform: scale(1.22); pointer-events: none; }
+  .corners i { position: absolute; width: 28px; height: 28px; border: 3.5px solid #7fb000; }
+  .corners i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; border-radius: 10px 0 0 0; }
+  .corners i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; border-radius: 0 10px 0 0; }
+  .corners i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; border-radius: 0 0 0 10px; }
+  .corners i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; border-radius: 0 0 10px 0; }
+  .stale-chip { position: absolute; left: 50%; top: 50%; padding: 8px 13px; border-radius: 999px; background: #0f2b2e; color: #fff; font-size: 0.78rem; font-weight: 800; white-space: nowrap; transform: translate(-50%, -50%) scale(0.7); opacity: 0; transition: opacity 0.25s, transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); pointer-events: none; }
+  .plate.stale .stale-chip { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .okbadge { position: absolute; right: 10px; top: 10px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--ok); color: #fff; opacity: 0; transform: scale(0.3); pointer-events: none; }
+  .okbadge svg { width: 17px; height: 17px; }
+  .cap { margin: 0; text-align: center; }
+  .cap b { display: block; font-size: 0.92rem; }
+  .cap span { position: relative; display: inline-block; margin-top: 3px; padding: 2px 8px; border-radius: 8px; font: 600 0.78rem/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+  .cap span::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: color-mix(in srgb, var(--lime) 55%, transparent); transform: scaleX(0); transform-origin: 0 50%; }
+  .cap span.hit::before { animation: mark 1.4s cubic-bezier(0.2, 0.8, 0.3, 1); }
+  @keyframes mark { 30%, 70% { transform: scaleX(1); } 100% { transform: scaleX(1); opacity: 0; } }
+
+  /* Phone that rises to scan the code */
+  .phone { position: absolute; left: 50%; top: 64px; z-index: 6; width: 152px; height: 300px; margin-left: -76px; padding: 8px; border-radius: 32px; background: linear-gradient(160deg, #1d2a2d, #070d0e); box-shadow: 0 46px 60px -34px rgba(0, 0, 0, 0.75), inset 0 0 0 2px #33464a; opacity: 0; transform: translateY(90px) rotate(9deg) scale(0.9); pointer-events: none; }
+  .screen { position: relative; height: 100%; border-radius: 25px; overflow: hidden; display: grid; place-items: center; background: radial-gradient(70% 50% at 50% 46%, #3c5a5e, #142123 70%), #142123; }
+  .screen::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.03) 0 2px, transparent 2px 4px); }
+  .notch { position: absolute; top: 7px; left: 50%; width: 44px; height: 12px; margin-left: -22px; border-radius: 8px; background: #000; z-index: 3; }
+  .view { position: relative; width: 104px; height: 104px; }
+  .view canvas { width: 100%; height: 100%; border-radius: 10px; display: block; }
+  .view .brk { position: absolute; inset: -10px; }
+  .view .brk i { position: absolute; width: 22px; height: 22px; border: 3px solid #fff; }
+  .view .brk i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; border-radius: 8px 0 0 0; }
+  .view .brk i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; border-radius: 0 8px 0 0; }
+  .view .brk i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; border-radius: 0 0 0 8px; }
+  .view .brk i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; border-radius: 0 0 8px 0; }
+  .banner { position: absolute; left: 7px; right: 7px; top: 24px; z-index: 2; display: flex; align-items: center; gap: 7px; padding: 8px 9px; border-radius: 15px; background: rgba(255, 255, 255, 0.95); color: #0f2b2e; font-size: 10.5px; line-height: 1.25; transform: translateY(-150%); }
+  .banner .g { display: grid; place-items: center; width: 22px; height: 22px; flex: none; border-radius: 7px; background: #c4f135; font-weight: 900; font-size: 9px; }
+  .banner b { display: block; font-size: 10.5px; }
+  .banner span { display: block; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #4e6466; }
+
+  /* ---------- Settings panel ---------- */
+  .panel { width: min(340px, calc(100vw - 32px)); padding: 20px 20px 22px; border-radius: 26px; background: var(--panel); box-shadow: 0 0 0 1px var(--line), 0 30px 60px -50px var(--shadow); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  .lbl, legend { display: block; margin: 0 0 7px; padding: 0; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .field { position: relative; display: flex; align-items: center; height: 48px; padding: 0 12px 0 14px; border-radius: 15px; background: var(--field); box-shadow: inset 0 0 0 1.5px var(--line); transition: box-shadow 0.2s; }
+  .field:focus-within { box-shadow: inset 0 0 0 2px var(--lime-ink); }
+  .field.bad { box-shadow: inset 0 0 0 2px var(--err); }
+  .field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; outline: none; font: 600 0.86rem ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .count { flex: none; margin-left: 8px; font-size: 0.7rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .info { margin: 7px 0 16px; font-size: 0.74rem; color: var(--muted); min-height: 1.1em; }
+  .info b { color: var(--ink); }
+  .info.bad { color: var(--err); }
+  fieldset { margin: 0 0 16px; padding: 0; border: 0; min-width: 0; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 5px; border-radius: 16px; background: var(--field); box-shadow: inset 0 0 0 1.5px var(--line); }
+  .opt { position: relative; }
+  .opt input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .opt span { display: flex; align-items: center; justify-content: center; gap: 7px; height: 38px; border-radius: 11px; font-size: 0.8rem; font-weight: 750; color: var(--muted); transition: background 0.25s, color 0.25s, transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); pointer-events: none; }
+  .opt input:checked + span { background: var(--card); color: var(--ink); box-shadow: 0 6px 14px -10px var(--shadow), 0 0 0 1px var(--line); }
+  .opt input:active + span { transform: scale(0.94); }
+  .opt input:focus-visible + span { outline: 3px solid var(--lime-ink); outline-offset: 1px; }
+  .mini3 { display: grid; grid-template-columns: repeat(3, 4px); gap: 1.5px; }
+  .mini3 i { width: 4px; height: 4px; background: currentColor; }
+  .round .mini3 i { border-radius: 50%; }
+  .soft .mini3 i { border-radius: 1.5px; transform: scale(0.92); }
+  .sw { display: flex; gap: 10px; }
+  .sw .opt span { width: 34px; height: 34px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 0 0 1.5px var(--line); }
+  .sw .opt input:checked + span { background: var(--c); box-shadow: 0 0 0 3px var(--card), 0 0 0 5.5px var(--ink); transform: scale(0.92); }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 46px; padding: 0 14px; border-radius: 15px; border: 1.5px solid var(--line); background: transparent; font-size: 0.88rem; font-weight: 800; cursor: pointer; overflow: hidden; transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1), border-color 0.2s, background 0.2s; }
+  .btn:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--lime-ink) 60%, var(--line)); }
+  .btn:active { transform: scale(0.95); }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn.primary { grid-column: 1 / -1; height: 50px; border: 0; background: var(--lime); color: #0f2b2e; box-shadow: 0 14px 24px -14px rgba(110, 150, 0, 0.9), inset 0 -3px 0 rgba(0, 0, 0, 0.1); }
+  .btn.primary::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.55) 50%, transparent 70%); transform: translateX(-120%); }
+  .btn.primary.working::after { animation: run 0.9s linear infinite; }
+  @keyframes run { to { transform: translateX(120%); } }
+  .btn.done { border-color: var(--ok); color: var(--ok); }
+
+  .fx { position: fixed; inset: 0; z-index: 30; overflow: hidden; pointer-events: none; }
+  .bit { position: absolute; left: 0; top: 0; width: 8px; height: 8px; border-radius: 2px; }
+
+  @media (max-width: 760px) {
+    .stage { padding: 18px 16px 28px; }
+    .wrap { gap: 14px; }
+    .plate { width: min(222px, 100%); margin: 12px auto 10px; }
+    /* on phones the buttons come right after the link, the style pickers below */
+    .panel { display: flex; flex-direction: column; }
+    .panel .actions { order: 1; margin-bottom: 16px; }
+    .panel fieldset { order: 2; }
+    .panel fieldset:last-of-type { margin-bottom: 0; }
+  }
+  @media (max-width: 380px) {
+    .card { padding: 18px 16px; }
+    .panel { padding: 18px 14px; }
+    .plate { padding: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stage::before, .blob, .card, .lift, .pill i, .sheen, .btn.primary.working::after, .cap span.hit::before { animation: none !important; }
+    .card { transition: none; transform: none; }
+    .btn, .opt span, .plate, .stale-chip { transition-duration: 0.01s; }
+    .fx { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <span class="blob a" aria-hidden="true"></span>
+    <span class="blob b" aria-hidden="true"></span>
+    <div class="wrap">
+      <div class="lift">
+        <section class="card" id="card" aria-labelledby="shop">
+          <header class="head">
+            <span class="avatar" aria-hidden="true">LB</span>
+            <div><h1 id="shop">Lahore Bakes</h1><p>Menu · open till 11 pm</p></div>
+            <span class="pill"><i aria-hidden="true"></i>Open</span>
+          </header>
+          <div class="plate" id="plate">
+            <canvas id="qr" role="img" aria-label="QR code"></canvas>
+            <span class="sheen" aria-hidden="true"></span>
+            <span class="corners" id="corners" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <span class="stale-chip" aria-hidden="true">Press Make code</span>
+            <span class="okbadge" id="okbadge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></span>
+          </div>
+          <p class="cap"><b>Scan for today's menu</b><span id="capUrl"></span></p>
+          <div class="phone" id="phone" aria-hidden="true">
+            <div class="screen">
+              <span class="notch"></span>
+              <div class="banner" id="banner"><span class="g">LB</span><div><b>Open in browser</b><span id="bannerUrl"></span></div></div>
+              <div class="view"><canvas id="mini" width="208" height="208"></canvas><span class="brk" id="brk"><i></i><i></i><i></i><i></i></span></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="lift late">
+        <section class="panel" aria-label="Code settings">
+          <label class="lbl" for="link">Link or text</label>
+          <div class="field" id="field">
+            <input id="link" type="text" inputmode="url" autocomplete="off" spellcheck="false" maxlength="151" value="https://lahorebakes.example/menu" aria-describedby="info" />
+            <span class="count" id="count" aria-hidden="true"></span>
+          </div>
+          <p class="info" id="info"></p>
+          <fieldset>
+            <legend>Dots</legend>
+            <div class="seg">
+              <label class="opt square"><input type="radio" name="dots" value="square" /><span><b class="mini3" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></b>Square</span></label>
+              <label class="opt round"><input type="radio" name="dots" value="round" checked /><span><b class="mini3" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></b>Round</span></label>
+              <label class="opt soft"><input type="radio" name="dots" value="soft" /><span><b class="mini3" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></b>Soft</span></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Colour</legend>
+            <div class="sw">
+              <label class="opt" style="--c:#0f2b2e"><input type="radio" name="col" value="#0f2b2e" checked aria-label="Deep teal" /><span></span></label>
+              <label class="opt" style="--c:#4a1d5e"><input type="radio" name="col" value="#4a1d5e" aria-label="Plum" /><span></span></label>
+              <label class="opt" style="--c:#1f5130"><input type="radio" name="col" value="#1f5130" aria-label="Forest" /><span></span></label>
+              <label class="opt" style="--c:#0b3d78"><input type="radio" name="col" value="#0b3d78" aria-label="Ocean" /><span></span></label>
+              <label class="opt" style="--c:#8a2f12"><input type="radio" name="col" value="#8a2f12" aria-label="Rust" /><span></span></label>
+            </div>
+          </fieldset>
+          <div class="actions">
+            <button class="btn primary" id="make" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3" /></svg><span>Make code</span></button>
+            <button class="btn" id="copy" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1" /><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" /></svg><span>Copy link</span></button>
+            <button class="btn" id="save" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" /></svg><span>Save PNG</span></button>
+          </div>
+        </section>
+      </div>
+    </div>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+    <div class="fx" id="fx" aria-hidden="true"></div>
+  </main>
+
+<script>
+  // ---------- Scan Me: a share card that draws a real, scannable QR code with motion ----------
+  const $ = (s) => document.querySelector(s);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const SPRING = window.CSS && CSS.supports && CSS.supports("transition-timing-function", "linear(0, 1)")
+    ? "linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077 24.3%, 1.104 27.8%, 1.107 31.2%, 1.096, 1.073 38.1%, 1.017 47.1%, 0.996 55.4%, 0.991 61.4%, 1 80%, 1)"
+    : "cubic-bezier(.34, 1.56, .64, 1)";
+  function play(el, frames, opts) {
+    if (calm() || !el || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  const statusEl = $("#status");
+  const say = (t) => { statusEl.textContent = t; };
+
+  // ---------- A small QR encoder (byte mode, error level Q, versions 1 to 10, up to 151 bytes) ----------
+  const QR = (() => {
+    // per version: [error words per block, [blocks, data words], [blocks, data words]]
+    const T = [null, [13, [1, 13]], [22, [1, 22]], [18, [2, 17]], [26, [2, 24]], [18, [2, 15], [2, 16]],
+      [24, [4, 19]], [18, [2, 14], [4, 15]], [22, [4, 18], [2, 19]], [20, [4, 16], [4, 17]], [24, [6, 19], [2, 20]]];
+    const ALIGN = [null, [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
+    // Galois field GF(256) tables for the Reed-Solomon error words
+    const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
+    for (let i = 0, x = 1; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 256) x ^= 0x11d; }
+    for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+    const mul = (a, b) => (a && b ? EXP[LOG[a] + LOG[b]] : 0);
+    function rsRemainder(data, n) {
+      let g = [1];
+      for (let i = 0; i < n; i++) { const ng = new Array(g.length + 1).fill(0); g.forEach((v, j) => { ng[j] ^= v; ng[j + 1] ^= mul(v, EXP[i]); }); g = ng; }
+      const r = new Array(n).fill(0);
+      for (const d of data) { const f = d ^ r.shift(); r.push(0); for (let j = 0; j < n; j++) r[j] ^= mul(g[j + 1], f); }
+      return r;
+    }
+    const MASKS = [(r, c) => (r + c) % 2 === 0, (r) => r % 2 === 0, (r, c) => c % 3 === 0, (r, c) => (r + c) % 3 === 0,
+      (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0, (r, c) => ((r * c) % 2) + ((r * c) % 3) === 0,
+      (r, c) => (((r * c) % 2) + ((r * c) % 3)) % 2 === 0, (r, c) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0];
+    // Penalty score used to pick the most readable mask (rules from the QR standard)
+    function penalty(M) {
+      const n = M.length; let s = 0, dark = 0;
+      const line = (get) => {
+        for (let i = 0; i < n; i++) {
+          let run = 1;
+          for (let j = 1; j <= n; j++) {
+            if (j < n && get(i, j) === get(i, j - 1)) run++;
+            else { if (run >= 5) s += run - 2; run = 1; }
+            if (j >= 10) {
+              let p = ""; for (let k = j - 10; k <= j; k++) p += k < n ? get(i, k) : 0;
+              if (p === "10111010000" || p === "00001011101") s += 40;
+            }
+          }
+        }
+      };
+      line((i, j) => M[i][j]); line((i, j) => M[j][i]);
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+        dark += M[r][c];
+        if (r < n - 1 && c < n - 1) { const v = M[r][c]; if (v === M[r + 1][c] && v === M[r][c + 1] && v === M[r + 1][c + 1]) s += 3; }
+      }
+      return s + Math.floor(Math.abs((dark * 100) / (n * n) - 50) / 5) * 10;
+    }
+    // Returns { size, dark: rows of 0/1, version } or null when the text is too long
+    function encode(text) {
+      const bytes = [...new TextEncoder().encode(text)];
+      let v = 1, words = 0;
+      for (; v <= 10; v++) { words = T[v].slice(1).reduce((s, [c, d]) => s + c * d, 0); if (4 + (v < 10 ? 8 : 16) + bytes.length * 8 <= words * 8) break; }
+      if (v > 10) return null;
+      const ec = T[v][0], blocks = [];
+      T[v].slice(1).forEach(([c, d]) => { for (let i = 0; i < c; i++) blocks.push(d); });
+      // data bits: mode 0100, length, the bytes, terminator, padding words
+      const bits = [];
+      const put = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+      put(4, 4); put(bytes.length, v < 10 ? 8 : 16); bytes.forEach((b) => put(b, 8));
+      put(0, Math.min(4, words * 8 - bits.length));
+      while (bits.length % 8) bits.push(0);
+      const cw = [];
+      for (let i = 0; i < bits.length; i += 8) cw.push(parseInt(bits.slice(i, i + 8).join(""), 2));
+      for (let p = 0; cw.length < words; p++) cw.push(p % 2 ? 0x11 : 0xec);
+      // split into blocks, add error words, interleave
+      const db = [], eb = []; let k = 0;
+      blocks.forEach((d) => { const b = cw.slice(k, k + d); k += d; db.push(b); eb.push(rsRemainder(b, ec)); });
+      const all = [];
+      for (let i = 0; i < Math.max(...blocks); i++) db.forEach((b) => { if (i < b.length) all.push(b[i]); });
+      for (let i = 0; i < ec; i++) eb.forEach((b) => all.push(b[i]));
+      // fixed patterns: finders, timing, alignment, format areas, dark module, version info
+      const n = v * 4 + 17;
+      const M = Array.from({ length: n }, () => new Array(n).fill(0));
+      const F = Array.from({ length: n }, () => new Array(n).fill(false));
+      const set = (r, c, on) => { M[r][c] = on ? 1 : 0; F[r][c] = true; };
+      const finder = (r0, c0) => {
+        for (let r = -1; r <= 7; r++) for (let c = -1; c <= 7; c++) {
+          const rr = r0 + r, cc = c0 + c;
+          if (rr < 0 || cc < 0 || rr >= n || cc >= n) continue;
+          const ring = Math.max(Math.abs(r - 3), Math.abs(c - 3));
+          set(rr, cc, ring !== 2 && ring !== 4);
+        }
+      };
+      finder(0, 0); finder(0, n - 7); finder(n - 7, 0);
+      for (let i = 8; i < n - 8; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+      const al = ALIGN[v], last = al.length - 1;
+      al.forEach((r, i) => al.forEach((c, j) => {
+        if ((i === 0 && j === 0) || (i === 0 && j === last) || (i === last && j === 0)) return;
+        for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) set(r + dr, c + dc, Math.max(Math.abs(dr), Math.abs(dc)) !== 1);
+      }));
+      for (let i = 0; i < 9; i++) { if (!F[8][i]) set(8, i, 0); if (!F[i][8]) set(i, 8, 0); }
+      for (let i = 0; i < 8; i++) { set(8, n - 1 - i, 0); set(n - 1 - i, 8, 0); }
+      set(n - 8, 8, 1);
+      if (v >= 7) {
+        let rem = v;
+        for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1f25);
+        const vb = (v << 12) | rem;
+        for (let i = 0; i < 18; i++) { const on = (vb >>> i) & 1, a = n - 11 + (i % 3), b = Math.floor(i / 3); set(b, a, on); set(a, b, on); }
+      }
+      // the data bits go in a zigzag from the bottom right
+      let bi = 0;
+      const total = all.length * 8;
+      for (let right = n - 1, up = true; right >= 1; right -= 2, up = !up) {
+        if (right === 6) right = 5;
+        for (let vert = 0; vert < n; vert++) {
+          const r = up ? n - 1 - vert : vert;
+          for (let j = 0; j < 2; j++) {
+            const c = right - j;
+            if (F[r][c]) continue;
+            M[r][c] = bi < total ? (all[bi >> 3] >>> (7 - (bi & 7))) & 1 : 0;
+            bi++;
+          }
+        }
+      }
+      // try the eight masks and keep the most readable one
+      const withMask = (m) => {
+        const X = M.map((row, r) => row.map((val, c) => (F[r][c] ? val : val ^ (MASKS[m](r, c) ? 1 : 0))));
+        const data = (3 << 3) | m;
+        let rem = data;
+        for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+        const fb = ((data << 10) | rem) ^ 0x5412;
+        const b = (i) => (fb >>> i) & 1;
+        for (let i = 0; i <= 5; i++) X[i][8] = b(i);
+        X[7][8] = b(6); X[8][8] = b(7); X[8][7] = b(8);
+        for (let i = 9; i < 15; i++) X[8][14 - i] = b(i);
+        for (let i = 0; i < 8; i++) X[8][n - 1 - i] = b(i);
+        for (let i = 8; i < 15; i++) X[n - 15 + i][8] = b(i);
+        X[n - 8][8] = 1;
+        return X;
+      };
+      let best = null, bestScore = Infinity;
+      for (let m = 0; m < 8; m++) { const X = withMask(m), s = penalty(X); if (s < bestScore) { best = X; bestScore = s; } }
+      return { size: n, dark: best, version: v };
+    }
+    return { encode };
+  })();
+
+  // ---------- State ----------
+  const input = $("#link"), field = $("#field"), info = $("#info"), count = $("#count");
+  const plate = $("#plate"), canvas = $("#qr"), ctx = canvas.getContext("2d");
+  const mini = $("#mini"), mctx = mini.getContext("2d");
+  const capUrl = $("#capUrl"), bannerUrl = $("#bannerUrl");
+  const makeBtn = $("#make"), copyBtn = $("#copy"), saveBtn = $("#save");
+  let style = "round", colour = "#0f2b2e";
+  let code = null, codeText = "", parts = [];
+  const shortUrl = (t) => t.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+  // Lay out one code: every dark module outside the three finders, with its own delay and fly-in direction
+  function prepare(c) {
+    const n = c.size, mid = (n - 1) / 2;
+    // a logo badge in the middle, sized per version so error level Q can always repair what it hides
+    const badge = n <= 21 ? 0 : n <= 25 ? 3 : n <= 29 ? 5 : n <= 41 ? 7 : 0;
+    const half = (badge - 1) / 2;
+    const list = [];
+    const maxD = Math.hypot(mid, mid);
+    for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) {
+      if (!c.dark[r][col]) continue;
+      const inFinder = (r < 7 && col < 7) || (r < 7 && col >= n - 7) || (r >= n - 7 && col < 7);
+      if (inFinder) continue;
+      if (badge && Math.abs(r - mid) <= half && Math.abs(col - mid) <= half) continue;
+      const dx = col - mid, dy = r - mid, d = Math.hypot(dx, dy) / maxD, a = Math.atan2(dy, dx);
+      list.push({ r, c: col, delay: d * 640 + ((a + Math.PI) / (Math.PI * 2)) * 140 + Math.random() * 90, fx: (dx / (Math.hypot(dx, dy) || 1)) * (16 + Math.random() * 26), fy: (dy / (Math.hypot(dx, dy) || 1)) * (16 + Math.random() * 26) - 10, out: Math.random() * 220 });
+    }
+    return { list, badge };
+  }
+
+  // ---------- Drawing ----------
+  const springOut = (p) => (p <= 0 ? 0 : p >= 1 ? 1 : 1 - Math.exp(-6.2 * p) * Math.cos(p * 10.5));
+  const easeIO = (p) => (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
+  function rr(g, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+  }
+  function dot(g, cx, cy, k, st) {
+    if (k <= 0.05) return;
+    if (st === "square") g.fillRect(cx - k / 2 - 0.3, cy - k / 2 - 0.3, k + 0.6, k + 0.6);
+    else if (st === "round") { g.beginPath(); g.arc(cx, cy, k * 0.47, 0, 6.2832); g.fill(); }
+    else { rr(g, cx - k * 0.46, cy - k * 0.46, k * 0.92, k * 0.92, k * 0.3); g.fill(); }
+  }
+  function finderAt(g, x, y, s, e, turn, st, col) {
+    if (e <= 0.01) return;
+    const half = 3.5 * s, rad = st === "square" ? 0 : st === "round" ? 2.3 * s : 1.3 * s;
+    g.save(); g.translate(x + half, y + half); g.rotate(turn); g.scale(e, e);
+    g.fillStyle = col; rr(g, -half, -half, 7 * s, 7 * s, rad); g.fill();
+    g.fillStyle = "#fff"; rr(g, -2.5 * s, -2.5 * s, 5 * s, 5 * s, rad * 0.65); g.fill();
+    g.fillStyle = col;
+    if (st === "round") { g.beginPath(); g.arc(0, 0, 1.55 * s, 0, 6.2832); g.fill(); }
+    else { rr(g, -1.5 * s, -1.5 * s, 3 * s, 3 * s, rad * 0.45); g.fill(); }
+    g.restore();
+  }
+  function badgeAt(g, cx, cy, s, size, e, col) {
+    if (!size || e <= 0.01) return;
+    const w = (size + 0.4) * s;
+    g.save(); g.translate(cx, cy); g.scale(e, e);
+    g.fillStyle = "#fff"; rr(g, -w / 2, -w / 2, w, w, w * 0.28); g.fill();
+    const grad = g.createLinearGradient(-w / 2, -w / 2, w / 2, w / 2);
+    grad.addColorStop(0, "#f6b544"); grad.addColorStop(0.55, "#e8735a"); grad.addColorStop(1, "#c4f135");
+    g.fillStyle = grad; rr(g, -w * 0.38, -w * 0.38, w * 0.76, w * 0.76, w * 0.22); g.fill();
+    g.fillStyle = col; g.font = "900 " + Math.round(w * 0.3) + "px system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText("LB", 0, w * 0.02);
+    g.restore();
+  }
+  // Paint a finished code at any size (main canvas still frame, the phone screen and the PNG file)
+  function paintStill(g, c, prep, ox, oy, s, st, col) {
+    const n = c.size;
+    g.fillStyle = col;
+    prep.list.forEach((m) => dot(g, ox + m.c * s + s / 2, oy + m.r * s + s / 2, s, st));
+    [[0, 0], [0, n - 7], [n - 7, 0]].forEach(([r, cc]) => finderAt(g, ox + cc * s, oy + r * s, s, 1, 0, st, col));
+    badgeAt(g, ox + (n / 2) * s, oy + (n / 2) * s, s, prep.badge, 1, col);
+  }
+
+  let W = 0;
+  function sizeCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = canvas.clientWidth || 200;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(W * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw(performance.now());
+  }
+
+  // One animation at a time on the canvas: exit, build, scan, pulse or still
+  let phase = { kind: "blank" }, raf = 0, phaseEnd = null;
+  function animate(kind, dur, extra) {
+    if (phaseEnd) { const f = phaseEnd; phaseEnd = null; f(); }
+    if (calm()) { phase = { kind: kind === "exit" ? "blank" : "still" }; draw(performance.now()); return Promise.resolve(); }
+    return new Promise((res) => {
+      phase = Object.assign({ kind, t0: performance.now(), dur }, extra || {});
+      phaseEnd = res;
+      if (!raf) raf = requestAnimationFrame(loop);
+    });
+  }
+  function loop(now) {
+    raf = 0;
+    draw(now);
+    if (phase.kind === "still" || phase.kind === "blank") return;
+    if (now - phase.t0 < phase.dur) { raf = requestAnimationFrame(loop); return; }
+    phase = { kind: phase.kind === "exit" ? "blank" : "still" };
+    draw(now);
+    const f = phaseEnd; phaseEnd = null; if (f) f();
+  }
+  function draw(now) {
+    ctx.clearRect(0, 0, W, W);
+    if (!code || phase.kind === "blank") return;
+    const n = code.size, s = W / n, t = phase.t0 ? now - phase.t0 : 0;
+    const p = phase.dur ? Math.min(1, t / phase.dur) : 1;
+    const finders = [[0, 0], [0, n - 7], [n - 7, 0]];
+    if (phase.kind === "still") { paintStill(ctx, code, parts, 0, 0, s, style, colour); return; }
+
+    if (phase.kind === "exit") {
+      // the old code shivers, shrinks and drops away
+      const c = phase.old, pr = phase.oldParts, os = W / c.size;
+      ctx.fillStyle = phase.col;
+      pr.list.forEach((m) => {
+        const q = Math.max(0, Math.min(1, (t - m.out) / 260));
+        const k = os * (1 - q) * (1 + Math.sin(t / 22 + m.r) * 0.06);
+        ctx.globalAlpha = 1 - q;
+        dot(ctx, m.c * os + os / 2, m.r * os + os / 2 + q * q * 34, k, phase.st);
+      });
+      ctx.globalAlpha = 1;
+      [[0, 0], [0, c.size - 7], [c.size - 7, 0]].forEach(([r, cc], i) => { const q = Math.min(1, Math.max(0, (t - i * 60) / 300)); finderAt(ctx, cc * os, r * os, os, 1 - q, q * 1.2, phase.st, phase.col); });
+      badgeAt(ctx, (c.size / 2) * os, (c.size / 2) * os, os, pr.badge, 1 - p, phase.col);
+      return;
+    }
+
+    if (phase.kind === "build") {
+      // modules fly in from the middle outwards with a springy overshoot; finders spin in; the badge pops last
+      ctx.fillStyle = colour;
+      parts.list.forEach((m) => {
+        const q = Math.max(0, Math.min(1, (t - m.delay) / 520));
+        if (q <= 0) return;
+        const e = springOut(q), fly = 1 - Math.min(1, q * 1.6);
+        ctx.globalAlpha = Math.min(1, q * 3);
+        dot(ctx, m.c * s + s / 2 + m.fx * fly, m.r * s + s / 2 + m.fy * fly, s * e, style);
+      });
+      ctx.globalAlpha = 1;
+      finders.forEach(([r, cc], i) => { const q = Math.max(0, Math.min(1, (t - 60 - i * 130) / 640)); finderAt(ctx, cc * s, r * s, s, springOut(q), (1 - springOut(q)) * -1.9, style, colour); });
+      const bq = Math.max(0, Math.min(1, (t - 900) / 520));
+      badgeAt(ctx, (n / 2) * s, (n / 2) * s, s, parts.badge, springOut(bq), colour);
+      return;
+    }
+
+    if (phase.kind === "pulse") {
+      // a diagonal wave dips every module and swaps the style or colour as it passes
+      parts.list.forEach((m) => {
+        const q = Math.max(0, Math.min(1, (t - ((m.r + m.c) / (2 * n)) * 380) / 360));
+        const swapped = q > 0.5;
+        ctx.fillStyle = swapped ? colour : phase.col;
+        dot(ctx, m.c * s + s / 2, m.r * s + s / 2, s * (1 - 0.6 * Math.sin(Math.PI * q)), swapped ? style : phase.st);
+      });
+      finders.forEach(([r, cc], i) => { const q = Math.max(0, Math.min(1, (t - i * 90) / 420)); finderAt(ctx, cc * s, r * s, s, 1 - 0.35 * Math.sin(Math.PI * q), Math.sin(Math.PI * q) * 0.5, q > 0.5 ? style : phase.st, q > 0.5 ? colour : phase.col); });
+      badgeAt(ctx, (n / 2) * s, (n / 2) * s, s, parts.badge, 1 + 0.12 * Math.sin(Math.PI * p), colour);
+      return;
+    }
+
+    if (phase.kind === "scan") {
+      // a lime scan line sweeps down; modules light up as it passes
+      const y = easeIO(p) * (W + 12) - 6;
+      paintStill(ctx, code, parts, 0, 0, s, style, colour);
+      ctx.fillStyle = "#86c400";
+      parts.list.forEach((m) => { const cy = m.r * s + s / 2; if (cy < y && cy > y - s * 2.4) dot(ctx, m.c * s + s / 2, cy, s * 1.08, style); });
+      const grad = ctx.createLinearGradient(0, y - 46, 0, y);
+      grad.addColorStop(0, "rgba(196,241,53,0)"); grad.addColorStop(1, "rgba(196,241,53,0.42)");
+      ctx.fillStyle = grad; ctx.fillRect(0, y - 46, W, 46);
+      ctx.fillStyle = "#7fb000"; ctx.fillRect(0, y - 1.5, W, 3);
+    }
+  }
+
+  // ---------- Inputs ----------
+  function byteLen(t) { return new TextEncoder().encode(t).length; }
+  function refreshField() {
+    const t = input.value;
+    const b = byteLen(t);
+    count.textContent = b + "/151";
+    const stale = t.trim() !== codeText;
+    plate.classList.toggle("stale", stale && !!code);
+    field.classList.toggle("bad", b > 151);
+    if (b > 151) { info.className = "info bad"; info.textContent = "Too long for this card: keep it under 151 bytes."; }
+    else if (stale) { info.className = "info"; info.innerHTML = "Changed. Press <b>Make code</b> or Enter."; }
+    else if (code) { info.className = "info"; info.innerHTML = "Version <b>" + code.version + "</b> · " + code.size + " × " + code.size + " dots · error level Q"; }
+  }
+  input.addEventListener("input", refreshField);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); makeCode(false); } });
+
+  document.querySelectorAll('input[name="dots"]').forEach((r) => r.addEventListener("change", () => restyle(r.value, colour)));
+  document.querySelectorAll('input[name="col"]').forEach((r) => r.addEventListener("change", () => restyle(style, r.value)));
+  function restyle(st, col) {
+    const oldSt = style, oldCol = colour;
+    style = st; colour = col;
+    drawMini();
+    if (!code) return;
+    animate("pulse", 820, { st: oldSt, col: oldCol });
+    say("Style changed to " + st + " dots");
+  }
+  function check(name, value) { const el = document.querySelector('input[name="' + name + '"][value="' + value + '"]'); if (el) el.checked = true; }
+
+  // ---------- Make code: shiver out, fly in, scan, lock, then a phone reads it ----------
+  let run = 0, busy = false;
+  async function makeCode(demo) {
+    const text = input.value.trim();
+    if (!text) {
+      field.classList.add("bad");
+      play(field, [{ transform: "translateX(0)" }, { transform: "translateX(-7px)" }, { transform: "translateX(6px)" }, { transform: "translateX(-3px)" }, { transform: "none" }], { duration: 380 });
+      info.className = "info bad"; info.textContent = "Add a link or some text first.";
+      say("Add a link or some text first");
+      return;
+    }
+    const next = QR.encode(text);
+    if (!next) { refreshField(); say("That text is too long for a QR code on this card"); return; }
+    const id = ++run;
+    busy = true;
+    resetPhone();
+    makeBtn.classList.add("working");
+    makeBtn.querySelector("span").textContent = "Drawing…";
+    hideFinish();
+    // 1. Anticipation: the plate squashes and the old dots shiver and fall
+    play(plate, [{ transform: "scale(1)" }, { transform: "scale(.95)" }, { transform: "scale(1.015)" }, { transform: "scale(1)" }], { duration: 620, easing: "ease-out" });
+    if (code) await animate("exit", 520, { old: code, oldParts: parts, st: style, col: colour });
+    if (id !== run) return;
+    // 2. Main: the new code assembles from the middle out
+    code = next; codeText = text; parts = prepare(code);
+    capUrl.textContent = shortUrl(text); bannerUrl.textContent = shortUrl(text);
+    canvas.setAttribute("aria-label", "QR code for " + text);
+    plate.classList.remove("stale");
+    refreshField();
+    drawMini();
+    await animate("build", 1500);
+    if (id !== run) return;
+    // 3. Progress: the scan line reads it
+    makeBtn.querySelector("span").textContent = "Checking…";
+    await animate("scan", 900);
+    if (id !== run) return;
+    // 4. Finish: corners lock on, a tick pops and little dots burst out
+    makeBtn.classList.remove("working");
+    makeBtn.querySelector("span").textContent = "Make code";
+    const corners = $("#corners"), ok = $("#okbadge");
+    corners.style.opacity = "1"; corners.style.transform = "scale(1)";
+    play(corners, [{ opacity: 0, transform: "scale(1.25)" }, { opacity: 1, transform: "scale(1)" }], { duration: 560, easing: SPRING });
+    ok.style.opacity = "1"; ok.style.transform = "scale(1)";
+    play(ok, [{ transform: "scale(.2) rotate(-40deg)" }, { transform: "scale(1) rotate(0)" }], { duration: 620, easing: SPRING });
+    burst(plate);
+    say("QR code ready for " + text);
+    busy = false;
+    await wait(calm() ? 300 : 500);
+    if (id !== run) return;
+    await phoneScan(id);
+    if (id !== run) return;
+    hideFinish(true);
+    if (demo) queueDemo(2600);
+  }
+  makeBtn.addEventListener("click", () => makeCode(false));
+
+  function hideFinish(soft) {
+    const corners = $("#corners"), ok = $("#okbadge");
+    if (soft && !calm()) {
+      play(corners, [{ opacity: 1 }, { opacity: 0 }], { duration: 400 });
+      play(ok, [{ opacity: 1, transform: "scale(1)" }, { opacity: 0, transform: "scale(.4)" }], { duration: 400 });
+    }
+    corners.style.opacity = "0"; corners.style.transform = "scale(1.22)";
+    ok.style.opacity = "0"; ok.style.transform = "scale(.3)";
+  }
+
+  // The phone rises over the card, its brackets lock onto the code and a banner drops in
+  async function phoneScan(id) {
+    if (calm()) return;
+    const phone = $("#phone"), brk = $("#brk"), banner = $("#banner");
+    phone.style.opacity = "1";
+    await play(phone, [{ opacity: 0, transform: "translateY(90px) rotate(9deg) scale(.9)" }, { opacity: 1, transform: "translateY(0) rotate(-2deg) scale(1)" }], { duration: 760, easing: SPRING, fill: "forwards" });
+    if (id !== run) { resetPhone(); return; }
+    await play(brk, [{ transform: "scale(1.35)", opacity: 0.3 }, { transform: "scale(.92)", opacity: 1, offset: 0.7 }, { transform: "scale(1)", opacity: 1 }], { duration: 560, easing: "ease-out" });
+    play(phone, [{ transform: "translateY(0) rotate(-2deg)" }, { transform: "translateY(0) rotate(-3.4deg)" }, { transform: "translateY(0) rotate(-0.6deg)" }, { transform: "translateY(0) rotate(-2deg)" }], { duration: 300 });
+    await play(banner, [{ transform: "translateY(-150%)" }, { transform: "translateY(0)" }], { duration: 600, easing: SPRING, fill: "forwards" });
+    await wait(1300);
+    if (id !== run) { resetPhone(); return; }
+    await play(phone, [{ opacity: 1, transform: "translateY(0) rotate(-2deg) scale(1)" }, { opacity: 0, transform: "translateY(110px) rotate(6deg) scale(.92)" }], { duration: 520, easing: "cubic-bezier(.5,0,.75,0)", fill: "forwards" });
+    resetPhone();
+  }
+  function resetPhone() {
+    const phone = $("#phone"), banner = $("#banner");
+    phone.getAnimations().forEach((a) => a.cancel());
+    banner.getAnimations().forEach((a) => a.cancel());
+    phone.style.opacity = "0";
+  }
+  function drawMini() {
+    mctx.setTransform(1, 0, 0, 1, 0, 0);
+    mctx.fillStyle = "#fff"; mctx.fillRect(0, 0, 208, 208);
+    if (!code) return;
+    const s = 184 / code.size;
+    paintStill(mctx, code, parts, 12, 12, s, style, colour);
+  }
+
+  // Little dots burst out of the plate corners
+  const fx = $("#fx");
+  function burst(el) {
+    if (calm()) return;
+    const r = el.getBoundingClientRect();
+    const cols = [colour, "#c4f135", "#f6b544", "#e8735a"];
+    for (let i = 0; i < 22; i++) {
+      const b = document.createElement("i");
+      b.className = "bit";
+      b.style.background = cols[i % cols.length];
+      const sx = r.left + (i % 2 ? r.width - 14 : 14), sy = r.top + (i % 4 < 2 ? 14 : r.height - 14);
+      const a = Math.atan2(sy - (r.top + r.height / 2), sx - (r.left + r.width / 2)) + (Math.random() - 0.5) * 1.1;
+      const d = 40 + Math.random() * 60;
+      fx.appendChild(b);
+      b.animate([
+        { transform: "translate(" + sx + "px," + sy + "px) scale(.4) rotate(0)", opacity: 1 },
+        { transform: "translate(" + (sx + Math.cos(a) * d) + "px," + (sy + Math.sin(a) * d) + "px) scale(1) rotate(" + (Math.random() * 360) + "deg)", opacity: 1, offset: 0.6 },
+        { transform: "translate(" + (sx + Math.cos(a) * d * 1.2) + "px," + (sy + Math.sin(a) * d * 1.2 + 26) + "px) scale(.5) rotate(" + (Math.random() * 540) + "deg)", opacity: 0 }
+      ], { duration: 900 + Math.random() * 300, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = () => b.remove();
+    }
+  }
+
+  // ---------- Copy and save ----------
+  async function writeClipboard(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* fall back below */ }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;left:-9999px;top:0";
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch (e) { return false; }
+  }
+  function flash(btn, label, good) {
+    const span = btn.querySelector("span");
+    const was = btn.dataset.label || span.textContent;
+    btn.dataset.label = was;
+    span.textContent = label;
+    btn.classList.toggle("done", good);
+    play(btn, [{ transform: "scale(.92)" }, { transform: "scale(1.04)" }, { transform: "scale(1)" }], { duration: 480, easing: "ease-out" });
+    clearTimeout(btn._t);
+    btn._t = setTimeout(() => { span.textContent = was; btn.classList.remove("done"); }, 1700);
+  }
+  copyBtn.addEventListener("click", async (e) => {
+    const btn = e.currentTarget; // keep it before the await
+    const text = codeText || input.value.trim();
+    const ok = await writeClipboard(text);
+    capUrl.classList.remove("hit"); void capUrl.offsetWidth; capUrl.classList.add("hit");
+    flash(btn, ok ? "Copied" : "Select the link", ok);
+    say(ok ? "Link copied" : "Copy was blocked. Select the link in the field instead.");
+  });
+  saveBtn.addEventListener("click", (e) => {
+    const btn = e.currentTarget;
+    if (!code) { say("Make a code first"); return; }
+    // a 1024 px PNG with a white quiet zone of four dots on every side
+    const c = document.createElement("canvas"); c.width = c.height = 1024;
+    const g = c.getContext("2d");
+    g.fillStyle = "#fff"; g.fillRect(0, 0, 1024, 1024);
+    const s = 1024 / (code.size + 8);
+    paintStill(g, code, parts, s * 4, s * 4, s, style, colour);
+    const done = (url, revoke) => {
+      const a = document.createElement("a");
+      a.href = url; a.download = "lahore-bakes-qr.png";
+      document.body.appendChild(a); a.click(); a.remove();
+      if (revoke) setTimeout(() => URL.revokeObjectURL(url), 4000);
+      flash(btn, "Saved", true);
+      say("PNG saved: lahore-bakes-qr.png");
+    };
+    if (c.toBlob) c.toBlob((b) => { if (b) done(URL.createObjectURL(b), true); else done(c.toDataURL("image/png"), false); }, "image/png");
+    else done(c.toDataURL("image/png"), false);
+  });
+
+  // ---------- Gentle tilt that follows the pointer ----------
+  const card = $("#card");
+  if (matchMedia("(pointer: fine)").matches) {
+    card.addEventListener("pointermove", (e) => {
+      if (calm()) return;
+      const r = card.getBoundingClientRect();
+      card.style.setProperty("--ry", ((e.clientX - r.left) / r.width - 0.5) * 8 + "deg");
+      card.style.setProperty("--rx", -((e.clientY - r.top) / r.height - 0.5) * 8 + "deg");
+    });
+    card.addEventListener("pointerleave", () => { card.style.setProperty("--rx", "0deg"); card.style.setProperty("--ry", "0deg"); });
+  }
+
+  // ---------- Auto-demo: restyle, type a new link, rebuild; stops on any real input ----------
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) => window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  function queueDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(runDemo, ms); }
+  async function typeLink(text) {
+    input.value = "";
+    refreshField();
+    for (const ch of text) {
+      if (!demoOn) return false;
+      input.value += ch;
+      refreshField();
+      await wait(38);
+    }
+    return true;
+  }
+  const LINKS = ["https://lahorebakes.example/eid-boxes", "https://lahorebakes.example/menu"];
+  async function runDemo() {
+    if (!demoOn) return;
+    if (busy) { queueDemo(1200); return; }
+    const step = round++ % 4;
+    if (step === 0) { check("dots", "square"); check("col", "#0b3d78"); restyle("square", "#0b3d78"); queueDemo(3200); }
+    else if (step === 1) { if (await typeLink(LINKS[0]) && demoOn) makeCode(true); }
+    else if (step === 2) { check("dots", "soft"); check("col", "#4a1d5e"); restyle("soft", "#4a1d5e"); queueDemo(3200); }
+    else { check("dots", "round"); check("col", "#0f2b2e"); restyle("round", "#0f2b2e"); await wait(900); if (demoOn && await typeLink(LINKS[1]) && demoOn) makeCode(true); }
+  }
+
+  // ---------- Start ----------
+  new ResizeObserver(() => sizeCanvas()).observe(canvas);
+  sizeCanvas();
+  refreshField();
+  setTimeout(() => makeCode(true), 200);
+</script>
+</body>
+</html>

@@ -1,0 +1,503 @@
+<!doctype html>
+<!-- Chill & Craft · Free Space · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Free Space · clear cache storage meter</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: graphite and lime ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #edf1e6;
+    --glow: #d9f99d;
+    --card: #ffffff;
+    --soft: #f5f7f1;
+    --line: #e2e7da;
+    --track: #e9ede3;
+    --ink: #161d10;
+    --muted: #667060;
+    --lime: #84cc16;
+    --lime-deep: #3f6212;
+    --lime-ink: #1a2e05;
+    --sh: 40, 60, 20;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0a0d08;
+    --glow: #1f3a0a;
+    --card: #141a10;
+    --soft: #1a2215;
+    --line: #26301f;
+    --track: #20291a;
+    --ink: #eef5e4;
+    --muted: #9aa58f;
+    --lime: #a3e635;
+    --lime-deep: #bef264;
+    --lime-ink: #1a2e05;
+    --sh: 0, 0, 0;
+    --focus: #93c5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .frame { position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 20px 16px; overflow: hidden; overflow: clip; }
+  .glow { position: absolute; width: 520px; height: 520px; left: 50%; top: 50%; margin: -260px 0 0 -260px; border-radius: 50%; background: radial-gradient(closest-side, var(--glow), transparent); opacity: .8; pointer-events: none; animation: breathe 7s ease-in-out infinite; }
+
+  .card {
+    position: relative;
+    width: min(460px, 100%);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    padding: 18px 20px 18px;
+    box-shadow: 0 44px 80px -52px rgba(var(--sh), .6), 0 2px 8px -4px rgba(var(--sh), .14);
+  }
+  .top { display: flex; align-items: center; gap: 11px; }
+  .dev { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--ink); color: var(--lime); }
+  .dev svg { width: 20px; height: 20px; }
+  .top h1 { margin: 0; font-size: 16.5px; font-weight: 780; }
+  .top p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .cap { margin-left: auto; padding: 5px 10px; border-radius: 99px; background: var(--soft); border: 1px solid var(--line); font-size: 12.5px; font-weight: 700; }
+
+  /* ---------- Big number with rolling digits ---------- */
+  .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 18px; }
+  .used { display: flex; align-items: baseline; gap: 6px; }
+  .odo { display: inline-flex; font-size: 44px; font-weight: 820; letter-spacing: -.03em; line-height: 1; height: 1em; overflow: hidden; font-variant-numeric: tabular-nums; }
+  .col { display: inline-block; width: .6em; height: 1em; overflow: hidden; text-align: center; transition: width .3s; }
+  .col.blank { width: 0; }
+  .strip { display: block; transition: transform .55s var(--spring); }
+  .strip span { display: block; height: 1em; }
+  .dotc { width: .26em; text-align: center; }
+  .unit { font-size: 17px; font-weight: 750; color: var(--muted); }
+  .hero small { display: block; font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .free { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 99px; background: color-mix(in srgb, var(--lime) 18%, var(--card)); color: var(--lime-deep); font-size: 13px; font-weight: 760; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .free i { width: 8px; height: 8px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 0 var(--lime); animation: ping 2.4s ease-out infinite; }
+
+  /* ---------- The storage bar ---------- */
+  .bar { position: relative; display: flex; height: 40px; margin-top: 14px; border-radius: 12px; background: var(--track); overflow: hidden; box-shadow: inset 0 1px 3px rgba(var(--sh), .18); }
+  .seg { position: relative; height: 100%; flex: 0 0 auto; background: var(--c); box-shadow: inset -1.5px 0 0 rgba(255, 255, 255, .55); }
+  :root[data-theme="dark"] .seg { box-shadow: inset -1.5px 0 0 rgba(0, 0, 0, .45); }
+  .seg::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255, 255, 255, .28), transparent 60%); }
+  .seg.doomed::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, .45) 0 6px, transparent 6px 12px); background-size: 17px 17px; animation: march .6s linear infinite; }
+  .bar .shine { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .75) 50%, transparent 70%); transform: translateX(-110%); pointer-events: none; }
+  .bar .scan { position: absolute; top: 0; bottom: 0; width: 3px; left: 0; background: var(--lime); box-shadow: 0 0 14px 4px color-mix(in srgb, var(--lime) 70%, transparent); opacity: 0; pointer-events: none; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
+  .legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
+  .legend b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* ---------- What can go ---------- */
+  .list-head { display: flex; justify-content: space-between; align-items: baseline; margin: 18px 0 8px; }
+  .list-head h2 { margin: 0; font-size: 14px; font-weight: 780; }
+  .list-head span { font-size: 12.5px; color: var(--muted); }
+  .rows { display: grid; gap: 8px; }
+  .row {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    align-items: center;
+    gap: 11px;
+    padding: 10px 12px;
+    border-radius: 15px;
+    background: var(--soft);
+    border: 1px solid var(--line);
+    cursor: pointer;
+    transition: border-color .25s, background-color .25s, opacity .3s;
+  }
+  .row:hover { border-color: color-mix(in srgb, var(--lime) 50%, var(--line)); }
+  .row.off { opacity: .62; }
+  .row input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .box { width: 22px; height: 22px; border-radius: 7px; border: 2px solid var(--line); background: var(--card); display: grid; place-items: center; transition: background-color .2s, border-color .2s, transform .3s var(--spring); }
+  .box svg { width: 14px; height: 14px; stroke: var(--lime-ink); opacity: 0; transform: scale(.4); transition: opacity .15s, transform .3s var(--spring); }
+  .row input:checked + .box { background: var(--lime); border-color: var(--lime); }
+  .row input:checked + .box svg { opacity: 1; transform: none; }
+  .row input:focus-visible + .box { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .row input:disabled ~ * { cursor: default; }
+  .ic { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: color-mix(in srgb, var(--c) 18%, var(--card)); color: var(--c); }
+  .ic svg { width: 18px; height: 18px; }
+  .nm { min-width: 0; }
+  .nm b { display: block; font-size: 14px; font-weight: 720; }
+  .nm small { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mini { display: block; height: 4px; margin-top: 6px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .mini b { display: block; height: 100%; width: 100%; background: var(--c); border-radius: 2px; }
+  .sz { font-size: 14px; font-weight: 780; font-variant-numeric: tabular-nums; text-align: right; min-width: 62px; }
+  .row.done .sz { color: var(--lime-deep); }
+  .row.done .nm small::before { content: "Cleared · "; color: var(--lime-deep); font-weight: 700; }
+
+  /* ---------- The button ---------- */
+  .go {
+    position: relative;
+    width: 100%;
+    height: 54px;
+    margin-top: 16px;
+    border: 0;
+    border-radius: 16px;
+    overflow: hidden;
+    font: inherit;
+    font-size: 15.5px;
+    font-weight: 800;
+    color: var(--lime-ink);
+    background: var(--lime);
+    box-shadow: 0 16px 28px -18px color-mix(in srgb, var(--lime) 90%, black), inset 0 -3px 0 rgba(0, 0, 0, .12);
+    cursor: pointer;
+    transition: transform .25s var(--spring), filter .2s, background-color .3s, color .3s;
+  }
+  .go:hover { filter: brightness(1.05); }
+  .go:active, .go.pressed { transform: scale(.97); }
+  .go:disabled { cursor: default; }
+  .go.empty { background: var(--track); color: var(--muted); box-shadow: none; }
+  .go .fill { position: absolute; inset: 0; transform-origin: 0 50%; transform: scaleX(0); background: linear-gradient(90deg, rgba(255, 255, 255, .0), rgba(255, 255, 255, .45)); }
+  .go.work { background: #152010; color: var(--lime); }
+  :root[data-theme="dark"] .go.work { background: #0c1209; box-shadow: inset 0 0 0 1.5px var(--line); }
+  .go.work .fill { background: linear-gradient(90deg, color-mix(in srgb, var(--lime) 35%, transparent), color-mix(in srgb, var(--lime) 60%, transparent)); }
+  .go span { position: relative; display: inline-flex; align-items: center; gap: 9px; }
+  .go svg { width: 20px; height: 20px; }
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+
+  .layer { position: absolute; inset: 0; pointer-events: none; }
+  .px { position: absolute; width: 6px; height: 6px; border-radius: 1.5px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+  @keyframes ping { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--lime) 60%, transparent); } 80%, 100% { box-shadow: 0 0 0 8px transparent; } }
+  @keyframes march { to { background-position: 17px 0; } }
+
+  @media (max-width: 420px) {
+    .card { padding: 16px 14px; }
+    .odo { font-size: 38px; }
+    .row { gap: 9px; padding: 9px 10px; }
+    .ic { width: 30px; height: 30px; }
+  }
+  /* Calm mode: every step still happens, without the big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <div class="glow" aria-hidden="true"></div>
+  <main class="card" aria-labelledby="title">
+    <header class="top">
+      <span class="dev" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="6" y="2.5" width="12" height="19" rx="3" /><path d="M10.5 18.5h3" /></svg></span>
+      <div>
+        <h1 id="title">Storage</h1>
+        <p>Sana's phone</p>
+      </div>
+      <span class="cap">64 GB</span>
+    </header>
+
+    <div class="hero">
+      <div>
+        <div class="used"><span class="odo" id="odo" aria-hidden="true"></span><span class="unit">GB</span></div>
+        <small>used of 64 GB</small>
+        <span class="sr-only" id="usedText"></span>
+      </div>
+      <span class="free" id="free"><i aria-hidden="true"></i><span id="freeText">21.3 GB free</span></span>
+    </div>
+
+    <div class="bar" id="bar" aria-hidden="true"><i class="shine" id="shine"></i><i class="scan" id="scan"></i></div>
+    <ul class="legend" id="legend" aria-label="Storage by type"></ul>
+
+    <div class="list-head"><h2>Safe to clear</h2><span id="pick">3 picked</span></div>
+    <div class="rows" id="rows"></div>
+
+    <button class="go" id="go" type="button"><i class="fill" id="fill"></i><span id="goText">Clear 6.8 GB</span></button>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </main>
+  <div class="layer" id="layer" aria-hidden="true"></div>
+</div>
+
+<script>
+  // ---------- Free Space: tick what can go, clear it, watch the bar give the space back ----------
+  (function () {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const frame = $("frame"), layer = $("layer"), bar = $("bar"), legend = $("legend"), rowsEl = $("rows"), go = $("go"), goText = $("goText"), fill = $("fill");
+    const odo = $("odo"), usedText = $("usedText"), freeText = $("freeText"), freeChip = $("free"), pick = $("pick"), status = $("status"), shine = $("shine"), scan = $("scan");
+
+    const CAP = 64;
+    const SEGS = [
+      { id: "photos", name: "Photos", gb: 18.2, c: "#6366f1" },
+      { id: "apps", name: "Apps", gb: 9.4, c: "#0ea5e9" },
+      { id: "videos", name: "Videos", gb: 5.3, c: "#ec4899" },
+      { id: "cache", name: "App cache", gb: 4.2, c: "#f97316", clean: true, note: "Saved by 23 apps, safe to remove", icon: '<path d="M4 7h16v12H4zM8 7V5h8v2"/><path d="M9 12h6"/>' },
+      { id: "thumbs", name: "Thumbnails", gb: 1.6, c: "#f59e0b", clean: true, note: "Photo previews, rebuilt when needed", icon: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M7 15l3-3 3 3 2-2 3 3"/>' },
+      { id: "old", name: "Old downloads", gb: 1.0, c: "#e5484d", clean: true, note: "Not opened in 90 days", icon: '<path d="M12 4v10M8 10l4 4 4-4"/><path d="M5 19h14"/>' },
+      { id: "sys", name: "System", gb: 3.0, c: "#94a3b8" }
+    ];
+    SEGS.forEach((s) => { s.full = s.gb; s.on = !!s.clean; });
+    const CLEAN = SEGS.filter((s) => s.clean);
+
+    const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+    const calm = () => calmQ.matches;
+    const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 200) : ms));
+    function play(el, frames, opts) {
+      if (calm() || !el.animate) return Promise.resolve();
+      const a = el.animate(frames, opts);
+      return new Promise((res) => { a.onfinish = res; a.oncancel = res; });
+    }
+    function tween(ms, fn, ease) {
+      if (calm()) { fn(1); return Promise.resolve(); }
+      ease = ease || ((k) => 1 - Math.pow(1 - k, 3));
+      return new Promise((res) => {
+        const t0 = performance.now();
+        const step = (now) => { const k = Math.min(1, (now - t0) / ms); fn(ease(k)); if (k < 1) requestAnimationFrame(step); else res(); };
+        requestAnimationFrame(step);
+      });
+    }
+    const gb = (v) => (Math.round(v * 10) / 10).toFixed(1) + " GB";
+    const say = (m) => { if (!demo.on) status.textContent = m; };
+    const used = () => SEGS.reduce((s, x) => s + x.gb, 0);
+    const picked = () => CLEAN.filter((s) => s.on && s.gb > 0.05);
+    const pickedGb = () => picked().reduce((s, x) => s + x.gb, 0);
+
+    // ---------- Odometer: one rolling strip per digit ----------
+    let cols = [];
+    (function buildOdo() {
+      const html = [0, 1, 2, 3].map((i) => (i === 2 ? '<span class="dotc">.</span>' : `<span class="col"><span class="strip">${"0123456789".split("").map((d) => `<span>${d}</span>`).join("")}</span></span>`)).join("");
+      odo.innerHTML = html;
+      cols = [...odo.querySelectorAll(".col")];
+    })();
+    function setOdo(v) {
+      const s = (Math.round(v * 10) / 10).toFixed(1).padStart(4, " ").replace(".", "");   // e.g. "427"
+      cols.forEach((c, i) => {
+        const ch = s[i];
+        c.classList.toggle("blank", ch === " ");
+        c.firstChild.style.transform = `translateY(${-(ch === " " ? 0 : +ch)}em)`;
+      });
+      usedText.textContent = `${gb(v)} used of ${CAP} GB`;
+    }
+
+    // ---------- Bar, legend and rows ----------
+    const segEls = new Map();
+    SEGS.forEach((s) => {
+      const el = document.createElement("i");
+      el.className = "seg";
+      el.style.setProperty("--c", s.c);
+      bar.insertBefore(el, shine);
+      segEls.set(s.id, el);
+    });
+    function legendHtml() {
+      const clutter = CLEAN.reduce((t, s) => t + s.gb, 0);
+      const items = [
+        ["Photos", "#6366f1", SEGS[0].gb], ["Apps", "#0ea5e9", SEGS[1].gb], ["Videos", "#ec4899", SEGS[2].gb],
+        ["Clutter", "#f97316", clutter], ["System", "#94a3b8", SEGS[6].gb], ["Free", "var(--track)", CAP - used()]
+      ];
+      legend.innerHTML = items.map(([n, c, v]) => `<li><i style="--c:${c}${n === "Free" ? ";box-shadow:inset 0 0 0 1.5px var(--line)" : ""}"></i>${n} <b>${gb(v)}</b></li>`).join("");
+    }
+    const rowEls = new Map();
+    CLEAN.forEach((s) => {
+      const row = document.createElement("label");
+      row.className = "row";
+      row.style.setProperty("--c", s.c);
+      row.innerHTML = `<input type="checkbox" checked aria-label="${s.name}, ${gb(s.gb)}"><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></span>
+        <span class="nm"><b>${s.name}</b><small>${s.note}</small><span class="mini" aria-hidden="true"><b></b></span></span>
+        <span class="sz">${gb(s.gb)}</span>`;
+      rowsEl.appendChild(row);
+      const input = row.querySelector("input");
+      input.addEventListener("change", () => { s.on = input.checked; row.classList.toggle("off", !s.on); refresh(); });
+      rowEls.set(s.id, { row, input, sz: row.querySelector(".sz"), mini: row.querySelector(".mini b") });
+    });
+    function paint() {
+      SEGS.forEach((s) => { segEls.get(s.id).style.width = (s.gb / CAP) * 100 + "%"; });
+      CLEAN.forEach((s) => { const r = rowEls.get(s.id); r.sz.textContent = gb(s.gb); r.mini.style.width = (s.gb / s.full) * 100 + "%"; });
+      const u = used();
+      setOdo(u);
+      freeText.textContent = `${gb(CAP - u)} free`;
+    }
+    function refresh() {
+      const n = picked().length, total = pickedGb();
+      const allClear = CLEAN.every((s) => s.gb < 0.05);
+      pick.textContent = n ? `${n} picked · ${gb(total)}` : allClear ? "All clear" : "Nothing picked";
+      if (S.state === "idle") {
+        go.classList.toggle("empty", !n);
+        goText.innerHTML = n ? `${TRASH}Clear ${gb(total)}` : "Pick something to clear";
+      }
+      legendHtml();
+    }
+    const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 12.5h9l1-12.5"/></svg>';
+    const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    const SCAN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg>';
+
+    const S = { state: "idle", busy: false };
+    function lock(on) { CLEAN.forEach((s) => { rowEls.get(s.id).input.disabled = on; }); }
+
+    // ---------- Clear: stripes, pixels fly off, segments drain one by one, digits roll ----------
+    function emit(el, color, ms) {
+      if (calm()) return Promise.resolve();
+      const end = performance.now() + ms;
+      return new Promise((res) => {
+        const tick = () => {
+          const r = el.getBoundingClientRect(), f = frame.getBoundingClientRect();
+          if (r.width > 2) for (let i = 0; i < 2; i++) {
+            const p = document.createElement("i");
+            p.className = "px";
+            p.style.background = Math.random() < 0.3 ? "var(--lime)" : color;
+            p.style.left = r.left - f.left + Math.random() * r.width - 3 + "px";
+            p.style.top = r.top - f.top + Math.random() * r.height * 0.6 - 3 + "px";
+            layer.appendChild(p);
+            const dx = (Math.random() - 0.5) * 30, dy = -(40 + Math.random() * 60);
+            const an = p.animate([
+              { transform: "translate(0, 0) scale(1)", opacity: 1 },
+              { transform: `translate(${dx}px, ${dy}px) rotate(${Math.random() * 180}deg) scale(.3)`, opacity: 0 }
+            ], { duration: 700 + Math.random() * 400, easing: "cubic-bezier(.2, .7, .3, 1)" });
+            an.onfinish = an.oncancel = () => p.remove();
+          }
+          if (performance.now() < end) setTimeout(tick, 45); else res();
+        };
+        tick();
+      });
+    }
+    function confetti(x, y) {
+      if (calm()) return;
+      const f = frame.getBoundingClientRect(), colors = ["#a3e635", "#84cc16", "#ffffff", "#fde047", "#4ade80"];
+      for (let i = 0; i < 26; i++) {
+        const p = document.createElement("i");
+        p.className = "px";
+        p.style.background = colors[i % colors.length];
+        p.style.left = x - f.left - 3 + "px";
+        p.style.top = y - f.top - 3 + "px";
+        if (i % 2) { p.style.width = "4px"; p.style.height = "9px"; }
+        layer.appendChild(p);
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.4, d = 60 + Math.random() * 80;
+        const an = p.animate([
+          { transform: "translate(0, 0) rotate(0) scale(1)", opacity: 1 },
+          { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d}px) rotate(${Math.random() * 360}deg)`, opacity: 1, offset: 0.55 },
+          { transform: `translate(${Math.cos(a) * d * 1.2}px, ${Math.sin(a) * d + 70}px) rotate(${Math.random() * 720}deg) scale(.6)`, opacity: 0 }
+        ], { duration: 1100 + Math.random() * 500, easing: "cubic-bezier(.2, .7, .3, 1)" });
+        an.onfinish = an.oncancel = () => p.remove();
+      }
+    }
+    async function clearNow() {
+      if (S.busy || S.state !== "idle") return;
+      const items = picked();
+      if (!items.length) return;
+      S.busy = true;
+      S.state = "work";
+      lock(true);
+      const total = items.reduce((t, s) => t + s.gb, 0);
+      let done = 0;
+      go.classList.add("work");
+      goText.textContent = `Clearing… 0.0 of ${gb(total)}`;
+      say(`Clearing ${gb(total)}`);
+      items.forEach((s) => segEls.get(s.id).classList.add("doomed"));
+      play(bar, [{ transform: "none" }, { transform: "scaleY(1.12)" }, { transform: "none" }], { duration: 420, easing: "ease-out" });
+      await wait(520);
+      for (const s of items) {
+        const start = s.gb, r = rowEls.get(s.id);
+        play(r.row, [{ transform: "none" }, { transform: "translateX(4px)" }, { transform: "none" }], { duration: 300, easing: "ease-out" });
+        const fx = emit(segEls.get(s.id), s.c, 760);
+        await tween(880, (k) => {
+          s.gb = start * (1 - k);
+          paint();
+          const sofar = done + start * k;
+          fill.style.transform = `scaleX(${(sofar / total).toFixed(3)})`;
+          goText.textContent = `Clearing… ${gb(sofar).replace(" GB", "")} of ${gb(total)}`;
+        }, (k) => k * k * (3 - 2 * k));
+        await fx;
+        s.gb = 0;
+        done += start;
+        paint();
+        segEls.get(s.id).classList.remove("doomed");
+        r.row.classList.add("done");
+        r.input.checked = true;
+        play(r.row.querySelector(".box"), [{ transform: "scale(.5)" }, { transform: "scale(1.25)", offset: 0.5 }, { transform: "none" }], { duration: 460, easing: "ease-out" });
+      }
+      // finish: the bar settles, a shine runs across, confetti from the free chip
+      play(bar, [{ transform: "scaleX(1)" }, { transform: "scaleX(1.015) scaleY(.9)" }, { transform: "scaleX(.995) scaleY(1.05)" }, { transform: "none" }], { duration: 560, easing: "ease-out" });
+      play(shine, [{ transform: "translateX(-110%)" }, { transform: "translateX(110%)" }], { duration: 900, easing: "cubic-bezier(.4, 0, .2, 1)" });
+      const fr = freeChip.getBoundingClientRect();
+      confetti(fr.left + fr.width / 2, fr.top + fr.height / 2);
+      play(freeChip, [{ transform: "scale(1)" }, { transform: "scale(1.18)", offset: 0.4 }, { transform: "scale(1)" }], { duration: 620, easing: "cubic-bezier(.3, 1.6, .5, 1)" });
+      fill.style.transform = "scaleX(0)";
+      go.classList.remove("work");
+      goText.innerHTML = `${TICK}${gb(total)} freed`;
+      S.state = "done";
+      refresh();
+      say(`Done. ${gb(total)} freed. ${gb(CAP - used())} free now.`);
+      await wait(2000);
+      S.state = "again";
+      goText.innerHTML = `${SCAN}Scan again`;
+      S.busy = false;
+    }
+    // ---------- Scan again: a sweep line, then the clutter grows back (so the demo can repeat) ----------
+    async function rescan() {
+      if (S.busy || S.state !== "again") return;
+      S.busy = true;
+      S.state = "scan";
+      goText.textContent = "Scanning…";
+      say("Scanning for clutter");
+      const w = bar.clientWidth;
+      play(scan, [{ transform: "translateX(0)", opacity: 0 }, { transform: `translateX(${w * 0.15}px)`, opacity: 1, offset: 0.1 }, { transform: `translateX(${w - 3}px)`, opacity: 1, offset: 0.9 }, { transform: `translateX(${w - 3}px)`, opacity: 0 }], { duration: 1100, easing: "ease-in-out" });
+      CLEAN.forEach((s) => { const r = rowEls.get(s.id); r.row.classList.remove("done", "off"); r.input.checked = true; s.on = true; });
+      await tween(1100, (k) => { CLEAN.forEach((s) => { s.gb = s.full * k; }); paint(); });
+      CLEAN.forEach((s) => { s.gb = s.full; });
+      paint();
+      S.state = "idle";
+      lock(false);
+      refresh();
+      say(`Found ${gb(pickedGb())} you can clear`);
+      S.busy = false;
+    }
+    go.addEventListener("click", (e) => {
+      const btn = e.currentTarget;
+      btn.classList.add("pressed");
+      setTimeout(() => btn.classList.remove("pressed"), 160);
+      if (S.state === "idle") clearNow();
+      else if (S.state === "again") rescan();
+    });
+
+    // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+    const demo = { on: true, timer: 0, k: 0 };
+    function stopDemo() { if (!demo.on) return; demo.on = false; clearTimeout(demo.timer); }
+    addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    function scheduleDemo(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+    async function runDemo() {
+      if (!demo.on) return;
+      if (S.busy) return scheduleDemo(600);
+      if (S.state === "again") { go.classList.add("pressed"); setTimeout(() => go.classList.remove("pressed"), 160); await rescan(); return scheduleDemo(1600); }
+      if (S.state !== "idle") return scheduleDemo(800);
+      // every other round, untick one row first so the totals visibly change
+      const skip = demo.k % 2 === 1 ? rowEls.get("old") : null;
+      demo.k += 1;
+      CLEAN.forEach((s) => { const r = rowEls.get(s.id); r.input.checked = true; s.on = true; r.row.classList.remove("off"); });
+      refresh();
+      if (skip) {
+        await wait(500); if (!demo.on) return;
+        skip.input.checked = false;
+        skip.input.dispatchEvent(new Event("change"));
+        await wait(700); if (!demo.on) return;
+      }
+      go.classList.add("pressed");
+      setTimeout(() => go.classList.remove("pressed"), 160);
+      await wait(160); if (!demo.on) return;
+      await clearNow();
+      scheduleDemo(400);
+    }
+
+    paint();
+    refresh();
+    scheduleDemo(450);
+  })();
+</script>
+</body>
+</html>

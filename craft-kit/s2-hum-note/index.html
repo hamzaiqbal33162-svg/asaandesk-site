@@ -1,0 +1,686 @@
+<!doctype html>
+<!-- Chill & Craft · Hum Note · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hum Note · Hold to record, slide to cancel, release to send</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg1: #fde6f1;
+    --bg2: #e9e1ff;
+    --card: #ffffff;
+    --thread: #faf5fd;
+    --ink: #241632;
+    --muted: #7d6f8e;
+    --line: rgba(36, 22, 50, 0.1);
+    --in: #ffffff;
+    --g1: #d6249f;
+    --g2: #7b2ff7;
+    --rec: #ff3d6e;
+    --tick: #3aa0ff;
+    --ok: #19a974;
+    --shadow: rgba(90, 30, 120, 0.35);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg1: #1d0e2b;
+    --bg2: #0d0a1c;
+    --card: #1a1228;
+    --thread: #140e20;
+    --ink: #f4ebfc;
+    --muted: #a798ba;
+    --line: rgba(244, 235, 252, 0.1);
+    --in: #261b37;
+    --g1: #e83aae;
+    --g2: #8b45ff;
+    --rec: #ff5a85;
+    --tick: #5cb6ff;
+    --ok: #3fd69d;
+    --shadow: rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg2); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, input { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 3px solid var(--g2); outline-offset: 2px; }
+
+  /* ---------- Stage: dusk gradient with drifting bokeh ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 22px 16px; overflow: hidden; isolation: isolate; background: linear-gradient(160deg, var(--bg1), var(--bg2)); }
+  .bokeh { position: absolute; z-index: -1; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--g1) 30%, transparent), transparent 68%); pointer-events: none; animation: drift 12s ease-in-out infinite alternate; }
+  .bokeh.b2 { background: radial-gradient(circle, color-mix(in srgb, var(--g2) 30%, transparent), transparent 68%); animation-duration: 15s; animation-direction: alternate-reverse; }
+  @keyframes drift { to { transform: translate(40px, -30px) scale(1.15); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px) scale(0.97); } }
+
+  /* ---------- Chat card ---------- */
+  .chat { position: relative; display: flex; flex-direction: column; width: min(400px, 100%); height: 500px; border-radius: 30px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 50px 80px -50px var(--shadow); overflow: visible; animation: rise 0.85s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+  .head { display: flex; align-items: center; gap: 11px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .av { position: relative; display: grid; place-items: center; width: 42px; height: 42px; flex: none; border-radius: 50%; background: linear-gradient(140deg, #ffb36b, #ff5f8f); color: #fff; font-weight: 900; font-size: 0.86rem; }
+  .av::after { content: ""; position: absolute; right: 0; bottom: 0; width: 11px; height: 11px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 2.5px var(--card); }
+  .head b { display: block; font-size: 0.96rem; }
+  .head small { display: block; font-size: 0.74rem; color: var(--muted); transition: color 0.3s; }
+  .head small.live { color: var(--rec); font-weight: 700; }
+  .src { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 11px; border: 1.5px solid var(--line); border-radius: 999px; background: transparent; font-size: 0.72rem; font-weight: 800; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .src svg { width: 14px; height: 14px; }
+  .src[aria-pressed="true"] { border-color: var(--rec); color: var(--rec); }
+
+  .thread { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 14px 14px 10px; overflow-y: auto; overflow-x: hidden; background: radial-gradient(circle at 20% 10%, color-mix(in srgb, var(--g1) 7%, transparent), transparent 40%), var(--thread); scrollbar-width: none; }
+  .thread::-webkit-scrollbar { display: none; }
+  .day { align-self: center; padding: 3px 10px; border-radius: 999px; background: var(--line); font-size: 0.66rem; font-weight: 800; color: var(--muted); }
+  .msg { position: relative; max-width: 80%; padding: 9px 12px; border-radius: 18px; font-size: 0.88rem; line-height: 1.4; box-shadow: 0 6px 14px -12px var(--shadow); flex: none; }
+  .msg.in { align-self: flex-start; background: var(--in); border-bottom-left-radius: 6px; box-shadow: 0 0 0 1px var(--line), 0 6px 14px -12px var(--shadow); }
+  .msg.out { align-self: flex-end; background: linear-gradient(135deg, var(--g1), var(--g2)); color: #fff; border-bottom-right-radius: 6px; }
+  .msg .t { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 0.64rem; opacity: 0.8; vertical-align: -2px; }
+  .ticks { display: inline-grid; width: 18px; height: 12px; }
+  .ticks svg { grid-area: 1 / 1; width: 18px; height: 12px; transition: opacity 0.25s; }
+  .ticks .t2 path { stroke: currentColor; }
+  .ticks.blue { color: #b9e2ff; }
+  .voice { display: grid; grid-template-columns: 36px 1fr; grid-template-rows: auto auto; align-items: center; column-gap: 9px; width: 248px; padding: 9px 12px 7px 9px; }
+  .pp { grid-row: 1 / 3; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.22); color: #fff; cursor: pointer; transition: transform 0.35s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .pp:active { transform: scale(0.9); }
+  .pp svg { width: 16px; height: 16px; }
+  .wave { position: relative; display: flex; align-items: center; gap: 2px; height: 28px; cursor: pointer; touch-action: none; border-radius: 6px; }
+  .wave i { flex: 1; min-width: 2px; height: calc(var(--h) * 100%); border-radius: 2px; background: rgba(255, 255, 255, 0.45); transform-origin: 50% 50%; transition: background 0.12s; }
+  .wave i.on { background: #fff; }
+  .wave .head-dot { position: absolute; top: 50%; left: 0; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); pointer-events: none; }
+  .vmeta { display: flex; align-items: center; gap: 7px; font-size: 0.66rem; font-weight: 700; opacity: 0.92; font-variant-numeric: tabular-nums; }
+  .speed { height: 18px; padding: 0 7px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.24); color: #fff; font-size: 0.62rem; font-weight: 900; cursor: pointer; }
+  .vmeta .ticks { margin-left: auto; }
+  .react { position: absolute; left: -10px; bottom: -10px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--card); box-shadow: 0 0 0 1.5px var(--line), 0 6px 10px -6px var(--shadow); transform: scale(0); }
+  .react svg { width: 14px; height: 14px; }
+  .typing { align-self: flex-start; display: flex; gap: 4px; padding: 12px 14px; border-radius: 18px; border-bottom-left-radius: 6px; background: var(--in); box-shadow: 0 0 0 1px var(--line); }
+  .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: hop 1s ease-in-out infinite; }
+  .typing i:nth-child(2) { animation-delay: 0.15s; } .typing i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes hop { 30% { transform: translateY(-5px); } 60% { transform: none; } }
+
+  /* ---------- Composer ---------- */
+  .comp { position: relative; display: flex; align-items: center; gap: 10px; height: 70px; padding: 0 12px 0 14px; border-top: 1px solid var(--line); border-radius: 0 0 30px 30px; background: var(--card); }
+  .field { flex: 1; min-width: 0; height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--thread); box-shadow: inset 0 0 0 1.5px var(--line); outline: none; font-size: 0.9rem; transition: opacity 0.25s, transform 0.35s; }
+  .field:focus { box-shadow: inset 0 0 0 2px var(--g2); }
+  .rec { position: absolute; left: 14px; right: 74px; top: 0; bottom: 0; display: flex; align-items: center; gap: 9px; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; overflow: hidden; }
+  .comp.recording .rec { opacity: 1; visibility: visible; }
+  .comp.recording .field { opacity: 0; transform: translateX(-20px); pointer-events: none; }
+  .rdot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--rec); animation: blinkr 1s ease-in-out infinite; }
+  @keyframes blinkr { 50% { opacity: 0.25; } }
+  .timer { flex: none; width: 38px; font-size: 0.86rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .live { flex: 1; min-width: 0; height: 34px; }
+  .slide { position: relative; flex: none; margin-right: 2px; font-size: 0.74rem; font-weight: 800; color: var(--muted); white-space: nowrap; background: linear-gradient(90deg, var(--muted) 30%, var(--ink) 50%, var(--muted) 70%) 0 0 / 200% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: shine 1.6s linear infinite; padding-left: 14px; }
+  .slide::before { content: ""; position: absolute; left: 0; top: 50%; width: 6px; height: 6px; margin-top: -4px; border-left: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); }
+  @keyframes shine { to { background-position: -200% 0; } }
+  .comp.locked .slide { display: none; }
+  .bin { display: none; }
+  .comp.locked .bin { display: grid; }
+  .ibtn { place-items: center; width: 34px; height: 34px; flex: none; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--rec) 12%, transparent); color: var(--rec); cursor: pointer; }
+  .ibtn svg { width: 17px; height: 17px; }
+
+  .mic { position: relative; z-index: 3; display: grid; place-items: center; width: 50px; height: 50px; flex: none; padding: 0; border: 0; border-radius: 50%; background: linear-gradient(140deg, var(--g1), var(--g2)); color: #fff; cursor: pointer; box-shadow: 0 12px 20px -10px var(--shadow); touch-action: none; transition: transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1), background 0.3s; }
+  .mic svg { position: absolute; width: 22px; height: 22px; transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.25s; }
+  .mic .i-send { opacity: 0; transform: rotate(-90deg) scale(0.5); }
+  .mic.text .i-mic, .comp.locked .mic .i-mic { opacity: 0; transform: rotate(90deg) scale(0.5); }
+  .mic.text .i-send, .comp.locked .mic .i-send { opacity: 1; transform: none; }
+  .comp.recording:not(.locked) .mic { transform: translateY(-10px) scale(1.5); background: var(--rec); }
+  .ripple { position: absolute; inset: 0; border-radius: 50%; background: var(--rec); opacity: 0; pointer-events: none; }
+  .comp.recording:not(.locked) .ripple { opacity: 0.22; transform: scale(var(--lv, 1)); transition: transform 0.08s linear; }
+  .comp.recording:not(.locked) .ripple.r2 { opacity: 0.12; transform: scale(calc(var(--lv, 1) * 1.25)); }
+  .lockpill { position: absolute; right: 20px; bottom: 82px; z-index: 2; display: grid; justify-items: center; gap: 2px; width: 36px; padding: 9px 0 8px; border-radius: 999px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 10px 18px -10px var(--shadow); color: var(--muted); opacity: 0; transform: translateY(16px); transition: opacity 0.25s, transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); pointer-events: none; }
+  .comp.recording:not(.locked) .lockpill { opacity: 1; transform: translateY(var(--ly, 0px)); }
+  .lockpill svg { width: 16px; height: 16px; }
+  .lockpill .chev { width: 12px; height: 12px; animation: up 1.2s ease-in-out infinite; }
+  @keyframes up { 50% { transform: translateY(-4px); } }
+
+  .fx { position: fixed; inset: 0; z-index: 30; overflow: hidden; pointer-events: none; }
+  .toast { position: fixed; left: 50%; bottom: 18px; z-index: 40; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 999px; background: var(--ink); color: var(--card); font-size: 0.84rem; font-weight: 700; transform: translate(-50%, 200%); transition: transform 0.6s cubic-bezier(0.3, 1.5, 0.4, 1); }
+  .toast.show { transform: translate(-50%, 0); }
+  .trash { position: absolute; left: 0; top: 0; width: 34px; height: 40px; color: var(--rec); }
+  .trash svg { width: 100%; height: 100%; overflow: visible; }
+  .lid { transform-box: fill-box; transform-origin: 0% 100%; }
+  .blob { position: absolute; left: 0; top: 0; width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(140deg, var(--g1), var(--g2)); }
+
+  @media (max-width: 440px) {
+    .chat { height: 520px; border-radius: 26px; }
+    .comp { border-radius: 0 0 26px 26px; }
+    .voice { width: 228px; }
+    .src span { display: none; }
+  }
+  @media (max-height: 560px) { .chat { height: calc(100dvh - 32px); min-height: 420px; } }
+  @media (prefers-reduced-motion: reduce) {
+    .bokeh, .chat, .rdot, .slide, .lockpill .chev, .typing i { animation: none !important; }
+    .mic, .mic svg, .lockpill, .field, .toast { transition-duration: 0.01s !important; }
+    .comp.recording:not(.locked) .mic { transform: none; }
+    .fx { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <span class="bokeh" style="width:280px;height:280px;left:8%;top:10%" aria-hidden="true"></span>
+    <span class="bokeh b2" style="width:340px;height:340px;right:6%;bottom:6%" aria-hidden="true"></span>
+    <span class="bokeh" style="width:160px;height:160px;right:20%;top:16%" aria-hidden="true"></span>
+    <section class="chat" aria-label="Chat with Zara">
+      <header class="head">
+        <span class="av" aria-hidden="true">ZR</span>
+        <div><b>Zara Rizvi</b><small id="presence">online · Karachi</small></div>
+        <button class="src" id="src" type="button" aria-pressed="false" title="Record with your own microphone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg><span id="srcText">Demo voice</span></button>
+      </header>
+      <div class="thread" id="thread" aria-live="polite" aria-relevant="additions">
+        <span class="day">Today</span>
+        <div class="msg in">Are you coming to the mehndi tonight?<span class="t">7:42 PM</span></div>
+      </div>
+      <div class="comp" id="comp">
+        <label class="sr-only" for="field">Message</label>
+        <input class="field" id="field" placeholder="Message" autocomplete="off" />
+        <div class="rec" aria-hidden="true">
+          <button class="ibtn bin" id="del" type="button" aria-label="Delete recording" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg></button>
+          <span class="rdot"></span><span class="timer" id="timer">0:00</span>
+          <canvas class="live" id="live"></canvas>
+          <span class="slide" id="slide">Slide to cancel</span>
+        </div>
+        <span class="lockpill" id="lockpill" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2" /><path id="shackle" d="M8 11V8a4 4 0 0 1 8 0v3" /></svg><svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m3 7.5 3-3 3 3" /></svg></span>
+        <button class="mic" id="mic" type="button" aria-label="Record a voice note. Hold, or press to start">
+          <span class="ripple"></span><span class="ripple r2"></span>
+          <svg class="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+          <svg class="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+        </button>
+      </div>
+    </section>
+    <div class="toast" id="toast" role="status"></div>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+    <div class="fx" id="fx" aria-hidden="true"></div>
+  </main>
+
+<script>
+  // ---------- Hum Note: hold to record a voice note, slide to cancel, lift to lock, release to send ----------
+  const $ = (s) => document.querySelector(s);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const SPRING = window.CSS && CSS.supports && CSS.supports("transition-timing-function", "linear(0, 1)")
+    ? "linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077 24.3%, 1.104 27.8%, 1.107 31.2%, 1.096, 1.073 38.1%, 1.017 47.1%, 0.996 55.4%, 0.991 61.4%, 1 80%, 1)"
+    : "cubic-bezier(.34, 1.56, .64, 1)";
+  function play(el, frames, opts) {
+    if (calm() || !el || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  const say = (t) => { $("#status").textContent = t; };
+  let toastT = 0;
+  function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("show"), 2600); }
+  const clock = (s) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+  const timeNow = () => new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+
+  const thread = $("#thread"), comp = $("#comp"), mic = $("#mic"), field = $("#field"), fx = $("#fx");
+  const live = $("#live"), lctx = live.getContext("2d");
+  const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.9l10-6.5a1 1 0 0 0 0-1.7l-10-6.5A1 1 0 0 0 8 5.5Z" /></svg>';
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4.2" height="14" rx="1.4" /><rect x="13.8" y="5" width="4.2" height="14" rx="1.4" /></svg>';
+  const TICKS = '<span class="ticks" aria-hidden="true"><svg class="t0" viewBox="0 0 18 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="6" r="4.4" /><path d="M9 3.6V6l1.6 1" /></svg><svg class="t1" viewBox="0 0 18 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:0"><path d="m2 6.5 3 3 6-7" /></svg><svg class="t2" viewBox="0 0 18 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:0"><path d="m2 6.5 3 3 6-7M8 9.5l6-7" /></svg></span>';
+
+  // ---------- A pretend voice: syllables of louder bars with short gaps ----------
+  function demoLevels(n, seed) {
+    let s = seed || 7;
+    const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    const out = [];
+    while (out.length < n) {
+      const len = 3 + Math.floor(rnd() * 5), peak = 0.45 + rnd() * 0.55;
+      for (let k = 0; k < len && out.length < n; k++) out.push(Math.max(0.12, peak * Math.sin((Math.PI * (k + 0.5)) / len) * (0.75 + rnd() * 0.25)));
+      for (let k = 0, gap = 1 + Math.floor(rnd() * 2); k < gap && out.length < n; k++) out.push(0.08 + rnd() * 0.08);
+    }
+    return out;
+  }
+  const resample = (arr, n) => Array.from({ length: n }, (_, i) => { const a = Math.floor((i / n) * arr.length), b = Math.max(a + 1, Math.floor(((i + 1) / n) * arr.length)); let m = 0; for (let k = a; k < b && k < arr.length; k++) m = Math.max(m, arr[k]); return Math.max(0.1, m); });
+
+  // ---------- Voice bubbles with play, scrub and speed ----------
+  const BARS = 30;
+  let current = null; // the bubble that is playing
+  function voiceBubble(note, fresh) {
+    const el = document.createElement("div");
+    el.className = "msg out voice";
+    el.innerHTML = '<button class="pp" type="button">' + ICON_PLAY + '</button><div class="wave" tabindex="0" role="slider" aria-valuemin="0"></div><div class="vmeta"><span class="time"></span><button class="speed" type="button" aria-label="Playback speed 1 times">1×</button><span class="t"></span>' + TICKS + '</div><span class="react" aria-hidden="true"><svg viewBox="0 0 24 24" fill="#ff3d6e"><path d="M12 21s-7.5-4.6-9.4-9.3C1.2 8.2 3.4 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.6 0 5.8 3.7 4.4 7.2C19.5 16.4 12 21 12 21Z" /></svg></span>';
+    const wave = el.querySelector(".wave");
+    note.levels.forEach((h) => { const i = document.createElement("i"); i.style.setProperty("--h", Math.min(1, h).toFixed(2)); wave.appendChild(i); });
+    const dot = document.createElement("span"); dot.className = "head-dot"; wave.appendChild(dot);
+    el.querySelector(".t").textContent = note.at || timeNow();
+    const b = { el, note, pos: 0, speed: 1, playing: false };
+    el._b = b;
+    paintBubble(b);
+    el.querySelector(".pp").addEventListener("click", () => toggle(b, true));
+    el.querySelector(".speed").addEventListener("click", (e) => { const btn = e.currentTarget; b.speed = b.speed === 1 ? 1.5 : b.speed === 1.5 ? 2 : 1; btn.textContent = b.speed + "×"; btn.setAttribute("aria-label", "Playback speed " + b.speed + " times"); if (b.audio) b.audio.playbackRate = b.speed; play(btn, [{ transform: "scale(.8)" }, { transform: "scale(1.15)" }, { transform: "none" }], { duration: 360 }); });
+    // scrub with pointer or arrow keys
+    const seek = (e) => { const r = wave.getBoundingClientRect(); b.pos = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * note.dur; if (b.audio) b.audio.currentTime = b.pos; paintBubble(b); };
+    wave.addEventListener("pointerdown", (e) => { wave.setPointerCapture(e.pointerId); seek(e); wave._drag = true; });
+    wave.addEventListener("pointermove", (e) => { if (wave._drag) seek(e); });
+    wave.addEventListener("pointerup", () => { wave._drag = false; });
+    wave.addEventListener("keydown", (e) => {
+      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (!d) { if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggle(b, true); } return; }
+      e.preventDefault(); b.pos = Math.max(0, Math.min(note.dur, b.pos + d)); if (b.audio) b.audio.currentTime = b.pos; paintBubble(b);
+    });
+    return el;
+  }
+  function paintBubble(b) {
+    const p = b.note.dur ? b.pos / b.note.dur : 0;
+    const bars = b.el.querySelectorAll(".wave i");
+    bars.forEach((i, k) => i.classList.toggle("on", (k + 0.5) / bars.length <= p));
+    b.el.querySelector(".head-dot").style.left = p * 100 + "%";
+    b.el.querySelector(".time").textContent = b.playing || b.pos ? clock(b.pos) + " / " + clock(b.note.dur) : clock(b.note.dur);
+    const w = b.el.querySelector(".wave");
+    w.setAttribute("aria-valuemax", Math.round(b.note.dur));
+    w.setAttribute("aria-valuenow", Math.round(b.pos));
+    w.setAttribute("aria-valuetext", clock(b.pos) + " of " + clock(b.note.dur));
+    w.setAttribute("aria-label", "Position in voice note");
+    const pp = b.el.querySelector(".pp");
+    pp.innerHTML = b.playing ? ICON_PAUSE : ICON_PLAY;
+    pp.setAttribute("aria-label", (b.playing ? "Pause" : "Play") + " voice note, " + clock(b.note.dur));
+  }
+  let raf = 0, lastT = 0;
+  function toggle(b, byUser) {
+    if (b.playing) { stopPlay(b); return; }
+    if (current && current !== b) stopPlay(current);
+    current = b; b.playing = true;
+    if (b.pos >= b.note.dur - 0.05) b.pos = 0;
+    if (b.note.url) {
+      b.audio = b.audio || new Audio(b.note.url);
+      b.audio.playbackRate = b.speed; b.audio.currentTime = b.pos;
+      b.audio.play().catch(() => {});
+    } else if (byUser) hum.start();
+    paintBubble(b);
+    play(b.el.querySelector(".pp"), [{ transform: "scale(.8)" }, { transform: "scale(1.12)" }, { transform: "none" }], { duration: 380 });
+    lastT = performance.now();
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(tick);
+    say("Playing voice note");
+  }
+  function tick(now) {
+    const b = current;
+    if (!b || !b.playing) return;
+    const dt = (now - lastT) / 1000; lastT = now;
+    b.pos = b.audio && !b.audio.paused ? b.audio.currentTime : Math.min(b.note.dur, b.pos + dt * b.speed);
+    const lv = b.note.levels[Math.min(b.note.levels.length - 1, Math.floor((b.pos / b.note.dur) * b.note.levels.length))] || 0;
+    hum.follow(lv, b.pos);
+    paintBubble(b);
+    if (b.pos >= b.note.dur - 0.02) { b.pos = b.note.dur; stopPlay(b); b.pos = 0; paintBubble(b); return; }
+    raf = requestAnimationFrame(tick);
+  }
+  function stopPlay(b) {
+    b.playing = false;
+    if (b.audio) b.audio.pause();
+    hum.stop();
+    paintBubble(b);
+    if (current === b) current = null;
+  }
+
+  // A soft hum that follows the bars when you play a demo note (only after you press Play)
+  const hum = (() => {
+    let ac = null, osc = null, gain = null;
+    const NOTES = [220, 247, 277, 330, 370, 440];
+    return {
+      start() {
+        try {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          ac = ac || new AC();
+          if (ac.state === "suspended") ac.resume();
+          this.stop();
+          osc = ac.createOscillator(); osc.type = "triangle";
+          const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900;
+          gain = ac.createGain(); gain.gain.value = 0;
+          osc.connect(lp).connect(gain).connect(ac.destination);
+          osc.start();
+        } catch (e) { osc = null; }
+      },
+      follow(lv, t) {
+        if (!osc || !ac) return;
+        gain.gain.setTargetAtTime(lv > 0.2 ? lv * 0.06 : 0, ac.currentTime, 0.03);
+        osc.frequency.setTargetAtTime(NOTES[Math.floor(t * 2.2) % NOTES.length] * (1 + Math.sin(t * 30) * 0.004), ac.currentTime, 0.05);
+      },
+      stop() {
+        if (!osc) return;
+        try { gain.gain.setTargetAtTime(0, ac.currentTime, 0.02); osc.stop(ac.currentTime + 0.15); } catch (e) { /* already stopped */ }
+        osc = null;
+      }
+    };
+  })();
+
+  // Starter bubbles
+  function addIn(text) { const m = document.createElement("div"); m.className = "msg in"; m.textContent = text; const t = document.createElement("span"); t.className = "t"; t.textContent = timeNow(); m.appendChild(t); thread.appendChild(m); scrollDown(); return m; }
+  function scrollDown() { thread.scrollTo({ top: thread.scrollHeight, behavior: calm() ? "auto" : "smooth" }); }
+  function trim() { const items = thread.querySelectorAll(".msg, .typing"); if (items.length > 7) items[0].remove(); }
+  (function () {
+    const first = voiceBubble({ levels: resample(demoLevels(80, 11), BARS), dur: 6, at: "7:44 PM" });
+    first.querySelector(".ticks").classList.add("blue");
+    first.querySelectorAll(".ticks svg").forEach((s, k) => { s.style.opacity = k === 2 ? "1" : "0"; });
+    thread.appendChild(first);
+    const m = document.createElement("div"); m.className = "msg in"; m.innerHTML = 'Send me the hall address on a voice note please<span class="t">7:46 PM</span>'; thread.appendChild(m);
+    const r = document.createElement("div"); r.className = "msg out"; r.innerHTML = 'Sure, recording it now<span class="t">7:47 PM</span>' + TICKS; thread.appendChild(r);
+    r.querySelector(".ticks").classList.add("blue");
+    r.querySelectorAll(".ticks svg").forEach((s, k) => { s.style.opacity = k === 2 ? "1" : "0"; });
+  })();
+
+  // ---------- Recording ----------
+  const src = $("#src");
+  let useMic = false, stream = null, analyser = null, recorder = null, chunks = [];
+  const inFrame = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+  src.addEventListener("click", async (e) => {
+    const btn = e.currentTarget; // keep it before the await
+    if (useMic) { useMic = false; btn.setAttribute("aria-pressed", "false"); $("#srcText").textContent = "Demo voice"; toast("Using the demo voice"); return; }
+    if (inFrame || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) { toast("Open this page full screen to use your microphone"); say("The microphone works when the page is open on its own"); return; }
+    try {
+      stream = stream || await navigator.mediaDevices.getUserMedia({ audio: true });
+      useMic = true;
+      btn.setAttribute("aria-pressed", "true");
+      $("#srcText").textContent = "My mic";
+      toast("Your microphone is on for the next note");
+    } catch (err) {
+      toast("Microphone blocked, using the demo voice");
+      say("Microphone blocked, using the demo voice");
+    }
+  });
+
+  let rec = null; // { mode: 'hold'|'locked', t0, levels, demoSeed, timer }
+  let downAt = 0, sx = 0, sy = 0;
+  function startRec(mode) {
+    if (rec || busy) return;
+    rec = { mode, t0: performance.now(), levels: [], seed: 3 + Math.floor(Math.random() * 1000), real: false };
+    drawLive.cols = null;
+    stopDemoPlayback();
+    comp.classList.add("recording");
+    comp.classList.toggle("locked", mode === "locked");
+    $("#del").tabIndex = mode === "locked" ? 0 : -1;
+    $("#presence").textContent = "recording audio…"; $("#presence").classList.add("live");
+    mic.setAttribute("aria-label", mode === "locked" ? "Send voice note" : "Release to send");
+    if (useMic && stream && window.MediaRecorder) {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        const ac = new AC();
+        analyser = ac.createAnalyser(); analyser.fftSize = 512;
+        ac.createMediaStreamSource(stream).connect(analyser);
+        rec.ac = ac;
+        chunks = [];
+        recorder = new MediaRecorder(stream);
+        recorder.ondataavailable = (ev) => { if (ev.data && ev.data.size) chunks.push(ev.data); };
+        recorder.start();
+        rec.real = true;
+      } catch (e) { rec.real = false; }
+    }
+    sizeLive();
+    say(mode === "locked" ? "Recording. Press Send when you are done, or Delete." : "Recording. Release to send, slide left to cancel, slide up to lock.");
+    rec.loop = requestAnimationFrame(recTick);
+  }
+  const demoStream = demoLevels(2000, 5);
+  function recTick(now) {
+    if (!rec) return;
+    const t = (now - rec.t0) / 1000;
+    let lv;
+    if (rec.real && analyser) {
+      const buf = new Uint8Array(analyser.fftSize);
+      analyser.getByteTimeDomainData(buf);
+      let sum = 0; for (const v of buf) sum += ((v - 128) / 128) ** 2;
+      lv = Math.min(1, Math.sqrt(sum / buf.length) * 4.5);
+    } else lv = demoStream[(Math.floor(t * 12) + rec.seed) % demoStream.length] * (0.85 + Math.random() * 0.15);
+    if (rec.levels.length < Math.floor(t * 12) + 1) rec.levels.push(lv);
+    $("#timer").textContent = clock(t);
+    comp.style.setProperty("--lv", (1 + lv * 0.5).toFixed(3));
+    drawLive(rec.levels);
+    if (t >= 60) { sendRec(); return; }
+    rec.loop = requestAnimationFrame(recTick);
+  }
+  function sizeLive() { const d = Math.min(2, devicePixelRatio || 1); live.width = Math.max(10, live.clientWidth * d); live.height = live.clientHeight * d; lctx.setTransform(d, 0, 0, d, 0, 0); }
+  function drawLive(levels) {
+    const w = live.clientWidth, h = live.clientHeight, step = 4;
+    lctx.clearRect(0, 0, w, h);
+    const n = Math.floor(w / step);
+    if (!drawLive.cols) { const cs = getComputedStyle(document.documentElement); drawLive.cols = [cs.getPropertyValue("--g1").trim() || "#d6249f", cs.getPropertyValue("--g2").trim() || "#7b2ff7"]; }
+    const g = lctx.createLinearGradient(0, 0, w, 0);
+    g.addColorStop(0, drawLive.cols[0]);
+    g.addColorStop(1, drawLive.cols[1]);
+    lctx.fillStyle = g;
+    for (let i = 0; i < n; i++) {
+      const v = levels[levels.length - n + i];
+      if (v === undefined) continue;
+      const bh = Math.max(3, v * h);
+      lctx.beginPath();
+      lctx.roundRect ? lctx.roundRect(i * step, (h - bh) / 2, 2.6, bh, 1.3) : lctx.rect(i * step, (h - bh) / 2, 2.6, bh);
+      lctx.fill();
+    }
+  }
+  function endRecUi() {
+    comp.classList.remove("recording", "locked");
+    comp.style.removeProperty("--lv");
+    $("#lockpill").style.removeProperty("--ly");
+    $("#slide").style.transform = "";
+    $("#del").tabIndex = -1;
+    $("#presence").textContent = "online · Karachi"; $("#presence").classList.remove("live");
+    mic.setAttribute("aria-label", "Record a voice note. Hold, or press to start");
+    $("#timer").textContent = "0:00";
+  }
+  // Stops the real recorder of recording r (if any) and gives back its audio as a Blob
+  function stopRecorder(r) {
+    return new Promise((res) => {
+      const done = (b) => { if (r.ac) r.ac.close().catch(() => {}); r.ac = null; res(b); };
+      if (!r.real || !recorder || recorder.state === "inactive") { done(null); return; }
+      recorder.onstop = () => done(chunks.length ? new Blob(chunks, { type: recorder.mimeType || "audio/webm" }) : null);
+      try { recorder.stop(); } catch (e) { done(null); }
+    });
+  }
+
+  // Release: the live waveform squeezes into a bubble that flies up into the thread
+  let busy = false;
+  async function sendRec() {
+    if (!rec) return;
+    const r = rec; rec = null;
+    cancelAnimationFrame(r.loop);
+    const dur = Math.max(0.6, (performance.now() - r.t0) / 1000);
+    if (dur < 0.8 && !r.forced) { endRecUi(); await stopRecorder(r); toast("Hold a little longer to record"); return; }
+    busy = true;
+    const blobP = stopRecorder(r);
+    const from = live.getBoundingClientRect();
+    // 1. Anticipation: the orb squashes
+    play(mic, [{ transform: "scale(1.55)" }, { transform: "scale(1.2, 1.7)" }, { transform: "scale(1)" }], { duration: 360, easing: "ease-out" });
+    endRecUi();
+    const blob = await blobP;
+    const note = { levels: resample(r.levels.length ? r.levels : [0.3], BARS), dur, url: blob ? URL.createObjectURL(blob) : "" };
+    // 2. Main: the bubble flies from the composer to its place
+    const el = voiceBubble(note, true);
+    thread.appendChild(el);
+    trim();
+    thread.scrollTop = thread.scrollHeight;
+    const to = el.getBoundingClientRect();
+    el.style.transformOrigin = "0 0";
+    await play(el, [
+      { transform: "translate(" + (from.left - to.left) + "px," + (from.top - to.top) + "px) scale(" + Math.max(0.3, from.width / to.width) + "," + Math.max(0.3, from.height / to.height) + ")", opacity: 0.6, borderRadius: "12px" },
+      { transform: "none", opacity: 1, borderRadius: "18px 18px 6px 18px" }
+    ], { duration: 640, easing: SPRING });
+    el.style.transformOrigin = "";
+    el.querySelectorAll(".wave i").forEach((i, k) => play(i, [{ transform: "scaleY(.1)" }, { transform: "scaleY(1.3)" }, { transform: "none" }], { duration: 420, delay: k * 14, easing: "ease-out" }));
+    say("Voice note sent, " + clock(dur));
+    busy = false;
+    // 3. Progress: clock, then one tick, two ticks, then blue when Zara listens
+    await ticks(el);
+    // 4. Finish: Zara reacts with a heart (and sometimes replies)
+    reactTo(el);
+    if (demoOn) queueDemo(2600);
+  }
+  async function ticks(el) {
+    const t = el.querySelectorAll(".ticks svg"), box = el.querySelector(".ticks");
+    const show = (k) => t.forEach((s, j) => { s.style.opacity = j === k ? "1" : "0"; });
+    await wait(calm() ? 200 : 520); show(1); play(t[1], [{ transform: "scale(.4)" }, { transform: "none" }], { duration: 300, easing: SPRING });
+    await wait(calm() ? 200 : 600); show(2); play(t[2], [{ transform: "scale(.4)" }, { transform: "none" }], { duration: 300, easing: SPRING });
+    await wait(calm() ? 300 : 1100); box.classList.add("blue");
+  }
+  let replies = 0;
+  async function reactTo(el) {
+    const heart = el.querySelector(".react");
+    heart.style.transform = "scale(1)";
+    play(heart, [{ transform: "scale(0) rotate(-30deg)" }, { transform: "scale(1.35) rotate(8deg)" }, { transform: "scale(1)" }], { duration: 620, easing: SPRING });
+    if (replies++ % 2) return;
+    await wait(500);
+    const typing = document.createElement("div");
+    typing.className = "typing"; typing.innerHTML = "<i></i><i></i><i></i>";
+    typing.setAttribute("aria-label", "Zara is typing");
+    thread.appendChild(typing); trim(); scrollDown();
+    await wait(calm() ? 400 : 1300);
+    typing.remove();
+    const m = addIn("Got it, thank you! See you there");
+    play(m, [{ transform: "translateY(12px) scale(.9)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 480, easing: SPRING });
+    trim();
+  }
+
+  // Slide left: the recording rolls into a bin that opens, gulps and sinks
+  async function cancelRec() {
+    if (!rec) return;
+    const r = rec; rec = null;
+    cancelAnimationFrame(r.loop);
+    await stopRecorder(r);
+    const lr = live.getBoundingClientRect(), cr = comp.getBoundingClientRect();
+    endRecUi();
+    say("Voice note deleted");
+    if (calm()) { toast("Recording deleted"); if (demoOn) queueDemo(2200); return; }
+    busy = true;
+    const bin = document.createElement("div");
+    bin.className = "trash";
+    bin.innerHTML = '<svg viewBox="0 0 34 40" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="lid"><path d="M3 9h28M12 9V5h10v4" /></g><path d="M6 13l2 23h18l2-23M13 18v13M21 18v13" /></svg>';
+    const bx = cr.left + 18, by = cr.top + cr.height / 2 - 20;
+    fx.appendChild(bin);
+    const blob = document.createElement("i");
+    blob.className = "blob";
+    fx.appendChild(blob);
+    play(bin, [{ transform: "translate(" + bx + "px," + (by + 40) + "px) scale(.5)", opacity: 0 }, { transform: "translate(" + bx + "px," + by + "px) scale(1)", opacity: 1 }], { duration: 420, easing: SPRING, fill: "forwards" });
+    play(bin.querySelector(".lid"), [{ transform: "rotate(0)" }, { transform: "rotate(-40deg)" }], { duration: 300, delay: 300, fill: "forwards" });
+    await blob.animate([
+      { transform: "translate(" + (lr.left + lr.width / 2) + "px," + (lr.top + 8) + "px) scale(2.2,.6)", opacity: 1 },
+      { transform: "translate(" + (lr.left + lr.width / 3) + "px," + (by - 40) + "px) scale(1)", opacity: 1, offset: 0.5 },
+      { transform: "translate(" + (bx + 8) + "px," + (by + 8) + "px) scale(.5)", opacity: 1 }
+    ], { duration: 700, delay: 260, easing: "cubic-bezier(.4,0,.6,1)", fill: "both" }).finished.catch(() => {});
+    blob.remove();
+    play(bin.querySelector(".lid"), [{ transform: "rotate(-40deg)" }, { transform: "rotate(0)" }], { duration: 260, fill: "forwards" });
+    await play(bin, [{ transform: "translate(" + bx + "px," + by + "px) rotate(0)" }, { transform: "translate(" + bx + "px," + by + "px) rotate(-10deg)" }, { transform: "translate(" + bx + "px," + by + "px) rotate(8deg)" }, { transform: "translate(" + bx + "px," + by + "px) rotate(0)" }], { duration: 380, delay: 200 });
+    await play(bin, [{ transform: "translate(" + bx + "px," + by + "px)", opacity: 1 }, { transform: "translate(" + bx + "px," + (by + 46) + "px)", opacity: 0 }], { duration: 380, easing: "ease-in" });
+    bin.remove();
+    busy = false;
+    if (demoOn) queueDemo(2200);
+  }
+
+  function lockRec() {
+    if (!rec || rec.mode === "locked") return;
+    rec.mode = "locked";
+    comp.classList.add("locked");
+    $("#del").tabIndex = 0;
+    mic.setAttribute("aria-label", "Send voice note");
+    play($("#shackle"), [{ transform: "translateY(-2px)" }, { transform: "none" }], { duration: 200 });
+    say("Recording locked. Press Send when you are done.");
+  }
+
+  // Pointer: hold to record; slide left to cancel; slide up to lock; a quick tap starts a locked recording
+  mic.addEventListener("pointerdown", (e) => {
+    if (busy) return;
+    if (field.value.trim()) return; // the button is a text Send right now
+    if (rec && rec.mode === "locked") return; // handled by click
+    e.preventDefault();
+    try { mic.setPointerCapture(e.pointerId); } catch (err) { /* fine */ }
+    downAt = performance.now(); sx = e.clientX; sy = e.clientY;
+    startRec("hold");
+  });
+  mic.addEventListener("pointermove", (e) => {
+    if (!rec || rec.mode !== "hold") return;
+    const dx = Math.min(0, e.clientX - sx), dy = Math.min(0, e.clientY - sy);
+    $("#slide").style.transform = "translateX(" + dx * 0.8 + "px)";
+    $("#lockpill").style.setProperty("--ly", Math.max(-40, dy * 0.5) + "px");
+    if (dx < -90) cancelRec();
+    else if (dy < -70) lockRec();
+  });
+  mic.addEventListener("pointerup", () => {
+    if (!rec || rec.mode !== "hold") return;
+    if (performance.now() - downAt < 320) lockRec(); // a tap: keep recording hands-free
+    else sendRec();
+  });
+  mic.addEventListener("pointercancel", () => { if (rec && rec.mode === "hold") cancelRec(); });
+  mic.addEventListener("click", (e) => {
+    if (field.value.trim()) { sendText(); return; }
+    if (rec && rec.mode === "locked" && e.detail !== 0 && performance.now() - downAt < 400) return; // the tap that just locked it
+    if (rec && rec.mode === "locked") { rec.forced = true; sendRec(); return; }
+    if (e.detail === 0 && !rec) startRec("locked"); // keyboard
+  });
+  $("#del").addEventListener("click", () => cancelRec());
+
+  // Typing turns the mic into a Send arrow
+  field.addEventListener("input", () => mic.classList.toggle("text", !!field.value.trim()));
+  field.addEventListener("keydown", (e) => { if (e.key === "Enter" && field.value.trim()) { e.preventDefault(); sendText(); } });
+  function sendText() {
+    const text = field.value.trim();
+    if (!text) return;
+    const m = document.createElement("div");
+    m.className = "msg out"; m.textContent = text;
+    const t = document.createElement("span"); t.className = "t"; t.textContent = timeNow();
+    m.appendChild(t);
+    m.insertAdjacentHTML("beforeend", TICKS);
+    thread.appendChild(m); trim(); scrollDown();
+    play(m, [{ transform: "translateY(30px) scale(.8)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 520, easing: SPRING });
+    field.value = ""; mic.classList.remove("text");
+    ticks(m).then(() => reactTo(m.querySelector(".react") ? m : addReact(m)));
+    say("Message sent");
+  }
+  function addReact(m) { m.insertAdjacentHTML("beforeend", '<span class="react" aria-hidden="true"><svg viewBox="0 0 24 24" fill="#ff3d6e"><path d="M12 21s-7.5-4.6-9.4-9.3C1.2 8.2 3.4 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.6 0 5.8 3.7 4.4 7.2C19.5 16.4 12 21 12 21Z" /></svg></span>'); return m; }
+  addEventListener("resize", () => { if (rec) sizeLive(); });
+
+  // ---------- Auto-demo: record and send, play a note at 1.5x, record and slide to cancel ----------
+  let demoOn = true, demoTimer = 0, round = 0;
+  let demoRec = null, demoNote = null;
+  function stopDemo() {
+    if (!demoOn) return;
+    demoOn = false; clearTimeout(demoTimer);
+    // a recording or playback the demo started ends quietly, so your own press starts fresh
+    if (rec && rec === demoRec) { const r = rec; rec = null; cancelAnimationFrame(r.loop); endRecUi(); }
+    if (demoNote && demoNote.playing) stopPlay(demoNote);
+  }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) => window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  function queueDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(runDemo, ms); }
+  function stopDemoPlayback() { if (current) stopPlay(current); }
+  async function runDemo() {
+    if (!demoOn || busy || rec) return;
+    const step = round++ % 3;
+    if (step === 0 || step === 2) {
+      startRec("hold");
+      demoRec = rec;
+      const len = step === 0 ? 2600 : 1500;
+      if (step === 2) {
+        // slide the hint left like a thumb would
+        const t0 = performance.now();
+        await wait(700);
+        while (demoOn && rec === demoRec && performance.now() - t0 < len) { const k = (performance.now() - t0 - 700) / (len - 700); $("#slide").style.transform = "translateX(" + -k * 110 + "px)"; await wait(30); }
+        if (demoOn && rec && rec === demoRec) cancelRec();
+      } else {
+        await wait(len);
+        if (demoOn && rec && rec === demoRec) { rec.forced = true; sendRec(); }
+      }
+    } else {
+      const notes = thread.querySelectorAll(".voice");
+      const b = notes[notes.length - 1] && notes[notes.length - 1]._b;
+      if (!b) { queueDemo(1000); return; }
+      demoNote = b;
+      toggle(b, false);
+      await wait(1200);
+      if (demoOn && b.playing) b.el.querySelector(".speed").click();
+      await wait(2600);
+      if (!demoOn) return;
+      if (b.playing) stopPlay(b);
+      if (b.speed !== 1) { b.speed = 1; b.el.querySelector(".speed").textContent = "1×"; }
+      b.pos = 0; paintBubble(b);
+      demoNote = null;
+      queueDemo(1800);
+    }
+  }
+  queueDemo(900);
+</script>
+</body>
+</html>

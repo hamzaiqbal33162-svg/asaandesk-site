@@ -1,0 +1,591 @@
+<!doctype html>
+<!-- Chill & Craft · Front Row · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Front Row · event ticket card that prints itself</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: lilac hall + ivory ticket (light), midnight hall + ink ticket (dark) ---------- */
+  :root {
+    --bg: #ebe5f5; --bg-2: #f8f4ff; --beam: rgba(255, 214, 140, 0.32);
+    --paper: #fffaf0; --paper-2: #f6eedd; --ink: #1d1a4f; --muted: #6c6890; --line: rgba(29, 26, 79, 0.14); --perf: rgba(29, 26, 79, 0.25);
+    --rose: #e0457b; --rose-2: #ff7aa2; --gold: #e3a93c; --gold-2: #ffd27a; --good: #18a173;
+    --sky1: #2a2366; --sky2: #6b3f8f; --sky3: #f08a7a; --sil: #1a1440; --glow: #ffc96b; --moon: #fff1c9;
+    --zone: rgba(29, 26, 79, 0.1); --zone-on: #e0457b; --shadow: rgba(40, 20, 90, 0.35); --focus: #e0457b;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #09081a; --bg-2: #17143a; --beam: rgba(255, 190, 110, 0.16);
+    --paper: #18153a; --paper-2: #221e4c; --ink: #f3efff; --muted: #a7a2cf; --line: rgba(255, 255, 255, 0.1); --perf: rgba(255, 255, 255, 0.22);
+    --rose: #ff5c8f; --rose-2: #ff8db0; --gold: #f0b54a; --gold-2: #ffd98a; --good: #3fd39c;
+    --sky1: #0b0a24; --sky2: #2a1d5c; --sky3: #7a3a6e; --sil: #050414; --glow: #ffb347; --moon: #ffe9b0;
+    --zone: rgba(255, 255, 255, 0.09); --zone-on: #ff5c8f; --shadow: rgba(0, 0, 0, 0.75); --focus: #ffd98a;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: radial-gradient(90% 70% at 50% 0%, var(--bg-2), var(--bg) 70%); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 3px; }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- Stage: two slow spotlights sweep the hall ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 26px 16px; overflow: hidden; overflow: clip; }
+  .beam { position: absolute; top: -10vh; width: 34vmax; height: 130vh; background: linear-gradient(180deg, var(--beam), transparent 75%); clip-path: polygon(44% 0, 56% 0, 100% 100%, 0 100%); transform-origin: 50% 0; pointer-events: none; filter: blur(6px); animation: sweep 11s ease-in-out infinite alternate; }
+  .beam.l { left: 4%; transform: rotate(-24deg); }
+  .beam.r { right: 4%; transform: rotate(24deg); animation-delay: -5.5s; animation-name: sweep-r; }
+  @keyframes sweep { from { transform: rotate(-30deg); } to { transform: rotate(-8deg); } }
+  @keyframes sweep-r { from { transform: rotate(30deg); } to { transform: rotate(8deg); } }
+
+  /* the ticket sways a little when idle and tilts toward your pointer */
+  .scene { position: relative; perspective: 1400px; animation: rise 1s cubic-bezier(0.2, 0.9, 0.3, 1.12) backwards; }
+  @keyframes rise { from { opacity: 0; transform: translateY(50px) scale(0.94); } }
+  .sway { transform-style: preserve-3d; animation: sway 9s ease-in-out infinite; }
+  .scene:hover .sway, .scene.held .sway { animation-play-state: paused; }
+  @keyframes sway { 0%, 100% { transform: rotateY(-4deg) rotateX(2deg); } 50% { transform: rotateY(4deg) rotateX(-1.5deg); } }
+  .tilt { transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2); filter: drop-shadow(0 30px 34px var(--shadow)) drop-shadow(0 6px 8px var(--shadow)); }
+  .tilt.shake { animation: thump 0.38s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  @keyframes thump { 30% { transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(5px) scale(0.985); } }
+
+  /* ---------- Ticket: notches cut with a mask at the perforation line ---------- */
+  .ticket {
+    --cut: 260px; position: relative; width: min(400px, calc(100vw - 32px)); border-radius: 22px; background: var(--paper); overflow: hidden;
+    -webkit-mask: radial-gradient(circle 13px at 0 var(--cut), #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 13px at 100% var(--cut), #0000 97%, #000) right / 51% 100% no-repeat;
+    mask: radial-gradient(circle 13px at 0 var(--cut), #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 13px at 100% var(--cut), #0000 97%, #000) right / 51% 100% no-repeat;
+  }
+  .glare { position: absolute; inset: 0; z-index: 5; pointer-events: none; background: radial-gradient(60% 45% at var(--gx, 30%) var(--gy, 10%), rgba(255, 255, 255, 0.28), transparent 70%); mix-blend-mode: soft-light; transition: opacity 0.4s; }
+
+  /* art: night sky, crescent, string lights and a glowing arcade */
+  .art { position: relative; height: 168px; overflow: hidden; }
+  .art svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .art::after { /* a dusk scrim so the title reads over the lit arches */ content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, transparent 38%, rgba(10, 6, 34, 0.55) 70%, rgba(10, 6, 34, 0.8)); }
+  .title, .holo { z-index: 1; }
+  .star { animation: twinkle 3s ease-in-out infinite; }
+  @keyframes twinkle { 50% { opacity: 0.2; } }
+  .lights { transform-origin: 200px 0; animation: lights 6s ease-in-out infinite; }
+  @keyframes lights { 50% { transform: rotate(0.8deg) translateY(1px); } }
+  .bulb { animation: bulb 2.2s ease-in-out infinite; }
+  .printing .bulb { animation-duration: 0.35s; }
+  @keyframes bulb { 50% { opacity: 0.45; } }
+  .win { animation: flicker 4s ease-in-out infinite; }
+  @keyframes flicker { 0%, 100% { opacity: 1; } 47% { opacity: 0.85; } 50% { opacity: 0.6; } 53% { opacity: 0.9; } }
+  .title { position: absolute; left: 20px; right: 92px; bottom: 14px; color: #fff; }
+  .kicker { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-2); }
+  .kicker i { width: 6px; height: 6px; border-radius: 50%; background: var(--rose-2); box-shadow: 0 0 0 0 var(--rose-2); animation: onair 1.8s ease-out infinite; }
+  @keyframes onair { to { box-shadow: 0 0 0 7px transparent; } }
+  h1 { margin: 0; font-size: 23px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 830; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45); }
+  /* holographic sticker: its colours shift with the tilt */
+  .holo { position: absolute; right: 16px; bottom: 14px; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; text-align: center;
+    background: conic-gradient(from calc(var(--hx, 0) * 1deg), #ff8ad8, #8ae6ff, #c4ff8a, #ffe08a, #ff8ad8); color: #2a1f5c; font-size: 9px; font-weight: 900; letter-spacing: 0.08em; line-height: 1.15;
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6), 0 6px 16px -6px rgba(0, 0, 0, 0.5); animation: holo 7s linear infinite; }
+  .holo::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.75) 48%, transparent 62%) -120% 0 / 240% 100% no-repeat; animation: glint 4.5s ease-in-out infinite 1s; }
+  .holo b { display: block; font-size: 15px; letter-spacing: 0; }
+  @keyframes holo { to { filter: hue-rotate(360deg); } }
+  @keyframes glint { 0%, 55% { background-position: -120% 0; } 100% { background-position: 120% 0; } }
+
+  .info { display: grid; grid-template-columns: 1.05fr 0.8fr 1.3fr; gap: 10px; padding: 14px 20px 10px; }
+  .info small, .lab { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .info b { display: block; margin-top: 3px; font-size: 14px; font-weight: 760; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .count { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 20px 14px; padding: 8px 12px; border-radius: 12px; background: var(--paper-2); font-size: 12.5px; color: var(--muted); }
+  .clock { display: flex; gap: 4px; font-variant-numeric: tabular-nums; font-weight: 800; color: var(--ink); font-size: 13px; }
+  .clock span { display: inline-block; min-width: 2.6ch; text-align: center; padding: 2px 4px; border-radius: 6px; background: var(--paper); }
+  .clock span.tick { animation: tick 0.45s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  @keyframes tick { from { transform: translateY(-5px); opacity: 0.3; } }
+
+  .perf { position: relative; height: 0; margin: 0 20px; border-top: 2px dashed var(--perf); }
+
+  /* ---------- Stub: flips over like a card to show the printed ticket ---------- */
+  .stub { position: relative; perspective: 1100px; padding: 16px 20px 20px; }
+  .flipper { display: grid; transform-style: preserve-3d; transition: transform 0.95s cubic-bezier(0.3, 1.25, 0.4, 1); }
+  .flipped .flipper { transform: rotateX(180deg); }
+  .face { grid-area: 1 / 1; backface-visibility: hidden; -webkit-backface-visibility: hidden; position: relative; }
+  /* hidden faces also leave the tab order: a face turns visible at once, and hides only after it has turned away */
+  .front { visibility: visible; transition: visibility 0s 0s; }
+  .flipped .front { visibility: hidden; transition-delay: 0.3s; }
+  .back { transform: rotateX(180deg); visibility: hidden; transition: visibility 0s 0.3s; }
+  .flipped .back { visibility: visible; transition-delay: 0s; }
+  .scan { position: absolute; left: 0; right: 0; top: 0; height: 40px; z-index: 3; pointer-events: none; opacity: 0; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--gold-2) 55%, transparent), transparent); }
+  .printing .scan { animation: scan 0.9s ease-in-out; }
+  @keyframes scan { 0% { opacity: 0; transform: translateY(-40px); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(240px); } }
+
+  .pick { display: grid; grid-template-columns: 1fr 132px; gap: 14px; align-items: center; }
+  fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+  legend { padding: 0; margin-bottom: 8px; }
+  .tiers { display: grid; gap: 7px; }
+  .tier { position: relative; display: flex; align-items: center; gap: 10px; padding: 7px 11px; border-radius: 13px; cursor: pointer; background: var(--paper-2); transition: background 0.3s, box-shadow 0.3s, transform 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .tier input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .tier .dot { width: 16px; height: 16px; flex: none; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--perf); display: grid; place-items: center; transition: box-shadow 0.3s; }
+  .tier .dot::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--rose); transform: scale(0); transition: transform 0.45s cubic-bezier(0.3, 1.9, 0.5, 1); }
+  .tier .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .tier .tn { font-size: 13.5px; font-weight: 760; white-space: nowrap; }
+  .tier .tp { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; transition: color 0.3s; }
+  .tier:has(input:checked) { background: color-mix(in srgb, var(--rose) 12%, var(--paper)); box-shadow: inset 0 0 0 1.5px var(--rose); }
+  .tier:has(input:checked) .dot { box-shadow: inset 0 0 0 2px var(--rose); }
+  .tier:has(input:checked) .dot::after { transform: scale(1); }
+  .tier:has(input:checked) .tp { color: var(--rose); }
+  .tier:has(input:focus-visible) { outline: 2.5px solid var(--focus); outline-offset: 2px; }
+  .tier.pop { animation: tpop 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes tpop { 35% { transform: scale(0.96); } }
+  .left { position: absolute; top: -7px; right: 8px; font-size: 9.5px; font-weight: 850; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 6px; background: var(--gold); color: #2a1800; animation: nudge 3.6s ease-in-out infinite; }
+  @keyframes nudge { 0%, 82%, 100% { transform: none; } 88% { transform: rotate(-6deg) scale(1.1); } 94% { transform: rotate(4deg); } }
+
+  .venue { width: 132px; height: auto; display: block; cursor: pointer; }
+  .venue .zone { fill: var(--zone); transition: fill 0.35s; transform-box: view-box; transform-origin: 75px 12px; }
+  .venue .zone.on { fill: var(--zone-on); }
+  .venue .zone.pulse { animation: zpulse 0.6s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  @keyframes zpulse { 40% { transform: scale(1.06); } }
+  .venue .seat { fill: #fff; animation: seat 0.5s cubic-bezier(0.3, 2, 0.5, 1) backwards; transform-box: fill-box; transform-origin: center; }
+  @keyframes seat { from { transform: scale(0); } }
+  .venue .stg { fill: var(--ink); }
+  .venue text { fill: var(--paper); font-size: 6.5px; font-weight: 800; letter-spacing: 0.12em; }
+
+  .sum { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+  .qty { display: inline-flex; align-items: center; gap: 4px; padding: 4px; border-radius: 13px; background: var(--paper-2); }
+  .qty button { width: 34px; height: 34px; border: 0; border-radius: 10px; cursor: pointer; background: var(--paper); display: grid; place-items: center; transition: transform 0.4s cubic-bezier(0.3, 1.8, 0.5, 1), opacity 0.2s; box-shadow: 0 2px 6px -3px var(--shadow); }
+  .qty button:active { transform: scale(0.88); }
+  .qty button:disabled { opacity: 0.35; cursor: default; transform: none; }
+  .qty svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
+  .qty output { min-width: 26px; text-align: center; font-weight: 820; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .qty output.bump { animation: tpop 0.4s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .total { text-align: right; }
+  .total strong { display: block; font-size: 22px; font-weight: 850; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .total strong small { font-size: 12px; font-weight: 800; color: var(--muted); letter-spacing: 0.06em; margin-right: 4px; }
+  .total.bump strong { animation: tpop 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+
+  .buy { position: relative; width: 100%; height: 50px; margin-top: 14px; border: 0; border-radius: 15px; cursor: pointer; overflow: hidden; font-size: 15.5px; font-weight: 800; color: #fff;
+    background: linear-gradient(135deg, var(--rose), #b23a8f); box-shadow: 0 16px 26px -16px var(--rose); transition: transform 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .buy:hover { transform: translateY(-1px); }
+  .buy[data-state="press"] { transform: scale(0.95); transition-duration: 0.12s; }
+  .buy .bl { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 9px; }
+  .buy .bl svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+  .buy .fill { position: absolute; inset: 0; width: 0; background: rgba(255, 255, 255, 0.22); }
+  .buy[data-state="work"] .fill { width: 100%; transition: width 0.95s cubic-bezier(0.6, 0.1, 0.3, 1); }
+
+  /* printed side */
+  .pr { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: end; }
+  .pr b { display: block; margin-top: 2px; font-weight: 820; }
+  .admit b { font-size: 34px; line-height: 1; letter-spacing: -0.03em; }
+  .seats b { font-size: 15px; line-height: 1.3; }
+  .gate { text-align: right; }
+  .gate b { font-size: 22px; }
+  .back { display: flex; flex-direction: column; justify-content: space-between; }
+  .barcode { display: flex; align-items: stretch; justify-content: space-between; gap: 2px; flex: 1; min-height: 56px; max-height: 110px; margin-top: 16px; padding: 10px 12px; border-radius: 12px; background: var(--paper-2); }
+  .barcode i { display: block; background: var(--ink); border-radius: 1px; transform: scaleY(0); transform-origin: bottom; transition: transform 0.2s 0.3s; }
+  .flipped .barcode i { transform: scaleY(1); transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); transition-delay: calc(0.55s + var(--i) * 9ms); }
+  .code { margin: 8px 0 0; display: flex; justify-content: space-between; font: 700 12.5px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.16em; color: var(--muted); }
+  .pr-act { display: flex; gap: 8px; margin-top: 14px; }
+  .pr-act button { flex: 1; height: 44px; border: 0; border-radius: 13px; cursor: pointer; font-weight: 760; font-size: 14px; background: var(--paper-2); display: inline-flex; align-items: center; justify-content: center; gap: 7px; transition: transform 0.4s cubic-bezier(0.3, 1.8, 0.5, 1), background 0.3s, color 0.3s; }
+  .pr-act button:active { transform: scale(0.95); }
+  .pr-act button.ok { background: color-mix(in srgb, var(--good) 16%, var(--paper)); color: var(--good); }
+  .pr-act svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .stamp { position: absolute; right: 6px; top: -4px; padding: 6px 12px; border: 3px double var(--rose); border-radius: 10px; color: var(--rose); font-weight: 900; font-size: 20px; letter-spacing: 0.18em; transform: rotate(-12deg); opacity: 0; pointer-events: none; mix-blend-mode: multiply; }
+  :root[data-theme="dark"] .stamp { mix-blend-mode: screen; }
+  .stamped .stamp { animation: stamp 0.5s cubic-bezier(0.5, 0, 0.6, 1.6) forwards; }
+  @keyframes stamp { 0% { opacity: 0; transform: rotate(-26deg) scale(2.4); } 70% { opacity: 1; transform: rotate(-11deg) scale(0.92); } 100% { opacity: 0.92; transform: rotate(-12deg) scale(1); } }
+
+  /* confetti and the demo pointer */
+  .fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }
+  .ghost { position: fixed; left: 0; top: 0; z-index: 40; width: 26px; height: 26px; pointer-events: none; opacity: 0; transform: translate(var(--gx, 70vw), var(--gy, 105vh)); transition: transform 0.8s cubic-bezier(0.55, 0, 0.25, 1), opacity 0.35s; }
+  .ghost.show { opacity: 1; }
+  .ghost svg { width: 100%; height: 100%; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35)); transition: transform 0.15s; }
+  .ghost.tap svg { transform: scale(0.8); }
+  .ghost::after { content: ""; position: absolute; left: -10px; top: -11px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--gold-2); opacity: 0; }
+  .ghost.tap::after { animation: ring 0.5s ease-out; }
+  @keyframes ring { from { opacity: 0.95; transform: scale(0.3); } to { opacity: 0; transform: scale(1.7); } }
+
+  @media (min-width: 900px) { .ticket { width: 420px; } .art { height: 184px; } h1 { font-size: 25px; } }
+  @media (max-width: 380px) {
+    .pick { grid-template-columns: 1fr 104px; gap: 10px; } .venue { width: 104px; }
+    .info { padding: 12px 16px 8px; } .stub { padding: 14px 16px 16px; } .count { margin: 0 16px 12px; } .perf { margin: 0 16px; }
+    .tier { padding: 8px 9px; gap: 8px; } .tier .tn { font-size: 12.5px; } .title { left: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <span class="beam l" aria-hidden="true"></span><span class="beam r" aria-hidden="true"></span>
+  <div class="scene" id="scene">
+    <div class="sway">
+      <div class="tilt" id="tilt">
+        <article class="ticket" id="ticket" aria-labelledby="ttl">
+          <span class="glare" aria-hidden="true"></span>
+          <div class="art">
+            <svg viewBox="0 0 400 168" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+              <defs>
+                <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--sky1)"/><stop offset="0.6" style="stop-color:var(--sky2)"/><stop offset="1" style="stop-color:var(--sky3)"/></linearGradient>
+                <radialGradient id="win" cx="0.5" cy="0.8" r="0.8"><stop offset="0" stop-color="#fff3c4"/><stop offset="1" style="stop-color:var(--glow)"/></radialGradient>
+                <mask id="cres"><rect width="400" height="168" fill="#fff"/><circle cx="338" cy="30" r="15" fill="#000"/></mask>
+              </defs>
+              <rect width="400" height="168" fill="url(#sky)"/>
+              <g id="stars" fill="#fff"></g>
+              <circle cx="330" cy="36" r="17" fill="var(--moon)" mask="url(#cres)"/>
+              <circle cx="330" cy="36" r="30" fill="var(--moon)" opacity=".08"/>
+              <g class="lights">
+                <path d="M-10 8 Q 100 52 200 26 T 410 10" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+                <g id="bulbs"></g>
+              </g>
+              <!-- old city arcade, dome and minarets -->
+              <g fill="var(--sil)">
+                <rect x="84" y="62" width="10" height="56"/><path d="M82 64q7-14 14 0z"/><rect x="306" y="62" width="10" height="56"/><path d="M304 64q7-14 14 0z"/>
+                <path d="M170 104c0-18 12-24 30-40 18 16 30 22 30 40z"/><rect x="166" y="102" width="68" height="11"/><rect x="198.5" y="52" width="3" height="12"/>
+                <path d="M60 168V112h280v56z"/><path d="M-10 168v-22h420v22z"/>
+              </g>
+              <g id="arches"></g>
+            </svg>
+            <div class="title">
+              <p class="kicker"><i></i>Live in Lahore</p>
+              <h1 id="ttl">Sufi Night Under the Stars</h1>
+            </div>
+            <div class="holo" aria-hidden="true"><span><b>VIP</b>OPEN AIR</span></div>
+          </div>
+
+          <div class="info">
+            <div><small>Date</small><b id="date">Sat 12 Dec</b></div>
+            <div><small>Doors</small><b>7:15 PM</b></div>
+            <div><small>Venue</small><b>Old City courtyard</b></div>
+          </div>
+          <div class="count"><span>Starts in</span><span class="clock" id="clock" aria-label="Time until the show"><span data-u="d">00d</span><span data-u="h">00h</span><span data-u="m">00m</span><span data-u="s">00s</span></span></div>
+          <div class="perf" id="perf" aria-hidden="true"></div>
+
+          <div class="stub" id="stub">
+            <span class="scan" aria-hidden="true"></span>
+            <div class="flipper">
+              <div class="face front" id="front">
+                <div class="pick">
+                  <fieldset class="tiers">
+                    <legend class="lab">Choose your seats</legend>
+                    <label class="tier"><input type="radio" name="tier" value="lawn" /><span class="dot"></span><span class="tx"><span class="tn">Lawn</span><span class="tp">PKR 2,500</span></span></label>
+                    <label class="tier"><input type="radio" name="tier" value="gold" checked /><span class="dot"></span><span class="tx"><span class="tn">Gold</span><span class="tp">PKR 6,000</span></span></label>
+                    <label class="tier"><input type="radio" name="tier" value="front" /><span class="dot"></span><span class="tx"><span class="tn">Front Row</span><span class="tp">PKR 12,000</span></span><span class="left">4 LEFT</span></label>
+                  </fieldset>
+                  <svg class="venue" id="venue" viewBox="0 0 150 124" aria-hidden="true">
+                    <path class="stg" d="M53 12a22 22 0 0 0 44 0z"/><text x="75" y="18" text-anchor="middle">STAGE</text>
+                    <path class="zone" data-z="front"/><path class="zone" data-z="gold"/><path class="zone" data-z="lawn"/>
+                    <g id="seats"></g>
+                  </svg>
+                </div>
+                <div class="sum">
+                  <div class="qty" role="group" aria-label="Number of tickets">
+                    <button type="button" id="minus" aria-label="One ticket less"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+                    <output id="qty" aria-live="polite">2</output>
+                    <button type="button" id="plus" aria-label="One ticket more"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button>
+                  </div>
+                  <div class="total" id="totalBox"><span class="lab">Total</span><strong><small>PKR</small><span id="total">12,000</span></strong></div>
+                </div>
+                <button class="buy" id="buy" type="button" data-state="idle"><span class="fill"></span><span class="bl"><svg viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v8a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg><span id="buyLbl">Get 2 tickets</span></span></button>
+              </div>
+
+              <div class="face back" id="back">
+                <div class="pr">
+                  <div class="admit"><span class="lab">Admit</span><b id="admit">2</b></div>
+                  <div class="seats"><span class="lab">Seats</span><b id="seatTxt">Gold · Row C, 14–15</b></div>
+                  <div class="gate"><span class="lab">Gate</span><b id="gate">2</b></div>
+                </div>
+                <div class="barcode" id="barcode" aria-hidden="true"></div>
+                <p class="code"><span id="code">SNS-0000-00</span><span id="when">SAT 12 DEC · 8 PM</span></p>
+                <div class="pr-act">
+                  <button type="button" id="change"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 15"/><path d="M4 20v-5h5"/></svg>Change</button>
+                  <button type="button" id="copy"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg><span id="copyLbl">Copy code</span></button>
+                </div>
+                <span class="stamp" aria-hidden="true">PAID</span>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+  <p class="sr-only" aria-live="polite" id="status"></p>
+</main>
+<canvas class="fx" aria-hidden="true"></canvas>
+<div class="ghost" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 2.5v17l4.6-4.3 3 6.6 3.1-1.4-3-6.4 6.3-.4z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (s, r) { return (r || document).querySelector(s); };
+    var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+    var NS = "http://www.w3.org/2000/svg";
+    var scene = $("#scene"), tilt = $("#tilt"), ticket = $("#ticket"), stub = $("#stub"), buy = $("#buy"), statusEl = $("#status");
+    var TIERS = {
+      lawn: { name: "Lawn", price: 2500, max: 6, gate: "4" },
+      gold: { name: "Gold", price: 6000, max: 6, row: "C", seat: 14, gate: "2" },
+      front: { name: "Front Row", price: 12000, max: 4, row: "A", seat: 7, gate: "1" }
+    };
+    var S = { tier: "gold", qty: 2, shown: 12000, state: "pick", busy: false, code: "" };
+    function say(t) { statusEl.textContent = t; }
+    function fmt(n) { return n.toLocaleString("en-US"); }
+    function wait(fn, ms) { return setTimeout(fn, reduce.matches ? Math.min(ms, 40) : ms); }
+
+    /* ---------- The show is always on the Saturday at least ten days from today ---------- */
+    var show = new Date(); show.setDate(show.getDate() + 10); show.setDate(show.getDate() + ((6 - show.getDay() + 7) % 7)); show.setHours(20, 0, 0, 0);
+    var dateTxt = show.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+    $("#date").textContent = dateTxt;
+    $("#when").textContent = dateTxt.toUpperCase() + " · 8 PM";
+    var clockEls = {}; $$("#clock span").forEach(function (s) { clockEls[s.dataset.u] = s; });
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    function clock() {
+      var t = Math.max(0, Math.floor((show - Date.now()) / 1000));
+      var v = { d: Math.floor(t / 86400) + "d", h: pad(Math.floor(t / 3600) % 24) + "h", m: pad(Math.floor(t / 60) % 60) + "m", s: pad(t % 60) + "s" };
+      Object.keys(v).forEach(function (k) {
+        var el = clockEls[k];
+        if (el.textContent !== v[k]) { el.textContent = v[k]; el.classList.remove("tick"); void el.offsetWidth; el.classList.add("tick"); }
+      });
+    }
+
+    /* ---------- Art: stars, string-light bulbs and lit arches ---------- */
+    (function () {
+      var g = $("#stars"), h = "";
+      for (var i = 0; i < 34; i++) {
+        var x = (i * 97) % 400, y = (i * 53) % 96 + 4, r = i % 5 === 0 ? 1.4 : 0.8;
+        h += '<circle class="star" cx="' + x + '" cy="' + y + '" r="' + r + '" style="animation-delay:-' + ((i * 0.37) % 3).toFixed(2) + 's"/>';
+      }
+      g.innerHTML = h;
+      var b = "", cols = ["#ffd27a", "#ff8db0", "#8ae6ff", "#c4ff8a"];
+      for (var k = 0; k < 15; k++) {
+        var t = k / 14, bx = -10 + t * 420;
+        // the wire is two quadratic curves; sample its height so the bulbs sit on it
+        var by = t < 0.5 ? quad(8, 52, 26, t * 2) : quad(26, 0, 10, (t - 0.5) * 2);
+        b += '<circle class="bulb" cx="' + bx.toFixed(1) + '" cy="' + (by + 3).toFixed(1) + '" r="2.6" fill="' + cols[k % 4] + '" style="animation-delay:-' + (k * 0.29).toFixed(2) + 's"/>';
+      }
+      $("#bulbs").innerHTML = b;
+      var a = "", xs = [100, 132, 246, 278];
+      xs.forEach(function (x, i) { a += '<path class="win" style="animation-delay:-' + i * 0.8 + 's" d="M' + x + " 152V132q0-12 " + 11 + "-17q11 5 11 17v20z\" fill=\"url(#win)\"/>"; });
+      a += '<path class="win" d="M184 152v-26q0-14 16-22q16 8 16 22v26z" fill="url(#win)"/>';
+      $("#arches").innerHTML = a;
+    })();
+    function quad(p0, p1, p2, t) { return (1 - t) * (1 - t) * p0 + 2 * (1 - t) * t * p1 + t * t * p2; }
+
+    /* ---------- Venue map: three seating bands fanned below the stage ---------- */
+    var BANDS = { front: [28, 42], gold: [46, 70], lawn: [74, 108] };
+    function arcPt(r, a) { return (75 + r * Math.cos(a * Math.PI / 180)).toFixed(1) + " " + (12 + r * Math.sin(a * Math.PI / 180)).toFixed(1); }
+    $$(".venue .zone").forEach(function (z) {
+      var b = BANDS[z.dataset.z], a1 = 28, a2 = 152;
+      z.setAttribute("d", "M" + arcPt(b[1], a1) + "A" + b[1] + " " + b[1] + " 0 0 1 " + arcPt(b[1], a2) + "L" + arcPt(b[0], a2) + "A" + b[0] + " " + b[0] + " 0 0 0 " + arcPt(b[0], a1) + "Z");
+    });
+    function drawSeats() {
+      var b = BANDS[S.tier], r = (b[0] + b[1]) / 2, step = { front: 10, gold: 7.5, lawn: 6 }[S.tier], g = $("#seats"), h = "";
+      for (var i = 0; i < S.qty; i++) {
+        var a = 90 + (i - (S.qty - 1) / 2) * step, p = arcPt(r, a).split(" ");
+        h += '<circle class="seat" cx="' + p[0] + '" cy="' + p[1] + '" r="2.8" style="animation-delay:' + i * 60 + 'ms"/>';
+      }
+      g.innerHTML = h;
+      $$(".venue .zone").forEach(function (z) { z.classList.toggle("on", z.dataset.z === S.tier); });
+    }
+    $("#venue").addEventListener("click", function (e) {
+      var z = e.target.closest(".zone"); if (z) setTier(z.dataset.z);
+    });
+
+    /* ---------- Picking seats and quantity; the total counts to its new value ---------- */
+    var totalEl = $("#total"), tweenRaf = 0;
+    function tweenTotal(to) {
+      cancelAnimationFrame(tweenRaf);
+      var from = S.shown, t0 = performance.now(), dur = reduce.matches ? 1 : 520;
+      $("#totalBox").classList.remove("bump"); void totalEl.offsetWidth; $("#totalBox").classList.add("bump");
+      (function step(now) {
+        var k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+        S.shown = Math.round(from + (to - from) * e);
+        totalEl.textContent = fmt(S.shown);
+        if (k < 1) tweenRaf = requestAnimationFrame(step);
+      })(t0);
+    }
+    function refresh(pulse) {
+      var t = TIERS[S.tier];
+      if (S.qty > t.max) S.qty = t.max;
+      $("#qty").textContent = S.qty;
+      $("#minus").disabled = S.qty <= 1;
+      $("#plus").disabled = S.qty >= t.max;
+      $("#buyLbl").textContent = "Get " + S.qty + (S.qty === 1 ? " ticket" : " tickets");
+      tweenTotal(t.price * S.qty);
+      drawSeats();
+      if (pulse) { var z = $('.venue .zone[data-z="' + S.tier + '"]'); z.classList.remove("pulse"); void z.getBoundingClientRect(); z.classList.add("pulse"); }
+    }
+    function setTier(id) {
+      if (S.state !== "pick" || !TIERS[id]) return;
+      var input = $('input[value="' + id + '"]');
+      input.checked = true;
+      var changed = S.tier !== id;
+      S.tier = id;
+      var lab = input.closest(".tier"); lab.classList.remove("pop"); void lab.offsetWidth; lab.classList.add("pop");
+      refresh(changed);
+      say(TIERS[id].name + " seats, PKR " + fmt(TIERS[id].price) + " each. Total PKR " + fmt(TIERS[id].price * S.qty) + ".");
+    }
+    $$('input[name="tier"]').forEach(function (r) { r.addEventListener("change", function () { setTier(r.value); }); });
+    function setQty(n) {
+      if (S.state !== "pick") return;
+      var t = TIERS[S.tier], q = Math.max(1, Math.min(t.max, n));
+      if (q === S.qty) return;
+      S.qty = q;
+      var o = $("#qty"); o.classList.remove("bump"); void o.offsetWidth; o.classList.add("bump");
+      refresh(false);
+      say(q + (q === 1 ? " ticket" : " tickets") + ", total PKR " + fmt(t.price * q) + ".");
+    }
+    $("#minus").addEventListener("click", function () { setQty(S.qty - 1); });
+    $("#plus").addEventListener("click", function () { setQty(S.qty + 1); });
+
+    /* ---------- Buying: press, print scan, flip, barcode draws, stamp thumps, confetti ---------- */
+    function seatText() {
+      var t = TIERS[S.tier];
+      if (!t.row) return "Lawn · open seating";
+      return t.name + " · Row " + t.row + ", " + t.seat + (S.qty > 1 ? "–" + (t.seat + S.qty - 1) : "");
+    }
+    function makeCode() {
+      var abc = "ABCDEFGHJKMNPQRSTUVWXYZ23456789", s = "";
+      for (var i = 0; i < 4; i++) s += abc[Math.floor(Math.random() * abc.length)];
+      return "SNS-" + s + "-" + (TIERS[S.tier].seat || 0) + S.qty;
+    }
+    function drawBarcode(code) {
+      var h = "", seed = 0;
+      for (var i = 0; i < code.length; i++) seed = (seed * 31 + code.charCodeAt(i)) % 9973;
+      for (var k = 0; k < 52; k++) { seed = (seed * 73 + 41) % 9973; h += '<i style="--i:' + k + ";flex:" + (1 + (seed % 3)) + ' 1 0"></i>'; }
+      $("#barcode").innerHTML = h;
+    }
+    function purchase() {
+      if (S.state !== "pick" || S.busy) return;
+      S.busy = true;
+      var t = TIERS[S.tier];
+      S.code = makeCode();
+      $("#admit").textContent = S.qty;
+      $("#seatTxt").textContent = seatText();
+      $("#gate").textContent = t.gate;
+      $("#code").textContent = S.code;
+      drawBarcode(S.code);
+      buy.dataset.state = "press";
+      wait(function () { buy.dataset.state = "work"; $("#buyLbl").textContent = "Printing your tickets…"; ticket.classList.add("printing"); say("Booking " + S.qty + " " + t.name + " tickets…"); }, 130);
+      wait(function () { stub.classList.add("flipped"); S.state = "done"; }, 1150);
+      wait(function () {
+        ticket.classList.add("stamped");
+        tilt.classList.remove("shake"); void tilt.offsetWidth; tilt.classList.add("shake");
+        var r = $(".stamp").getBoundingClientRect();
+        burst(r.left + r.width / 2, r.top + r.height / 2, 46);
+      }, 2050);
+      wait(function () {
+        ticket.classList.remove("printing");
+        buy.dataset.state = "idle";
+        S.busy = false;
+        say("Booked: " + S.qty + " " + t.name + (S.qty === 1 ? " ticket. " : " tickets. ") + seatText() + ". Ticket code " + S.code.split("").join(" ") + ".");
+        if (!demoOn) $("#change").focus({ preventScroll: true });
+      }, 2500);
+    }
+    buy.addEventListener("click", purchase);
+    function change() {
+      if (S.state !== "done" || S.busy) return;
+      S.state = "pick";
+      stub.classList.remove("flipped");
+      wait(function () { if (S.state === "pick") ticket.classList.remove("stamped"); }, 350);
+      refresh(false);
+      say("Change your seats, then press Get tickets again.");
+      if (!demoOn) wait(function () { buy.focus({ preventScroll: true }); }, 500);
+    }
+    $("#change").addEventListener("click", change);
+
+    var copyBtn = $("#copy"), copyLbl = $("#copyLbl");
+    function copied(ok) {
+      copyBtn.classList.toggle("ok", ok);
+      copyLbl.textContent = ok ? "Copied" : "Press Ctrl+C";
+      say(ok ? "Ticket code copied." : "Could not copy, select the code and copy it.");
+      wait(function () { copyBtn.classList.remove("ok"); copyLbl.textContent = "Copy code"; }, 1600);
+    }
+    function fallbackCopy(text) {
+      try {
+        var ta = document.createElement("textarea"); ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select(); var ok = document.execCommand("copy"); ta.remove(); return ok;
+      } catch (e) { return false; }
+    }
+    copyBtn.addEventListener("click", function () {
+      var text = S.code;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { copied(true); }, function () { copied(fallbackCopy(text)); });
+      else copied(fallbackCopy(text));
+    });
+
+    /* ---------- Tilt and glare follow the pointer ---------- */
+    scene.addEventListener("pointermove", function (e) {
+      if (reduce.matches || e.pointerType === "touch") return;
+      var r = ticket.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+      scene.classList.add("held");
+      tilt.style.setProperty("--rx", ((0.5 - y) * 9).toFixed(2) + "deg");
+      tilt.style.setProperty("--ry", ((x - 0.5) * 11).toFixed(2) + "deg");
+      ticket.style.setProperty("--gx", (x * 100).toFixed(1) + "%");
+      ticket.style.setProperty("--gy", (y * 100).toFixed(1) + "%");
+      ticket.style.setProperty("--hx", ((x - 0.5) * 240).toFixed(0));
+    });
+    scene.addEventListener("pointerleave", function () { scene.classList.remove("held"); tilt.style.setProperty("--rx", "0deg"); tilt.style.setProperty("--ry", "0deg"); });
+
+    // keep the notches exactly on the perforation line
+    function placeCut() { ticket.style.setProperty("--cut", ($("#perf").offsetTop + 1) + "px"); }
+
+    /* ---------- Confetti: stars and paper ---------- */
+    var fx = $(".fx"), ctx = fx.getContext("2d"), bits = [], raf = 0;
+    function sizeFx() { var d = Math.min(devicePixelRatio || 1, 2); fx.width = innerWidth * d; fx.height = innerHeight * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+    var COLS = ["#e0457b", "#ffd27a", "#8ae6ff", "#c4ff8a", "#ff8db0", "#b23a8f"];
+    function burst(x, y, n) {
+      if (reduce.matches) return;
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 7;
+        bits.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 3.5, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4, w: 4 + Math.random() * 5, h: 6 + Math.random() * 6, c: COLS[i % COLS.length], star: i % 4 === 0, life: 0 });
+      }
+      if (!raf) raf = requestAnimationFrame(step);
+    }
+    function star(s) { ctx.beginPath(); for (var i = 0; i < 10; i++) { var rr = i % 2 ? s * 0.45 : s, a = i * Math.PI / 5 - Math.PI / 2; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); ctx.fill(); }
+    function step() {
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      bits = bits.filter(function (b) { return b.life < 100 && b.y < innerHeight + 30; });
+      bits.forEach(function (b) {
+        b.life++; b.vy += 0.24; b.vx *= 0.98; b.x += b.vx; b.y += b.vy; b.r += b.vr;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.globalAlpha = Math.min(1, (100 - b.life) / 25); ctx.fillStyle = b.c;
+        if (b.star) star(b.w * 0.9); else ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h * Math.abs(Math.cos(b.life * 0.15 + b.r)));
+        ctx.restore();
+      });
+      raf = bits.length ? requestAnimationFrame(step) : 0;
+    }
+
+    /* ---------- Auto-demo: plays on load and every few seconds; any real input stops it ---------- */
+    var ghost = $(".ghost"), demoOn = !reduce.matches, timers = [];
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+    function ghostTo(el, then) {
+      var r = el.getBoundingClientRect();
+      ghost.classList.add("show");
+      ghost.style.setProperty("--gx", Math.min(innerWidth - 30, r.left + r.width * 0.6) + "px");
+      ghost.style.setProperty("--gy", r.top + r.height * 0.6 + "px");
+      later(function () { ghost.classList.add("tap"); later(function () { ghost.classList.remove("tap"); if (demoOn && then) then(); }, 170); }, 820);
+    }
+    function stopDemo() { if (!demoOn) return; demoOn = false; timers.forEach(clearTimeout); ghost.classList.remove("show", "tap"); }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, function (e) { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }); });
+    function demo() {
+      if (!demoOn) return;
+      later(function () { ghostTo($('input[value="front"]').closest(".tier"), function () { setTier("front"); }); }, 200);
+      later(function () { ghostTo($("#plus"), function () { setQty(S.qty + 1); }); }, 1700);
+      later(function () { ghostTo(buy, purchase); }, 3100);
+      later(function () { ghost.classList.remove("show"); }, 4300);
+      later(function () { ghostTo($("#change"), change); }, 7200);
+      later(function () { ghostTo($('input[value="gold"]').closest(".tier"), function () { setTier("gold"); S.qty = 2; refresh(false); }); }, 8800);
+      later(function () { ghost.classList.remove("show"); }, 10000);
+      later(demo, 11400);
+    }
+
+    /* ---------- Start ---------- */
+    refresh(false);
+    clock(); setInterval(clock, 1000);
+    sizeFx(); placeCut();
+    addEventListener("resize", function () { sizeFx(); placeCut(); });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(placeCut);
+    if (demoOn) later(demo, 1100);
+  })();
+</script>
+</body>
+</html>

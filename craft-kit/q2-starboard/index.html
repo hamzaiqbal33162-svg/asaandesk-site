@@ -1,0 +1,564 @@
+<!doctype html>
+<!-- Chill & Craft · Starboard · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Starboard · review summary with rating bars</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: cream paper, berry ink and gold (light), espresso and gold (dark) ---------- */
+  :root {
+    --bg: #f6efe4; --bg-2: #fffaf2; --dots: rgba(91, 26, 58, 0.07);
+    --card: #fffdf8; --edge: rgba(91, 26, 58, 0.1); --ink: #3a1027; --muted: #85677a; --soft: #f5ebe2; --soft-2: #ecdccf;
+    --berry: #8c1d4f; --berry-2: #b8336f; --gold: #f2a900; --gold-2: #ffd257; --track: rgba(91, 26, 58, 0.09); --good: #1c8f5e; --bad: #c43d4b;
+    --shadow: rgba(80, 20, 40, 0.28); --focus: #8c1d4f;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #120b0d; --bg-2: #1d1215; --dots: rgba(255, 210, 87, 0.05);
+    --card: #21161a; --edge: rgba(255, 255, 255, 0.08); --ink: #f8ece8; --muted: #bfa3ad; --soft: #2c1e23; --soft-2: #3a2830;
+    --berry: #ff7aa9; --berry-2: #ff9bbe; --gold: #ffc23a; --gold-2: #ffe08a; --track: rgba(255, 255, 255, 0.08); --good: #46d394; --bad: #ff7383;
+    --shadow: rgba(0, 0, 0, 0.65); --focus: #ffd257;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 3px; }
+  button, input, textarea { font: inherit; color: inherit; }
+
+  .stage { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 26px 16px; overflow: hidden; overflow: clip;
+    background: radial-gradient(70% 60% at 30% 10%, var(--bg-2), transparent 70%), radial-gradient(var(--dots) 1.2px, transparent 1.3px) 0 0 / 20px 20px, var(--bg); }
+  .wrap { width: min(1000px, 100%); display: grid; grid-template-columns: 370px minmax(0, 1fr); gap: 22px; align-items: start; }
+
+  .card { background: var(--card); border-radius: 26px; border: 1px solid var(--edge); box-shadow: 0 40px 70px -50px var(--shadow); animation: rise 0.85s cubic-bezier(0.2, 0.9, 0.3, 1.12) backwards; }
+  @keyframes rise { from { opacity: 0; transform: translateY(40px) scale(0.97); } }
+
+  /* ---------- Summary ---------- */
+  .sum { padding: 20px; }
+  .sum h1 { margin: 0; font-size: 20px; letter-spacing: -0.02em; font-weight: 830; }
+  .prod { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+  .prod svg { width: 34px; height: 34px; flex: none; border-radius: 10px; background: var(--soft); padding: 4px; }
+  .score { display: grid; grid-template-columns: 112px 1fr; gap: 16px; align-items: center; margin-top: 16px; }
+  .dial { position: relative; width: 112px; height: 112px; }
+  .dial svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .dial .trk { fill: none; stroke: var(--track); stroke-width: 9; }
+  .dial .arc { fill: none; stroke: url(#gold); stroke-width: 9; stroke-linecap: round; stroke-dasharray: 289; stroke-dashoffset: 289; transition: stroke-dashoffset 1.2s cubic-bezier(0.3, 1.2, 0.4, 1); }
+  .dial .glint { fill: none; stroke: rgba(255, 255, 255, 0.7); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 8 281; animation: glint 5s ease-in-out infinite 1.5s; opacity: 0; }
+  @keyframes glint { 0% { stroke-dashoffset: 0; opacity: 0; } 10% { opacity: 1; } 40% { stroke-dashoffset: -260; opacity: 0; } 100% { stroke-dashoffset: -260; opacity: 0; } }
+  .avg { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+  .avg b { font-size: 31px; font-weight: 860; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .avg span { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .dial.pop { animation: dpop 0.6s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes dpop { 30% { transform: scale(0.93); } }
+
+  .bars { display: grid; gap: 3px; }
+  .row { display: grid; grid-template-columns: 26px 1fr 38px; align-items: center; gap: 8px; height: 22px; padding: 0 6px; margin: 0 -6px; border: 0; border-radius: 8px; background: none; cursor: pointer; text-align: left; transition: background 0.25s, opacity 0.3s; }
+  .row:hover { background: var(--soft); }
+  .row .n { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; font-weight: 760; }
+  .row .n svg { width: 11px; height: 11px; fill: var(--gold); }
+  .row .tr { position: relative; height: 8px; border-radius: 8px; background: var(--track); overflow: hidden; }
+  .row .tr i { position: absolute; inset: 0 auto 0 0; width: var(--w, 0%); border-radius: inherit; background: linear-gradient(90deg, var(--gold), var(--gold-2)); transition: width 1s cubic-bezier(0.3, 1.25, 0.4, 1); transition-delay: var(--d, 0s); }
+  .row .tr i::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent) -100% 0 / 50% 100% no-repeat; animation: shine 4.5s ease-in-out infinite; animation-delay: var(--d, 0s); }
+  @keyframes shine { 0%, 70% { background-position: -100% 0; } 100% { background-position: 250% 0; } }
+  .row .pc { font-size: 12px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .row[aria-pressed="true"] { background: color-mix(in srgb, var(--gold) 18%, transparent); }
+  .row[aria-pressed="true"] .pc { color: var(--ink); font-weight: 750; }
+  .bars.filtering .row[aria-pressed="false"] { opacity: 0.45; }
+
+  .total { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .stars { position: relative; display: inline-flex; flex: none; }
+  .stars svg { width: 17px; height: 17px; fill: var(--track); }
+  .stars .on { position: absolute; left: 0; top: 0; display: flex; overflow: hidden; width: var(--f, 0%); transition: width 1.2s cubic-bezier(0.3, 1.2, 0.4, 1); }
+  .stars .on svg { flex: none; fill: var(--gold); }
+  .total b { color: var(--ink); }
+
+  .topics { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--edge); }
+  .topics .lab { width: 100%; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .topic { height: 30px; padding: 0 10px; white-space: nowrap; border: 0; border-radius: 999px; cursor: pointer; background: var(--soft); font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; transition: background 0.25s, color 0.25s, transform 0.4s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .topic small { font-size: 11px; color: var(--muted); font-weight: 700; }
+  .topic:active { transform: scale(0.93); }
+  .topic[aria-pressed="true"] { background: var(--ink); color: var(--card); }
+  .topic[aria-pressed="true"] small { color: inherit; opacity: 0.7; }
+
+  .write { width: 100%; height: 48px; margin-top: 16px; border: 0; border-radius: 15px; cursor: pointer; font-size: 15px; font-weight: 780; color: #fff; background: linear-gradient(135deg, var(--berry), var(--berry-2)); box-shadow: 0 16px 26px -16px var(--berry); display: inline-flex; align-items: center; justify-content: center; gap: 9px; transition: transform 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  :root[data-theme="dark"] .write { color: #2a0716; }
+  .write svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .write:hover { transform: translateY(-1px); }
+  .write:active { transform: scale(0.96); }
+
+  /* ---------- Reviews list and the form share one area and slide past each other ---------- */
+  .area { min-width: 0; animation-delay: 0.12s; padding: 18px 18px 14px; }
+  .la-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; margin-bottom: 12px; }
+  .la-head h2 { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
+  .filt { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); opacity: 0; transform: translateX(12px); visibility: hidden; transition: opacity 0.3s, transform 0.4s cubic-bezier(0.3, 1.5, 0.5, 1), visibility 0s 0.4s; }
+  .filt.on { opacity: 1; transform: none; visibility: visible; transition-delay: 0s; }
+  .filt button { height: 26px; padding: 0 10px; border: 0; border-radius: 8px; cursor: pointer; background: var(--soft); font-size: 12px; font-weight: 750; }
+  /* both panes sit on top of each other; the box eases to the height of the one showing */
+  .panes { position: relative; overflow-x: clip; transition: height 0.5s cubic-bezier(0.3, 1.2, 0.4, 1); }
+  .pane { position: absolute; left: 0; right: 0; top: 0; min-width: 0; transition: transform 0.55s cubic-bezier(0.3, 1.2, 0.4, 1), opacity 0.35s, visibility 0s 0.55s; }
+  .pane.form { transform: translateX(40px); opacity: 0; visibility: hidden; }
+  .writing .pane.list { transform: translateX(-40px); opacity: 0; visibility: hidden; }
+  .writing .pane.form { transform: none; opacity: 1; visibility: visible; transition-delay: 0s; }
+  .pane.list { visibility: visible; transition-delay: 0s; }
+  .writing .pane.list { transition-delay: 0s, 0s, 0.55s; }
+
+  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; align-content: start; }
+  .rv { position: relative; padding: 13px 14px 11px; border-radius: 18px; background: var(--soft); transition: transform 0.5s cubic-bezier(0.3, 1.3, 0.4, 1), opacity 0.3s; }
+  .rv.enter { animation: enter 0.55s cubic-bezier(0.25, 1.4, 0.4, 1) backwards; animation-delay: calc(var(--k, 0) * 70ms); }
+  @keyframes enter { from { opacity: 0; transform: translateY(18px) scale(0.95); } }
+  .rv.leave { opacity: 0; transform: scale(0.94); transition-duration: 0.25s; }
+  .rv.fresh { box-shadow: 0 0 0 2px var(--gold), 0 14px 30px -18px var(--gold); animation: drop 0.8s cubic-bezier(0.25, 1.5, 0.4, 1); }
+  @keyframes drop { from { opacity: 0; transform: translateY(-30px) scale(0.9) rotate(-2deg); } }
+  .rv-top { display: flex; align-items: center; gap: 10px; }
+  .av { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: none; font-size: 12.5px; font-weight: 820; color: #fff; background: hsl(var(--h) 55% 45%); }
+  .who { flex: 1; min-width: 0; }
+  .who b { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who small { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rs { display: inline-flex; flex: none; }
+  .rs svg { width: 13px; height: 13px; fill: var(--track); }
+  .rs svg.f { fill: var(--gold); }
+  .rv p { margin: 8px 0 0; font-size: 13.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .rv-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+  .ver { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; color: var(--good); }
+  .ver svg, .new-tag svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+  .new-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 800; color: var(--berry); }
+  .help { position: relative; height: 30px; padding: 0 10px; border: 0; border-radius: 10px; cursor: pointer; background: var(--card); font-size: 12px; font-weight: 720; display: inline-flex; align-items: center; gap: 6px; transition: background 0.25s, color 0.25s; }
+  .help svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; transition: transform 0.5s cubic-bezier(0.3, 1.9, 0.5, 1); }
+  .help[aria-pressed="true"] { background: var(--ink); color: var(--card); }
+  .help[aria-pressed="true"] svg { transform: rotate(-14deg) scale(1.15); fill: currentColor; }
+  .help .plus { position: absolute; right: 6px; top: -4px; font-size: 11px; font-weight: 850; color: var(--berry); opacity: 0; pointer-events: none; }
+  .help .plus.go { animation: plus 0.9s ease-out; }
+  @keyframes plus { 0% { opacity: 0; transform: translateY(6px); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px); } }
+  .empty { padding: 26px 10px; text-align: center; font-size: 13px; color: var(--muted); border: 1.5px dashed var(--soft-2); border-radius: 18px; }
+
+  /* ---------- Write a review ---------- */
+  form { display: grid; gap: 12px; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend, .flab { padding: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; display: block; }
+  .rate { display: flex; align-items: center; gap: 4px; }
+  .rate.shake { animation: shake 0.45s; }
+  @keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+  .rate label { position: relative; cursor: pointer; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; }
+  .rate input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .rate svg { width: 32px; height: 32px; fill: var(--track); stroke: var(--soft-2); stroke-width: 0.6; transition: fill 0.2s, transform 0.45s cubic-bezier(0.3, 2, 0.5, 1); }
+  .rate label.lit svg { fill: var(--gold); stroke: transparent; }
+  .rate label.hov svg { fill: color-mix(in srgb, var(--gold) 55%, var(--track)); }
+  .rate label.boom svg { animation: boom 0.5s cubic-bezier(0.3, 2, 0.5, 1); animation-delay: calc(var(--k) * 60ms); }
+  @keyframes boom { 40% { transform: scale(1.35) rotate(12deg); } }
+  .rate label:has(input:focus-visible) { outline: 2.5px solid var(--focus); outline-offset: 1px; }
+  .word { margin-left: 8px; font-size: 13px; font-weight: 750; color: var(--berry); min-width: 60px; }
+  .field { display: grid; gap: 0; }
+  .field input, .field textarea { width: 100%; border-radius: 13px; border: 1.5px solid var(--soft-2); background: var(--card); padding: 10px 12px; font-size: 14px; color: var(--ink); transition: border-color 0.2s, box-shadow 0.2s; }
+  .field textarea { height: 76px; resize: none; line-height: 1.4; }
+  .field input:focus, .field textarea:focus { outline: none; border-color: var(--berry); box-shadow: 0 0 0 4px color-mix(in srgb, var(--berry) 15%, transparent); }
+  .field .bad { border-color: var(--bad); }
+  .hint { display: flex; justify-content: space-between; gap: 10px; min-height: 16px; margin-top: 4px; font-size: 11.5px; color: var(--muted); }
+  .err { color: var(--bad); font-weight: 650; }
+  .f-act { display: flex; gap: 8px; }
+  .f-act button { height: 46px; border: 0; border-radius: 14px; cursor: pointer; font-weight: 780; font-size: 14.5px; }
+  .cancel { padding: 0 16px; background: var(--soft); }
+  .post { position: relative; flex: 1; overflow: hidden; color: #fff; background: linear-gradient(135deg, var(--berry), var(--berry-2)); transition: transform 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  :root[data-theme="dark"] .post { color: #2a0716; }
+  .post:active { transform: scale(0.96); }
+  .post .pl { position: relative; z-index: 1; }
+  .post .bar { position: absolute; inset: 0; width: 0; background: rgba(255, 255, 255, 0.22); }
+  .post[data-state="work"] .bar { width: 100%; transition: width 0.8s cubic-bezier(0.6, 0.1, 0.3, 1); }
+  .post[data-state="done"] { background: var(--good); }
+
+  /* stars confetti and the demo pointer */
+  .fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }
+  .ghost { position: fixed; left: 0; top: 0; z-index: 40; width: 26px; height: 26px; pointer-events: none; opacity: 0; transform: translate(var(--gx, 70vw), var(--gy, 105vh)); transition: transform 0.8s cubic-bezier(0.55, 0, 0.25, 1), opacity 0.35s; }
+  .ghost.show { opacity: 1; }
+  .ghost svg { width: 100%; height: 100%; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35)); transition: transform 0.15s; }
+  .ghost.tap svg { transform: scale(0.8); }
+  .ghost::after { content: ""; position: absolute; left: -10px; top: -11px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--gold); opacity: 0; }
+  .ghost.tap::after { animation: ring 0.5s ease-out; }
+  @keyframes ring { from { opacity: 0.95; transform: scale(0.3); } to { opacity: 0; transform: scale(1.7); } }
+
+  @media (max-width: 860px) {
+    .stage { align-items: flex-start; padding-top: 14px; }
+    .prod { margin-top: 4px; }
+    .prod svg { width: 26px; height: 26px; padding: 3px; border-radius: 8px; }
+    .bars { gap: 1px; }
+    .row { height: 20px; }
+    .sum h1 { font-size: 19px; }
+    .wrap { grid-template-columns: minmax(0, 1fr); max-width: 440px; gap: 12px; }
+    .sum { padding: 16px; }
+    .score { grid-template-columns: 96px 1fr; gap: 14px; margin-top: 12px; }
+    .dial { width: 96px; height: 96px; }
+    .avg b { font-size: 27px; }
+    .total { margin-top: 10px; }
+    .topics { margin-top: 10px; padding-top: 10px; }
+    .topics .lab { display: none; }
+    .write { height: 44px; margin-top: 12px; }
+    .area { padding: 14px 14px 12px; }
+    .la-head { margin-bottom: 10px; }
+    form { gap: 10px; }
+    .field textarea { height: 62px; }
+    .rate label { width: 36px; height: 36px; }
+    .rate svg { width: 29px; height: 29px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="star" viewBox="0 0 24 24"><path d="M12 2.2l2.9 6.2 6.8.8-5 4.7 1.3 6.7L12 17.3 6 20.6l1.3-6.7-5-4.7 6.8-.8z"/></symbol>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd257"/><stop offset="1" stop-color="#f2a900"/></linearGradient>
+</defs></svg>
+<main class="stage">
+  <div class="wrap">
+    <section class="card sum" aria-labelledby="ttl">
+      <h1 id="ttl">Customer reviews</h1>
+      <p class="prod"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M9 30c0-9 3-20 11-20s11 11 11 20c0 3-5 4-11 4S9 33 9 30z" fill="#8a4b2a"/><path d="M12 22c4-3 12-3 16 0M13 26c4-2 10-2 14 0" stroke="#e8b27a" stroke-width="1.6" fill="none" stroke-linecap="round"/><path d="M15 15l5 4 5-4" stroke="#f2d0a4" stroke-width="1.6" fill="none"/></svg><span>Peshawari leather sandals · PKR 4,800</span></p>
+      <div class="score">
+        <div class="dial" id="dial">
+          <svg viewBox="0 0 112 112" aria-hidden="true"><circle class="trk" cx="56" cy="56" r="46"/><circle class="arc" id="arc" cx="56" cy="56" r="46"/><circle class="glint" cx="56" cy="56" r="46"/></svg>
+          <div class="avg"><b id="avg">0.00</b><span>out of 5</span></div>
+        </div>
+        <div class="bars" id="bars" role="group" aria-label="Filter by star rating"></div>
+      </div>
+      <p class="total"><span class="stars" aria-hidden="true"><span class="off"></span><span class="on" id="starsOn"></span></span><span><b id="count">0</b> reviews</span></p>
+      <div class="topics" role="group" aria-label="Filter by topic">
+        <span class="lab">People mention</span>
+        <button class="topic" type="button" data-t="comfort" aria-pressed="false">Comfort <small>86</small></button>
+        <button class="topic" type="button" data-t="stitching" aria-pressed="false">Stitching <small>54</small></button>
+        <button class="topic" type="button" data-t="delivery" aria-pressed="false">Delivery <small>31</small></button>
+      </div>
+      <button class="write" id="write" type="button"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>Write a review</button>
+    </section>
+
+    <section class="card area" id="area" aria-labelledby="lh">
+      <div class="la-head">
+        <h2 id="lh">Most helpful</h2>
+        <span class="filt" id="filt"><span id="filtTxt">5 stars</span><button type="button" id="clear">Clear</button></span>
+      </div>
+      <div class="panes">
+        <div class="pane list"><ul class="list" id="list" aria-live="polite"></ul></div>
+        <div class="pane form">
+          <form id="form" novalidate>
+            <fieldset>
+              <legend>Your rating</legend>
+              <div class="rate" id="rate"></div>
+            </fieldset>
+            <div class="field">
+              <label class="flab" for="txt">Your review</label>
+              <textarea id="txt" maxlength="200" placeholder="How do they feel, fit and look?"></textarea>
+              <div class="hint"><span id="txtErr" class="err"></span><span id="left">0 / 200</span></div>
+            </div>
+            <div class="field">
+              <label class="sr-only" for="nm">Your name (optional)</label>
+              <input id="nm" type="text" maxlength="30" autocomplete="name" placeholder="Your name (optional)" />
+            </div>
+            <div class="f-act">
+              <button class="cancel" type="button" id="cancel">Cancel</button>
+              <button class="post" type="submit" id="post" data-state="idle"><span class="bar"></span><span class="pl" id="postLbl">Post review</span></button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </div>
+  <p class="sr-only" aria-live="polite" id="status"></p>
+</main>
+<canvas class="fx" aria-hidden="true"></canvas>
+<div class="ghost" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 2.5v17l4.6-4.3 3 6.6 3.1-1.4-3-6.4 6.3-.4z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (s, r) { return (r || document).querySelector(s); };
+    var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+    var STAR = '<svg viewBox="0 0 24 24"><use href="#star"/></svg>';
+    var statusEl = $("#status"), area = $("#area"), listEl = $("#list");
+    function say(t) { statusEl.textContent = t; }
+    function wait(fn, ms) { return setTimeout(fn, reduce.matches ? Math.min(ms, 40) : ms); }
+
+    /* ---------- Data ---------- */
+    var counts = { 5: 236, 4: 52, 3: 12, 2: 6, 1: 6 };
+    var REVIEWS = [
+      { n: "Ayesha Raza", c: "Lahore", s: 5, d: "2 days ago", h: 24, t: ["comfort"], x: "Soft leather and the sole has real grip. Wore them to a mehndi and danced all night without a single blister." },
+      { n: "Kamran Butt", c: "Gujranwala", s: 4, d: "1 week ago", h: 11, t: ["stitching", "comfort"], x: "Great stitching. Runs a little tight for the first week, then fits like a glove." },
+      { n: "Sana Farooq", c: "Islamabad", s: 5, d: "2 weeks ago", h: 17, t: ["stitching"], x: "Ordered these for my father and he has not taken them off since. The hand stitching is beautiful." },
+      { n: "Faisal Nadeem", c: "Peshawar", s: 3, d: "3 weeks ago", h: 6, t: ["delivery"], x: "Good quality, but the brown is darker than in the photos and delivery took five days." },
+      { n: "Nida Hassan", c: "Karachi", s: 5, d: "1 month ago", h: 9, t: ["delivery", "comfort"], x: "Delivered in two days to Karachi. Comfortable straight out of the box." },
+      { n: "Tariq Mehmood", c: "Multan", s: 2, d: "1 month ago", h: 4, t: ["stitching"], x: "A strap came loose after a month. Support replaced the pair quickly, to be fair." },
+      { n: "Zainab Qadir", c: "Quetta", s: 4, d: "2 months ago", h: 3, t: ["comfort"], x: "Classic look and a solid build. I wish more sizes were in stock." },
+      { n: "Hassan Shah", c: "Sukkur", s: 1, d: "2 months ago", h: 2, t: ["delivery"], x: "The wrong size arrived and the exchange took ten days." }
+    ];
+    REVIEWS.forEach(function (r, i) { r.id = "r" + i; r.mine = false; });
+    var F = { stars: 0, topic: "" }, S = { writing: false, posting: false, rating: 0, shownAvg: 0, shownCount: 0 };
+
+    /* ---------- Summary: dial, bars and the star strip ---------- */
+    var barsEl = $("#bars");
+    [5, 4, 3, 2, 1].forEach(function (s, i) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "row"; b.dataset.s = s; b.setAttribute("aria-pressed", "false");
+      b.innerHTML = '<span class="n">' + s + STAR + '</span><span class="tr"><i style="--d:' + (0.25 + i * 0.09) + 's"></i></span><span class="pc">0%</span>';
+      barsEl.appendChild(b);
+    });
+    $("#starsOn").innerHTML = STAR + STAR + STAR + STAR + STAR;
+    $(".stars .off").innerHTML = STAR + STAR + STAR + STAR + STAR;
+    $(".stars .off").style.display = "flex";
+    function stats() {
+      var n = 0, sum = 0;
+      for (var s = 1; s <= 5; s++) { n += counts[s]; sum += s * counts[s]; }
+      return { n: n, avg: sum / n };
+    }
+    var tweenRaf = 0;
+    function render(pop) {
+      var st = stats();
+      $$(".row", barsEl).forEach(function (b) {
+        var s = +b.dataset.s, p = counts[s] / st.n * 100;
+        $(".tr i", b).style.setProperty("--w", p.toFixed(1) + "%");
+        $(".pc", b).textContent = Math.round(p) + "%";
+        b.setAttribute("aria-label", s + " stars: " + counts[s] + " reviews, " + Math.round(p) + "%. Show only these");
+      });
+      $("#arc").style.strokeDashoffset = (289 * (1 - st.avg / 5)).toFixed(1);
+      $("#starsOn").style.setProperty("--f", (st.avg / 5 * 100).toFixed(1) + "%");
+      // count the average and the total to their new values
+      cancelAnimationFrame(tweenRaf);
+      var a0 = S.shownAvg, c0 = S.shownCount, t0 = performance.now(), dur = reduce.matches ? 1 : 1100;
+      (function step(now) {
+        var k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+        S.shownAvg = a0 + (st.avg - a0) * e; S.shownCount = Math.round(c0 + (st.n - c0) * e);
+        $("#avg").textContent = S.shownAvg.toFixed(2);
+        $("#count").textContent = S.shownCount.toLocaleString("en-US");
+        if (k < 1) tweenRaf = requestAnimationFrame(step);
+      })(t0);
+      if (pop) { var d = $("#dial"); d.classList.remove("pop"); void d.offsetWidth; d.classList.add("pop"); }
+      $("#dial").setAttribute("aria-label", "Average " + st.avg.toFixed(2) + " out of 5 from " + st.n + " reviews");
+    }
+
+    /* ---------- Review cards ---------- */
+    function initials(n) { return n.split(" ").map(function (w) { return w[0]; }).join("").slice(0, 2).toUpperCase(); }
+    function hue(n) { var h = 0; for (var i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) % 360; return h; }
+    function card(r) {
+      var li = document.createElement("li");
+      li.className = "rv"; li.dataset.id = r.id;
+      var st = ""; for (var i = 1; i <= 5; i++) st += '<svg viewBox="0 0 24 24"' + (i <= r.s ? ' class="f"' : "") + '><use href="#star"/></svg>';
+      li.innerHTML = '<div class="rv-top"><span class="av" style="--h:' + hue(r.n) + '" aria-hidden="true">' + initials(r.n) + '</span><div class="who"><b></b><small>' + r.c + " · " + r.d + '</small></div><span class="rs" role="img" aria-label="' + r.s + ' out of 5 stars">' + st + "</span></div><p></p>" +
+        '<div class="rv-foot">' + (r.mine ? '<span class="new-tag"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/></svg>Just posted</span>' : '<span class="ver"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7.5"/></svg>Verified buyer</span>') +
+        '<button class="help" type="button" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M7 11v9H4v-9zM7 11l4-7c1.5 0 2.5 1 2.2 2.6L12.6 10H19a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 17.8 20H7"/></svg>Helpful <span class="hc">' + r.h + '</span><span class="plus" aria-hidden="true">+1</span></button></div>';
+      $(".who b", li).textContent = r.n; $("p", li).textContent = r.x;
+      $(".help", li).setAttribute("aria-label", "Helpful, " + r.h + " people found this useful");
+      return li;
+    }
+    var nodes = {};
+    function node(r) { return nodes[r.id] || (nodes[r.id] = card(r)); }
+    function limit() { return innerWidth < 861 ? 2 : 3; }
+    function matching() {
+      return REVIEWS.filter(function (r) { return (!F.stars || r.s === F.stars) && (!F.topic || r.t.indexOf(F.topic) >= 0); }).slice(0, limit());
+    }
+    // re-list with motion: leaving cards fade out, the rest glide to their new places (FLIP), new ones rise in
+    function relist(instant) {
+      var want = matching(), ids = want.map(function (r) { return r.id; });
+      var cur = $$(".rv", listEl), leaving = cur.filter(function (li) { return ids.indexOf(li.dataset.id) < 0; });
+      leaving.forEach(function (li) { li.classList.add("leave"); });
+      wait(function () {
+        var first = {};
+        $$(".rv", listEl).forEach(function (li) { first[li.dataset.id] = li.getBoundingClientRect().top; });
+        leaving.forEach(function (li) { li.classList.remove("leave"); li.remove(); });
+        var empty = $(".empty", listEl); if (empty) empty.remove();
+        var k = 0;
+        want.forEach(function (r) {
+          var li = node(r);
+          listEl.appendChild(li);
+          if (first[r.id] === undefined) { li.classList.remove("enter"); li.style.setProperty("--k", k++); void li.offsetWidth; li.classList.add("enter"); }
+        });
+        if (!want.length) { var e = document.createElement("li"); e.className = "empty"; e.textContent = "No reviews match yet. Try another filter."; listEl.appendChild(e); }
+        $$(".rv", listEl).forEach(function (li) {
+          var f = first[li.dataset.id]; if (f === undefined || reduce.matches) return;
+          var dy = f - li.getBoundingClientRect().top; if (!dy) return;
+          li.style.transition = "none"; li.style.transform = "translateY(" + dy + "px)";
+          void li.offsetWidth; li.style.transition = ""; li.style.transform = "";
+        });
+        fitPanes();
+      }, instant || !leaving.length ? 0 : 260);
+      var parts = [];
+      if (F.stars) parts.push(F.stars + (F.stars === 1 ? " star" : " stars"));
+      if (F.topic) parts.push(F.topic);
+      $("#filt").classList.toggle("on", parts.length > 0);
+      $("#filtTxt").textContent = parts.join(" · ");
+      $("#lh").textContent = parts.length ? "Filtered reviews" : "Most helpful";
+      barsEl.classList.toggle("filtering", !!F.stars);
+      $$(".row", barsEl).forEach(function (b) { b.setAttribute("aria-pressed", String(+b.dataset.s === F.stars)); });
+      $$(".topic").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.t === F.topic)); });
+    }
+    function setStars(s) { if (S.writing) showList(); F.stars = F.stars === s ? 0 : s; relist(); say(F.stars ? "Showing " + F.stars + "-star reviews." : "Showing all reviews."); }
+    function setTopic(t) { if (S.writing) showList(); F.topic = F.topic === t ? "" : t; relist(); say(F.topic ? "Showing reviews that mention " + F.topic + "." : "Showing all reviews."); }
+    barsEl.addEventListener("click", function (e) { var b = e.target.closest(".row"); if (b) setStars(+b.dataset.s); });
+    $$(".topic").forEach(function (b) { b.addEventListener("click", function () { setTopic(b.dataset.t); }); });
+    $("#clear").addEventListener("click", function () { F.stars = 0; F.topic = ""; relist(); say("Filters cleared."); });
+
+    listEl.addEventListener("click", function (e) {
+      var b = e.target.closest(".help"); if (!b) return;
+      var r = REVIEWS.filter(function (x) { return x.id === b.closest(".rv").dataset.id; })[0]; if (!r) return;
+      var on = b.getAttribute("aria-pressed") !== "true";
+      r.h += on ? 1 : -1;
+      b.setAttribute("aria-pressed", String(on));
+      $(".hc", b).textContent = r.h;
+      b.setAttribute("aria-label", "Helpful, " + r.h + " people found this useful");
+      if (on) { var p = $(".plus", b); p.classList.remove("go"); void p.offsetWidth; p.classList.add("go"); }
+      say(on ? "Marked as helpful." : "Helpful mark removed.");
+    });
+
+    /* ---------- Write a review ---------- */
+    var WORDS = ["", "Poor", "Fair", "Good", "Great", "Loved it"];
+    var rate = $("#rate");
+    rate.innerHTML = [1, 2, 3, 4, 5].map(function (s) {
+      return '<label style="--k:' + (s - 1) + '"><input type="radio" name="rating" value="' + s + '" aria-label="' + s + (s === 1 ? " star, " : " stars, ") + WORDS[s] + '" />' + STAR + "</label>";
+    }).join("") + '<span class="word" id="word" aria-hidden="true"></span>';
+    var labels = $$("label", rate);
+    function light(n, cls) { labels.forEach(function (l, i) { l.classList.toggle(cls, i < n); }); }
+    function setRating(n) {
+      S.rating = n;
+      $('input[value="' + n + '"]', rate).checked = true;
+      light(n, "lit"); light(0, "hov");
+      labels.forEach(function (l, i) { l.classList.remove("boom"); if (i < n) { void l.offsetWidth; l.classList.add("boom"); } });
+      $("#word").textContent = WORDS[n];
+      if (n >= 4) { var r = labels[n - 1].getBoundingClientRect(); burst(r.left + r.width / 2, r.top + r.height / 2, n === 5 ? 22 : 12); }
+    }
+    $$("input", rate).forEach(function (i) { i.addEventListener("change", function () { setRating(+i.value); }); });
+    labels.forEach(function (l, i) {
+      l.addEventListener("pointerenter", function () { light(i + 1, "hov"); $("#word").textContent = WORDS[i + 1]; });
+    });
+    rate.addEventListener("pointerleave", function () { light(0, "hov"); $("#word").textContent = WORDS[S.rating]; });
+
+    var txt = $("#txt"), nm = $("#nm"), post = $("#post"), panes = $(".panes");
+    function fitPanes() { var a = $(S.writing ? ".pane.form" : ".pane.list"); panes.style.height = a.offsetHeight + "px"; }
+    txt.addEventListener("input", function () { $("#left").textContent = txt.value.length + " / 200"; if (txt.value.trim().length >= 12) { $("#txtErr").textContent = ""; txt.classList.remove("bad"); } });
+    function showForm() {
+      if (S.writing) return;
+      S.writing = true; area.classList.add("writing");
+      fitPanes();
+      $("#lh").textContent = "Write a review";
+      $("#filt").classList.remove("on");
+      if (!demoOn) wait(function () { var f = $("input", rate); if (f) f.focus({ preventScroll: true }); }, 350);
+      say("Write your review: pick a star rating first.");
+    }
+    function showList() {
+      S.writing = false; area.classList.remove("writing");
+      relist(true);
+    }
+    $("#write").addEventListener("click", function () { if (S.writing) showList(); else showForm(); });
+    $("#cancel").addEventListener("click", function () { showList(); if (!demoOn) $("#write").focus({ preventScroll: true }); });
+    addEventListener("keydown", function (e) { if (e.key === "Escape" && S.writing && !S.posting) showList(); });
+
+    $("#form").addEventListener("submit", function (e) { e.preventDefault(); submit(); });
+    function submit() {
+      if (S.posting) return;
+      var text = txt.value.trim(), ok = true;
+      if (!S.rating) { rate.classList.remove("shake"); void rate.offsetWidth; rate.classList.add("shake"); ok = false; say("Pick 1 to 5 stars first."); }
+      if (text.length < 12) { $("#txtErr").textContent = "A little more please (12+ characters)"; txt.classList.add("bad"); ok = false; if (S.rating) say("Your review needs at least 12 characters."); }
+      if (!ok) return;
+      S.posting = true;
+      post.dataset.state = "work"; $("#postLbl").textContent = "Posting…";
+      wait(function () { post.dataset.state = "done"; $("#postLbl").textContent = "Posted"; }, 850);
+      wait(function () {
+        var r = { id: "m" + Date.now(), n: nm.value.trim() || "You", c: "Just now", s: S.rating, d: "verified soon", h: 0, t: [], x: text, mine: true };
+        REVIEWS.unshift(r);
+        counts[r.s]++;
+        F.stars = 0; F.topic = "";
+        S.writing = false; area.classList.remove("writing");
+        relist(true);
+        render(true);
+        wait(function () { var li = nodes[r.id]; if (li) { li.classList.remove("enter"); li.classList.add("fresh"); } }, 20);
+        var d = $("#dial").getBoundingClientRect(); burst(d.left + d.width / 2, d.top + d.height / 2, 40);
+        say("Thank you! Your " + r.s + "-star review is posted. The average is now " + stats().avg.toFixed(2) + ".");
+        // reset the form for next time
+        txt.value = ""; nm.value = ""; S.rating = 0; light(0, "lit"); $("#word").textContent = ""; $("#left").textContent = "0 / 200";
+        $$("input", rate).forEach(function (i) { i.checked = false; });
+        post.dataset.state = "idle"; $("#postLbl").textContent = "Post review";
+        S.posting = false;
+      }, 1350);
+    }
+    // take a posted review back out (used when the demo loops)
+    function unpost() {
+      var mine = REVIEWS.filter(function (r) { return r.mine; });
+      if (!mine.length) return;
+      mine.forEach(function (r) { counts[r.s]--; REVIEWS.splice(REVIEWS.indexOf(r), 1); var li = nodes[r.id]; if (li) li.classList.add("leave"); delete nodes[r.id]; });
+      wait(function () { relist(true); render(false); }, 260);
+    }
+
+    /* ---------- Gold star confetti ---------- */
+    var fx = $(".fx"), ctx = fx.getContext("2d"), bits = [], raf = 0;
+    function sizeFx() { var d = Math.min(devicePixelRatio || 1, 2); fx.width = innerWidth * d; fx.height = innerHeight * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+    var COLS = ["#f2a900", "#ffd257", "#ffe9a8", "#b8336f", "#ff9bbe"];
+    function burst(x, y, n) {
+      if (reduce.matches) return;
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 5.5;
+        bits.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2.5, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3, s: 3 + Math.random() * 5, c: COLS[i % COLS.length], life: 0 });
+      }
+      if (!raf) raf = requestAnimationFrame(step);
+    }
+    function step() {
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      bits = bits.filter(function (b) { return b.life < 75; });
+      bits.forEach(function (b) {
+        b.life++; b.vy += 0.17; b.vx *= 0.97; b.x += b.vx; b.y += b.vy; b.r += b.vr;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.globalAlpha = Math.min(1, (75 - b.life) / 20); ctx.fillStyle = b.c;
+        ctx.beginPath(); for (var i = 0; i < 10; i++) { var rr = i % 2 ? b.s * 0.45 : b.s, a = i * Math.PI / 5 - Math.PI / 2; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); ctx.fill();
+        ctx.restore();
+      });
+      raf = bits.length ? requestAnimationFrame(step) : 0;
+    }
+
+    /* ---------- Auto-demo: plays on load and every few seconds; any real input stops it ---------- */
+    var ghost = $(".ghost"), demoOn = !reduce.matches, timers = [];
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+    function ghostTo(el, then) {
+      if (!el) return;
+      var r = el.getBoundingClientRect();
+      ghost.classList.add("show");
+      ghost.style.setProperty("--gx", Math.min(innerWidth - 30, r.left + r.width * 0.55) + "px");
+      ghost.style.setProperty("--gy", r.top + r.height * 0.6 + "px");
+      later(function () { ghost.classList.add("tap"); later(function () { ghost.classList.remove("tap"); if (demoOn && then) then(); }, 170); }, 820);
+    }
+    function stopDemo() { if (!demoOn) return; demoOn = false; timers.forEach(clearTimeout); ghost.classList.remove("show", "tap"); }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, function (e) { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }); });
+    var DEMO_TEXT = "So comfortable from day one, and the stitching is perfect.";
+    function demo() {
+      if (!demoOn) return;
+      later(function () { ghostTo($('.row[data-s="5"]'), function () { setStars(5); }); }, 200);
+      later(function () { ghostTo($(".rv .help"), function () { var b = $(".rv .help"); if (b) b.click(); }); }, 2000);
+      later(function () { ghostTo($('.row[data-s="5"]'), function () { setStars(5); }); }, 3800);
+      later(function () { ghostTo($("#write"), showForm); }, 5400);
+      later(function () { ghostTo(labels[4], function () { setRating(5); }); }, 6900);
+      later(function () { ghostTo(txt); }, 8000);
+      for (var i = 0; i <= DEMO_TEXT.length; i++) (function (i) { later(function () { txt.value = DEMO_TEXT.slice(0, i); $("#left").textContent = i + " / 200"; }, 8900 + i * 26); })(i);
+      later(function () { ghostTo(post, submit); }, 10600);
+      later(function () { ghost.classList.remove("show"); }, 13200);
+      later(function () {
+        unpost();
+        var h = $('.help[aria-pressed="true"]'); if (h) h.click();
+      }, 15600);
+      later(demo, 17200);
+    }
+
+    /* ---------- Start ---------- */
+    sizeFx();
+    addEventListener("resize", function () { sizeFx(); if (!S.writing) relist(true); else fitPanes(); });
+    relist(true);
+    wait(function () { render(false); }, 260);
+    if (demoOn) later(demo, 1500);
+  })();
+</script>
+</body>
+</html>

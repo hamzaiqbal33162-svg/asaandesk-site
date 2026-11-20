@@ -1,0 +1,686 @@
+<!doctype html>
+<!-- Chill & Craft · Shutter Ring · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shutter Ring · a camera with modes, focus and a shutter that morphs</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: light first, dark below (the camera itself stays dark, like the real thing) ---------- */
+  :root {
+    --bg-a: #f4ede2; --bg-b: #e9dccb; --dot: rgba(40, 30, 10, 0.07); --glow: rgba(255, 190, 60, 0.35);
+    --ink: #1d1a14; --muted: #6f6656; --card: #fffaf2; --edge: #e3d7c4;
+    --cam: #0a0a0b; --cam-2: #161618; --amber: #ffc83d; --rec: #ff3b30; --focus: #b26b00;
+    --bezel: #121110; --bezel-edge: #3a352d; --shadow: rgba(60, 40, 10, 0.32);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #0b0a08; --bg-b: #1a150c; --dot: rgba(255, 220, 150, 0.05); --glow: rgba(255, 180, 40, 0.14);
+    --ink: #f6f0e4; --muted: #ab9f88; --card: #1b1812; --edge: #2d2820;
+    --cam: #000000; --cam-2: #121214; --focus: #ffd66b;
+    --bezel: #030303; --bezel-edge: #2d2820; --shadow: rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg-a); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+  button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 72px; padding: 22px 16px; background: radial-gradient(var(--dot) 1px, transparent 1.4px) 0 0 / 20px 20px, linear-gradient(160deg, var(--bg-a), var(--bg-b)); }
+  .glow { position: absolute; width: 60vmax; height: 60vmax; left: 50%; top: 50%; margin: -30vmax 0 0 -30vmax; border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 62%); pointer-events: none; animation: wander 16s ease-in-out infinite alternate; }
+  @keyframes wander { to { transform: translate(-6vmax, 6vmax) scale(1.1); } }
+  .caption { display: none; position: relative; z-index: 1; max-width: 300px; }
+  .eyebrow { margin: 0 0 12px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow i { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; border: 2px solid var(--focus); }
+  .caption h2 { margin: 0 0 14px; font-size: 48px; line-height: 1; letter-spacing: -0.035em; }
+  .caption p { margin: 0 0 22px; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .caption ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .caption li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .caption kbd { font: inherit; font-size: 12px; font-weight: 750; min-width: 70px; text-align: center; padding: 4px 10px; border-radius: 9px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 2px 0 var(--edge); }
+  @media (min-width: 900px) { .caption { display: block; } }
+
+  /* ---------- Phone ---------- */
+  .phone {
+    position: relative; z-index: 1; width: min(390px, 100%);
+    height: clamp(540px, calc(100vh - 44px), 760px); height: clamp(540px, calc(100dvh - 44px), 760px);
+    display: flex; flex-direction: column; background: var(--cam); color: #fff; border-radius: 46px; overflow: hidden; isolation: isolate;
+    box-shadow: 0 0 0 10px var(--bezel), 0 0 0 11px var(--bezel-edge), 0 50px 90px -30px var(--shadow);
+  }
+  .status { flex: none; height: 44px; padding: 8px 30px 0 34px; display: flex; align-items: center; justify-content: space-between; font-size: 14.5px; font-weight: 700; }
+  .status svg { width: 62px; height: 13px; fill: currentColor; }
+  @media (max-width: 480px) {
+    .stage { padding: 0; }
+    .phone { width: 100%; height: 100vh; height: 100dvh; border-radius: 0; box-shadow: none; }
+    .status { padding: 6px 20px 0 22px; }
+  }
+
+  .topbar { flex: none; height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; position: relative; }
+  .tb { width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.1); display: grid; place-items: center; position: relative; }
+  .tb svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .tb[data-flash="on"] { background: var(--amber); }
+  .tb[data-flash="on"] svg { stroke: #000; fill: #000; }
+  .tb[data-flash="auto"] svg { stroke: var(--amber); }
+  .tb .a { position: absolute; right: 2px; bottom: 2px; font-size: 9px; font-weight: 900; color: var(--amber); display: none; }
+  .tb[data-flash="auto"] .a { display: block; }
+  .tb[data-flash="off"] .slash { display: block; }
+  .slash { display: none; }
+  .rec { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(0.6); opacity: 0; display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px; border-radius: 8px; background: var(--rec); font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; transition: transform 0.4s cubic-bezier(0.3, 1.7, 0.5, 1), opacity 0.2s; }
+  .rec i { width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: blinkr 1s steps(2) infinite; }
+  @keyframes blinkr { 50% { opacity: 0.2; } }
+  .phone.recording .rec { opacity: 1; transform: translate(-50%, -50%); }
+  .chip-top { font-size: 11.5px; font-weight: 800; letter-spacing: 0.06em; padding: 5px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); color: var(--amber); transition: opacity 0.25s; }
+  .phone.recording .chip-top { opacity: 0; }
+
+  /* ---------- Viewfinder ---------- */
+  .vf-wrap { position: relative; flex: 1; min-height: 0; margin: 0 8px; perspective: 1200px; }
+  .vf { position: absolute; inset: 0; border-radius: 22px; overflow: hidden; touch-action: none; cursor: crosshair; background: #111; }
+  .vf svg.scene { position: absolute; inset: 0; width: 100%; height: 100%; transition: filter 0.6s; }
+  .vf .grid { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, transparent calc(33.33% - 0.5px), rgba(255, 255, 255, 0.22) 33.33%, transparent calc(33.33% + 0.5px), transparent calc(66.66% - 0.5px), rgba(255, 255, 255, 0.22) 66.66%, transparent calc(66.66% + 0.5px)), linear-gradient(transparent calc(33.33% - 0.5px), rgba(255, 255, 255, 0.22) 33.33%, transparent calc(33.33% + 0.5px), transparent calc(66.66% - 0.5px), rgba(255, 255, 255, 0.22) 66.66%, transparent calc(66.66% + 0.5px)); }
+  .flash { position: absolute; inset: 0; z-index: 15; background: #fff; opacity: 0; pointer-events: none; }
+  .vf .bgl, .shot .bgl { transition: filter 0.6s; }
+  .portrait .bgl { filter: blur(3.2px); }
+  .portrait .subj { filter: drop-shadow(0 0 0 transparent); }
+  .night-on .day { opacity: 0; }
+  .vf .day, .vf .nite { transition: opacity 0.8s; }
+  .nite { opacity: 0; }
+  .night-on .nite { opacity: 1; }
+  .phone.recording .vf { box-shadow: inset 0 0 0 3px var(--rec); }
+
+  .badge { position: absolute; left: 12px; top: 12px; z-index: 4; display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 12px; font-weight: 750; opacity: 0; transform: translateY(-6px); transition: opacity 0.3s, transform 0.4s cubic-bezier(0.3, 1.7, 0.5, 1); pointer-events: none; }
+  .badge.on { opacity: 1; transform: none; }
+  .badge svg { width: 14px; height: 14px; fill: var(--amber); }
+
+  .fsq { position: absolute; left: 0; top: 0; z-index: 5; width: 74px; height: 74px; margin: -37px 0 0 -37px; border: 1.5px solid var(--amber); border-radius: 6px; opacity: 0; pointer-events: none; }
+  .fsq::before, .fsq::after { content: ""; position: absolute; background: var(--amber); }
+  .fsq::before { left: 50%; top: -1px; width: 1.5px; height: 7px; box-shadow: 0 74px 0 var(--amber); margin-left: -0.75px; }
+  .fsq::after { top: 50%; left: -1px; height: 1.5px; width: 7px; box-shadow: 74px 0 0 var(--amber); margin-top: -0.75px; }
+  .fsq.on { opacity: 1; animation: fpop 0.55s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .fsq.dim { opacity: 0.45; transition: opacity 0.6s; }
+  @keyframes fpop { 0% { transform: scale(1.5); opacity: 0; } 60% { transform: scale(0.94); opacity: 1; } 100% { transform: scale(1); } }
+  .exp { position: absolute; right: -30px; top: 50%; width: 22px; height: 110px; margin-top: -55px; pointer-events: none; touch-action: none; cursor: ns-resize; }
+  .fsq.on .exp { pointer-events: auto; }
+  .exp::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 1.5px; background: rgba(255, 200, 61, 0.55); }
+  .exp i { position: absolute; left: 0; width: 22px; height: 22px; margin-top: -11px; top: var(--y, 50%); display: grid; place-items: center; }
+  .exp svg { width: 20px; height: 20px; fill: var(--amber); }
+
+  .zooms { position: absolute; left: 50%; bottom: 12px; z-index: 6; transform: translateX(-50%); display: flex; gap: 6px; padding: 4px; border-radius: 999px; background: rgba(0, 0, 0, 0.35); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .zoom { width: 34px; height: 34px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.08); font-size: 11.5px; font-weight: 800; color: #fff; transition: transform 0.35s cubic-bezier(0.3, 1.7, 0.5, 1), background 0.2s, color 0.2s; }
+  .zoom[aria-pressed="true"] { color: var(--amber); background: rgba(0, 0, 0, 0.55); transform: scale(1.12); }
+  .pano-guide { position: absolute; left: 14%; right: 14%; top: 50%; height: 54px; margin-top: -27px; z-index: 6; border: 1.5px solid rgba(255, 255, 255, 0.7); border-radius: 8px; display: none; overflow: hidden; }
+  .pano-on .pano-guide { display: block; }
+  .pano-guide i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(255, 200, 61, 0.3); border-right: 2px solid var(--amber); }
+  .pano-guide span { position: absolute; left: 50%; top: 100%; margin-top: 8px; transform: translateX(-50%); font-size: 12px; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 4px #000; }
+  .hold { position: absolute; left: 50%; top: 18px; z-index: 6; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: rgba(0, 0, 0, 0.5); font-size: 12.5px; font-weight: 700; opacity: 0; transition: opacity 0.25s; pointer-events: none; white-space: nowrap; }
+  .hold.on { opacity: 1; }
+
+  /* ---------- Modes and controls ---------- */
+  .modes { flex: none; position: relative; height: 44px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent); mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent); transition: opacity 0.3s; }
+  .phone.recording .modes, .phone.busy .modes { opacity: 0.25; pointer-events: none; }
+  .mstrip { position: absolute; left: 0; top: 0; height: 100%; display: flex; align-items: center; gap: 4px; white-space: nowrap; transition: transform 0.55s cubic-bezier(0.3, 1.35, 0.5, 1); }
+  .mode { border: 0; background: none; height: 32px; padding: 0 10px; border-radius: 16px; font-size: 12.5px; font-weight: 800; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.62); transition: color 0.25s, transform 0.4s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .mode[aria-checked="true"] { color: var(--amber); transform: scale(1.08); }
+  .ctrl { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 6px 34px 22px; }
+  .thumb { position: relative; width: 50px; height: 50px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, 0.85); background: var(--cam-2); overflow: hidden; padding: 0; }
+  .thumb .in { position: absolute; inset: 0; }
+  .thumb .in svg { width: 100%; height: 100%; display: block; }
+  .thumb .n { position: absolute; right: -2px; top: -2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--amber); color: #000; font-size: 10.5px; font-weight: 900; display: grid; place-items: center; transform: scale(0); transition: transform 0.4s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .thumb.has .n { transform: scale(1); }
+  .thumb.bump { animation: bump 0.5s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes bump { 40% { transform: scale(1.18); } }
+  .thumb .vid { position: absolute; left: 4px; bottom: 3px; font-size: 9px; font-weight: 800; text-shadow: 0 1px 3px #000; }
+  .shutter { position: relative; width: 78px; height: 78px; border-radius: 50%; border: 0; padding: 0; background: none; display: grid; place-items: center; }
+  .shutter .ring { position: absolute; inset: 0; border-radius: 50%; border: 4px solid #fff; }
+  .shutter .core { width: 62px; height: 62px; border-radius: 50%; background: #fff; transition: width 0.4s cubic-bezier(0.3, 1.5, 0.5, 1), height 0.4s cubic-bezier(0.3, 1.5, 0.5, 1), border-radius 0.4s cubic-bezier(0.3, 1.5, 0.5, 1), background 0.3s, transform 0.25s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .shutter:active .core, .shutter.press .core { transform: scale(0.86); }
+  .phone[data-mode="video"] .shutter .core { background: var(--rec); width: 58px; height: 58px; }
+  .phone.recording .shutter .core { width: 28px; height: 28px; border-radius: 7px; }
+  .phone[data-mode="night"] .shutter .core { background: #fff2c4; }
+  .phone[data-mode="pano"] .shutter .core { background: #fff; }
+  .shutter svg.prog { position: absolute; inset: -6px; width: 90px; height: 90px; transform: rotate(-90deg); pointer-events: none; }
+  .shutter svg.prog circle { fill: none; stroke: var(--amber); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 270; stroke-dashoffset: 270; }
+  .shutter .ico { position: absolute; width: 26px; height: 26px; fill: none; stroke: #000; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity 0.25s, transform 0.4s cubic-bezier(0.3, 1.7, 0.5, 1); transform: scale(0.5) rotate(-30deg); pointer-events: none; }
+  .phone[data-mode="night"] .shutter .i-moon, .phone[data-mode="pano"] .shutter .i-pano, .phone[data-mode="portrait"] .shutter .i-port { opacity: 0.85; transform: none; }
+  .phone.recording .shutter .ico { opacity: 0 !important; }
+  .flip { width: 50px; height: 50px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.12); display: grid; place-items: center; }
+  .flip svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.6s cubic-bezier(0.3, 1.4, 0.5, 1); }
+  .flip.spun svg { transform: rotate(180deg); }
+
+  .flyer { position: absolute; z-index: 25; border-radius: 22px; overflow: hidden; pointer-events: none; box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7); }
+  .flyer svg { width: 100%; height: 100%; display: block; }
+
+  /* ---------- Review ---------- */
+  .review { position: absolute; inset: 0; z-index: 30; background: #000; display: flex; flex-direction: column; padding: 50px 14px 18px; visibility: hidden; opacity: 0; transform: scale(1.04); transition: opacity 0.3s, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s 0.4s; }
+  .review.on { visibility: visible; opacity: 1; transform: none; transition: opacity 0.3s, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .rv-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .rv-top b { font-size: 15px; }
+  .rv-top small { display: block; font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+  .rv-close { height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: rgba(255, 255, 255, 0.14); font-weight: 750; font-size: 13.5px; }
+  .rv-big { position: relative; flex: 1; min-height: 0; border-radius: 18px; overflow: hidden; background: #111; }
+  .rv-big svg { width: 100%; height: 100%; display: block; }
+  .rv-big .vid { position: absolute; inset: 0; display: grid; place-items: center; }
+  .rv-big .vid i { width: 64px; height: 64px; border-radius: 50%; background: rgba(0, 0, 0, 0.45); display: grid; place-items: center; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  .rv-big .vid svg { width: 26px; height: 26px; fill: #fff; }
+  .rv-strip { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; scrollbar-width: none; }
+  .rv-strip button { flex: none; width: 52px; height: 52px; border-radius: 10px; overflow: hidden; border: 2px solid transparent; padding: 0; background: #111; opacity: 0.6; transition: opacity 0.2s, transform 0.3s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .rv-strip button[aria-current="true"] { border-color: var(--amber); opacity: 1; transform: scale(1.06); }
+  .rv-strip svg { width: 100%; height: 100%; display: block; }
+  .review .empty { margin: auto; color: rgba(255, 255, 255, 0.7); font-size: 14px; }
+
+  /* scene motion */
+  .scene .sway { animation: sway 4s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+  @keyframes sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg) translateY(-4px); } }
+  .scene .tail { animation: tail 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: 0% 100%; }
+  @keyframes tail { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-16deg); } }
+  .scene .twk { animation: twk 2.2s ease-in-out infinite; animation-delay: var(--d, 0s); }
+  @keyframes twk { 50% { opacity: 0.2; } }
+  .scene .blinkeye { animation: blinkeye 4s infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes blinkeye { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glow, .scene .sway, .scene .tail, .scene .twk, .scene .blinkeye, .rec i { animation: none !important; }
+    .mstrip, .vf svg.scene { transition-duration: 0.01s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="glow" aria-hidden="true"></div>
+  <section class="caption" aria-hidden="true">
+    <p class="eyebrow"><i></i>Mobile interactions</p>
+    <h2>Shutter Ring</h2>
+    <p>A phone camera where every mode has its own shutter. Tap to focus, swipe through the modes, and watch each picture fly into the gallery.</p>
+    <ul>
+      <li><kbd>Tap</kbd> the picture to focus there</li>
+      <li><kbd>Swipe</kbd> sideways to change mode</li>
+      <li><kbd>Drag</kbd> the sun to change exposure</li>
+      <li><kbd>Scroll</kbd> or tap the chips to zoom</li>
+      <li><kbd>Space</kbd> shoots, <kbd>← →</kbd> modes</li>
+    </ul>
+  </section>
+
+  <div class="phone" id="phone" data-mode="photo">
+    <div class="status" aria-hidden="true">
+      <span id="clock">9:41</span>
+      <svg viewBox="0 0 62 13"><rect x="0" y="8" width="3" height="5" rx="1"/><rect x="5" y="5.5" width="3" height="7.5" rx="1"/><rect x="10" y="3" width="3" height="10" rx="1"/><rect x="15" y="0.5" width="3" height="12.5" rx="1"/><path d="M29 4.2a9 9 0 0 1 12 0l-1.4 1.5a7 7 0 0 0-9.2 0zM31.6 7a5.2 5.2 0 0 1 6.8 0L35 10.6z"/><rect x="44" y="1" width="16" height="11" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="45.8" y="2.8" width="10.5" height="7.4" rx="1.8"/><rect x="60.6" y="4.6" width="1.4" height="3.8" rx="0.7"/></svg>
+    </div>
+    <div class="topbar">
+      <button class="tb" type="button" id="flashBtn" data-flash="off" aria-label="Flash: off">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 5 13h6l-1 9 8-11h-6z"/><path class="slash" d="M3 3l18 18"/></svg><span class="a">A</span>
+      </button>
+      <span class="rec" aria-hidden="true"><i></i><span id="recT">00:00</span></span>
+      <span class="chip-top" id="chipTop">PHOTO · 12 MP</span>
+    </div>
+
+    <div class="vf-wrap" id="vfWrap">
+      <div class="vf" id="vf" role="img" aria-label="Viewfinder: a rooftop at golden hour with a cat on the ledge">
+        <div id="sceneHost"></div>
+        <div class="grid" aria-hidden="true"></div>
+        <div class="badge" id="badge" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg><span id="badgeT">f/1.8 · Portrait</span></div>
+        <div class="hold" id="holdTip" aria-hidden="true">Hold still…</div>
+        <div class="pano-guide" aria-hidden="true"><i id="panoBar"></i><span id="panoTip">Press the shutter, then move slowly</span></div>
+        <div class="fsq" id="fsq" aria-hidden="true"><div class="exp" id="exp"><i><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" stroke="#ffc83d" stroke-width="2" stroke-linecap="round"/></svg></i></div></div>
+        <div class="zooms" role="group" aria-label="Zoom">
+          <button class="zoom" type="button" data-z="0.6" aria-pressed="false">.6×</button>
+          <button class="zoom" type="button" data-z="1" aria-pressed="true">1×</button>
+          <button class="zoom" type="button" data-z="2" aria-pressed="false">2×</button>
+        </div>
+        <div class="flash" id="flash"></div>
+      </div>
+    </div>
+
+    <div class="modes" id="modes">
+      <div class="mstrip" id="mstrip" role="radiogroup" aria-label="Camera mode"></div>
+    </div>
+    <div class="ctrl">
+      <button class="thumb" type="button" id="thumb" aria-label="Open gallery, no pictures yet"><span class="in" id="thumbIn"></span><span class="n" id="thumbN">0</span></button>
+      <button class="shutter" type="button" id="shutter" aria-label="Take photo">
+        <span class="ring"></span><span class="core"></span>
+        <svg class="ico i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5 7.5 7.5 0 1 0 19 14.5z"/></svg>
+        <svg class="ico i-pano" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7c6 2 12 2 18 0v10c-6-2-12-2-18 0z"/></svg>
+        <svg class="ico i-port" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="3.5"/><path d="M5 20c1-4 4-6 7-6s6 2 7 6"/></svg>
+        <svg class="prog" viewBox="0 0 90 90" aria-hidden="true"><circle id="progC" cx="45" cy="45" r="43"/></svg>
+      </button>
+      <button class="flip" type="button" id="flipBtn" aria-label="Switch to front camera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9a8 8 0 0 1 14-3l2 2M20 15a8 8 0 0 1-14 3l-2-2"/><path d="M20 4v4h-4M4 20v-4h4"/></svg></button>
+    </div>
+
+    <section class="review" id="review" aria-label="Gallery" aria-hidden="true">
+      <div class="rv-top"><div><b id="rvTitle">Photo</b><small id="rvSub">Just now</small></div><button class="rv-close" type="button" id="rvClose">Back to camera</button></div>
+      <div class="rv-big" id="rvBig"></div>
+      <div class="rv-strip" id="rvStrip" aria-label="All pictures"></div>
+    </section>
+
+    <p class="sr-only" id="live" aria-live="polite"></p>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var phone = $("phone"), vf = $("vf"), host = $("sceneHost"), live = $("live"), shutter = $("shutter");
+  function announce(t) { live.textContent = t; }
+
+  // ---------- The drawn scenes: back camera (rooftop at golden hour) and front camera (a selfie) ----------
+  function backScene() {
+    var win = "", st = "";
+    for (var i = 0; i < 16; i++) win += '<rect class="twk" style="--d:-' + (i * 0.37).toFixed(2) + 's" x="' + (12 + (i * 47) % 330) + '" y="' + (262 + (i * 29) % 56) + '" width="7" height="9" rx="1" fill="#ffcf6b" opacity=".85"/>';
+    for (var j = 0; j < 18; j++) st += '<circle class="twk" style="--d:-' + (j * 0.3).toFixed(1) + 's" cx="' + ((j * 67) % 350 + 5) + '" cy="' + (20 + (j * 41) % 170) + '" r="' + (j % 3 ? 1.1 : 1.8) + '" fill="#fff"/>';
+    return '<svg class="scene" viewBox="0 0 360 480" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs>' +
+      '<linearGradient id="skyD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a2a64"/><stop offset=".45" stop-color="#c55b7b"/><stop offset=".75" stop-color="#ff9a5b"/><stop offset="1" stop-color="#ffd27a"/></linearGradient>' +
+      '<linearGradient id="skyN" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#050818"/><stop offset=".6" stop-color="#1b1b48"/><stop offset="1" stop-color="#3d2c5e"/></linearGradient>' +
+      '<radialGradient id="sunG"><stop offset="0" stop-color="#fff4c9"/><stop offset=".5" stop-color="#ffe08a" stop-opacity=".6"/><stop offset="1" stop-color="#ffb35b" stop-opacity="0"/></radialGradient></defs>' +
+      '<g id="zoomG"><g class="bgl"><g id="L0">' +
+      '<rect x="-40" y="-40" width="440" height="560" fill="url(#skyD)" class="day"/><rect x="-40" y="-40" width="440" height="560" fill="url(#skyN)" class="nite"/>' +
+      '<g class="nite">' + st + '<circle cx="270" cy="90" r="20" fill="#fff6d8"/><circle cx="280" cy="84" r="18" fill="#0c0f2c"/></g>' +
+      '<g class="day"><circle cx="210" cy="250" r="90" fill="url(#sunG)"/><circle cx="210" cy="250" r="30" fill="#fff1c1"/></g>' +
+      '<g class="sway"><path d="M84 110l16 20-16 20-16-20z" fill="#ff5a6b"/><path d="M84 110v40l16-20z" fill="#ffd23f"/><path d="M84 150c-6 18 8 24 0 40" stroke="#5a1f33" stroke-width="1.4" fill="none"/></g></g>' +
+      '<g id="L1" fill="#7a3d62"><path d="M-30 300V262h40v-18h14v18h30v-30h8v-14l6-10 6 10v14h8v30h40v-22h28v22h34v-40l14-16 14 16v40h40v-12h40v30h70V480H-30z"/></g>' +
+      '<g id="L2"><path d="M-30 330h70v-30h52v30h40v-44h60v44h48v-24h70v24h70V480H-30z" fill="#4c2546"/>' + win + "</g></g>" +
+      '<g id="L3" class="subj"><path d="M-20 400q200-14 400 0V500H-20z" fill="#2c1828"/><path d="M-20 392h400v14H-20z" fill="#5b3446"/>' +
+      '<path d="M-10 40q95 40 190 6t190 8" stroke="#2a1520" stroke-width="1.4" fill="none"/>' +
+      '<g><circle cx="20" cy="50" r="5" fill="#ffd66b"/><circle cx="64" cy="62" r="5" fill="#ff8fb0"/><circle cx="110" cy="66" r="5" fill="#ffd66b"/><circle cx="156" cy="56" r="5" fill="#9be7ff"/><circle cx="204" cy="48" r="5" fill="#ffd66b"/><circle cx="252" cy="50" r="5" fill="#ff8fb0"/><circle cx="300" cy="56" r="5" fill="#ffd66b"/><circle cx="344" cy="56" r="5" fill="#9be7ff"/></g>' +
+      '<path d="M44 392h52l-8 -50H52z" fill="#c4623b"/><path d="M50 342h44v10H50z" fill="#a9502e"/><g fill="#2f8a52"><path d="M70 342c-20-20-26-44-14-64 10 18 16 40 14 64z"/><path d="M72 342c4-30 18-50 40-58-4 26-18 46-40 58z"/><path d="M68 342c-18-8-34-22-38-44 20 6 32 22 38 44z"/></g>' +
+      '<g fill="#1a0e18"><ellipse cx="240" cy="372" rx="34" ry="24"/><circle cx="262" cy="338" r="17"/><path d="M250 328l4-16 8 12zM268 324l8-14 2 16z"/><path class="tail" d="M208 384c-26 0-36-14-30-32" stroke="#1a0e18" stroke-width="7" fill="none" stroke-linecap="round"/></g>' +
+      '<g fill="#ffd66b" class="day"><circle cx="258" cy="338" r="2.2"/><circle cx="268" cy="338" r="2.2"/></g><g fill="#9bffb0" class="nite"><circle cx="258" cy="338" r="2.6"/><circle cx="268" cy="338" r="2.6"/></g>' +
+      "</g></g></svg>";
+  }
+  function frontScene() {
+    return '<svg class="scene" viewBox="0 0 360 480" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="wallF" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd8c2"/><stop offset="1" stop-color="#f2a7a0"/></linearGradient></defs>' +
+      '<g id="zoomG"><g class="bgl"><rect x="-40" y="-40" width="440" height="560" fill="url(#wallF)"/><g fill="#fff" opacity=".35"><circle cx="60" cy="90" r="40"/><circle cx="310" cy="160" r="60"/><circle cx="90" cy="380" r="50"/></g>' +
+      '<rect x="230" y="60" width="90" height="120" rx="8" fill="#fff" opacity=".5"/><path d="M240 160l22-40 18 26 12-14 20 28z" fill="#e7836f" opacity=".6"/></g>' +
+      '<g class="subj"><path d="M60 500c10-90 60-130 120-130s110 40 120 130z" fill="#3d5af1"/><path d="M150 380h60v-40h-60z" fill="#c98a64"/>' +
+      '<ellipse cx="180" cy="260" rx="78" ry="92" fill="#d79b74"/><path d="M98 250c-6-80 40-122 86-122 52 0 92 40 84 116-12-36-40-58-84-60-44-2-74 26-86 66z" fill="#2a1710"/>' +
+      '<g class="blinkeye" fill="#2a1710"><ellipse cx="150" cy="268" rx="8" ry="9"/><ellipse cx="212" cy="268" rx="8" ry="9"/></g>' +
+      '<path d="M156 316q24 18 48 0" stroke="#8a3b2a" stroke-width="5" fill="none" stroke-linecap="round"/><g fill="#f08a7a" opacity=".55"><circle cx="132" cy="298" r="12"/><circle cx="228" cy="298" r="12"/></g></g></g></svg>';
+  }
+
+  // ---------- Modes ----------
+  var MODES = [
+    { id: "night", label: "NIGHT", chip: "NIGHT · 3 s", shot: "Take night photo" },
+    { id: "portrait", label: "PORTRAIT", chip: "PORTRAIT · f/1.8", shot: "Take portrait" },
+    { id: "photo", label: "PHOTO", chip: "PHOTO · 12 MP", shot: "Take photo" },
+    { id: "video", label: "VIDEO", chip: "VIDEO · 4K 30", shot: "Start recording" },
+    { id: "pano", label: "PANO", chip: "PANO", shot: "Start panorama" }
+  ];
+  var mi = 2, front = false, zoom = 1, ev = 0, flashMode = "off", busy = false, recording = false, recT0 = 0, recTimer = 0;
+  var shots = [], view = 0;
+  var strip = $("mstrip"), modeBtns = [];
+  MODES.forEach(function (m, i) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "mode"; b.textContent = m.label;
+    b.setAttribute("role", "radio"); b.setAttribute("aria-checked", String(i === mi)); b.tabIndex = i === mi ? 0 : -1;
+    b.addEventListener("click", function () { setMode(i); });
+    strip.appendChild(b); modeBtns.push(b);
+  });
+  strip.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); setMode(mi + (e.key === "ArrowRight" ? 1 : -1)); modeBtns[mi].focus(); }
+  });
+  function centerStrip() {
+    var b = modeBtns[mi], W = $("modes").clientWidth;
+    strip.style.transform = "translateX(" + (W / 2 - (b.offsetLeft + b.offsetWidth / 2)).toFixed(1) + "px)";
+  }
+  function setMode(i) {
+    if (busy || recording) return;
+    i = Math.max(0, Math.min(MODES.length - 1, i));
+    if (i === mi) return;
+    mi = i;
+    var m = MODES[i];
+    modeBtns.forEach(function (b, k) { b.setAttribute("aria-checked", String(k === i)); b.tabIndex = k === i ? 0 : -1; });
+    centerStrip();
+    phone.dataset.mode = m.id;
+    vf.classList.toggle("portrait", m.id === "portrait");
+    vf.classList.toggle("night-on", m.id === "night");
+    vf.classList.toggle("pano-on", m.id === "pano");
+    $("chipTop").textContent = m.chip;
+    shutter.setAttribute("aria-label", m.shot);
+    var badge = $("badge");
+    badge.classList.toggle("on", m.id === "portrait" || m.id === "night");
+    $("badgeT").textContent = m.id === "night" ? "Night · 3 s" : "f/1.8 · Portrait";
+    // a quick lens blink between modes
+    if (!reduce) vf.animate([{ filter: "none" }, { filter: "brightness(.35) blur(4px)", offset: 0.4 }, { filter: "none" }], { duration: 420, easing: "ease-out" });
+    announce(m.label.charAt(0) + m.label.slice(1).toLowerCase() + " mode");
+  }
+
+  // ---------- Live viewfinder: handheld sway + zoom + exposure ----------
+  var scene = null, L = [];
+  function mountScene() {
+    host.innerHTML = front ? frontScene() : backScene();
+    scene = host.firstElementChild;
+    L = ["L0", "L1", "L2", "L3"].map(function (id) { return scene.querySelector("#" + id); });
+    applyLook();
+  }
+  var zS = { x: 1, v: 0, to: 1 }, fx = 180, fy = 300;   // zoom spring and zoom centre (scene units)
+  function applyLook() {
+    if (!scene) return;
+    scene.style.filter = "brightness(" + (1 + ev).toFixed(3) + ")";
+    var g = scene.querySelector("#zoomG");
+    g.setAttribute("transform", "translate(" + (fx * (1 - zS.x)).toFixed(2) + " " + (fy * (1 - zS.x)).toFixed(2) + ") scale(" + zS.x.toFixed(4) + ")");
+  }
+  var swayT0 = performance.now(), panX = 0;
+  (function frame(t) {
+    var s = (t - swayT0) / 1000;
+    // zoom spring
+    var dt = 1 / 60;
+    zS.v += (-180 * (zS.x - zS.to) - 22 * zS.v) * dt; zS.x += zS.v * dt;
+    if (!reduce) L.forEach(function (g, i) { if (g) g.setAttribute("transform", "translate(" + (Math.sin(s * 0.7 + i * 0.4) * (1 + i * 1.6) - panX * (0.4 + i * 0.3)).toFixed(2) + " " + (Math.cos(s * 0.5 + i) * (0.6 + i * 0.6)).toFixed(2) + ")"); });
+    applyLook();
+    requestAnimationFrame(frame);
+  })(performance.now());
+  function setZoom(z) {
+    zoom = Math.max(0.6, Math.min(3, z)); zS.to = zoom;
+    if (reduce) zS.x = zoom;
+    [].forEach.call(document.querySelectorAll(".zoom"), function (b) {
+      var v = +b.dataset.z;
+      var near = Math.abs(v - zoom) < 0.05 || (v === 2 && zoom > 1.5) || (v === 1 && zoom >= 0.95 && zoom <= 1.5);
+      b.setAttribute("aria-pressed", String(near));
+      if (v === 2) b.textContent = zoom > 1.5 && Math.abs(zoom - 2) > 0.05 ? zoom.toFixed(1) + "×" : "2×";
+    });
+  }
+  [].forEach.call(document.querySelectorAll(".zoom"), function (b) {
+    b.addEventListener("click", function (e) { e.stopPropagation(); setZoom(+b.dataset.z); announce("Zoom " + b.dataset.z + " times"); });
+    b.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
+  });
+  vf.addEventListener("wheel", function (e) { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.08 : 0.93)); }, { passive: false });
+
+  // ---------- Tap to focus, drag the sun for exposure, swipe for modes ----------
+  var fsq = $("fsq"), fTimer = 0, g = null;
+  function focusAt(cx, cy) {
+    var r = vf.getBoundingClientRect(), x = cx - r.left, y = cy - r.top;
+    fsq.style.left = x + "px"; fsq.style.top = y + "px";
+    fsq.classList.remove("on", "dim"); void fsq.offsetWidth; fsq.classList.add("on");
+    // zoom around the focus point (scene units, slice-fit)
+    var sc = Math.max(r.width / 360, r.height / 480), ox = (r.width - 360 * sc) / 2, oy = (r.height - 480 * sc) / 2;
+    fx = (x - ox) / sc; fy = (y - oy) / sc;
+    clearTimeout(fTimer); fTimer = setTimeout(function () { fsq.classList.add("dim"); }, 2200);
+    announce("Focused");
+  }
+  vf.addEventListener("pointerdown", function (e) {
+    if (e.button > 0 || e.target.closest(".zooms")) return;
+    var onExp = !!e.target.closest(".exp");
+    g = { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, exp: onExp, ev0: ev, id: e.pointerId, moved: false };
+    try { vf.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  vf.addEventListener("pointermove", function (e) {
+    if (!g || e.pointerId !== g.id) return;
+    g.x = e.clientX; g.y = e.clientY;
+    if (Math.hypot(g.x - g.x0, g.y - g.y0) > 8) g.moved = true;
+    if (g.exp) { setEv(g.ev0 - (g.y - g.y0) / 220); }
+  });
+  vf.addEventListener("pointerup", function (e) { if (g && e.pointerId === g.id) vfUp(); });
+  vf.addEventListener("pointercancel", function () { g = null; });
+  function vfUp() {
+    var G = g; g = null;
+    if (!G || G.exp) return;
+    var dx = G.x - G.x0, dy = G.y - G.y0;
+    if (!G.moved) focusAt(G.x, G.y);
+    else if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) setMode(mi + (dx < 0 ? 1 : -1));
+  }
+  function setEv(v) {
+    ev = Math.max(-0.45, Math.min(0.45, v));
+    $("exp").querySelector("i").style.setProperty("--y", (50 - ev / 0.45 * 45).toFixed(1) + "%");
+    applyLook();
+  }
+
+  // ---------- Flash, flip ----------
+  $("flashBtn").addEventListener("click", function () {
+    flashMode = flashMode === "off" ? "auto" : flashMode === "auto" ? "on" : "off";
+    this.dataset.flash = flashMode; this.setAttribute("aria-label", "Flash: " + flashMode);
+    announce("Flash " + flashMode);
+  });
+  $("flipBtn").addEventListener("click", function () {
+    if (busy || recording) return;
+    busy = true; phone.classList.add("busy");
+    var b = this; b.classList.toggle("spun");
+    var half = reduce ? null : vf.animate([{ transform: "perspective(1200px) rotateY(0deg) scale(1)" }, { transform: "perspective(1200px) rotateY(90deg) scale(.92)" }], { duration: 320, easing: "cubic-bezier(.5,0,.8,.5)", fill: "forwards" });
+    setTimeout(function () {
+      front = !front; mountScene();
+      if (half) half.cancel();
+      if (!reduce) vf.animate([{ transform: "perspective(1200px) rotateY(-90deg) scale(.92)" }, { transform: "perspective(1200px) rotateY(0deg) scale(1)" }], { duration: 520, easing: "cubic-bezier(.2,.9,.3,1.15)" });
+      b.setAttribute("aria-label", front ? "Switch to back camera" : "Switch to front camera");
+      vf.setAttribute("aria-label", front ? "Viewfinder: front camera, a smiling selfie" : "Viewfinder: a rooftop at golden hour with a cat on the ledge");
+      announce(front ? "Front camera" : "Back camera");
+      setTimeout(function () { busy = false; phone.classList.remove("busy"); }, reduce ? 0 : 520);
+    }, reduce ? 0 : 320);
+  });
+
+  // ---------- Shutter ----------
+  function flashBlink(strong) {
+    var f = $("flash");
+    f.style.background = strong ? "#fff" : "#000";
+    f.animate([{ opacity: strong ? 1 : 0.9 }, { opacity: 0 }], { duration: reduce ? 120 : strong ? 520 : 260, easing: "ease-out" });
+  }
+  function ring(dur) {
+    var c = $("progC");
+    c.getAnimations().forEach(function (a) { a.cancel(); });
+    return c.animate([{ strokeDashoffset: "270px" }, { strokeDashoffset: "0px" }], { duration: dur, easing: "linear" });
+  }
+  function capture(kind, extra) {
+    var strong = flashMode === "on" || (flashMode === "auto" && kind === "night");
+    flashBlink(strong);
+    var shotHTML = host.innerHTML;
+    var item = { kind: kind, html: shotHTML, cls: (vf.classList.contains("portrait") ? "portrait " : "") + (vf.classList.contains("night-on") ? "night-on" : ""), dur: extra || 0, ev: ev, z: zS.x, fx: fx, fy: fy };
+    shots.push(item); if (shots.length > 8) shots.shift();
+    fly(item);
+  }
+  // the frozen frame shrinks and flies along an arc into the gallery button
+  function fly(item) {
+    var pr = phone.getBoundingClientRect(), vr = vf.getBoundingClientRect(), tr = $("thumb").getBoundingClientRect();
+    var el = document.createElement("div");
+    el.className = "flyer " + item.cls;
+    el.style.left = (vr.left - pr.left) + "px"; el.style.top = (vr.top - pr.top) + "px";
+    el.style.width = vr.width + "px"; el.style.height = vr.height + "px";
+    el.innerHTML = item.html;
+    el.style.transformOrigin = "0 0";
+    phone.appendChild(el);
+    var sx = tr.width / vr.width, sy = tr.height / vr.height;
+    var dx = tr.left - vr.left, dy = tr.top - vr.top;
+    var done = function () { el.remove(); paintThumb(true); };
+    if (reduce) { done(); return; }
+    el.animate([
+      { transform: "none", borderRadius: "22px", opacity: 1 },
+      { transform: "translate(" + (dx * 0.25).toFixed(0) + "px," + (-30).toFixed(0) + "px) scale(" + (0.62).toFixed(2) + ")", borderRadius: "28px", opacity: 1, offset: 0.35 },
+      { transform: "translate(" + dx.toFixed(0) + "px," + dy.toFixed(0) + "px) scale(" + sx.toFixed(3) + "," + sy.toFixed(3) + ")", borderRadius: "80px", opacity: 0.9 }
+    ], { duration: 720, easing: "cubic-bezier(.5,0,.2,1)" }).onfinish = done;
+  }
+  function shotSVG(item) {
+    // a saved picture keeps the look it was taken with
+    var d = document.createElement("div");
+    d.className = item.cls; d.innerHTML = item.html;
+    var s = d.firstElementChild;
+    s.style.filter = "brightness(" + (1 + item.ev).toFixed(3) + ")";
+    return d;
+  }
+  function paintThumb(bump) {
+    var t = $("thumb"), n = shots.length, last = shots[n - 1];
+    $("thumbIn").innerHTML = "";
+    if (last) {
+      var d = shotSVG(last); d.style.cssText = "position:absolute;inset:0";
+      $("thumbIn").appendChild(d);
+      if (last.kind === "video") { var v = document.createElement("span"); v.className = "vid"; v.textContent = fmt(last.dur); $("thumbIn").appendChild(v); }
+    }
+    $("thumbN").textContent = n;
+    t.classList.toggle("has", n > 0);
+    t.setAttribute("aria-label", "Open gallery, " + n + (n === 1 ? " picture" : " pictures"));
+    if (bump) { t.classList.remove("bump"); void t.offsetWidth; t.classList.add("bump"); }
+  }
+  function fmt(s) { s = Math.floor(s); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
+
+  function shoot() {
+    if (busy) return;
+    var m = MODES[mi].id;
+    shutter.classList.add("press"); setTimeout(function () { shutter.classList.remove("press"); }, 160);
+    if (m === "video") {
+      if (!recording) {
+        recording = true; phone.classList.add("recording"); recT0 = performance.now();
+        shutter.setAttribute("aria-label", "Stop recording");
+        $("recT").textContent = "00:00";
+        recTimer = setInterval(function () { $("recT").textContent = fmt((performance.now() - recT0) / 1000); }, 250);
+        announce("Recording");
+      } else {
+        recording = false; phone.classList.remove("recording"); clearInterval(recTimer);
+        var secs = (performance.now() - recT0) / 1000;
+        shutter.setAttribute("aria-label", "Start recording");
+        capture("video", secs);
+        announce("Video saved, " + Math.round(secs) + " seconds");
+      }
+      return;
+    }
+    if (m === "night") {
+      busy = true; phone.classList.add("busy");
+      $("holdTip").classList.add("on");
+      var a = ring(reduce ? 300 : 2400);
+      if (scene && !reduce) scene.animate([{ filter: "brightness(1)" }, { filter: "brightness(1.6) saturate(1.2)" }], { duration: 2400, easing: "ease-in" });
+      a.onfinish = function () {
+        $("holdTip").classList.remove("on");
+        ring(1).cancel();
+        busy = false; phone.classList.remove("busy");
+        capture("night"); announce("Night photo saved");
+      };
+      announce("Night photo, hold still for 3 seconds");
+      return;
+    }
+    if (m === "pano") {
+      busy = true; phone.classList.add("busy");
+      $("panoTip").textContent = "Move slowly…";
+      var bar = $("panoBar"), t0 = performance.now(), D = reduce ? 300 : 2600;
+      (function step(t) {
+        var k = Math.min(1, (t - t0) / D);
+        bar.style.width = (k * 100) + "%"; panX = k * 46;
+        if (k < 1) requestAnimationFrame(step);
+        else {
+          capture("pano"); panX = 0; bar.style.width = "0";
+          $("panoTip").textContent = "Press the shutter, then move slowly";
+          busy = false; phone.classList.remove("busy"); announce("Panorama saved");
+        }
+      })(t0);
+      announce("Panorama: move slowly to the right");
+      return;
+    }
+    capture(m);
+    announce((m === "portrait" ? "Portrait" : "Photo") + " saved, " + shots.length + " in gallery");
+  }
+  shutter.addEventListener("click", shoot);
+
+  // ---------- Gallery review ----------
+  var review = $("review");
+  function openReview(i) {
+    if (!shots.length) { announce("No pictures yet. Take one first."); $("thumb").classList.remove("bump"); void $("thumb").offsetWidth; $("thumb").classList.add("bump"); return; }
+    view = i === undefined ? shots.length - 1 : i;
+    paintReview();
+    review.classList.add("on"); review.setAttribute("aria-hidden", "false");
+    announce("Gallery, " + shots.length + " pictures");
+    if (!demo.on) setTimeout(function () { $("rvClose").focus({ preventScroll: true }); }, 50);
+  }
+  function paintReview() {
+    var it = shots[view], big = $("rvBig");
+    big.innerHTML = ""; big.appendChild(shotSVG(it)); big.firstElementChild.style.cssText = "position:absolute;inset:0";
+    if (it.kind === "video") big.insertAdjacentHTML("beforeend", '<div class="vid"><i><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></i></div>');
+    var names = { photo: "Photo", portrait: "Portrait", night: "Night photo", video: "Video · " + fmt(it.dur), pano: "Panorama" };
+    $("rvTitle").textContent = names[it.kind];
+    $("rvSub").textContent = (view + 1) + " of " + shots.length;
+    var st = $("rvStrip"); st.innerHTML = "";
+    shots.forEach(function (s, k) {
+      var b = document.createElement("button"); b.type = "button";
+      b.setAttribute("aria-label", names[s.kind] ? (s.kind === "video" ? "Video" : names[s.kind]) + " " + (k + 1) : "Picture " + (k + 1));
+      b.setAttribute("aria-current", String(k === view));
+      var d = shotSVG(s); d.style.cssText = "width:100%;height:100%"; b.appendChild(d);
+      b.addEventListener("click", function () { view = k; paintReview(); });
+      st.appendChild(b);
+    });
+  }
+  function closeReview() { review.classList.remove("on"); review.setAttribute("aria-hidden", "true"); if (!demo.on) $("thumb").focus({ preventScroll: true }); }
+  $("thumb").addEventListener("click", function () { openReview(); });
+  $("rvClose").addEventListener("click", closeReview);
+
+  document.addEventListener("keydown", function (e) {
+    var tag = e.target.tagName;
+    if (e.key === "Escape" && review.classList.contains("on")) { e.preventDefault(); closeReview(); return; }
+    if (review.classList.contains("on")) return;
+    if (e.key === " " && tag !== "BUTTON" && tag !== "INPUT") { e.preventDefault(); shoot(); }
+    else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!fsq.classList.contains("on")) { var r = vf.getBoundingClientRect(); focusAt(r.left + r.width / 2, r.top + r.height / 2); }
+      setEv(ev + (e.key === "ArrowUp" ? 0.05 : -0.05)); announce("Exposure " + (ev >= 0 ? "+" : "") + ev.toFixed(2));
+    }
+    else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.target.closest(".mstrip")) setMode(mi + (e.key === "ArrowRight" ? 1 : -1));
+  });
+  addEventListener("resize", centerStrip);
+
+  // clock
+  function tick() { var d = new Date(); $("clock").textContent = (d.getHours() % 12 || 12) + ":" + String(d.getMinutes()).padStart(2, "0"); }
+  tick(); setInterval(tick, 15000);
+
+  mountScene(); centerStrip(); setZoom(1); setEv(0); paintThumb(false);
+  strip.style.transition = "none"; void strip.offsetWidth; strip.style.transition = "";
+
+  // ---------- Auto demo ----------
+  var demo = { on: !reduce, t: [] };
+  var ghost = document.createElement("div");
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.style.cssText = "position:absolute;left:0;top:0;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;z-index:40;pointer-events:none;background:rgba(255,255,255,.2);border:2px solid rgba(255,255,255,.85);box-shadow:0 6px 20px rgba(0,0,0,.35);opacity:0;transition:opacity .3s";
+  phone.appendChild(ghost);
+  function later(ms, fn) { demo.t.push(setTimeout(function () { if (demo.on) fn(); }, ms)); }
+  function gAt(q, ms) { if (ghost.style.opacity !== "1") ms = 0; var r = phone.getBoundingClientRect(); ghost.style.transition = "opacity .3s, transform " + (ms || 0) + "ms cubic-bezier(.4,.1,.2,1), scale .15s"; ghost.style.transform = "translate(" + (q.x - r.left).toFixed(1) + "px," + (q.y - r.top).toFixed(1) + "px)"; ghost.style.opacity = 1; }
+  function gHide() { ghost.style.opacity = 0; }
+  function stopDemo() {
+    if (!demo.on) return;
+    demo.on = false; demo.t.forEach(clearTimeout); demo.t = []; gHide();
+    if (recording) shoot();
+  }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (ty) { addEventListener(ty, function (e) { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }); });
+  function ptIn(el, fx2, fy2) { var r = el.getBoundingClientRect(); return { x: r.left + r.width * fx2, y: r.top + r.height * fy2 }; }
+  function dTap(getPt, at, fn) {
+    later(at, function () {
+      var q = getPt(); gAt(q, 520);
+      later(560, function () { ghost.style.scale = "0.82"; later(140, function () { ghost.style.scale = "1"; fn(q); }); });
+    });
+    return at + 700;
+  }
+  function dSwipe(at, dir) {
+    later(at, function () {
+      var a = ptIn(vf, dir < 0 ? 0.75 : 0.25, 0.6), b2 = ptIn(vf, dir < 0 ? 0.25 : 0.75, 0.58);
+      gAt(a, 480);
+      later(520, function () { gAt(b2, 380); later(400, function () { setMode(mi - dir); }); });
+    });
+    return at + 1000;
+  }
+  function demoLoop() {
+    if (!demo.on) return;
+    if (review.classList.contains("on")) closeReview();
+    if (front) $("flipBtn").click();
+    if (mi !== 2) setMode(2);
+    setZoom(1); setEv(0);
+    var t = 700;
+    t = dTap(function () { return ptIn(vf, 0.66, 0.74); }, t, function (q) { focusAt(q.x, q.y); });
+    t = dTap(function () { return ptIn(shutter, 0.5, 0.5); }, t + 600, function () { shoot(); });
+    t = dSwipe(t + 900, 1);                                         // swipe right: Portrait
+    t = dTap(function () { return ptIn(shutter, 0.5, 0.5); }, t + 700, function () { shoot(); });
+    t = dTap(function () { return ptIn(modeBtns[3], 0.5, 0.5); }, t + 1000, function () { setMode(3); });
+    t = dTap(function () { return ptIn(shutter, 0.5, 0.5); }, t + 500, function () { shoot(); });
+    t = dTap(function () { return ptIn(document.querySelector('.zoom[data-z="2"]'), 0.5, 0.5); }, t + 300, function () { setZoom(2); });
+    t = dTap(function () { return ptIn(shutter, 0.5, 0.5); }, t + 1300, function () { shoot(); });
+    t = dTap(function () { return ptIn($("thumb"), 0.5, 0.5); }, t + 1100, function () { openReview(); });
+    later(t + 1900, function () { closeReview(); gHide(); });
+    later(t + 3200, demoLoop);
+  }
+  if (demo.on) later(500, demoLoop);
+})();
+</script>
+</body>
+</html>

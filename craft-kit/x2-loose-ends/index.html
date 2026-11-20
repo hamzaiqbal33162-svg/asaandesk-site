@@ -1,0 +1,763 @@
+<!doctype html>
+<!-- Chill & Craft · Loose Ends · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loose Ends · delete a tag that is still in use</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: violet ink, amber warnings ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #f0edfc;
+    --grid: rgba(109, 74, 255, .07);
+    --card: #ffffff;
+    --panel: #f8f6ff;
+    --line: #e5e0f6;
+    --ink: #1e1940;
+    --muted: #6f6893;
+    --violet: #6d4aff;
+    --amber: #f59e0b;
+    --amber-soft: #fff3d6;
+    --amber-ink: #8a5300;
+    --red: #e5484d;
+    --red-soft: #ffe5e5;
+    --ok: #10a37a;
+    --sh: 50, 30, 140;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d0a1d;
+    --grid: rgba(160, 135, 255, .07);
+    --card: #18142f;
+    --panel: #201b3c;
+    --line: #2d2752;
+    --ink: #eeeaff;
+    --muted: #a39cc9;
+    --violet: #9f85ff;
+    --amber: #fbbf24;
+    --amber-soft: #33260b;
+    --amber-ink: #fcd34d;
+    --red: #ff6b6b;
+    --red-soft: #3b1a20;
+    --ok: #3ddba7;
+    --sh: 0, 0, 0;
+    --focus: #93c5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .frame {
+    position: relative;
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    place-items: center;
+    padding: 20px 16px;
+    overflow: hidden;
+    overflow: clip;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+  }
+
+  /* ---------- Card ---------- */
+  .card {
+    position: relative;
+    width: min(560px, 100%);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    padding: 18px 20px 12px;
+    box-shadow: 0 40px 80px -50px rgba(var(--sh), .55), 0 2px 8px -4px rgba(var(--sh), .14);
+  }
+  .top { display: flex; align-items: center; gap: 11px; }
+  .logo { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, #8f6bff, var(--violet)); box-shadow: 0 10px 18px -10px var(--violet); }
+  .logo svg { width: 20px; height: 20px; }
+  .top h1 { margin: 0; font-size: 17px; font-weight: 780; letter-spacing: -.01em; }
+  .top p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .count { margin-left: auto; font-size: 12.5px; font-weight: 650; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---------- Tag chips ---------- */
+  .tags { position: relative; z-index: 3; list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag {
+    --c: var(--violet);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 4px 0 11px;
+    border-radius: 99px;
+    background: var(--card);
+    border: 1.5px solid color-mix(in srgb, var(--c) 40%, var(--line));
+    font-size: 13.5px;
+    font-weight: 680;
+    white-space: nowrap;
+    box-shadow: 0 6px 14px -10px rgba(var(--sh), .5);
+    transition: border-color .25s, box-shadow .25s;
+  }
+  .tag .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
+  .tag .uses { min-width: 19px; height: 19px; padding: 0 5px; border-radius: 99px; background: color-mix(in srgb, var(--c) 16%, transparent); color: color-mix(in srgb, var(--c) 70%, var(--ink)); font-size: 11px; font-weight: 800; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+  .tag .x { width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); display: grid; place-items: center; cursor: pointer; transition: background-color .2s, color .2s, transform .2s var(--spring); }
+  .tag .x svg { width: 14px; height: 14px; }
+  .tag .x:hover { background: var(--red-soft); color: var(--red); }
+  .tag .x:active, .tag .x.pressed { transform: scale(.82); background: var(--red-soft); color: var(--red); }
+  .tag.doomed { border-color: var(--amber); box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber) 22%, transparent), 0 8px 16px -10px rgba(var(--sh), .5); }
+  .tag.chosen { border-color: var(--c); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 24%, transparent), 0 10px 18px -10px var(--c); }
+
+  /* ---------- Places that use the tags ---------- */
+  .places { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 70px; }
+  .place {
+    position: relative;
+    border-radius: 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 9px 9px 10px;
+    display: grid;
+    gap: 8px;
+    transition: border-color .3s, box-shadow .3s;
+  }
+  .place.is-warn { background: color-mix(in srgb, var(--amber) 9%, var(--panel)); border-color: color-mix(in srgb, var(--amber) 70%, var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 16%, transparent); }
+  .place.is-ok { border-color: color-mix(in srgb, var(--ok) 70%, var(--line)); }
+  .place.is-lost { border-color: color-mix(in srgb, var(--red) 70%, var(--line)); }
+  .pv { height: 46px; border-radius: 10px; position: relative; overflow: hidden; }
+  .pv i { position: absolute; left: 8px; height: 5px; border-radius: 3px; }
+  .pv-banner { background: linear-gradient(120deg, #8f6bff, #ff7aa8, #ffb86b); background-size: 200% 100%; animation: sheen 6s ease-in-out infinite alternate; }
+  .pv-banner i { background: rgba(255, 255, 255, .9); top: 12px; width: 58%; height: 7px; }
+  .pv-banner i.s { top: 25px; width: 34%; height: 5px; opacity: .7; }
+  .pv-list { background: var(--card); border: 1px solid var(--line); }
+  .pv-list i { background: var(--line); width: 70%; }
+  .pv-list i:nth-child(1) { top: 9px; } .pv-list i:nth-child(2) { top: 19px; width: 52%; }
+  .pv-list i.tot { top: 31px; width: 36%; height: 7px; background: var(--violet); opacity: .5; left: auto; right: 8px; }
+  .pv-mail { background: var(--card); border: 1px solid var(--line); }
+  .pv-mail svg { position: absolute; left: 8px; top: 8px; width: 22px; height: 16px; }
+  .pv-mail i { background: var(--line); top: 29px; width: 72%; }
+  .pv-mail i.s { top: 36px; width: 46%; }
+  .minis { display: flex; flex-wrap: wrap; gap: 4px; min-height: 22px; perspective: 300px; }
+  .mini {
+    --c: var(--violet);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    background: color-mix(in srgb, var(--c) 15%, var(--card));
+    color: color-mix(in srgb, var(--c) 70%, var(--ink));
+    transition: background-color .3s, color .3s, box-shadow .3s;
+  }
+  .mini i { width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
+  .mini.hit { box-shadow: 0 0 0 2px var(--amber); }
+  .mini.lost { background: transparent; color: var(--red); box-shadow: inset 0 0 0 1.5px var(--red); text-decoration: line-through; animation: wobble .5s ease-in-out 2; }
+  .mini.lost i { background: var(--red); }
+  .mini.none { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1.5px var(--line); border: 0; font-style: italic; }
+  .place b { font-size: 12px; font-weight: 720; display: flex; align-items: center; gap: 5px; min-width: 0; }
+  .place b span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .flag { position: absolute; right: -7px; top: -7px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 900; transform: scale(0); transition: transform .35s var(--spring), background-color .2s; box-shadow: 0 0 0 3px var(--card); }
+  .place.is-warn .flag { transform: scale(1); background: var(--amber); }
+  .place.is-ok .flag { transform: scale(1); background: var(--ok); }
+  .place.is-lost .flag { transform: scale(1); background: var(--red); }
+
+  /* ---------- Wires ---------- */
+  .wires { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; overflow: visible; }
+  .w-line { fill: none; stroke: var(--wc, var(--amber)); stroke-width: 2.4; stroke-dasharray: 1 1; stroke-dashoffset: 0; transition: stroke .35s; }
+  .w-dot, .w-end { fill: var(--wc, var(--amber)); transition: fill .35s; transform-box: fill-box; transform-origin: 50% 50%; }
+  .w-end { stroke: var(--card); stroke-width: 2.5; }
+  .w-pulse { fill: #fff; stroke: var(--wc, var(--amber)); stroke-width: 3; }
+  .w-glow { fill: var(--wc, var(--amber)); opacity: .3; }
+
+  /* ---------- Warning panel ---------- */
+  .warn-box { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s cubic-bezier(.3, .8, .3, 1); }
+  .warn-box.open { grid-template-rows: 1fr; }
+  .warn-in { min-height: 0; overflow: hidden; }
+  .warn {
+    margin-top: 14px;
+    border-radius: 16px;
+    background: var(--amber-soft);
+    border: 1.5px solid color-mix(in srgb, var(--amber) 55%, transparent);
+    padding: 12px 14px 13px;
+    display: grid;
+    gap: 9px;
+  }
+  .warn-head { display: flex; gap: 10px; align-items: flex-start; }
+  .warn-ic { width: 30px; height: 30px; flex: none; border-radius: 10px; background: var(--amber); color: #fff; display: grid; place-items: center; animation: nudge 2.4s ease-in-out infinite; }
+  .warn-ic svg { width: 18px; height: 18px; }
+  .warn h2 { margin: 0; font-size: 14.5px; font-weight: 780; color: var(--ink); }
+  .warn h2 em { font-style: normal; color: var(--amber-ink); }
+  .warn p { margin: 1px 0 0; font-size: 12.5px; color: var(--muted); }
+  .rep { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 650; }
+  .rep select { font: inherit; font-weight: 700; color: var(--ink); background: var(--card); border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn { border: 0; border-radius: 11px; padding: 9px 14px; font: inherit; font-size: 13.5px; font-weight: 750; cursor: pointer; transition: transform .2s var(--spring), filter .2s; }
+  .btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
+  .btn:active, .btn.pressed { transform: scale(.93); }
+  .btn.main { background: var(--violet); color: #fff; box-shadow: 0 10px 18px -12px var(--violet); }
+  .btn.danger { background: var(--card); color: var(--red); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--red) 50%, transparent); }
+  .btn.plain { background: transparent; color: var(--muted); }
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- Toast ---------- */
+  .toast-slot { position: relative; height: 52px; margin-top: 10px; overflow: hidden; }
+  .hint { position: absolute; inset: 0 0 8px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12.5px; color: var(--muted); text-align: center; transition: opacity .25s; }
+  .toast-slot:has(.toast.show) .hint { opacity: 0; }
+  .hint span { white-space: nowrap; }
+  kbd { font: 650 11px/1 system-ui, sans-serif; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--line); border-bottom-width: 2px; background: var(--panel); color: var(--ink); }
+  .toast { position: relative; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 6px 0 14px; border-radius: 13px; background: #211b45; color: #f2efff; font-size: 13px; transform: translateY(120%); opacity: 0; transition: transform .45s var(--spring), opacity .25s; }
+  :root[data-theme="dark"] .toast { background: #332b66; }
+  .toast.show { transform: none; opacity: 1; }
+  .toast span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .undo { border: 0; border-radius: 9px; padding: 7px 13px; font: inherit; font-weight: 780; background: #c9b8ff; color: #211b45; cursor: pointer; transition: transform .2s var(--spring); }
+  .undo:active, .undo.pressed { transform: scale(.9); }
+
+  .layer { position: absolute; inset: 0; pointer-events: none; }
+  .bit { position: absolute; width: 7px; height: 7px; border-radius: 2px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @keyframes sheen { to { background-position: 100% 0; } }
+  @keyframes nudge { 0%, 70%, 100% { transform: rotate(0); } 78% { transform: rotate(-12deg); } 86% { transform: rotate(10deg); } 94% { transform: rotate(-4deg); } }
+  @keyframes wobble { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
+
+  @media (max-width: 460px) {
+    .card { padding: 16px 14px 10px; }
+    .places { gap: 8px; margin-top: 64px; }
+    .place { padding: 8px 7px 9px; }
+    .place b svg { display: none; }
+    .place b { font-size: 11.5px; }
+    .hint .esc { display: none; }
+    .place b span { white-space: normal; line-height: 1.2; }
+    .top p { display: none; }
+  }
+  /* Calm mode: every step still happens, without the big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <main class="card" id="card" aria-labelledby="title">
+    <header class="top">
+      <span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"><path d="M3 12.5V4.8A1.8 1.8 0 0 1 4.8 3h7.7L21 11.5 12.5 20z" /><circle cx="8" cy="8" r="1.6" fill="#fff" /></svg></span>
+      <div>
+        <h1 id="title">Shop tags</h1>
+        <p>Deleting a tag checks where it is used first</p>
+      </div>
+      <span class="count" id="count">4 tags</span>
+    </header>
+
+    <ul class="tags" id="tags" aria-label="Tags"></ul>
+
+    <div class="places" id="places">
+      <article class="place" data-id="home">
+        <div class="pv pv-banner" aria-hidden="true"><i></i><i class="s"></i></div>
+        <div class="minis" aria-label="Tags on Home banner"></div>
+        <b><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z" /></svg><span>Home banner</span></b>
+        <span class="flag" aria-hidden="true"></span>
+      </article>
+      <article class="place" data-id="chk">
+        <div class="pv pv-list" aria-hidden="true"><i></i><i></i><i class="tot"></i></div>
+        <div class="minis" aria-label="Tags on Checkout page"></div>
+        <b><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 7h14l-1.5 11h-11zM9 7a3 3 0 0 1 6 0" /></svg><span>Checkout page</span></b>
+        <span class="flag" aria-hidden="true"></span>
+      </article>
+      <article class="place" data-id="mail">
+        <div class="pv pv-mail" aria-hidden="true"><svg viewBox="0 0 22 16"><rect x="1" y="1" width="20" height="14" rx="3" fill="none" stroke="#9f85ff" stroke-width="2" /><path d="M2 3l9 6 9-6" fill="none" stroke="#9f85ff" stroke-width="2" /></svg><i></i><i class="s"></i></div>
+        <div class="minis" aria-label="Tags on Weekly email"></div>
+        <b><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></svg><span>Weekly email</span></b>
+        <span class="flag" aria-hidden="true"></span>
+      </article>
+    </div>
+
+    <div class="warn-box" id="warnBox">
+      <div class="warn-in">
+        <section class="warn" aria-labelledby="warnTitle">
+          <div class="warn-head">
+            <span class="warn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 7v6M12 17h.01" /></svg></span>
+            <div>
+              <h2 id="warnTitle"><em id="warnName">Eid Sale</em> is used in <span id="warnCount">3</span> places</h2>
+              <p id="warnList">Home banner · Checkout page · Weekly email</p>
+            </div>
+          </div>
+          <label class="rep" for="repSel">Replace it with <select id="repSel"></select></label>
+          <div class="acts">
+            <button class="btn main" id="replaceBtn" type="button">Replace and delete</button>
+            <button class="btn danger" id="anywayBtn" type="button">Delete anyway</button>
+            <button class="btn plain" id="cancelBtn" type="button">Cancel</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="toast-slot">
+      <p class="hint" aria-hidden="true"><span>Press × on a tag</span><span class="esc">· <kbd>Esc</kbd> cancels</span><span>· <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes</span></p>
+      <div class="toast" id="toast"><span id="toastText">Deleted</span><button class="undo" id="undoBtn" type="button">Undo</button></div>
+    </div>
+
+    <svg class="wires" id="wires" aria-hidden="true"></svg>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+  </main>
+  <div class="layer" id="layer" aria-hidden="true"></div>
+</div>
+
+<script>
+  // ---------- Loose Ends: a delete that first shows every place the tag is still used ----------
+  (function () {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const NS = "http://www.w3.org/2000/svg";
+    const frame = $("frame"), card = $("card"), layer = $("layer"), tagsEl = $("tags"), placesEl = $("places"), wires = $("wires");
+    const warnBox = $("warnBox"), warnName = $("warnName"), warnCount = $("warnCount"), warnList = $("warnList"), repSel = $("repSel");
+    const replaceBtn = $("replaceBtn"), anywayBtn = $("anywayBtn"), cancelBtn = $("cancelBtn");
+    const toast = $("toast"), toastText = $("toastText"), undoBtn = $("undoBtn"), countEl = $("count"), status = $("status");
+
+    const T = {
+      eid: { name: "Eid Sale", c: "#f59e0b" },
+      new: { name: "New in", c: "#7c5cff" },
+      win: { name: "Winter Sale", c: "#0ea5a4" },
+      clr: { name: "Clearance", c: "#e5487a" }
+    };
+    const PLACES = [{ id: "home", name: "Home banner" }, { id: "chk", name: "Checkout page" }, { id: "mail", name: "Weekly email" }];
+    const START = () => ({ tags: ["eid", "new", "win", "clr"], places: { home: ["eid", "new"], chk: ["eid"], mail: ["eid"] } });
+    const S = Object.assign(START(), { busy: false, pending: null, wires: [], undo: null });
+
+    const calmQ = matchMedia("(prefers-reduced-motion: reduce)");
+    const calm = () => calmQ.matches;
+    const wait = (ms) => new Promise((r) => setTimeout(r, calm() ? Math.min(ms, 200) : ms));
+    const SPRING = CSS.supports("transition-timing-function", "linear(0, 1)")
+      ? "linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1)"
+      : "cubic-bezier(.34, 1.56, .64, 1)";
+    function play(el, frames, opts) {
+      if (calm() || !el.animate) return Promise.resolve();
+      const a = el.animate(frames, opts);
+      return new Promise((res) => { a.onfinish = res; a.oncancel = res; });
+    }
+    // a JS tween for things CSS cannot animate (path shapes, points along a path)
+    function tween(ms, fn, ease) {
+      if (calm()) { fn(1); return Promise.resolve(); }
+      ease = ease || ((k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2));
+      return new Promise((res) => {
+        const t0 = performance.now();
+        const step = (now) => { const k = Math.min(1, (now - t0) / ms); fn(ease(k)); if (k < 1) requestAnimationFrame(step); else res(); };
+        requestAnimationFrame(step);
+      });
+    }
+    const say = (m) => { if (!demo.on) status.textContent = m; };
+    const press = (el) => { el.classList.add("pressed"); setTimeout(() => el.classList.remove("pressed"), 170); };
+    const usesOf = (id) => PLACES.filter((p) => S.places[p.id].includes(id));
+    const chipEl = (id) => tagsEl.querySelector(`.tag[data-id="${id}"]`);
+    const placeEl = (id) => placesEl.querySelector(`.place[data-id="${id}"]`);
+    const miniEl = (pid, tid) => placeEl(pid).querySelector(`.mini[data-tag="${tid}"]`);
+    // card-relative box (the wires layer starts inside the card's 1px border)
+    function rel(r) { const c = card.getBoundingClientRect(); return { x: r.left - c.left - card.clientLeft, y: r.top - c.top - card.clientTop, w: r.width, h: r.height }; }
+    const startPt = (tid) => { const r = rel(chipEl(tid).getBoundingClientRect()); return { x: r.x + r.w / 2, y: r.y + r.h }; };
+    const endPt = (pid, tid) => { const r = rel(miniEl(pid, tid).getBoundingClientRect()); return { x: r.x + r.w / 2, y: r.y }; };
+    const lerp = (a, b, k) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
+    function ctrl(a, b) { const dy = Math.max(34, (b.y - a.y) * 0.55); return [a, { x: a.x, y: a.y + dy }, { x: b.x, y: b.y - dy }, b]; }
+    function bez(p, t) {   // point on a cubic bezier
+      const u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+      return { x: a * p[0].x + b * p[1].x + c * p[2].x + d * p[3].x, y: a * p[0].y + b * p[1].y + c * p[2].y + d * p[3].y };
+    }
+    const dOf = (p) => `M${p[0].x.toFixed(1)} ${p[0].y.toFixed(1)}C${p[1].x.toFixed(1)} ${p[1].y.toFixed(1)} ${p[2].x.toFixed(1)} ${p[2].y.toFixed(1)} ${p[3].x.toFixed(1)} ${p[3].y.toFixed(1)}`;
+    function svg(tag, attrs) { const el = document.createElementNS(NS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); return el; }
+
+    // ---------- Render tags and the little tag pills inside each place ----------
+    const X_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    function renderTags() {
+      tagsEl.innerHTML = "";
+      S.tags.forEach((id) => {
+        const t = T[id], n = usesOf(id).length;
+        const li = document.createElement("li");
+        li.className = "tag";
+        li.dataset.id = id;
+        li.style.setProperty("--c", t.c);
+        li.innerHTML = `<i class="dot" aria-hidden="true"></i><span>${t.name}</span>${n ? `<small class="uses" title="Used in ${n} places">${n}</small>` : ""}<button class="x" type="button" aria-label="Delete tag ${t.name}${n ? `, used in ${n} place${n > 1 ? "s" : ""}` : ""}">${X_ICON}</button>`;
+        tagsEl.appendChild(li);
+      });
+      countEl.textContent = `${S.tags.length} tag${S.tags.length === 1 ? "" : "s"}`;
+    }
+    function miniHtml(id) { return `<span class="mini" data-tag="${id}" style="--c:${T[id].c}"><i></i><span>${T[id].name}</span></span>`; }
+    function renderMinis() {
+      PLACES.forEach((p) => {
+        const box = placeEl(p.id).querySelector(".minis"), list = S.places[p.id];
+        box.innerHTML = list.length ? list.map(miniHtml).join("") : '<span class="mini none">No tag</span>';
+      });
+    }
+    function flipTags(mutate) {
+      const before = new Map([...tagsEl.children].map((li) => [li.dataset.id, li.getBoundingClientRect()]));
+      mutate();
+      [...tagsEl.children].forEach((li, i) => {
+        const a = before.get(li.dataset.id);
+        if (!a) return;
+        const b = li.getBoundingClientRect(), dx = a.left - b.left, dy = a.top - b.top;
+        if (Math.abs(dx) + Math.abs(dy) > 0.5) play(li, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], { duration: 560, delay: i * 35, easing: SPRING, fill: "backwards" });
+      });
+    }
+    function setFlag(pid, kind) {
+      const p = placeEl(pid);
+      p.classList.remove("is-warn", "is-ok", "is-lost");
+      if (kind) p.classList.add("is-" + kind);
+      p.querySelector(".flag").textContent = kind === "warn" ? "!" : kind === "ok" ? "✓" : kind === "lost" ? "×" : "";
+    }
+
+    // ---------- Wires from the tag to every place that uses it ----------
+    function makeWire(tid, pid, i) {
+      const a = startPt(tid), b = endPt(pid, tid), pts = ctrl(a, b);
+      const g = svg("g", { class: "wire" });
+      const path = svg("path", { class: "w-line", d: dOf(pts), pathLength: "1" });
+      const dotA = svg("circle", { class: "w-dot", cx: a.x, cy: a.y, r: 3.6 });
+      const dotB = svg("circle", { class: "w-end", cx: b.x, cy: b.y, r: 5 });
+      g.append(path, dotA, dotB);
+      wires.appendChild(g);
+      const delay = 180 + i * 150;
+      play(path, [{ strokeDashoffset: "1" }, { strokeDashoffset: "0" }], { duration: 560, delay, easing: "cubic-bezier(.3, .7, .3, 1)", fill: "backwards" });
+      play(dotB, [{ transform: "scale(0)" }, { transform: "scale(1)" }], { duration: 380, delay: delay + 460, easing: SPRING, fill: "backwards" });
+      return { g, path, dotA, dotB, a, b, pid, tid };
+    }
+    function fadeWires(delay) {
+      const list = S.wires;
+      S.wires = [];
+      list.forEach((w) => {
+        if (calm()) { w.g.remove(); return; }
+        const an = w.g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 480, delay, fill: "forwards" });
+        an.onfinish = an.oncancel = () => w.g.remove();
+      });
+    }
+    function pulse(w, delay) {
+      return wait(delay).then(() => {
+        const dot = svg("circle", { class: "w-pulse", r: 5, cx: w.a.x, cy: w.a.y });
+        const glow = svg("circle", { class: "w-glow", r: 11, cx: w.a.x, cy: w.a.y });
+        w.g.append(glow, dot);
+        const pts = ctrl(w.a, w.b);
+        return tween(620, (k) => {
+          const p = bez(pts, k);
+          dot.setAttribute("cx", p.x); dot.setAttribute("cy", p.y);
+          glow.setAttribute("cx", p.x); glow.setAttribute("cy", p.y);
+        }, (k) => k * k * (3 - 2 * k)).then(() => { dot.remove(); glow.remove(); });
+      });
+    }
+    function bits(x, y, n, colors) {
+      if (calm()) return;
+      const f = frame.getBoundingClientRect();
+      for (let i = 0; i < n; i++) {
+        const el = document.createElement("i");
+        el.className = "bit";
+        el.style.left = x - f.left - 3.5 + "px";
+        el.style.top = y - f.top - 3.5 + "px";
+        el.style.background = colors[i % colors.length];
+        layer.appendChild(el);
+        const a = Math.random() * Math.PI * 2, d = 26 + Math.random() * 40;
+        const an = el.animate([
+          { transform: "translate(0, 0) scale(1)", opacity: 1 },
+          { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d + 26}px) rotate(${Math.random() * 400}deg) scale(.3)`, opacity: 0 }
+        ], { duration: 600 + Math.random() * 300, easing: "cubic-bezier(.2, .7, .3, 1)" });
+        an.onfinish = an.oncancel = () => el.remove();
+      }
+    }
+
+    // ---------- Step 1: press × on a tag ----------
+    function requestDelete(id, fromUser) {
+      if (S.busy || S.pending || !T[id]) return Promise.resolve();
+      return usesOf(id).length ? openWarning(id, fromUser) : popTag(id);
+    }
+    async function openWarning(id, fromUser) {
+      S.busy = true;
+      S.pending = id;
+      hideToast();
+      const uses = usesOf(id), chip = chipEl(id);
+      chip.classList.add("doomed");
+      play(chip, [{ transform: "none" }, { transform: "rotate(-5deg)" }, { transform: "rotate(5deg)" }, { transform: "rotate(-3deg)" }, { transform: "none" }], { duration: 420 });
+      warnName.textContent = T[id].name;
+      warnList.textContent = uses.map((p) => p.name).join(" · ");
+      warnCount.textContent = uses.length;
+      repSel.innerHTML = S.tags.filter((t) => t !== id).map((t) => `<option value="${t}">${T[t].name}</option>`).join("");
+      if (S.tags.includes("win") && id !== "win") repSel.value = "win";
+      replaceBtn.disabled = !repSel.options.length;
+      S.wires = uses.map((p, i) => makeWire(id, p.id, i));
+      uses.forEach((p, i) => setTimeout(() => {
+        setFlag(p.id, "warn");
+        const m = miniEl(p.id, id);
+        if (m) { m.classList.add("hit"); play(m, [{ transform: "scale(1)" }, { transform: "scale(1.18)" }, { transform: "scale(1)" }], { duration: 380, easing: "ease-out" }); }
+      }, calm() ? 0 : 640 + i * 150));
+      warnBox.classList.add("open");
+      warnBox.inert = false;
+      play(warnCount, [{ transform: "scale(.3)", opacity: 0 }, { transform: "scale(1.3)", opacity: 1, offset: 0.6 }, { transform: "scale(1)" }], { duration: 600, delay: 300, easing: "ease-out", fill: "backwards" });
+      say(`${T[id].name} is used in ${uses.length} place${uses.length > 1 ? "s" : ""}: ${uses.map((p) => p.name).join(", ")}. Replace it, delete anyway, or cancel.`);
+      await wait(760 + uses.length * 150);
+      S.busy = false;
+      if (fromUser) repSel.focus({ preventScroll: true });
+    }
+    function closeWarn() { warnBox.classList.remove("open"); warnBox.inert = true; }
+    function snapshot(removed) { S.undo = { tags: S.tags.slice(), places: JSON.parse(JSON.stringify(S.places)), removed }; }
+
+    // ---------- Replace and delete: wires swing to the new tag, pills flip, old tag falls off ----------
+    async function applyReplace() {
+      if (S.busy || !S.pending || !repSel.value) return;
+      const old = S.pending, rep = repSel.value, list = S.wires, n = list.length;
+      S.busy = true;
+      snapshot(old);
+      closeWarn();
+      const chipNew = chipEl(rep);
+      chipNew.classList.add("chosen");
+      play(chipNew, [{ transform: "scale(1)" }, { transform: "translateY(-3px) scale(1.12)" }, { transform: "scale(1)" }], { duration: 440, easing: "ease-out" });
+      say(`Moving ${n} place${n > 1 ? "s" : ""} to ${T[rep].name}`);
+      await wait(260);
+      const to = startPt(rep);
+      const from = list.map((w) => w.a);
+      await tween(760, (k) => {
+        list.forEach((w, i) => {
+          const s = lerp(from[i], to, k);
+          s.y -= Math.sin(k * Math.PI) * 18;   // a little hop while it swings over
+          w.path.setAttribute("d", dOf(ctrl(s, w.b)));
+          w.dotA.setAttribute("cx", s.x); w.dotA.setAttribute("cy", s.y);
+        });
+      });
+      list.forEach((w) => { w.a = to; w.g.style.setProperty("--wc", T[rep].c); });
+      await Promise.all(list.map((w, i) => pulse(w, i * 130).then(() => swapMini(w.pid, old, rep))));
+      await dropChip(old);
+      PLACES.forEach((p) => {
+        const L = S.places[p.id], i = L.indexOf(old);
+        if (i < 0) return;
+        if (L.includes(rep)) L.splice(i, 1); else L[i] = rep;
+      });
+      S.tags = S.tags.filter((t) => t !== old);
+      flipTags(renderTags);
+      renderMinis();
+      fadeWires(700);
+      setTimeout(() => PLACES.forEach((p) => setFlag(p.id, "")), calm() ? 0 : 1700);
+      showToast(`${T[old].name} deleted · ${n} place${n > 1 ? "s" : ""} now use ${T[rep].name}`);
+      say(`${T[old].name} deleted. ${n} places now use ${T[rep].name}. Undo is available.`);
+      S.pending = null;
+      S.busy = false;
+    }
+    async function swapMini(pid, old, rep) {
+      const m = miniEl(pid, old), place = placeEl(pid);
+      if (!m) return;
+      if (S.places[pid].includes(rep)) {
+        await play(m, [{ transform: "scale(1)", opacity: 1 }, { transform: "scale(0)", opacity: 0 }], { duration: 300, easing: "ease-in" });
+        m.style.display = "none";
+      } else {
+        await play(m, [{ transform: "rotateX(0)" }, { transform: "rotateX(90deg)" }], { duration: 170, easing: "ease-in" });
+        m.style.setProperty("--c", T[rep].c);
+        m.querySelector("span").textContent = T[rep].name;
+        m.dataset.tag = rep;
+        m.classList.remove("hit");
+        await play(m, [{ transform: "rotateX(-90deg)" }, { transform: "none" }], { duration: 420, easing: SPRING });
+      }
+      setFlag(pid, "ok");
+      play(place, [{ transform: "none" }, { transform: "translateY(-5px)" }, { transform: "none" }], { duration: 420, easing: "ease-out" });
+    }
+    async function dropChip(id) {
+      const chip = chipEl(id);
+      if (!chip) return;
+      const r = chip.getBoundingClientRect();
+      chip.classList.remove("doomed");
+      await play(chip, [
+        { transform: "none", opacity: 1 },
+        { transform: "translateY(-7px) rotate(-5deg)", opacity: 1, offset: 0.25 },
+        { transform: "translateY(50px) rotate(-28deg) scale(.55)", opacity: 0 }
+      ], { duration: 640, easing: "cubic-bezier(.5, 0, .75, .4)" });
+      chip.style.visibility = "hidden";
+      bits(r.left + r.width / 2, r.top + r.height / 2 + 30, 12, [T[id].c, "#ffffff", "#c9b8ff"]);
+    }
+
+    // ---------- Delete anyway: each wire snaps in the middle and its tag pill goes missing ----------
+    function split(p) {
+      const m = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+      const p01 = m(p[0], p[1]), p12 = m(p[1], p[2]), p23 = m(p[2], p[3]), p012 = m(p01, p12), p123 = m(p12, p23), mid = m(p012, p123);
+      return [[p[0], p01, p012, mid], [mid, p123, p23, p[3]], mid];
+    }
+    async function snapWire(w, delay) {
+      await wait(delay);
+      const [h1, h2, mid] = split(ctrl(w.a, w.b));
+      const a = svg("path", { class: "w-line", d: dOf(h1), pathLength: "1" });
+      const b = svg("path", { class: "w-line", d: dOf(h2), pathLength: "1" });
+      w.path.replaceWith(a);
+      w.g.insertBefore(b, a.nextSibling);
+      w.g.style.setProperty("--wc", "var(--red)");
+      const c = card.getBoundingClientRect();
+      bits(c.left + mid.x, c.top + mid.y, 9, ["#ff6b6b", "#fbbf24", "#ffffff"]);
+      const m = miniEl(w.pid, w.tid);
+      if (m) { m.classList.remove("hit"); m.classList.add("lost"); }
+      setFlag(w.pid, "lost");
+      play(placeEl(w.pid), [{ transform: "none" }, { transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "none" }], { duration: 360 });
+      await Promise.all([
+        play(a, [{ strokeDashoffset: "0" }, { strokeDashoffset: "1" }], { duration: 520, easing: "cubic-bezier(.2, .8, .3, 1)", fill: "forwards" }),
+        play(b, [{ strokeDashoffset: "0" }, { strokeDashoffset: "-1" }], { duration: 520, easing: "cubic-bezier(.2, .8, .3, 1)", fill: "forwards" }),
+        play(w.dotA, [{ opacity: 1 }, { opacity: 0 }], { duration: 400, fill: "forwards" }),
+        play(w.dotB, [{ transform: "scale(1)" }, { transform: "scale(1.6)", opacity: 0 }], { duration: 420, fill: "forwards" })
+      ]);
+      w.g.style.opacity = "0";
+    }
+    async function applyAnyway() {
+      if (S.busy || !S.pending) return;
+      const old = S.pending, list = S.wires, n = list.length;
+      S.busy = true;
+      snapshot(old);
+      closeWarn();
+      say(`Deleting ${T[old].name} from ${n} places`);
+      await Promise.all(list.map((w, i) => snapWire(w, 120 + i * 120)));
+      await wait(500);
+      await dropChip(old);
+      PLACES.forEach((p) => { S.places[p.id] = S.places[p.id].filter((t) => t !== old); });
+      S.tags = S.tags.filter((t) => t !== old);
+      flipTags(renderTags);
+      renderMinis();
+      placesEl.querySelectorAll(".mini.none").forEach((m, i) => play(m, [{ transform: "scale(.5)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 480, delay: i * 80, easing: SPRING, fill: "backwards" }));
+      fadeWires(0);
+      setTimeout(() => PLACES.forEach((p) => setFlag(p.id, "")), calm() ? 0 : 2200);
+      showToast(`${T[old].name} deleted · ${n} place${n > 1 ? "s" : ""} lost a tag`);
+      say(`${T[old].name} deleted. ${n} places lost a tag. Undo is available.`);
+      S.pending = null;
+      S.busy = false;
+    }
+
+    // ---------- Cancel, unused tags, Undo ----------
+    async function cancelWarn(fromUser) {
+      if (S.busy || !S.pending) return;
+      const id = S.pending, list = S.wires;
+      S.busy = true;
+      closeWarn();
+      await Promise.all(list.map((w, i) => Promise.all([
+        play(w.path, [{ strokeDashoffset: "0" }, { strokeDashoffset: "1" }], { duration: 420, delay: (list.length - 1 - i) * 90, easing: "ease-in", fill: "forwards" }),
+        play(w.dotB, [{ transform: "scale(1)" }, { transform: "scale(0)" }], { duration: 260, delay: (list.length - 1 - i) * 90, fill: "forwards" })
+      ])));
+      list.forEach((w) => w.g.remove());
+      S.wires = [];
+      const chip = chipEl(id);
+      if (chip) chip.classList.remove("doomed");
+      PLACES.forEach((p) => setFlag(p.id, ""));
+      placesEl.querySelectorAll(".mini.hit").forEach((m) => m.classList.remove("hit"));
+      S.pending = null;
+      S.busy = false;
+      say(`${T[id].name} kept`);
+      if (fromUser && chip) chip.querySelector(".x").focus({ preventScroll: true });
+    }
+    async function popTag(id) {
+      S.busy = true;
+      snapshot(id);
+      hideToast();
+      const chip = chipEl(id), r = chip.getBoundingClientRect();
+      await play(chip, [{ transform: "scale(1)" }, { transform: "scale(1.14)", offset: 0.35 }, { transform: "scale(0) rotate(-20deg)", opacity: 0 }], { duration: 460, easing: "cubic-bezier(.5, 0, .7, 1)" });
+      chip.style.visibility = "hidden";
+      bits(r.left + r.width / 2, r.top + r.height / 2, 14, [T[id].c, "#ffffff", "#c9b8ff"]);
+      S.tags = S.tags.filter((t) => t !== id);
+      flipTags(renderTags);
+      showToast(`${T[id].name} deleted · it was not used anywhere`);
+      say(`${T[id].name} deleted. It was not used anywhere.`);
+      S.busy = false;
+    }
+    function undo() {
+      if (S.busy || !S.undo) return;
+      const snap = S.undo;
+      S.undo = null;
+      hideToast();
+      S.tags = snap.tags.slice();
+      S.places = JSON.parse(JSON.stringify(snap.places));
+      PLACES.forEach((p) => setFlag(p.id, ""));
+      flipTags(renderTags);
+      renderMinis();
+      const chip = chipEl(snap.removed);
+      if (chip) play(chip, [{ transform: "scale(0) rotate(-20deg)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 620, easing: SPRING });
+      PLACES.forEach((p, i) => {
+        const m = miniEl(p.id, snap.removed);
+        if (m) play(m, [{ transform: "scale(.3)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 520, delay: 160 + i * 90, easing: SPRING, fill: "backwards" });
+      });
+      say(`${T[snap.removed].name} is back where it was`);
+    }
+    let toastTimer = 0;
+    function showToast(text) {
+      toastText.textContent = text;
+      toast.classList.add("show");
+      undoBtn.disabled = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(hideToast, 8000);
+    }
+    function hideToast() { toast.classList.remove("show"); undoBtn.disabled = true; clearTimeout(toastTimer); }
+
+    tagsEl.addEventListener("click", (e) => {
+      const b = e.target.closest(".x");
+      if (!b) return;
+      press(b);
+      requestDelete(b.closest(".tag").dataset.id, true);
+    });
+    replaceBtn.addEventListener("click", () => { applyReplace(); });
+    anywayBtn.addEventListener("click", () => { applyAnyway(); });
+    cancelBtn.addEventListener("click", () => { cancelWarn(true); });
+    undoBtn.addEventListener("click", () => undo());
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") cancelWarn(true);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+    });
+    // keep the wires attached if the window changes size while the warning is open
+    addEventListener("resize", () => {
+      S.wires.forEach((w) => {
+        if (!chipEl(w.tid) || !miniEl(w.pid, w.tid)) return;
+        w.a = startPt(w.tid); w.b = endPt(w.pid, w.tid);
+        w.path.setAttribute("d", dOf(ctrl(w.a, w.b)));
+        w.dotA.setAttribute("cx", w.a.x); w.dotA.setAttribute("cy", w.a.y);
+        w.dotB.setAttribute("cx", w.b.x); w.dotB.setAttribute("cy", w.b.y);
+      });
+    });
+
+    // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+    const demo = { on: true, timer: 0, k: 0 };
+    function stopDemo() {
+      if (!demo.on) return;
+      demo.on = false;
+      clearTimeout(demo.timer);
+    }
+    addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    function scheduleDemo(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+    async function runDemo() {
+      if (!demo.on) return;
+      if (S.busy) return scheduleDemo(600);
+      if (S.undo) { press(undoBtn); await wait(160); undo(); return scheduleDemo(2300); }
+      if (S.pending) await cancelWarn(false);
+      const chip = chipEl("eid");
+      if (!chip || usesOf("eid").length < 3) {
+        Object.assign(S, START());
+        renderTags(); renderMinis();
+        return scheduleDemo(1200);
+      }
+      press(chip.querySelector(".x"));
+      await requestDelete("eid", false);
+      if (!demo.on) return;
+      await wait(1500); if (!demo.on || S.pending !== "eid") return;
+      const anyway = demo.k % 2 === 1;
+      demo.k += 1;
+      repSel.value = "win";
+      const b = anyway ? anywayBtn : replaceBtn;
+      press(b);
+      await wait(170); if (!demo.on || S.pending !== "eid") return;
+      await (anyway ? applyAnyway() : applyReplace());
+      scheduleDemo(2800);
+    }
+
+    renderTags();
+    renderMinis();
+    closeWarn();
+    hideToast();
+    scheduleDemo(500);
+  })();
+</script>
+</body>
+</html>

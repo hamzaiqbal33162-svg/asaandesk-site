@@ -1,0 +1,538 @@
+<!doctype html>
+<!-- Chill & Craft · Enclosure · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Enclosure · An email composer that catches a forgotten attachment</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg1: #e8edf7;
+    --bg2: #d9e1f1;
+    --grid: rgba(47, 91, 255, 0.07);
+    --win: #ffffff;
+    --bar: #f4f6fb;
+    --ink: #18223a;
+    --muted: #66708a;
+    --line: rgba(24, 34, 58, 0.11);
+    --blue: #2f5bff;
+    --blue2: #1d43e0;
+    --coral: #ff6b4a;
+    --coral-bg: #fff1ec;
+    --ok: #16a36c;
+    --shadow: rgba(30, 50, 110, 0.35);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg1: #0c1120;
+    --bg2: #111830;
+    --grid: rgba(110, 140, 255, 0.06);
+    --win: #151c2e;
+    --bar: #1a2238;
+    --ink: #e8ecf8;
+    --muted: #97a0bb;
+    --line: rgba(232, 236, 248, 0.1);
+    --blue: #5b7cff;
+    --blue2: #4466f0;
+    --coral: #ff7a5c;
+    --coral-bg: #2c1b1c;
+    --ok: #3cd394;
+    --shadow: rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg1); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, input, textarea { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+
+  /* ---------- Stage: graph paper under a cool light ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; overflow: hidden; isolation: isolate; background: linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 28px 28px, linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 28px 28px, radial-gradient(90% 70% at 50% 30%, var(--bg1), var(--bg2)); }
+  .orb { position: absolute; z-index: -1; width: 38vmax; height: 38vmax; border-radius: 50%; filter: blur(50px); opacity: 0.55; pointer-events: none; }
+  .orb.a { left: -10vmax; top: -12vmax; background: radial-gradient(circle, rgba(47, 91, 255, 0.35), transparent 65%); animation: roam 13s ease-in-out infinite alternate; }
+  .orb.b { right: -12vmax; bottom: -14vmax; background: radial-gradient(circle, rgba(255, 107, 74, 0.3), transparent 65%); animation: roam 16s ease-in-out infinite alternate-reverse; }
+  @keyframes roam { to { transform: translate(5vmax, 3vmax) scale(1.1); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(26px) scale(0.97); } }
+
+  /* ---------- Window ---------- */
+  .win { position: relative; width: min(540px, 100%); border-radius: 22px; background: var(--win); box-shadow: 0 0 0 1px var(--line), 0 50px 80px -50px var(--shadow); overflow: hidden; animation: rise 0.85s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+  .titlebar { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px; background: var(--bar); border-bottom: 1px solid var(--line); }
+  .lights { display: flex; gap: 6px; }
+  .lights i { width: 11px; height: 11px; border-radius: 50%; background: #ff6b5f; }
+  .lights i:nth-child(2) { background: #ffbf3d; } .lights i:nth-child(3) { background: #2fc85a; }
+  .titlebar h1 { margin: 0; font-size: 0.86rem; font-weight: 800; }
+  .draft { margin-left: auto; font-size: 0.72rem; color: var(--muted); }
+  .row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 16px; border-bottom: 1px solid var(--line); font-size: 0.86rem; }
+  .row > span:first-child { width: 56px; flex: none; color: var(--muted); font-weight: 700; font-size: 0.8rem; }
+  .who { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px 0 4px; border-radius: 999px; background: color-mix(in srgb, var(--blue) 11%, transparent); font-weight: 700; font-size: 0.82rem; min-width: 0; }
+  .who b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(140deg, #8fa7ff, #2f5bff); color: #fff; font-size: 0.6rem; }
+  .who small { color: var(--muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row input { flex: 1; min-width: 0; height: 42px; border: 0; outline: none; background: none; font-weight: 700; }
+  .bodywrap { position: relative; height: 140px; margin: 0; transform-origin: 50% 0; }
+  .bodywrap textarea, .mirror { position: absolute; inset: 0; margin: 0; padding: 14px 16px; font: 0.92rem/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; white-space: pre-wrap; overflow-wrap: break-word; letter-spacing: 0; }
+  .bodywrap textarea { width: 100%; height: 100%; border: 0; outline: none; resize: none; background: transparent; z-index: 1; scrollbar-width: none; }
+  .bodywrap textarea::-webkit-scrollbar { display: none; }
+  .mirror { color: transparent; overflow: hidden; pointer-events: none; }
+  .mirror mark { color: transparent; background: none; border-radius: 4px; box-shadow: inset 0 -2px 0 var(--coral); transition: background 0.3s; }
+  .mirror.loud mark { background: color-mix(in srgb, var(--coral) 26%, transparent); animation: blink 0.9s ease-in-out 2; }
+  .mirror.calm mark { box-shadow: inset 0 -2px 0 var(--ok); }
+  @keyframes blink { 50% { background: color-mix(in srgb, var(--coral) 50%, transparent); } }
+
+  /* Attachment tray */
+  .tray { display: flex; align-items: center; gap: 8px; min-height: 66px; padding: 10px 16px; border-top: 1px dashed var(--line); overflow-x: auto; scrollbar-width: thin; }
+  .file { position: relative; display: flex; align-items: center; gap: 9px; flex: none; width: 190px; height: 46px; padding: 0 30px 0 6px; border-radius: 13px; background: var(--bar); box-shadow: inset 0 0 0 1px var(--line); }
+  .ico { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 9px; color: #fff; font-size: 0.56rem; font-weight: 900; letter-spacing: 0.04em; background: var(--c, #8a93a8) center / cover no-repeat; }
+  .file b { display: block; font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file small { display: block; font-size: 0.68rem; color: var(--muted); }
+  .file > div { min-width: 0; }
+  .x { position: absolute; right: 6px; top: 50%; width: 22px; height: 22px; margin-top: -11px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+  .x:hover { background: var(--line); color: var(--ink); }
+  .x svg { width: 12px; height: 12px; }
+  .add { display: inline-flex; align-items: center; gap: 7px; flex: none; height: 46px; padding: 0 14px; border: 1.5px dashed color-mix(in srgb, var(--blue) 45%, var(--line)); border-radius: 13px; background: transparent; color: var(--blue); font-size: 0.8rem; font-weight: 800; cursor: pointer; transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1), background 0.2s; }
+  .add:hover { transform: translateY(-2px); background: color-mix(in srgb, var(--blue) 7%, transparent); }
+  .add svg { width: 17px; height: 17px; }
+  .empty-note { font-size: 0.76rem; color: var(--muted); white-space: nowrap; }
+
+  /* Footer */
+  .foot { position: relative; display: flex; align-items: center; gap: 10px; height: 66px; padding: 0 14px 0 16px; border-top: 1px solid var(--line); background: var(--bar); }
+  .watch { display: inline-flex; align-items: center; gap: 7px; min-width: 0; height: 30px; padding: 0 11px; border-radius: 999px; font-size: 0.74rem; font-weight: 800; color: var(--muted); background: var(--line); transition: background 0.3s, color 0.3s; }
+  .watch i { width: 8px; height: 8px; flex: none; border-radius: 50%; background: currentColor; }
+  .watch span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .watch.warn { color: var(--coral); background: color-mix(in srgb, var(--coral) 14%, transparent); }
+  .watch.warn i { animation: ping 1.4s ease-in-out infinite; }
+  .watch.good { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+  @keyframes ping { 50% { transform: scale(1.7); opacity: 0.4; } }
+  .send { position: relative; margin-left: auto; display: inline-flex; align-items: center; gap: 9px; height: 44px; padding: 0 18px 0 20px; border: 0; border-radius: 14px; background: linear-gradient(180deg, var(--blue), var(--blue2)); color: #fff; font-weight: 850; font-size: 0.92rem; cursor: pointer; box-shadow: 0 14px 22px -14px rgba(40, 70, 230, 0.95), inset 0 -3px 0 rgba(0, 0, 0, 0.16); transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); flex: none; z-index: 2; }
+  .send:hover { transform: translateY(-2px); }
+  .send:active { transform: scale(0.95); }
+  .send svg { width: 19px; height: 19px; }
+  .clip { position: absolute; right: 112px; bottom: 26px; z-index: 5; width: 40px; height: 72px; filter: drop-shadow(0 6px 6px rgba(20, 30, 70, 0.25)); opacity: 0; transform: translateY(40px) rotate(-20deg); pointer-events: none; }
+  .clip svg { width: 100%; height: 100%; overflow: visible; }
+  .bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: linear-gradient(90deg, var(--blue), var(--ok)); transform: scaleX(0); transform-origin: 0 50%; }
+
+  /* Forgot-the-file card */
+  .catch { position: absolute; left: 12px; right: 12px; bottom: 74px; z-index: 4; padding: 14px; border-radius: 16px; background: var(--coral-bg); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--coral) 50%, transparent), 0 24px 40px -24px var(--shadow); transform: translateY(30px) scale(0.96); opacity: 0; visibility: hidden; transition: transform 0.5s cubic-bezier(0.3, 1.5, 0.5, 1), opacity 0.25s, visibility 0.5s; }
+  .catch.show { transform: none; opacity: 1; visibility: visible; }
+  .catch p { margin: 0 0 10px; font-size: 0.86rem; line-height: 1.4; }
+  .catch p b { color: var(--coral); }
+  .catch .btns { display: flex; gap: 8px; }
+  .catch button { height: 38px; padding: 0 14px; border-radius: 11px; border: 1.5px solid color-mix(in srgb, var(--coral) 40%, transparent); background: transparent; font-weight: 800; font-size: 0.82rem; cursor: pointer; }
+  .catch button.main { border: 0; background: var(--coral); color: #fff; }
+
+  /* Drop overlay */
+  .drop { position: absolute; inset: 44px 0 0; z-index: 6; display: grid; place-content: center; justify-items: center; gap: 8px; border-radius: 0 0 22px 22px; background: color-mix(in srgb, var(--blue) 12%, var(--win)); box-shadow: inset 0 0 0 3px var(--blue); color: var(--blue); font-weight: 850; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; }
+  .drop.show { opacity: 1; visibility: visible; }
+  .drop svg { width: 40px; height: 40px; animation: bob 1s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-6px) rotate(-8deg); } }
+
+  /* Sent panel */
+  .sent { position: absolute; inset: 44px 0 0; z-index: 7; display: grid; place-content: center; justify-items: center; gap: 6px; padding: 20px; background: var(--win); text-align: center; opacity: 0; visibility: hidden; transition: opacity 0.35s, visibility 0.35s; }
+  .sent.show { opacity: 1; visibility: visible; }
+  .sent svg.check { width: 66px; height: 66px; }
+  .sent .ring { fill: none; stroke: var(--ok); stroke-width: 4; stroke-dasharray: 176; stroke-dashoffset: 176; }
+  .sent .tk { fill: none; stroke: var(--ok); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; }
+  .sent.show .ring { transition: stroke-dashoffset 0.7s cubic-bezier(0.3, 0.7, 0.3, 1); stroke-dashoffset: 0; }
+  .sent.show .tk { transition: stroke-dashoffset 0.45s 0.45s ease-out; stroke-dashoffset: 0; }
+  .sent h2 { margin: 6px 0 0; font-size: 1.1rem; }
+  .sent p { margin: 0; font-size: 0.84rem; color: var(--muted); }
+  .sent .undo { margin-top: 10px; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 12px; border: 1.5px solid var(--line); background: transparent; font-weight: 800; cursor: pointer; }
+  .sent .undo svg { width: 22px; height: 22px; transform: rotate(-90deg); }
+  .sent .undo circle { fill: none; stroke: var(--blue); stroke-width: 3; stroke-dasharray: 50.3; }
+
+  .fx { position: fixed; inset: 0; z-index: 30; overflow: hidden; pointer-events: none; }
+  .env { position: absolute; left: 0; top: 0; width: 120px; height: 82px; perspective: 400px; }
+  .env .back { position: absolute; inset: 0; border-radius: 9px; background: #dfe7ff; box-shadow: 0 18px 30px -14px rgba(20, 40, 140, 0.6); }
+  .env .front { position: absolute; inset: 0; border-radius: 9px; background: linear-gradient(160deg, #ffffff, #e9eeff); clip-path: polygon(0 28%, 50% 62%, 100% 28%, 100% 100%, 0 100%); }
+  .env .flap { position: absolute; left: 0; right: 0; top: 0; height: 62%; background: #c9d6ff; clip-path: polygon(0 0, 100% 0, 50% 100%); transform-origin: 50% 0; transform: rotateX(180deg); }
+  .env .eclip { position: absolute; right: 8px; top: -14px; width: 16px; height: 34px; opacity: 0; }
+  .chipfly { position: absolute; left: 0; top: 0; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: #fff; font-size: 0.56rem; font-weight: 900; background: var(--c, #8a93a8) center / cover no-repeat; }
+  .speed { position: absolute; left: 0; top: 0; height: 3px; width: 60px; border-radius: 2px; background: var(--blue); }
+
+  @media (max-width: 480px) {
+    .row > span:first-child { width: 50px; }
+    .who small { display: none; }
+    .bodywrap { height: 164px; }
+    .file { width: 170px; }
+    .clip { right: 104px; }
+    .draft { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .orb, .win, .watch.warn i, .mirror.loud mark, .drop svg { animation: none !important; }
+    .catch, .sent, .sent .ring, .sent .tk, .send, .add { transition-duration: 0.01s !important; transition-delay: 0s !important; }
+    .fx, .clip { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <span class="orb a" aria-hidden="true"></span><span class="orb b" aria-hidden="true"></span>
+    <section class="win" id="win" aria-labelledby="winTitle">
+      <div class="titlebar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><h1 id="winTitle">New message</h1><span class="draft" id="draft">Draft saved</span></div>
+      <div class="row"><span>To</span><span class="who"><b aria-hidden="true">SM</b>Sara Malik <small>sara@studio.example</small></span></div>
+      <label class="row"><span>Subject</span><input id="subject" value="March invoice" autocomplete="off" /></label>
+      <div class="bodywrap" id="bodywrap">
+        <div class="mirror" id="mirror" aria-hidden="true"></div>
+        <label class="sr-only" for="body">Message</label>
+        <textarea id="body" spellcheck="false"></textarea>
+      </div>
+      <div class="tray" id="tray" aria-label="Attachments">
+        <button class="add" id="add" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m20 11.5-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.6 17.3a1.7 1.7 0 0 1-2.4-2.4L15 7.2" /></svg>Attach</button>
+        <span class="empty-note" id="emptyNote">or drop files here</span>
+      </div>
+      <input type="file" id="picker" multiple hidden />
+      <div class="foot">
+        <span class="watch" id="watch"><i aria-hidden="true"></i><span id="watchText">No files</span></span>
+        <span class="clip" id="clip" aria-hidden="true"><svg viewBox="0 0 40 72"><defs><linearGradient id="clipMetal" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#eef1f8" /><stop offset=".5" stop-color="#c3cadb" /><stop offset="1" stop-color="#8c96b0" /></linearGradient></defs><path d="M28 14v38a9 9 0 0 1-18 0V12a7 7 0 0 1 14 0v36a3.5 3.5 0 0 1-7 0V20" fill="none" stroke="#5d6782" stroke-width="5.6" stroke-linecap="round" /><path d="M28 14v38a9 9 0 0 1-18 0V12a7 7 0 0 1 14 0v36a3.5 3.5 0 0 1-7 0V20" fill="none" stroke="url(#clipMetal)" stroke-width="3.2" stroke-linecap="round" /><g transform="translate(19 31)"><ellipse cx="-5" cy="0" rx="3.6" ry="4" fill="#fff" stroke="#18223a" stroke-width="1.2" /><ellipse cx="5" cy="0" rx="3.6" ry="4" fill="#fff" stroke="#18223a" stroke-width="1.2" /><circle cx="-4.2" cy="0.8" r="1.8" fill="#18223a" /><circle cx="5.8" cy="0.8" r="1.8" fill="#18223a" /><ellipse cx="-8.5" cy="6.5" rx="2.4" ry="1.4" fill="#ff8f7a" opacity=".7" /><ellipse cx="8.5" cy="6.5" rx="2.4" ry="1.4" fill="#ff8f7a" opacity=".7" /><path d="M-2.5 7q2.5 2 5 0" fill="none" stroke="#18223a" stroke-width="1.5" stroke-linecap="round" /></g></svg></span>
+        <button class="send" id="send" type="button"><span id="sendText">Send</span><svg id="plane" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12 20 4l-5 16-3-7Z" /><path d="m12 13 8-9" /></svg></button>
+        <span class="bar" id="bar"></span>
+      </div>
+      <div class="catch" id="catch" role="group" aria-labelledby="catchText">
+        <p id="catchText"></p>
+        <div class="btns"><button class="main" id="catchAttach" type="button">Attach file</button><button id="catchSend" type="button">Send anyway</button></div>
+      </div>
+      <div class="drop" id="drop" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m20 11.5-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.6 17.3a1.7 1.7 0 0 1-2.4-2.4L15 7.2" /></svg>Drop to attach</div>
+      <div class="sent" id="sent" aria-hidden="true">
+        <svg class="check" viewBox="0 0 66 66" aria-hidden="true"><circle class="ring" cx="33" cy="33" r="28" /><path class="tk" d="m21 34 8 8 16-17" /></svg>
+        <h2 id="sentTitle">Sent to Sara</h2>
+        <p id="sentInfo"></p>
+        <button class="undo" id="undo" type="button"><svg viewBox="0 0 22 22" aria-hidden="true"><circle id="undoRing" cx="11" cy="11" r="8" /></svg><span>Undo</span></button>
+      </div>
+    </section>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+    <div class="fx" id="fx" aria-hidden="true"></div>
+  </main>
+
+<script>
+  // ---------- Enclosure: a mail composer that notices when you mention a file you forgot to attach ----------
+  const $ = (s) => document.querySelector(s);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const SPRING = window.CSS && CSS.supports && CSS.supports("transition-timing-function", "linear(0, 1)")
+    ? "linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077 24.3%, 1.104 27.8%, 1.107 31.2%, 1.096, 1.073 38.1%, 1.017 47.1%, 0.996 55.4%, 0.991 61.4%, 1 80%, 1)"
+    : "cubic-bezier(.34, 1.56, .64, 1)";
+  function play(el, frames, opts) {
+    if (calm() || !el || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  const say = (t) => { $("#status").textContent = t; };
+  const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  const DRAFT = "Hi Sara,\nI have attached the March invoice for the logo work. Let me know if anything looks off.\nThanks, Ahmed";
+  const body = $("#body"), mirror = $("#mirror"), subject = $("#subject");
+  const tray = $("#tray"), addBtn = $("#add"), picker = $("#picker"), emptyNote = $("#emptyNote");
+  const watch = $("#watch"), watchText = $("#watchText");
+  const sendBtn = $("#send"), sendText = $("#sendText"), bar = $("#bar");
+  const catchCard = $("#catch"), catchText = $("#catchText");
+  const fx = $("#fx");
+  body.value = DRAFT;
+
+  // ---------- Watch the words: "attached", "attachment", "enclosed" and friends ----------
+  const WORDS = /\b(attach(?:ed|es|ing|ment|ments)?|enclos(?:ed|ing|ure)|find the file|the file)\b/gi;
+  let files = []; // { file, url, el }
+  function mentions() { return [...(subject.value + "\n" + body.value).matchAll(WORDS)].map((m) => m[0]); }
+  function paintMirror() {
+    // the mirror sits under the textarea and draws the highlight behind the mentioned words
+    mirror.innerHTML = esc(body.value).replace(WORDS, (w) => "<mark>" + w + "</mark>") + "\n";
+    mirror.scrollTop = body.scrollTop;
+    mirror.classList.toggle("calm", files.length > 0);
+  }
+  function refreshWatch() {
+    const said = mentions();
+    watch.classList.remove("warn", "good");
+    if (files.length) { watch.classList.add("good"); watchText.textContent = files.length + (files.length === 1 ? " file" : " files") + " · " + size(total()); }
+    else if (said.length) { watch.classList.add("warn"); watchText.textContent = "You mention a file"; }
+    else watchText.textContent = "No files";
+    emptyNote.hidden = files.length > 0;
+    paintMirror();
+  }
+  body.addEventListener("input", () => { refreshWatch(); savedSoon(); });
+  subject.addEventListener("input", () => { refreshWatch(); savedSoon(); });
+  body.addEventListener("scroll", () => { mirror.scrollTop = body.scrollTop; });
+  let saveT = 0;
+  function savedSoon() { $("#draft").textContent = "Saving…"; clearTimeout(saveT); saveT = setTimeout(() => { $("#draft").textContent = "Draft saved"; }, 700); }
+
+  // ---------- Files: real picker, drag and drop, thumbnails for images ----------
+  const total = () => files.reduce((s, f) => s + f.file.size, 0);
+  const size = (b) => (b < 1024 ? b + " B" : b < 1048576 ? (b / 1024).toFixed(b < 10240 ? 1 : 0) + " KB" : (b / 1048576).toFixed(1) + " MB");
+  function kind(f) {
+    const n = f.name.toLowerCase();
+    if (/^image\//.test(f.type)) return ["IMG", "#7a5af0"];
+    if (/\.pdf$/.test(n) || f.type === "application/pdf") return ["PDF", "#e5484d"];
+    if (/\.(xlsx?|csv|ods)$/.test(n)) return ["XLS", "#16a36c"];
+    if (/\.(docx?|odt|rtf|txt|md)$/.test(n)) return ["DOC", "#2f5bff"];
+    if (/\.(zip|rar|7z|gz)$/.test(n)) return ["ZIP", "#e39b1c"];
+    return [(n.split(".").pop() || "FILE").slice(0, 4).toUpperCase(), "#7b859e"];
+  }
+  function addFiles(list, fromRect) {
+    const incoming = [...list];
+    if (!incoming.length) return;
+    if (files.length + incoming.length > 6) { say("Up to 6 files per message"); flashWatch("Up to 6 files"); return; }
+    if (total() + incoming.reduce((s, f) => s + f.size, 0) > 25 * 1048576) { say("Files over 25 MB cannot be attached"); flashWatch("Over 25 MB"); return; }
+    incoming.forEach((file, i) => {
+      const [label, col] = kind(file);
+      const el = document.createElement("div");
+      el.className = "file";
+      const url = /^image\//.test(file.type) ? URL.createObjectURL(file) : "";
+      el.innerHTML = '<span class="ico" style="--c:' + col + (url ? ";background-image:url(" + url + ')">' : '">' + label) + '</span><div><b></b><small></small></div><button class="x" type="button"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m2 2 8 8M10 2 2 10" /></svg></button>';
+      el.querySelector("b").textContent = file.name;
+      el.querySelector("small").textContent = size(file.size) + " · " + label;
+      el.querySelector(".x").setAttribute("aria-label", "Remove " + file.name);
+      const item = { file, url, el };
+      el.querySelector(".x").addEventListener("click", () => removeFile(item));
+      tray.insertBefore(el, addBtn);
+      files.push(item);
+      play(el, [{ transform: "translateY(18px) scale(.7)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 560, delay: i * 90, easing: SPRING, fill: "backwards" });
+      if (fromRect) flyChip(fromRect, el.querySelector(".ico"), label, col, url, i);
+    });
+    refreshWatch();
+    hideCatch();
+    play(watch, [{ transform: "scale(1)" }, { transform: "scale(1.12)" }, { transform: "scale(1)" }], { duration: 420, easing: SPRING });
+    say(incoming.length === 1 ? incoming[0].name + " attached" : incoming.length + " files attached");
+  }
+  async function removeFile(item) {
+    files = files.filter((f) => f !== item);
+    await play(item.el, [{ transform: "none", opacity: 1 }, { transform: "scale(.6) translateY(10px)", opacity: 0 }], { duration: 260, easing: "ease-in" });
+    item.el.remove();
+    if (item.url) URL.revokeObjectURL(item.url);
+    refreshWatch();
+    say(item.file.name + " removed");
+  }
+  function clearFiles() { files.forEach((f) => { f.el.remove(); if (f.url) URL.revokeObjectURL(f.url); }); files = []; refreshWatch(); }
+  function flashWatch(t) {
+    watch.classList.add("warn"); watchText.textContent = t;
+    play(watch, [{ transform: "translateX(-5px)" }, { transform: "translateX(5px)" }, { transform: "none" }], { duration: 300 });
+    setTimeout(refreshWatch, 1600);
+  }
+  addBtn.addEventListener("click", () => picker.click());
+  picker.addEventListener("change", () => { addFiles(picker.files); picker.value = ""; });
+  // drag and drop anywhere on the window
+  const win = $("#win"), drop = $("#drop");
+  let depth = 0;
+  win.addEventListener("dragenter", (e) => { if (!e.dataTransfer || ![...e.dataTransfer.types].includes("Files")) return; e.preventDefault(); depth++; drop.classList.add("show"); });
+  win.addEventListener("dragover", (e) => { if (drop.classList.contains("show")) e.preventDefault(); });
+  win.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; drop.classList.remove("show"); } });
+  win.addEventListener("drop", (e) => { e.preventDefault(); depth = 0; drop.classList.remove("show"); if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+
+  // a little file badge arcs from where the file came from into the tray
+  function flyChip(from, toEl, label, col, url, i) {
+    if (calm()) return;
+    const to = toEl.getBoundingClientRect();
+    const c = document.createElement("div");
+    c.className = "chipfly";
+    c.style.setProperty("--c", col);
+    if (url) c.style.backgroundImage = "url(" + url + ")"; else c.textContent = label;
+    fx.appendChild(c);
+    const sx = from.left + from.width / 2 - 17, sy = from.top + from.height / 2 - 17;
+    c.animate([
+      { transform: "translate(" + sx + "px," + sy + "px) scale(.4) rotate(-20deg)", opacity: 0 },
+      { transform: "translate(" + (sx + to.left) / 2 + "px," + (Math.min(sy, to.top) - 70) + "px) scale(1.2) rotate(10deg)", opacity: 1, offset: 0.5 },
+      { transform: "translate(" + to.left + "px," + to.top + "px) scale(1) rotate(0)", opacity: 1 }
+    ], { duration: 700, delay: i * 90, easing: "cubic-bezier(.4,.1,.3,1)", fill: "backwards" }).onfinish = () => c.remove();
+  }
+
+  // ---------- Send ----------
+  let busy = false, run = 0;
+  async function trySend(force) {
+    if (busy) return;
+    const said = mentions();
+    if (!force && !files.length && said.length) return caught(said);
+    return send();
+  }
+  sendBtn.addEventListener("click", () => trySend(false));
+  $("#catchAttach").addEventListener("click", () => picker.click());
+  $("#catchSend").addEventListener("click", () => { hideCatch(); trySend(true); });
+
+  // Caught: the plane tries to leave, a paperclip pops up, hooks it and points at the words
+  async function caught(said) {
+    busy = true;
+    const plane = $("#plane"), clip = $("#clip");
+    sendText.textContent = "Wait…";
+    // 1. Anticipation: the plane tilts and lunges forward
+    await play(plane, [{ transform: "none" }, { transform: "translate(-3px,2px) rotate(-14deg)" }, { transform: "translate(10px,-6px) rotate(8deg)" }], { duration: 360, easing: "cubic-bezier(.5,0,.5,1.4)" });
+    // 2. The clip springs up, hooks the button and the plane snaps back
+    clip.style.opacity = "1"; clip.style.transform = "none";
+    play(clip, [{ opacity: 0, transform: "translateY(40px) rotate(-20deg)" }, { opacity: 1, transform: "translateY(-10px) rotate(8deg)", offset: 0.6 }, { opacity: 1, transform: "none" }], { duration: 620, easing: SPRING });
+    await play(plane, [{ transform: "translate(10px,-6px) rotate(8deg)" }, { transform: "translate(-4px,1px) rotate(-4deg)" }, { transform: "none" }], { duration: 520, easing: SPRING });
+    play(sendBtn, [{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(5px)" }, { transform: "translateX(-2px)" }, { transform: "none" }], { duration: 420 });
+    // 3. The words light up and the card explains
+    mirror.classList.add("loud");
+    setTimeout(() => mirror.classList.remove("loud"), 2200);
+    const word = said[0];
+    catchText.innerHTML = "Did you forget the file? You wrote <b>“" + esc(word) + "”</b> but nothing is attached.";
+    catchCard.classList.add("show");
+    sendText.textContent = "Send";
+    say("Did you forget the file? You wrote " + word + " but nothing is attached.");
+    if (!demoOn) $("#catchAttach").focus();
+    busy = false;
+  }
+  function hideCatch() {
+    catchCard.classList.remove("show");
+    const clip = $("#clip");
+    if (clip.style.opacity === "1") {
+      play(clip, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(40px) rotate(20deg)" }], { duration: 360, easing: "ease-in" });
+      clip.style.opacity = "0"; clip.style.transform = "translateY(40px) rotate(-20deg)";
+    }
+  }
+
+  let lastSent = null, undoTimer = 0;
+  async function send() {
+    busy = true;
+    const id = ++run;
+    hideCatch();
+    const sentFiles = files.slice();
+    const bytes = total() + new Blob([subject.value + body.value]).size;
+    lastSent = { subject: subject.value, body: body.value, files: sentFiles.map((f) => f.file) };
+    // 1. Anticipation: the window dips and the body folds up
+    play(win, [{ transform: "scale(1)" }, { transform: "scale(.985) translateY(3px)" }, { transform: "scale(1)" }], { duration: 420 });
+    const bw = $("#bodywrap"), br = bw.getBoundingClientRect();
+    const envEl = makeEnvelope(br);
+    play(bw, [{ transform: "scaleY(1)", opacity: 1 }, { transform: "scaleY(.15)", opacity: 0 }], { duration: 380, easing: "cubic-bezier(.5,0,.3,1)", fill: "forwards" });
+    // 2. Main: an envelope rises, the files slide in, the flap shuts and a clip snaps on
+    if (envEl) {
+      await play(envEl, [{ transform: envEl._at + " scale(.4)", opacity: 0 }, { transform: envEl._at + " scale(1)", opacity: 1 }], { duration: 520, easing: SPRING, fill: "forwards" });
+      const er = envEl.getBoundingClientRect();
+      await Promise.all(sentFiles.map((f, i) => {
+        const r = f.el.querySelector(".ico").getBoundingClientRect();
+        const [label, col] = kind(f.file);
+        const c = document.createElement("div");
+        c.className = "chipfly"; c.style.setProperty("--c", col);
+        if (f.url) c.style.backgroundImage = "url(" + f.url + ")"; else c.textContent = label;
+        fx.insertBefore(c, envEl);
+        const ex = er.left + er.width / 2 - 17, ey = er.top + er.height * 0.3;
+        return c.animate([
+          { transform: "translate(" + r.left + "px," + r.top + "px) scale(1)" },
+          { transform: "translate(" + (r.left + ex) / 2 + "px," + (ey - 60) + "px) scale(1.1) rotate(-8deg)", offset: 0.55 },
+          { transform: "translate(" + ex + "px," + (ey + 10) + "px) scale(.7)", opacity: 1 }
+        ], { duration: 600, delay: i * 110, easing: "cubic-bezier(.4,.1,.3,1)", fill: "forwards" }).finished.catch(() => {}).then(() => c.remove());
+      }));
+      play(envEl.querySelector(".flap"), [{ transform: "rotateX(180deg)" }, { transform: "rotateX(0)" }], { duration: 420, easing: SPRING, fill: "forwards" });
+      if (sentFiles.length) { const ec = envEl.querySelector(".eclip"); ec.style.opacity = "1"; play(ec, [{ transform: "translateY(-20px) rotate(-30deg)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 420, delay: 200, easing: SPRING, fill: "backwards" }); }
+      await wait(520);
+    }
+    if (id !== run) return;
+    // 3. Progress: the bar fills at a pretend upload speed based on the real size
+    sendText.textContent = "Sending 0%";
+    const dur = calm() ? 400 : Math.min(2200, 900 + bytes / 400);
+    await progress(dur, (p) => { bar.style.transform = "scaleX(" + p + ")"; sendText.textContent = "Sending " + Math.round(p * 100) + "%"; });
+    if (id !== run) return;
+    // 4. Finish: the envelope zooms off with speed lines and the sent panel draws its tick
+    if (envEl) zoomOff(envEl);
+    const names = sentFiles.map((f) => f.file.name);
+    $("#sentInfo").textContent = names.length ? "with " + (names.length === 1 ? names[0] : names.length + " files") + " · " + size(bytes) : "No attachment · " + size(bytes);
+    const sent = $("#sent");
+    sent.classList.add("show"); sent.setAttribute("aria-hidden", "false");
+    say("Sent to Sara Malik " + (names.length ? "with " + names.join(", ") : "with no attachment") + ". Undo is open for 5 seconds.");
+    bar.style.transform = "scaleX(0)";
+    sendText.textContent = "Send";
+    // 5. Undo window, then a fresh draft
+    const ring = $("#undoRing");
+    ring.style.transition = "none"; ring.style.strokeDashoffset = "0";
+    requestAnimationFrame(() => requestAnimationFrame(() => { ring.style.transition = "stroke-dashoffset 5s linear"; ring.style.strokeDashoffset = "50.3"; }));
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => { if (id === run) freshDraft(false); }, 5200);
+  }
+  function makeEnvelope(br) {
+    if (calm()) return null;
+    const e = document.createElement("div");
+    e.className = "env";
+    e.innerHTML = '<span class="back"></span><span class="front"></span><span class="flap"></span><svg class="eclip" viewBox="0 0 16 34"><path d="M11 4v20a4 4 0 0 1-8 0V6a3 3 0 0 1 6 0v16" fill="none" stroke="#8b96b5" stroke-width="2.4" stroke-linecap="round"/></svg>';
+    e._at = "translate(" + (br.left + br.width / 2 - 60) + "px," + (br.top + br.height / 2 - 41) + "px)";
+    e.style.transform = e._at;
+    fx.appendChild(e);
+    return e;
+  }
+  function progress(dur, cb) {
+    return new Promise((res) => {
+      const t0 = performance.now();
+      const step = (now) => { const p = Math.min(1, (now - t0) / dur); cb(1 - Math.pow(1 - p, 2.2)); if (p < 1) requestAnimationFrame(step); else res(); };
+      requestAnimationFrame(step);
+    });
+  }
+  function zoomOff(e) {
+    const r = e.getBoundingClientRect();
+    for (let k = 0; k < 4; k++) {
+      const s = document.createElement("i");
+      s.className = "speed";
+      fx.appendChild(s);
+      const y = r.top + 14 + k * 18;
+      s.animate([{ transform: "translate(" + (r.left - 30) + "px," + y + "px) scaleX(.2)", opacity: 0 }, { transform: "translate(" + (r.left - 90) + "px," + y + "px) scaleX(1)", opacity: 0.8, offset: 0.4 }, { transform: "translate(" + (r.left - 160) + "px," + y + "px) scaleX(.3)", opacity: 0 }], { duration: 520, delay: k * 40 }).onfinish = () => s.remove();
+    }
+    e.animate([
+      { transform: e._at + " scale(1) rotate(0)" },
+      { transform: "translate(" + (r.left - 24) + "px," + (r.top + 8) + "px) scale(.96) rotate(-4deg)", offset: 0.25 },
+      { transform: "translate(" + (innerWidth + 80) + "px," + (r.top - 120) + "px) scale(.6) rotate(-12deg)" }
+    ], { duration: 700, easing: "cubic-bezier(.6,0,.4,1)", fill: "forwards" }).onfinish = () => e.remove();
+  }
+  function freshDraft(restore) {
+    ++run;
+    clearTimeout(undoTimer);
+    const sent = $("#sent");
+    sent.classList.remove("show"); sent.setAttribute("aria-hidden", "true");
+    const bw = $("#bodywrap");
+    bw.getAnimations().forEach((a) => a.cancel());
+    play(bw, [{ transform: "scaleY(.2)", opacity: 0 }, { transform: "scaleY(1)", opacity: 1 }], { duration: 520, easing: SPRING });
+    clearFiles();
+    if (restore && lastSent) {
+      subject.value = lastSent.subject; body.value = lastSent.body;
+      addFiles(lastSent.files);
+      say("Sending cancelled. Your draft is back.");
+    } else {
+      subject.value = "March invoice"; body.value = DRAFT;
+      say("New draft ready");
+    }
+    refreshWatch();
+    busy = false;
+    if (demoOn) queueDemo(2200);
+  }
+  $("#undo").addEventListener("click", () => freshDraft(true));
+
+  // ---------- Auto-demo: try to send without the file, get caught, attach, send; stops on real input ----------
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) => window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  function queueDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(runDemo, ms); }
+  function demoFile(i) {
+    const list = [["invoice-march.pdf", 253952, "application/pdf"], ["logo-final.zip", 1843200, "application/zip"], ["hours-march.xlsx", 48128, "application/vnd.ms-excel"]];
+    const [n, s, t] = list[i % list.length];
+    return new File([new Uint8Array(s)], n, { type: t });
+  }
+  async function runDemo() {
+    if (!demoOn || busy) return;
+    const r = round++;
+    if (r % 2 === 0) {
+      await trySend(false);
+      await wait(1700);
+      if (!demoOn) return;
+      play($("#catchAttach"), [{ transform: "scale(1)" }, { transform: "scale(.92)" }, { transform: "scale(1)" }], { duration: 260 });
+      await wait(260);
+      addFiles([demoFile(0)], $("#catchAttach").getBoundingClientRect());
+    } else {
+      // a file is dropped on the window
+      drop.classList.add("show");
+      await wait(900);
+      drop.classList.remove("show");
+      if (!demoOn) return;
+      addFiles([demoFile(0), demoFile(r)], tray.getBoundingClientRect());
+    }
+    await wait(1300);
+    if (demoOn) trySend(false);
+  }
+
+  refreshWatch();
+  queueDemo(1300);
+</script>
+</body>
+</html>
