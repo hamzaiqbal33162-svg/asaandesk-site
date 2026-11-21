@@ -1,0 +1,496 @@
+<!doctype html>
+<!-- Chill & Craft · Kettle · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kettle · Boil switch toggle</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg-a: #e4f1eb;
+    --bg-b: #c4ddd2;
+    --tile: #b9d8cb;
+    --tile-hi: rgba(255, 255, 255, 0.35);
+    --grout: #e3f0ea;
+    --wood-a: #d2b48f;
+    --wood-b: #b38f68;
+    --ink: #15302a;
+    --muted: #55746a;
+    --panel: #fffdf9;
+    --panel-line: rgba(21, 48, 42, 0.1);
+    --chip: rgba(21, 48, 42, 0.06);
+    --hot: #ff5a36;
+    --hot-rgb: 255, 90, 54;
+    --cold: #2f8fc4;
+    --focus: #ff5a36;
+    --shadow: rgba(25, 60, 50, 0.45);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #13241f;
+    --bg-b: #070e0c;
+    --tile: #1b302a;
+    --tile-hi: rgba(255, 255, 255, 0.04);
+    --grout: #12221d;
+    --wood-a: #4a3727;
+    --wood-b: #2e2118;
+    --ink: #e5f2ec;
+    --muted: #8fb2a6;
+    --panel: #15241f;
+    --panel-line: rgba(229, 242, 236, 0.1);
+    --chip: rgba(229, 242, 236, 0.07);
+    --hot: #ff6a45;
+    --hot-rgb: 255, 106, 69;
+    --cold: #6cc4f0;
+    --focus: #ffb03a;
+    --shadow: rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg-b); }
+
+  /* ---------- Stage and kitchen card ---------- */
+  .stage { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; overflow: hidden; background: radial-gradient(90% 70% at 50% 25%, var(--bg-a), var(--bg-b)); }
+  /* subway tiles: one 52 x 52 SVG cell holds two rows of 2:1 tiles with offset joints and a glaze line */
+  :root { --tiles: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='52'%3E%3Cpath d='M0 1h52M0 27h52M1 0v27M27 26v26' fill='none' stroke='%23e6f2ec' stroke-width='2'/%3E%3Cpath d='M2 4h50M0 30h26M28 30h24' stroke='%23ffffff' stroke-opacity='.45'/%3E%3C/svg%3E"); }
+  :root[data-theme="dark"] { --tiles: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='52'%3E%3Cpath d='M0 1h52M0 27h52M1 0v27M27 26v26' fill='none' stroke='%23101e1a' stroke-width='2'/%3E%3Cpath d='M2 4h50M0 30h26M28 30h24' stroke='%23ffffff' stroke-opacity='.05'/%3E%3C/svg%3E"); }
+  .kitchen { position: relative; width: min(440px, 100%); border-radius: 30px; overflow: hidden; isolation: isolate; box-shadow: 0 1px 0 var(--panel-line), 0 40px 70px -40px var(--shadow);
+    background: linear-gradient(var(--tile-hi), transparent 45%), var(--tiles) 0 0 / 52px 52px, var(--tile);
+  }
+  .kitchen::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(70% 50% at 50% 30%, rgba(255, 255, 255, 0.18), transparent 70%); }
+  .top { position: relative; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 22px 0; }
+  .eyebrow { margin: 0 0 2px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: 0; font-size: 1.35rem; font-weight: 800; letter-spacing: -0.01em; }
+  .tag { flex: none; margin-top: 4px; padding: 6px 10px; border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 0.72rem; font-weight: 700; box-shadow: 0 6px 14px -10px var(--shadow); }
+  .tag b { color: var(--ink); }
+
+  /* ---------- Scene: the kettle SVG with a canvas on top for water, bubbles and steam ---------- */
+  .scene { position: relative; z-index: 1; width: min(300px, 74vw); margin: -6px auto 0; }
+  .scene svg { position: relative; z-index: 1; display: block; width: 100%; height: auto; overflow: visible; }
+  .scene canvas { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; pointer-events: none; }
+  /* the counter top starts at the kettle's base line and runs down under the panel */
+  .counter { position: absolute; z-index: 0; left: -60vw; right: -60vw; top: 93.5%; height: 600px; background: linear-gradient(180deg, var(--wood-a), var(--wood-b) 60%); box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.25), inset 0 -1px 0 rgba(0, 0, 0, 0.2); }
+  .counter::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 12px; background: linear-gradient(rgba(0, 0, 0, 0.12), transparent); }
+  .badge { position: absolute; z-index: 3; left: 50%; top: 2%; translate: -50% 0; padding: 7px 12px; border-radius: 999px; background: var(--hot); color: #fff; font-size: 0.8rem; font-weight: 800; white-space: nowrap; opacity: 0; box-shadow: 0 10px 22px -10px rgba(var(--hot-rgb), 0.9); pointer-events: none; }
+
+  /* ---------- Control panel ---------- */
+  .panel { position: relative; z-index: 2; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px 18px; margin: 6px 16px 16px; padding: 16px 18px; border-radius: 22px; background: var(--panel); box-shadow: 0 1px 0 var(--panel-line), 0 18px 30px -22px var(--shadow); }
+  .rocker { display: grid; justify-items: center; gap: 7px; padding: 4px; border: 0; border-radius: 16px; background: none; color: var(--muted); font: inherit; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .rocker:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .rk-plate { display: block; width: 62px; height: 88px; padding: 6px; border-radius: 18px; background: linear-gradient(180deg, #303b37, #151c1a); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 12px 18px -10px rgba(0, 0, 0, 0.6); perspective: 200px; }
+  .rk-face { position: relative; display: grid; grid-template-rows: 1fr 1fr; height: 100%; border-radius: 13px; overflow: hidden; transform: rotateX(-18deg); transform-origin: 50% 50%;
+    background: linear-gradient(180deg, #fbf8f2, #e4ddd1 49%, #c7bfb1 50%, #ece6dc); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+    transition: transform 0.5s cubic-bezier(0.3, 1.7, 0.45, 1), background 0.3s, box-shadow 0.3s; }
+  .rk-face span { display: grid; place-items: center; font-size: 1.05rem; font-weight: 900; color: #6b6458; letter-spacing: 0; }
+  .rocker[aria-checked="true"] .rk-face { transform: rotateX(18deg); background: linear-gradient(180deg, #ff8d62, #ff5a36 49%, #ff7a4d 50%, #ffc1a4); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.25), 0 0 26px rgba(var(--hot-rgb), 0.75); }
+  .rocker[aria-checked="true"] .rk-face span { color: #fff; }
+  .rocker[aria-checked="true"] { color: var(--hot); }
+  .read { min-width: 0; }
+  .temp { display: flex; align-items: baseline; gap: 2px; margin: 0; font-size: 2.6rem; font-weight: 850; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--cold); }
+  .temp small { font-size: 1rem; font-weight: 750; color: var(--muted); }
+  .state { margin: 6px 0 10px; font-size: 0.84rem; font-weight: 650; color: var(--muted); min-height: 1.3em; }
+  .bar { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 5%; border-radius: 3px; background: linear-gradient(90deg, var(--cold), #f3c14b, var(--hot)); background-size: 260px 100%; }
+  fieldset.cups { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; margin: 0; padding: 12px 0 0; border: 0; border-top: 1px solid var(--panel-line); min-width: 0; }
+  legend { float: left; margin-right: 6px; padding: 0; font-size: 0.74rem; font-weight: 750; color: var(--muted); }
+  .chip { position: relative; flex: 1; }
+  .chip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .chip span { display: block; padding: 8px 6px; border-radius: 12px; background: var(--chip); font-size: 0.8rem; font-weight: 750; text-align: center; transition: background 0.25s, color 0.25s, transform 0.3s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .chip input:checked + span { background: var(--ink); color: var(--panel); }
+  .chip input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .chip:active span { transform: scale(0.94); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 380px) { .panel { gap: 10px 12px; padding: 14px; } .temp { font-size: 2.2rem; } }
+  @media (min-width: 1100px) and (min-height: 820px) { .kitchen { scale: 1.12; } }
+  @media (prefers-reduced-motion: reduce) { .rk-face, .chip span { transition: none; } }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <section class="kitchen" id="kitchen" aria-labelledby="ttl">
+      <header class="top">
+        <div>
+          <p class="eyebrow">Morning tea</p>
+          <h1 id="ttl">Kettle</h1>
+        </div>
+        <span class="tag" id="tag"><b>2 cups</b> · clicks off at 100°C</span>
+      </header>
+
+      <div class="scene" id="scene">
+        <div class="counter" aria-hidden="true"></div>
+        <svg id="kettle" viewBox="0 0 320 300" aria-hidden="true">
+          <defs>
+            <linearGradient id="kb" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0" stop-color="#d9d0c2" /><stop offset="0.28" stop-color="#fffdf8" /><stop offset="0.55" stop-color="#f6f0e6" /><stop offset="1" stop-color="#c9bfae" />
+            </linearGradient>
+            <linearGradient id="kh" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#f7f2ea" /><stop offset="1" stop-color="#cfc5b5" /></linearGradient>
+            <linearGradient id="kbase" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3d4844" /><stop offset="1" stop-color="#171e1c" /></linearGradient>
+            <radialGradient id="hotglow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ff7a45" stop-opacity="0.8" /><stop offset="1" stop-color="#ff7a45" stop-opacity="0" /></radialGradient>
+            <filter id="soft" x="-30%" y="-200%" width="160%" height="500%"><feGaussianBlur stdDeviation="3" /></filter>
+          </defs>
+          <ellipse cx="160" cy="283" rx="112" ry="8" fill="rgba(0,0,0,0.22)" />
+          <ellipse id="glow-floor" cx="160" cy="281" rx="132" ry="16" fill="url(#hotglow)" opacity="0" />
+          <g id="kettle-g">
+            <!-- handle -->
+            <path d="M204 106 C 250 102, 272 128, 268 172 C 265 206, 250 226, 222 238" fill="none" stroke="url(#kh)" stroke-width="20" stroke-linecap="round" />
+            <path d="M206 112 C 246 110, 262 132, 259 170 C 256 200, 244 218, 222 228" fill="none" stroke="rgba(0,0,0,0.07)" stroke-width="3" stroke-linecap="round" />
+            <!-- spout -->
+            <path d="M120 132 C 100 122, 82 106, 60 84 L 52 92 C 70 116, 90 144, 112 164 Z" fill="url(#kb)" />
+            <path d="M52 92 L 60 84" stroke="#bdb2a0" stroke-width="3" stroke-linecap="round" />
+            <!-- body -->
+            <path d="M100 252 C 94 200, 100 142, 118 98 L 202 98 C 220 142, 226 200, 220 252 Q 160 262 100 252 Z" fill="url(#kb)" />
+            <path d="M101 244 Q 160 254 219 244 L 220 252 Q 160 262 100 252 Z" fill="#2c3633" />
+            <path d="M122 104 C 108 150, 106 200, 110 240" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="5" stroke-linecap="round" />
+            <!-- lid -->
+            <g id="lid">
+              <path d="M114 100 Q 160 78 206 100 Z" fill="#eee7dc" />
+              <path d="M114 100 L 206 100" stroke="rgba(0,0,0,0.16)" stroke-width="2" />
+              <rect x="146" y="76" width="28" height="12" rx="6" fill="#2c3633" />
+              <rect x="150" y="78" width="12" height="3" rx="1.5" fill="rgba(255,255,255,0.3)" />
+            </g>
+            <!-- water window (the canvas draws the water inside it) -->
+            <rect x="134" y="120" width="52" height="118" rx="15" fill="#1c2624" />
+            <g stroke="#8a948f" stroke-width="1.6" stroke-linecap="round">
+              <path d="M192 140h6M192 160h4M192 180h6M192 200h4M192 220h6" />
+            </g>
+            <g font-family="system-ui, sans-serif" font-size="7" font-weight="800" fill="#8a948f">
+              <text x="200" y="142.5">MAX</text><text x="200" y="222.5">MIN</text>
+            </g>
+            <!-- base with its heating light -->
+            <rect x="84" y="256" width="152" height="24" rx="11" fill="url(#kbase)" />
+            <rect id="led-glow" x="98" y="264" width="124" height="6" rx="3" fill="#ff6a3a" filter="url(#soft)" opacity="0" />
+            <rect id="led" x="102" y="266" width="116" height="3.5" rx="1.75" fill="#40302b" />
+          </g>
+        </svg>
+        <canvas id="fx" aria-hidden="true"></canvas>
+        <span class="badge" id="badge" aria-hidden="true">Boiled · 100°C</span>
+      </div>
+
+      <div class="panel">
+        <button class="rocker" id="rocker" type="button" role="switch" aria-checked="false" aria-label="Boil" aria-describedby="state">
+          <span class="rk-plate" id="plate"><span class="rk-face"><span>I</span><span>O</span></span></span>
+          Boil
+        </button>
+        <div class="read">
+          <p class="temp" id="temp-wrap"><span id="temp">24</span><small>°C</small></p>
+          <p class="state" id="state">Cold · flip the switch to boil</p>
+          <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+        </div>
+        <fieldset class="cups" id="cups">
+          <legend>Fill</legend>
+          <label class="chip"><input type="radio" name="cups" value="1" /><span>1 cup</span></label>
+          <label class="chip"><input type="radio" name="cups" value="2" checked /><span>2 cups</span></label>
+          <label class="chip"><input type="radio" name="cups" value="4" /><span>Full</span></label>
+        </fieldset>
+      </div>
+      <p class="sr" id="live" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+<script>
+  // Kettle: a boil switch that really heats the water.
+  // On = the rocker tips and lights, the base glows and flickers → the temperature climbs while tiny bubbles cling to
+  // the bottom, then stream up and roll → steam curls from the spout, the kettle rattles near the top → at 100°C a
+  // burst of steam, the lid hops and the switch clicks itself off. Then it slowly cools. "Fill" pours fresh water.
+  (function () {
+    "use strict";
+    var $ = function (id) { return document.getElementById(id); };
+    var calm = matchMedia("(prefers-reduced-motion: reduce)");
+    var kitchen = $("kitchen"), scene = $("scene"), canvas = $("fx"), ctx = canvas.getContext("2d");
+    var rocker = $("rocker"), plate = $("plate"), tempEl = $("temp"), tempWrap = $("temp-wrap"), stateEl = $("state"), bar = $("bar");
+    var live = $("live"), tag = $("tag"), badge = $("badge");
+    var kettleG = $("kettle-g"), lid = $("lid"), led = $("led"), ledGlow = $("led-glow"), floorGlow = $("glow-floor");
+    var radios = [].slice.call(document.querySelectorAll('input[name="cups"]'));
+
+    var BOIL_SECS = { 1: 4.5, 2: 6.5, 4: 9 };          // seconds from tap water to boiling
+    var LEVEL = { 1: 0.3, 2: 0.56, 4: 0.9 };          // water height in the window, 0..1
+    var NAMES = { 1: "1 cup", 2: "2 cups", 4: "a full kettle" };
+    var ROOM = 24, TAP = 22;
+    var S = { on: false, temp: ROOM, cups: 2, heat: 0, agit: 0, level: LEVEL[2], levelV: 0, levelTo: LEVEL[2],
+      boiledAt: -1e9, onAt: -1e9, lidY: 0, lidV: 0, fillAt: -1e9, fillTo: 2 };
+    var WIN = { x: 134, y: 120, w: 52, h: 118, r: 15 };   // the water window, in SVG units
+    var SPOUT = { x: 55, y: 86 }, LID = { x: 160, y: 92 };
+    var bubbles = [], steam = [], rings = [], bubbleDebt = 0, steamDebt = 0;
+
+    // ---------- Canvas: drawn in the SVG's own units ----------
+    var W = 0, H = 0, dpr = 1, k = 1;
+    function size() {
+      W = scene.clientWidth; H = scene.clientHeight; dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); k = W / 320 || 1;
+    }
+    size();
+    addEventListener("resize", size);
+    if (window.ResizeObserver) new ResizeObserver(size).observe(scene);
+
+    // one soft steam puff, drawn once and stamped many times
+    var puff = document.createElement("canvas");
+    puff.width = puff.height = 64;
+    (function () {
+      var p = puff.getContext("2d"), g = p.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, "rgba(255,255,255,0.95)"); g.addColorStop(0.45, "rgba(255,255,255,0.5)"); g.addColorStop(1, "rgba(255,255,255,0)");
+      p.fillStyle = g; p.fillRect(0, 0, 64, 64);
+    })();
+
+    function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+    function say(msg) { live.textContent = msg; }
+
+    // ---------- The switch ----------
+    function setOn(on, why) {
+      if (on === S.on) return;
+      S.on = on;
+      rocker.setAttribute("aria-checked", String(on));
+      if (!calm.matches) plate.animate([{ transform: "scale(1)" }, { transform: "scale(0.92, 0.95)", offset: 0.3 }, { transform: "scale(1.04)", offset: 0.65 }, { transform: "scale(1)" }], { duration: 420, easing: "ease-out" });
+      if (on) { S.onAt = now(); say("Kettle on. Heating " + NAMES[S.cups] + " from " + Math.round(S.temp) + "°C."); }
+      else if (why === "boil") say("Boiled at 100°C. The switch clicked off by itself.");
+      else say("Switched off at " + Math.round(S.temp) + "°C.");
+    }
+    rocker.addEventListener("click", function () { setOn(!S.on, "user"); });
+
+    // ---------- Fill with fresh water ----------
+    function fill(cups) {
+      cups = +cups;
+      radios.forEach(function (r) { r.checked = +r.value === cups; });
+      var was = S.cups;
+      S.cups = cups;
+      tag.innerHTML = "<b>" + (cups === 4 ? "Full" : NAMES[cups]) + "</b> · clicks off at 100°C";
+      if (S.on) {
+        // topping up while it heats: the new cold water mixes in
+        if (LEVEL[cups] > LEVEL[was]) S.temp = (S.temp * LEVEL[was] + TAP * (LEVEL[cups] - LEVEL[was])) / LEVEL[cups];
+        S.levelTo = LEVEL[cups];
+        say("Topped up to " + NAMES[cups] + ".");
+      } else {
+        // switched off: pour it out and refill with fresh tap water
+        S.fillAt = now(); S.fillTo = cups;
+        say("Fresh water: " + NAMES[cups] + " at " + TAP + "°C.");
+        if (calm.matches) { S.levelTo = S.level = LEVEL[cups]; S.temp = TAP; S.fillAt = -1e9; }
+      }
+    }
+    radios.forEach(function (r) { r.addEventListener("change", function () { if (r.checked) fill(r.value); }); });
+
+    // ---------- The boil moment ----------
+    function boiled(t) {
+      S.temp = 100; S.boiledAt = t;
+      setOn(false, "boil");
+      if (calm.matches) { badge.style.opacity = "1"; setTimeout(function () { badge.style.opacity = "0"; }, 2600); return; }
+      S.lidV = -140;
+      for (var i = 0; i < 26; i++) addSteam(i % 3 ? SPOUT : LID, 1.8);
+      for (var j = 0; j < 30; j++) addBubble(true);
+      badge.animate([
+        { opacity: 0, transform: "translateY(16px) scale(0.4)" },
+        { opacity: 1, transform: "translateY(-4px) scale(1.12)", offset: 0.12 },
+        { opacity: 1, transform: "translateY(0) scale(1)", offset: 0.2 },
+        { opacity: 1, transform: "translateY(0) scale(1)", offset: 0.85 },
+        { opacity: 0, transform: "translateY(-10px) scale(0.96)" }
+      ], { duration: 2800, easing: "ease-out" });
+      tempWrap.animate([{ transform: "scale(1)" }, { transform: "scale(1.12)" }, { transform: "scale(0.98)" }, { transform: "scale(1)" }], { duration: 520, easing: "ease-out" });
+    }
+
+    // ---------- Particles ----------
+    function addBubble(big) {
+      var surf = surfaceY();
+      bubbles.push({ x: WIN.x + 9 + Math.random() * (WIN.w - 18), y: WIN.y + WIN.h - 5, r: 0.7 + Math.random() * (big ? 2.6 : 0.6 + S.agit * 1.9),
+        v: 14 + Math.random() * 26 + S.agit * 36, ph: Math.random() * 6.3, top: surf });
+    }
+    function addSteam(from, power) {
+      var spout = from === SPOUT;
+      steam.push({ x: from.x + (Math.random() - 0.5) * 6, y: from.y + (Math.random() - 0.5) * 4,
+        vx: (spout ? -16 : 0) + (Math.random() - 0.5) * 14 * power, vy: -(26 + Math.random() * 30) * power,
+        r: 5 + Math.random() * 4, life: 0, max: 1.6 + Math.random() * 1.2, ph: Math.random() * 6.3, a: 0.32 + Math.random() * 0.2 });
+    }
+    function surfaceY() { return WIN.y + WIN.h - 5 - S.level * (WIN.h - 12); }
+
+    // ---------- Main loop ----------
+    var t0 = performance.now(), last = t0, lastText = "", lastTemp = -1;
+    function now() { return (performance.now() - t0) / 1000; }
+    function frame(ms) {
+      var dt = Math.min(0.05, Math.max(0, (ms - last) / 1000)), t = (ms - t0) / 1000;
+      last = ms;
+      var rm = calm.matches;
+
+      // heater: warms up with a flicker, cools off slowly
+      var since = t - S.onAt, flick = S.on && since < 0.34 ? [1, 0.15, 1, 0.35, 1][Math.floor(since / 0.068)] : 1;
+      S.heat += ((S.on ? 1 : 0) - S.heat) * Math.min(1, dt * (S.on ? 6 : 2.4));
+      var glow = S.heat * flick;
+      if (S.on) S.temp += (76 / BOIL_SECS[S.cups]) * S.heat * dt * (S.temp > 92 ? 0.75 : 1);
+      else S.temp += (ROOM - S.temp) * dt * 0.035;
+      if (S.on && S.temp >= 100) boiled(t);
+
+      // refill: the water drains out of the window, then fresh water rises in
+      var fp = t - S.fillAt;
+      if (fp >= 0 && fp < 0.5) S.levelTo = 0.02;
+      else if (fp >= 0.5 && fp < 0.55) { S.levelTo = LEVEL[S.fillTo]; S.temp = TAP; S.fillAt = -1e9; for (var f = 0; f < 22; f++) addBubble(true); }
+      S.levelV += ((S.levelTo - S.level) * 110 - S.levelV * 13) * dt;
+      S.level += S.levelV * dt;
+      if (rm) { S.level = S.levelTo; S.levelV = 0; }
+
+      // how lively the water is
+      var agitTo = S.on ? clamp((S.temp - 42) / 58, 0, 1) : t - S.boiledAt < 1.2 ? 1 : 0;
+      S.agit += (agitTo - S.agit) * Math.min(1, dt * (agitTo > S.agit ? 2 : 0.9));
+
+      // rattle near the boil, and the lid hopping
+      var jx = 0, jy = 0;
+      if (!rm && S.on && S.temp > 86) {
+        var amp = (S.temp - 86) / 14 * 1.4;
+        jx = (Math.random() - 0.5) * amp; jy = (Math.random() - 0.5) * amp * 0.5;
+        if (Math.random() < dt * 5 * amp) S.lidV -= 26 + amp * 12;
+      }
+      S.lidV += (-S.lidY * 900 - S.lidV * 16) * dt; S.lidY += S.lidV * dt;
+      if (S.lidY > 0) { S.lidY = 0; S.lidV *= -0.3; }
+      kettleG.setAttribute("transform", "translate(" + jx.toFixed(2) + " " + jy.toFixed(2) + ")");
+      lid.setAttribute("transform", "translate(0 " + Math.min(0, S.lidY).toFixed(2) + ") rotate(" + (Math.min(0, S.lidY) * 0.25).toFixed(2) + " 206 100)");
+
+      // heating light on the base and on the counter
+      led.setAttribute("fill", glow > 0.05 ? "rgb(255," + Math.round(90 + 40 * (1 - glow)) + "," + Math.round(54 * glow) + ")" : "#40302b");
+      ledGlow.setAttribute("opacity", (glow * 0.95).toFixed(3));
+      floorGlow.setAttribute("opacity", (glow * 0.85).toFixed(3));
+
+      // particles
+      if (!rm) {
+        var rate = S.agit > 0.02 ? Math.pow(S.agit, 1.4) * 70 : 0;
+        bubbleDebt += rate * dt;
+        while (bubbleDebt >= 1) { bubbleDebt--; addBubble(false); }
+        var hot = clamp((S.temp - 58) / 42, 0, 1), sRate = hot > 0 ? Math.pow(hot, 1.5) * (S.on ? 24 : 7) : 0;
+        steamDebt += sRate * dt;
+        while (steamDebt >= 1) { steamDebt--; addSteam(Math.random() < 0.75 ? SPOUT : LID, 1); }
+      }
+      draw(t, dt, jx, jy);
+
+      // read-out
+      var shown = Math.round(S.temp);
+      if (shown !== lastTemp) {
+        lastTemp = shown;
+        tempEl.textContent = shown;
+        var p = clamp((S.temp - 20) / 80, 0, 1);
+        tempWrap.style.color = "color-mix(in oklch, var(--hot) " + Math.round(Math.pow(p, 1.6) * 100) + "%, var(--cold))";
+        bar.style.width = (4 + p * 96).toFixed(1) + "%";
+        bar.style.backgroundPosition = "0 0";
+      }
+      var txt;
+      if (S.on) txt = S.temp < 30 ? "Heating up…" : "Heating · about " + Math.max(1, Math.ceil((100 - S.temp) / (76 / BOIL_SECS[S.cups]))) + " s to the boil";
+      else if (t - S.boiledAt < 5) txt = "Boiled · ready for tea";
+      else if (S.temp > ROOM + 4) txt = "Cooling · flip it again to reboil";
+      else txt = "Cold · flip the switch to boil";
+      if (txt !== lastText) { lastText = txt; stateEl.textContent = txt; }
+      requestAnimationFrame(frame);
+    }
+
+    function rr(x, y, w, h, r) {
+      ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+    function draw(t, dt, jx, jy) {
+      ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
+      ctx.clearRect(0, 0, 320, 300);
+      var surf = surfaceY(), bottom = WIN.y + WIN.h - 3, amp = 0.5 + S.agit * 2.6;
+
+      // water in the window
+      ctx.save();
+      ctx.translate(jx, jy);
+      rr(WIN.x + 3, WIN.y + 3, WIN.w - 6, WIN.h - 6, WIN.r - 3);
+      ctx.clip();
+      ctx.beginPath();
+      ctx.moveTo(WIN.x, bottom + 4);
+      for (var x = WIN.x; x <= WIN.x + WIN.w + 3; x += 3) ctx.lineTo(x, surf + Math.sin(t * 4.2 + x * 0.25) * amp * 0.6 + Math.sin(t * 7.7 - x * 0.41) * amp * 0.4);
+      ctx.lineTo(WIN.x + WIN.w + 3, bottom + 4);
+      ctx.closePath();
+      var g = ctx.createLinearGradient(0, surf, 0, bottom);
+      g.addColorStop(0, "rgba(168,226,246,0.96)"); g.addColorStop(1, "rgba(34,118,170,0.96)");
+      ctx.fillStyle = g; ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (var x2 = WIN.x; x2 <= WIN.x + WIN.w + 3; x2 += 3) { var yy = surf + Math.sin(t * 4.2 + x2 * 0.25) * amp * 0.6 + Math.sin(t * 7.7 - x2 * 0.41) * amp * 0.4; if (x2 === WIN.x) ctx.moveTo(x2, yy); else ctx.lineTo(x2, yy); }
+      ctx.stroke();
+      // the element's orange heat at the bottom
+      if (S.heat > 0.01) {
+        var hg = ctx.createRadialGradient(160, bottom + 8, 2, 160, bottom + 8, 50);
+        hg.addColorStop(0, "rgba(255,122,64," + (0.6 * S.heat).toFixed(3) + ")"); hg.addColorStop(1, "rgba(255,122,64,0)");
+        ctx.fillStyle = hg; ctx.fillRect(WIN.x, WIN.y, WIN.w, WIN.h);
+      }
+      // tiny bubbles clinging to the bottom before the boil
+      if (S.on && S.temp > 34 && S.temp < 80) {
+        ctx.fillStyle = "rgba(255,255,255," + (0.35 + 0.25 * Math.sin(t * 9)).toFixed(3) + ")";
+        for (var c = 0; c < 9; c++) { ctx.beginPath(); ctx.arc(WIN.x + 10 + c * 4.1, bottom - 2.5 - (c % 3) * 0.8, 0.8 + (c % 2) * 0.4, 0, 6.3); ctx.fill(); }
+      }
+      // rising bubbles
+      for (var i = bubbles.length - 1; i >= 0; i--) {
+        var b = bubbles[i];
+        b.v += 34 * dt; b.y -= b.v * dt; b.x += Math.sin(t * 7 + b.ph) * 0.3;
+        if (b.y < surf + 1) { rings.push({ x: b.x, y: surf, r: b.r, a: 0.8 }); bubbles.splice(i, 1); continue; }
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.3);
+        ctx.fillStyle = "rgba(255,255,255,0.22)"; ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 0.7; ctx.stroke();
+      }
+      // pops at the surface
+      for (var j = rings.length - 1; j >= 0; j--) {
+        var q = rings[j];
+        q.r += 14 * dt; q.a -= 3 * dt;
+        if (q.a <= 0) { rings.splice(j, 1); continue; }
+        ctx.strokeStyle = "rgba(255,255,255," + q.a.toFixed(3) + ")"; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.ellipse(q.x, q.y, q.r, q.r * 0.35, 0, 0, 6.3); ctx.stroke();
+      }
+      ctx.restore();
+      // glass: a highlight and the rim
+      ctx.save();
+      ctx.translate(jx, jy);
+      var gl = ctx.createLinearGradient(WIN.x, 0, WIN.x + WIN.w, 0);
+      gl.addColorStop(0, "rgba(255,255,255,0.0)"); gl.addColorStop(0.18, "rgba(255,255,255,0.32)"); gl.addColorStop(0.3, "rgba(255,255,255,0.04)"); gl.addColorStop(1, "rgba(255,255,255,0)");
+      rr(WIN.x + 3, WIN.y + 3, WIN.w - 6, WIN.h - 6, WIN.r - 3);
+      ctx.fillStyle = gl; ctx.fill();
+      ctx.strokeStyle = "rgba(20,28,26,0.9)"; ctx.lineWidth = 3; ctx.stroke();
+      ctx.restore();
+
+      // steam (not shaken with the kettle)
+      for (var s = steam.length - 1; s >= 0; s--) {
+        var p = steam[s];
+        p.life += dt;
+        if (p.life > p.max) { steam.splice(s, 1); continue; }
+        p.vy *= 1 - dt * 0.5; p.vx *= 1 - dt * 0.8;
+        p.x += (p.vx + Math.sin(t * 2.2 + p.ph) * 9) * dt; p.y += p.vy * dt; p.r += 15 * dt;
+        var life = p.life / p.max, a = p.a * (life < 0.15 ? life / 0.15 : 1 - (life - 0.15) / 0.85);
+        ctx.globalAlpha = Math.max(0, a);
+        ctx.drawImage(puff, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+      }
+      ctx.globalAlpha = 1;
+    }
+    requestAnimationFrame(frame);
+
+    // ---------- Auto demo: boil, wait, refill, boil again ----------
+    var demoOn = !calm.matches, timer = 0;
+    function stopDemo(e) { if (e.isTrusted && demoOn) { demoOn = false; clearTimeout(timer); } }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (ev) { addEventListener(ev, stopDemo, { capture: true, passive: true }); });
+    function later(ms) { return new Promise(function (r) { timer = setTimeout(r, ms); }); }
+    function untilOff(cap) {
+      return new Promise(function (r) {
+        var end = Date.now() + cap;
+        (function check() { if (!demoOn || !S.on || Date.now() > end) r(); else timer = setTimeout(check, 120); })();
+      });
+    }
+    async function demo() {
+      var order = [4, 1, 2], i = 0;
+      await later(650); if (!demoOn) return;
+      while (demoOn) {
+        setOn(true);
+        await untilOff(14000); if (!demoOn) return;
+        await later(3000); if (!demoOn) return;
+        fill(order[i++ % order.length]);
+        await later(1500); if (!demoOn) return;
+      }
+    }
+    if (demoOn) demo();
+  })();
+</script>
+</body>
+</html>

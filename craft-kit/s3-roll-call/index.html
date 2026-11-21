@@ -1,0 +1,474 @@
+<!doctype html>
+<!-- Chill & Craft · Roll Call · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Roll Call · A group send with a bubble for every person</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: soft peach, plum ink, soap-bubble shine ---------- */
+  :root {
+    --bg: #fbe8df;
+    --bg2: #f6d6cc;
+    --card: #fffaf7;
+    --field: #fbf0ea;
+    --ink: #3a1d3e;
+    --muted: #8d6f86;
+    --line: rgba(58, 29, 62, 0.13);
+    --plum: #7a3b84;
+    --plum2: #5e2867;
+    --sent: #c9a3d1;
+    --dlv: #57b8d9;
+    --read: #7a3b84;
+    --wait: #e6c46a;
+    --fail: #e0544b;
+    --shadow: rgba(110, 50, 80, 0.35);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #1a1020;
+    --bg2: #24152b;
+    --card: #221629;
+    --field: #2b1d33;
+    --ink: #f6ecf6;
+    --muted: #b49fb6;
+    --line: rgba(246, 236, 246, 0.11);
+    --plum: #c77fd2;
+    --plum2: #a961b6;
+    --sent: #8d6f99;
+    --dlv: #5cc5e6;
+    --read: #d08cdc;
+    --wait: #f0cf72;
+    --fail: #ff6b60;
+    --shadow: rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, textarea { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 3px solid var(--plum); outline-offset: 2px; }
+
+  /* ---------- Stage with drifting background bubbles ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 20px 16px; overflow: hidden; isolation: isolate; background: radial-gradient(70% 60% at 50% 10%, var(--bg2), transparent 70%), var(--bg); }
+  .drift { position: absolute; z-index: -1; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--plum) 18%, transparent); background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.5), transparent 40%); animation: up 16s linear infinite; }
+  @keyframes up { from { transform: translateY(40vh); opacity: 0; } 15%, 80% { opacity: 1; } to { transform: translateY(-60vh); opacity: 0; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(0.98); } }
+
+  .card { width: min(640px, 100%); padding: 18px 18px 16px; border-radius: 30px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 50px 90px -50px var(--shadow); animation: rise 0.85s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+  .head { display: flex; align-items: center; gap: 12px; }
+  .gico { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border-radius: 14px; background: linear-gradient(140deg, #f29bb7, var(--plum)); color: #fff; }
+  .gico svg { width: 22px; height: 22px; }
+  .head h1 { margin: 0; font-size: 1.04rem; letter-spacing: -0.01em; }
+  .head p { margin: 1px 0 0; font-size: 0.76rem; color: var(--muted); }
+  .head .count { margin-left: auto; font-size: 0.74rem; font-weight: 800; color: var(--muted); white-space: nowrap; }
+
+  /* ---------- The arc of people ---------- */
+  .arc { position: relative; aspect-ratio: 2 / 1; margin: 6px 0 0; }
+  /* a dashed guide ring behind the people; only its upper half shows */
+  .arc::before { content: ""; position: absolute; left: 9%; right: 9%; top: 18%; bottom: -78%; border-radius: 50%; border: 1.5px dashed color-mix(in srgb, var(--plum) 20%, transparent); -webkit-mask: linear-gradient(#000 38%, transparent 50%); mask: linear-gradient(#000 38%, transparent 50%); pointer-events: none; }
+  .p { position: absolute; width: 76px; margin: -28px 0 0 -38px; }
+  .pb { display: grid; justify-items: center; gap: 3px; width: 100%; padding: 0; border: 0; border-radius: 14px; background: transparent; cursor: pointer; }
+  .av { position: relative; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; color: #fff; font-weight: 900; font-size: 0.86rem; transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.3s, filter 0.3s; box-shadow: 0 0 0 3px var(--card), 0 0 0 5.5px var(--ring, transparent); }
+  .pb:hover .av { transform: translateY(-3px); }
+  .pb[aria-pressed="false"] .av { opacity: 0.35; filter: grayscale(1); }
+  .pb[aria-pressed="false"] .av::after { content: "–"; position: absolute; right: -4px; top: -4px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); color: var(--card); font-size: 0.8rem; line-height: 1; }
+  .nm { font-size: 0.74rem; font-weight: 800; line-height: 1.1; }
+  .stt { min-height: 1.1em; font-size: 0.64rem; font-weight: 750; color: var(--muted); white-space: nowrap; line-height: 1.1; }
+  .p.sent { --ring: var(--sent); }
+  .p.dlv { --ring: var(--dlv); }
+  .p.dlv .stt { color: var(--dlv); }
+  .p.read { --ring: var(--read); }
+  .p.read .stt { color: var(--read); }
+  .p.wait { --ring: var(--wait); }
+  .p.fail { --ring: var(--fail); }
+  .p.fail .stt { color: var(--fail); }
+  .p .retry { display: none; }
+  .p.fail .retry { display: inline-flex; }
+  .retry { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; height: 24px; padding: 0 9px; border: 1.5px solid var(--fail); border-radius: 999px; background: var(--card); color: var(--fail); font-size: 0.66rem; font-weight: 850; align-items: center; cursor: pointer; white-space: nowrap; }
+  .retry:hover { background: var(--fail); color: #fff; }
+  /* the soap bubble that wraps a person once the message is delivered */
+  .wrapb { position: absolute; inset: -9px; border-radius: 50%; opacity: 0; pointer-events: none; }
+  .soap, .wrapb { background: radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.95) 0 7%, rgba(255, 255, 255, 0) 20%), conic-gradient(from 20deg, #ff9fd4, #9fe7ff, #fff3a0, #c3a6ff, #9fffd9, #ff9fd4);
+    -webkit-mask: radial-gradient(circle, rgba(0, 0, 0, 0.18) 52%, #000 70%, #000 100%);
+    mask: radial-gradient(circle, rgba(0, 0, 0, 0.18) 52%, #000 70%, #000 100%); }
+  .p.dlv .wrapb { opacity: 0.85; animation: shimmer 3s linear infinite, wob 2.2s ease-in-out infinite; }
+  /* the hub: one big soap bubble in the middle of the arc; messages launch from here */
+  .hub { position: absolute; left: 50%; top: 70%; display: grid; place-items: center; align-content: center; width: 124px; height: 124px; margin: -62px 0 0 -62px; text-align: center; animation: wob 3.4s ease-in-out infinite; }
+  .hub .soap { position: absolute; inset: 0; border-radius: 50%; opacity: 0.9; animation: shimmer 6s linear infinite; }
+  .hub b { position: relative; font-size: 1.7rem; font-weight: 900; color: var(--plum); line-height: 1; font-variant-numeric: tabular-nums; }
+  .hub span { position: relative; margin-top: 3px; font-size: 0.66rem; font-weight: 800; color: var(--muted); }
+  @keyframes shimmer { to { filter: hue-rotate(360deg); } }
+  @keyframes wob { 50% { transform: scale(1.05, 0.96); } }
+  .tick { position: absolute; right: -6px; bottom: -4px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--read); color: #fff; box-shadow: 0 0 0 2.5px var(--card); transform: scale(0); transition: transform 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .tick svg { width: 12px; height: 12px; }
+  .p.read .tick { transform: scale(1); }
+  .p.fail .tick { transform: scale(1); background: var(--fail); }
+
+  /* ---------- Composer ---------- */
+  .compose { position: relative; display: flex; gap: 8px; align-items: flex-end; margin-top: 36px; }
+  .compose textarea { flex: 1; min-width: 0; height: 50px; resize: none; padding: 13px 16px; border: 1.5px solid var(--line); border-radius: 18px; background: var(--field); font-size: 0.92rem; line-height: 1.35; transition: border-color 0.2s, box-shadow 0.2s; }
+  .compose textarea:focus { outline: none; border-color: var(--plum); box-shadow: 0 0 0 4px color-mix(in srgb, var(--plum) 16%, transparent); }
+  .compose.shake { animation: shake 0.45s; }
+  @keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+  .send { display: inline-flex; align-items: center; gap: 8px; height: 50px; padding: 0 18px; border: 0; border-radius: 18px; background: linear-gradient(180deg, var(--plum), var(--plum2)); color: #fff; font-weight: 850; font-size: 0.9rem; cursor: pointer; flex: none; box-shadow: 0 14px 22px -14px var(--plum2), inset 0 -3px 0 rgba(0, 0, 0, 0.16); transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .send:hover { transform: translateY(-2px); }
+  .send:active { transform: scale(0.95); }
+  .send svg { width: 19px; height: 19px; }
+  .send[aria-disabled="true"] { opacity: 0.75; cursor: progress; }
+
+  /* ---------- Summary ---------- */
+  .sum { margin-top: 14px; }
+  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); }
+  .bar i { height: 100%; width: 0; transition: width 0.5s cubic-bezier(0.3, 1.2, 0.5, 1); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 8px; height: 8px; border-radius: 50%; }
+  .legend b { color: var(--ink); }
+  .last { margin: 8px 0 0; font-size: 0.78rem; color: var(--muted); min-height: 1.2em; }
+  .last b { color: var(--ink); }
+
+  .fx { position: fixed; inset: 0; z-index: 30; overflow: hidden; pointer-events: none; }
+  .fx .soap { position: absolute; left: 0; top: 0; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; }
+  .fx .big { width: 64px; height: 64px; margin: -32px 0 0 -32px; }
+  .drop { position: absolute; left: 0; top: 0; width: 6px; height: 6px; border-radius: 50%; background: #bfe9ff; }
+
+  @media (max-width: 520px) {
+    .card { padding: 14px; }
+    .p { width: 52px; margin: -22px 0 0 -26px; }
+    .av { width: 40px; height: 40px; font-size: 0.74rem; }
+    .nm { font-size: 0.66rem; }
+    .stt { display: none; }
+    .compose { margin-top: 26px; }
+    .arc { aspect-ratio: 1.4 / 1; }
+    .hub { width: 84px; height: 84px; margin: -42px 0 0 -42px; top: 72%; }
+    .hub b { font-size: 1.2rem; }
+    .hub span { font-size: 0.58rem; }
+    .send span { display: none; }
+    .send { padding: 0 15px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .drift, .card, .p.dlv .wrapb, .compose.shake, .hub, .hub .soap { animation: none !important; }
+    .av, .tick, .bar i, .send { transition-duration: 0.01s; }
+    .fx { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage" id="stage">
+    <section class="card" aria-labelledby="title">
+      <header class="head">
+        <span class="gico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5" /><circle cx="17" cy="9" r="2.8" /><path d="M16.5 14.6c2.6 0 4.4 1.6 5 4.4" /></svg></span>
+        <div><h1 id="title">Family group</h1><p>Tap a person to leave them out</p></div>
+        <span class="count" id="count">8 of 8 picked</span>
+      </header>
+      <div class="arc" id="arc" role="group" aria-label="Recipients"><div class="hub" id="hub" aria-hidden="true"><i class="soap"></i><b id="hubN" class="num">8</b><span id="hubL">people picked</span></div></div>
+      <div class="compose" id="compose">
+        <label class="sr-only" for="msg">Message to the group</label>
+        <textarea id="msg" maxlength="160" placeholder="Write one message for everyone…"></textarea>
+        <button class="send" id="send" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l16-8-6 16-3-7Z" /></svg><span id="sendText">Send to 8</span></button>
+      </div>
+      <div class="sum">
+        <div class="bar" id="bar" aria-hidden="true"><i style="background:var(--read)"></i><i style="background:var(--dlv)"></i><i style="background:var(--sent)"></i><i style="background:var(--wait)"></i><i style="background:var(--fail)"></i></div>
+        <div class="legend" id="legend"></div>
+        <p class="last" id="last" aria-live="polite">Nothing sent yet.</p>
+      </div>
+    </section>
+    <div class="fx" id="fx" aria-hidden="true"></div>
+  </main>
+
+<script>
+  // ---------- Roll Call: one message, one bubble per person, each with its own delivery status ----------
+  const $ = (s) => document.querySelector(s);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  function play(el, frames, opts) {
+    if (calm() || !el || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  const fx = $("#fx"), arc = $("#arc"), last = $("#last");
+  const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>';
+  const CROSS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17" /></svg>';
+
+  // background bubbles drifting up
+  for (let i = 0; i < 7; i++) {
+    const d = document.createElement("i");
+    d.className = "drift";
+    const s = 18 + Math.random() * 46;
+    d.style.cssText = "width:" + s + "px;height:" + s + "px;left:" + (5 + i * 13 + Math.random() * 6) + "%;bottom:-10%;animation-delay:" + (-i * 2.3) + "s;animation-duration:" + (14 + Math.random() * 8) + "s";
+    $("#stage").appendChild(d);
+  }
+
+  // ---------- People on the arc ----------
+  // net: how this person's phone behaves in the demo: ok, slow (offline for a while) or down (no signal: fails)
+  const PEOPLE = [
+    { n: "Saima", c: "#e0703a" }, { n: "Tariq", c: "#3f7ad8", net: "down" }, { n: "Hira", c: "#c4447a" }, { n: "Usman", c: "#1f9a8a" },
+    { n: "Mariam", c: "#8a63d2" }, { n: "Bilal", c: "#d49a17" }, { n: "Zoya", c: "#e05a7a", net: "slow" }, { n: "Faisal", c: "#4f8a3f" }
+  ];
+  const ST_TEXT = { idle: "", q: "Queued", sent: "Sent", wait: "Phone off", dlv: "Delivered", read: "Read", fail: "Not delivered" };
+  PEOPLE.forEach((p, i) => {
+    const a = Math.PI * (1.08 + (0.84 * i) / (PEOPLE.length - 1));
+    p.x = 50 + 42 * Math.cos(a); p.y = 96 + 80 * Math.sin(a);
+    p.on = true; p.st = "idle";
+    // each person: a holder on the arc with a toggle button (avatar, name, status) and a Retry button beside it
+    const wrap = document.createElement("div");
+    wrap.className = "p";
+    wrap.style.left = p.x + "%"; wrap.style.top = p.y + "%";
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "pb"; b.setAttribute("aria-pressed", "true");
+    b.innerHTML = '<span class="av" style="background:' + p.c + '">' + p.n.slice(0, 2).toUpperCase() + '<i class="wrapb"></i><i class="tick">' + TICK + '</i></span><span class="nm">' + p.n + '</span><span class="stt"></span>';
+    b.addEventListener("click", () => toggle(p));
+    const r = document.createElement("button");
+    r.type = "button"; r.className = "retry"; r.textContent = "Retry";
+    r.setAttribute("aria-label", "Retry sending to " + p.n);
+    r.addEventListener("click", () => retry(p));
+    wrap.append(b, r);
+    arc.appendChild(wrap);
+    p.el = wrap; p.btn = b;
+    label(p);
+  });
+  function label(p) {
+    p.btn.setAttribute("aria-label", p.n + (p.on ? ", included" : ", left out") + (ST_TEXT[p.st] ? ". " + ST_TEXT[p.st] : ""));
+  }
+  function setSt(p, st) {
+    p.st = st;
+    p.el.classList.remove("q", "sent", "wait", "dlv", "read", "fail");
+    if (st !== "idle") p.el.classList.add(st);
+    p.el.querySelector(".stt").textContent = st === "read" ? "Read " + p.at : ST_TEXT[st];
+    if (st === "fail") p.el.querySelector(".tick").innerHTML = CROSS; else p.el.querySelector(".tick").innerHTML = TICK;
+    label(p);
+    summary();
+  }
+  function toggle(p) {
+    if (isBusy()) return;
+    p.on = !p.on;
+    p.btn.setAttribute("aria-pressed", String(p.on));
+    label(p);
+    play(p.el.querySelector(".av"), [{ transform: "scale(1)" }, { transform: "scale(" + (p.on ? 1.15 : 0.85) + ")" }, { transform: "scale(1)" }], { duration: 380, easing: "cubic-bezier(.3,1.6,.5,1)" });
+    picked();
+  }
+  function picked() {
+    const n = PEOPLE.filter((p) => p.on).length;
+    $("#count").textContent = n + " of " + PEOPLE.length + " picked";
+    $("#sendText").textContent = n ? "Send to " + n : "Pick someone";
+  }
+
+  // ---------- Summary bar ----------
+  const SEG = [["read", "Read"], ["dlv", "Delivered"], ["sent", "Sent"], ["wait", "Phone off"], ["fail", "Failed"]];
+  function summary() {
+    const live = PEOPLE.filter((p) => p.on && p.st !== "idle");
+    const tot = Math.max(1, live.length);
+    const cnt = (k) => live.filter((p) => (k === "sent" ? p.st === "sent" || p.st === "q" : p.st === k)).length;
+    const bars = $("#bar").children;
+    SEG.forEach(([k], i) => { bars[i].style.width = (live.length ? (cnt(k) / tot) * 100 : 0) + "%"; });
+    $("#legend").innerHTML = SEG.map(([k, t], i) => '<span><i style="background:' + getComputedStyle(bars[i]).backgroundColor + '"></i>' + t + " <b>" + cnt(k) + "</b></span>").join("");
+    // the hub in the middle: how many are picked, or how many have read it
+    const picked = PEOPLE.filter((p) => p.on).length;
+    const hubN = $("#hubN"), txt = live.length ? cnt("read") + "/" + live.length : String(picked);
+    if (hubN.textContent !== txt) { hubN.textContent = txt; play(hubN, [{ transform: "scale(1.3)" }, { transform: "scale(1)" }], { duration: 300, easing: "cubic-bezier(.3,1.6,.5,1)" }); }
+    $("#hubL").textContent = live.length ? "have read it" : picked === 1 ? "person picked" : "people picked";
+  }
+
+  // ---------- Bubble flights ----------
+  function center(el) { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }
+  function flyBubble(from, to, dur, lean) {
+    if (calm()) return Promise.resolve();
+    const b = document.createElement("i");
+    b.className = "soap";
+    fx.appendChild(b);
+    // sample a curved path into keyframes, with a little squash and stretch along the way
+    const [x0, y0] = from, [x1, y1] = to;
+    const cx = (x0 + x1) / 2 + lean, cy = Math.min(y0, y1) - 40 - Math.abs(x1 - x0) * 0.15;
+    const frames = [];
+    for (let i = 0; i <= 12; i++) {
+      const t = i / 12, u = 1 - t;
+      const x = u * u * x0 + 2 * u * t * cx + t * t * x1, y = u * u * y0 + 2 * u * t * cy + t * t * y1;
+      const sq = 1 + Math.sin(t * Math.PI * 3) * 0.12;
+      frames.push({ transform: "translate(" + x.toFixed(1) + "px," + y.toFixed(1) + "px) scale(" + (sq * (0.6 + t * 0.4)).toFixed(3) + "," + ((2 - sq) * (0.6 + t * 0.4)).toFixed(3) + ")", opacity: i === 0 ? 0 : 1 });
+    }
+    return b.animate(frames, { duration: dur, easing: "cubic-bezier(.35,0,.25,1)" }).finished.catch(() => {}).then(() => b.remove());
+  }
+  function pop(x, y, n, color) {
+    if (calm()) return;
+    for (let i = 0; i < n; i++) {
+      const d = document.createElement("i");
+      d.className = "drop";
+      if (color) d.style.background = color;
+      fx.appendChild(d);
+      const a = (i / n) * Math.PI * 2, r = 26 + Math.random() * 18;
+      d.animate([{ transform: "translate(" + x + "px," + y + "px) scale(1)", opacity: 1 }, { transform: "translate(" + (x + Math.cos(a) * r) + "px," + (y + Math.sin(a) * r) + "px) scale(.3)", opacity: 0 }], { duration: 480 + Math.random() * 200, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = () => d.remove();
+    }
+  }
+  const clock = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  // one person's journey: fly, land (sent), wrap in a bubble (delivered), pop (read)
+  async function deliver(p, from, k, run) {
+    const av = p.el.querySelector(".av");
+    setSt(p, "q");
+    await wait(calm() ? 0 : k * 110);
+    await flyBubble(from, center(av), 750 + Math.random() * 350, (k % 2 ? 1 : -1) * (30 + Math.random() * 40));
+    if (run !== sendRun) return;
+    if (p.net === "down" && !p.fixed) {
+      // no signal: the bubble sags, drops and bursts grey
+      setSt(p, "sent");
+      await wait(calm() ? 200 : 900);
+      if (run !== sendRun) return;
+      const [x, y] = center(av);
+      pop(x, y + 20, 6, "#bbb");
+      play(av, [{ transform: "translateX(0)" }, { transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "translateX(0)" }], { duration: 360 });
+      setSt(p, "fail");
+      return;
+    }
+    setSt(p, "sent");
+    play(av, [{ transform: "scale(1)" }, { transform: "scale(1.1, .9)" }, { transform: "scale(.96, 1.04)" }, { transform: "scale(1)" }], { duration: 420, easing: "ease-out" });
+    if (p.net === "slow" && !p.fixed) {
+      await wait(calm() ? 300 : 700);
+      if (run !== sendRun) return;
+      setSt(p, "wait");
+      await wait(calm() ? 400 : 2600 + Math.random() * 900);
+    } else await wait(calm() ? 150 : 350 + Math.random() * 600);
+    if (run !== sendRun) return;
+    setSt(p, "dlv");
+    play(p.el.querySelector(".wrapb"), [{ transform: "scale(.3)", opacity: 0 }, { transform: "scale(1.12)", opacity: 0.9, offset: 0.6 }, { transform: "scale(1)", opacity: 0.85 }], { duration: 520, easing: "ease-out" });
+    await wait(calm() ? 200 : 700 + Math.random() * 1500);
+    if (run !== sendRun) return;
+    // read: the bubble pops into droplets and a tick lands
+    const [x, y] = center(av);
+    pop(x, y, 10);
+    p.at = clock();
+    setSt(p, "read");
+    play(av, [{ transform: "scale(1.14)" }, { transform: "scale(1)" }], { duration: 380, easing: "cubic-bezier(.3,1.6,.5,1)" });
+  }
+
+  // ---------- Send ----------
+  // busy while the big bubble lifts off or any delivery is still in the air
+  let lifting = false, inflight = 0, sendRun = 0;
+  const isBusy = () => lifting || inflight > 0;
+  const msg = $("#msg");
+  $("#send").addEventListener("click", () => send());
+  msg.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+  // runs one delivery and finishes the round when the last one in the air comes back
+  async function track(p, from, k, run) {
+    inflight++;
+    try { await deliver(p, from, k, run); } finally { inflight--; }
+    if (!isBusy() && run === sendRun) finish();
+  }
+  async function send() {
+    if (isBusy()) return;
+    const text = msg.value.trim();
+    const to = PEOPLE.filter((p) => p.on);
+    if (!text || !to.length) {
+      const c = $("#compose"); c.classList.remove("shake"); void c.offsetWidth; c.classList.add("shake");
+      last.textContent = !text ? "Write a message first." : "Pick at least one person.";
+      return;
+    }
+    lifting = true;
+    const run = ++sendRun;
+    $("#send").setAttribute("aria-disabled", "true");
+    PEOPLE.forEach((p) => { p.fixed = false; setSt(p, "idle"); });
+    last.innerHTML = "Sending <b>“" + esc(text.length > 38 ? text.slice(0, 36) + "…" : text) + "”</b> to " + to.length + (to.length === 1 ? " person" : " people") + "…";
+    // 1. anticipation: the message lifts out of the box as one big wobbling bubble
+    const [mx, my] = center(msg);
+    const launch = center($("#hub"));
+    if (!calm()) {
+      const big = document.createElement("i");
+      big.className = "soap big";
+      fx.appendChild(big);
+      // the message bubble floats up out of the box into the hub, wobbling as it goes
+      const [hx, hy] = launch;
+      await big.animate([
+        { transform: "translate(" + mx + "px," + my + "px) scale(.2)", opacity: 0 },
+        { transform: "translate(" + mx + "px," + (my - 26) + "px) scale(1.1,.9)", opacity: 1, offset: 0.3 },
+        { transform: "translate(" + (mx + hx) / 2 + "px," + (my + hy) / 2 + "px) scale(.92,1.08)", offset: 0.65 },
+        { transform: "translate(" + hx + "px," + hy + "px) scale(1.2)" }
+      ], { duration: 900, easing: "cubic-bezier(.4,0,.3,1)" }).finished.catch(() => {});
+      big.remove();
+      play($("#hub"), [{ transform: "scale(1)" }, { transform: "scale(1.14, .9)" }, { transform: "scale(.95, 1.06)" }, { transform: "scale(1)" }], { duration: 480, easing: "ease-out" });
+      pop(launch[0], launch[1], 12);
+    }
+    msg.value = "";
+    lifting = false;
+    // 2. main: it splits into one bubble per person; 3. each one reports back on its own
+    await Promise.all(to.map((p, k) => track(p, launch, k, run)));
+  }
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  // 4. finish: everyone read it, or a failure is waiting for Retry
+  function finish() {
+    const to = PEOPLE.filter((p) => p.on && p.st !== "idle");
+    const read = to.filter((p) => p.st === "read").length, fail = to.filter((p) => p.st === "fail");
+    $("#send").removeAttribute("aria-disabled");
+    if (fail.length) {
+      last.innerHTML = "Read by <b>" + read + " of " + to.length + "</b> · " + fail.map((p) => p.n).join(", ") + " did not get it. Tap Retry.";
+      return;
+    }
+    last.innerHTML = "<b>Everyone read it</b> · " + read + " of " + to.length + " at " + clock();
+    celebrate(to);
+  }
+  async function retry(p) {
+    if (p.st !== "fail") return;
+    p.fixed = true;
+    $("#send").setAttribute("aria-disabled", "true");
+    const [mx, my] = center(msg);
+    last.innerHTML = "Trying " + p.n + " again…";
+    await track(p, center($("#hub")), 0, sendRun);
+  }
+  function celebrate(to) {
+    to.forEach((p, k) => play(p.el.querySelector(".av"), [{ transform: "translateY(0)" }, { transform: "translateY(-14px) scale(1.06)" }, { transform: "translateY(0)" }], { duration: 520, delay: k * 70, easing: "cubic-bezier(.3,1.4,.5,1)" }));
+    const r = arc.getBoundingClientRect();
+    if (calm()) return;
+    const cols = PEOPLE.map((p) => p.c);
+    for (let i = 0; i < 28; i++) {
+      const d = document.createElement("i");
+      d.className = "drop";
+      d.style.background = cols[i % cols.length];
+      d.style.width = d.style.height = 5 + Math.random() * 5 + "px";
+      fx.appendChild(d);
+      const x = r.left + r.width / 2, y = r.bottom - 10, a = -Math.PI * (0.1 + Math.random() * 0.8), v = 90 + Math.random() * 120;
+      d.animate([{ transform: "translate(" + x + "px," + y + "px)", opacity: 1 }, { transform: "translate(" + (x + Math.cos(a) * v) + "px," + (y + Math.sin(a) * v) + "px)", opacity: 1, offset: 0.55 }, { transform: "translate(" + (x + Math.cos(a) * v * 1.2) + "px," + (y + Math.sin(a) * v + 60) + "px)", opacity: 0 }], { duration: 1200 + Math.random() * 500, easing: "cubic-bezier(.2,.6,.4,1)" }).onfinish = () => d.remove();
+    }
+  }
+
+  // ---------- Auto-demo: write, maybe leave someone out, send, retry the failed one, then settle ----------
+  const DEMO = ["Dinner at 8 on Sunday, who is in?", "Wedding photos are up, check the shared album!", "Leaving for the airport at 6, reach on time"];
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) => window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  function queueDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(runDemo, ms); }
+  async function runDemo() {
+    if (!demoOn || isBusy()) return;
+    // settle the last round back to neutral
+    PEOPLE.forEach((p) => setSt(p, "idle"));
+    // second round leaves Bilal out, third brings him back
+    const bilal = PEOPLE[5];
+    if ((round % 3 === 1) === bilal.on) toggle(bilal);
+    const text = DEMO[round++ % DEMO.length];
+    for (let i = 1; i <= text.length; i++) { if (!demoOn) return; msg.value = text.slice(0, i); await wait(calm() ? 0 : 24); }
+    await wait(300);
+    if (!demoOn) return;
+    await send();
+    const failed = PEOPLE.find((p) => p.st === "fail");
+    if (failed && demoOn) { await wait(1400); if (!demoOn) return; play(failed.el.querySelector(".retry"), [{ transform: "translateX(-50%) scale(1)" }, { transform: "translateX(-50%) scale(.9)" }, { transform: "translateX(-50%) scale(1)" }], { duration: 260 }); await retry(failed); }
+    queueDemo(3600);
+  }
+
+  // ---------- Start ----------
+  picked();
+  summary();
+  play(arc, [{ opacity: 0 }, { opacity: 1 }], { duration: 300 });
+  PEOPLE.forEach((p, k) => play(p.el, [{ transform: "translateY(18px) scale(.6)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 560, delay: 120 + k * 60, easing: "cubic-bezier(.3,1.5,.5,1)", fill: "backwards" }));
+  queueDemo(1100);
+</script>
+</body>
+</html>

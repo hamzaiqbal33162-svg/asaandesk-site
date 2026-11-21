@@ -1,0 +1,614 @@
+<!doctype html>
+<!-- Chill & Craft · Night Stay · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Night Stay · hotel date range picker</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: lavender dusk (light), deep indigo night (dark) ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --bg: #ebe7fb;
+    --bg2: #f8f6ff;
+    --card: #ffffff;
+    --ink: #1c1838;
+    --muted: #6a6688;
+    --line: #e6e2f5;
+    --soft: #f4f2fc;
+    --vio: #6a4cf0;
+    --vio2: #8f74ff;
+    --band: #e9e3ff;
+    --amber: #ffbe55;
+    --full: #c2bfd4;
+    --bad: #e2475b;
+    --shadow: rgba(46, 30, 120, .28);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #090a1d;
+    --bg2: #12142e;
+    --card: #14162f;
+    --ink: #ecebff;
+    --muted: #9b99c2;
+    --line: #262947;
+    --soft: #1b1e3b;
+    --vio: #8f74ff;
+    --vio2: #b3a0ff;
+    --band: #2a2457;
+    --full: #4b4b6c;
+    --bad: #ff6f82;
+    --shadow: rgba(0, 0, 0, .7);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: var(--ff); color: var(--ink); background: var(--bg); }
+  .stage {
+    min-height: 100vh; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr); padding: 18px 14px;
+    overflow: hidden; overflow-x: clip;
+    background: radial-gradient(70% 50% at 50% 0%, color-mix(in srgb, var(--vio) 22%, transparent), transparent 70%), linear-gradient(180deg, var(--bg2), var(--bg));
+  }
+  .card {
+    position: relative; width: min(100%, 410px); border-radius: 28px; overflow: hidden; background: var(--card); border: 1px solid var(--line);
+    box-shadow: 0 40px 80px -46px var(--shadow), 0 12px 26px -18px var(--shadow);
+    animation: rise .8s cubic-bezier(.22, 1.3, .36, 1) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(.97); } }
+
+  /* ---------- The lodge at night: one window lights up per night you stay ---------- */
+  .scene { position: relative; display: block; width: 100%; height: 112px; }
+  .scene svg { display: block; width: 100%; height: 100%; }
+  .twk { animation: twk 2.6s ease-in-out infinite alternate; }
+  .twk:nth-child(3n) { animation-delay: -1s; } .twk:nth-child(3n+1) { animation-delay: -1.8s; }
+  @keyframes twk { from { opacity: .2; } to { opacity: 1; } }
+  .win { fill: #2c2a52; transition: fill .4s, opacity .4s; }
+  .win.lit { fill: var(--amber); filter: drop-shadow(0 0 4px rgba(255, 190, 85, .9)); animation: litup .5s cubic-bezier(.34, 1.56, .64, 1) both; }
+  .win.peek { fill: #b48a4a; opacity: .75; }
+  @keyframes litup { 0% { fill: #fff6d8; } 100% { fill: var(--amber); } }
+  .smoke circle { fill: #fff; opacity: 0; animation: smoke 4.8s linear infinite; }
+  .smoke circle:nth-child(2) { animation-delay: -1.6s; } .smoke circle:nth-child(3) { animation-delay: -3.2s; }
+  @keyframes smoke { 0% { transform: translate(0, 0) scale(.5); opacity: 0; } 20% { opacity: .35; } 100% { transform: translate(18px, -38px) scale(1.8); opacity: 0; } }
+  .moonchip {
+    position: absolute; left: 12px; top: 10px; padding: 5px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; color: #f3f0ff;
+    background: rgba(20, 16, 60, .45); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, .15);
+  }
+  .nightsTag {
+    position: absolute; right: 12px; top: 10px; padding: 5px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; color: #2a1a00;
+    background: var(--amber); transform: scale(0); transition: transform .45s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .nightsTag.on { transform: scale(1); }
+
+  .body { padding: 14px 16px 16px; }
+  .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+  h1 { margin: 0; font-size: clamp(18px, 5vw, 20px); letter-spacing: -.02em; }
+  .sub { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .rate { text-align: right; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .rate b { display: block; font-size: 14px; color: var(--ink); }
+
+  /* ---------- Check-in / check-out tiles ---------- */
+  .tiles { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; margin: 12px 0 18px; }
+  .tile { padding: 8px 11px; border-radius: 14px; background: var(--soft); border: 1.5px solid transparent; transition: border-color .3s, background .3s, transform .3s; min-width: 0; }
+  .tile.on { border-color: var(--vio); background: color-mix(in srgb, var(--vio) 9%, var(--card)); transform: translateY(-1px); }
+  .tile small { display: block; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .tile span { display: block; margin-top: 2px; font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile span.ph { color: var(--muted); font-weight: 500; }
+  .moonpill { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(160deg, #2d2670, #17133f); color: #fff; font: 800 15px/1 var(--ff); position: relative; }
+  .moonpill small { position: absolute; bottom: -14px; font-size: 9.5px; color: var(--muted); font-weight: 700; letter-spacing: .04em; }
+  .moonpill.bump { animation: bump .5s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes bump { 40% { transform: scale(1.18); } }
+
+  /* ---------- Calendar ---------- */
+  .calhead { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 4px; }
+  .calhead h2 { margin: 0; font-size: 14.5px; letter-spacing: -.01em; }
+  .nav { width: 34px; height: 34px; border-radius: 11px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; display: grid; place-items: center; transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), background .2s; }
+  .nav:hover { background: var(--soft); transform: translateY(-1px); }
+  .nav[aria-disabled="true"] { opacity: .4; cursor: default; }
+  .nav.bump { animation: navBump .4s ease; }
+  @keyframes navBump { 30% { transform: translateX(-3px); } 60% { transform: translateX(3px); } }
+  .nav svg { width: 16px; height: 16px; }
+  .cal { position: relative; overflow-x: clip; }
+  .wd, .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .wd span { text-align: center; font-size: 10.5px; font-weight: 700; color: var(--muted); padding: 4px 0; }
+  .grid.slide { animation: slide .4s cubic-bezier(.22, 1, .36, 1); }
+  .grid.slideBack { animation: slideBack .4s cubic-bezier(.22, 1, .36, 1); }
+  @keyframes slide { from { opacity: 0; transform: translateX(26px); } }
+  @keyframes slideBack { from { opacity: 0; transform: translateX(-26px); } }
+  .day {
+    position: relative; height: 41px; padding: 0; border: 0; background: transparent; color: var(--ink); cursor: pointer; font: inherit;
+    display: grid; place-items: center; align-content: center; gap: 0; isolation: isolate;
+  }
+  .day::before { /* the range band */
+    content: ""; position: absolute; inset: 4px 0; z-index: -2; background: var(--band); transform: scaleX(0); transform-origin: left;
+    transition: transform .35s cubic-bezier(.22, 1, .36, 1); transition-delay: calc(var(--k, 0) * 22ms);
+  }
+  .day::after { /* the round cap for check-in / check-out */
+    content: ""; position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px; border-radius: 13px; z-index: -1;
+    background: linear-gradient(160deg, var(--vio2), var(--vio)); transform: scale(0); transition: transform .4s cubic-bezier(.34, 1.56, .64, 1);
+    box-shadow: 0 8px 14px -8px var(--vio);
+  }
+  .day b { font-size: 13.5px; font-weight: 700; line-height: 1.1; transition: color .2s .12s; }
+  .day i { transition: color .2s .12s; }
+  .day i { font-style: normal; font-size: 9px; color: var(--muted); line-height: 1.2; }
+  .day.wkend i { color: color-mix(in srgb, var(--vio) 75%, var(--muted)); font-weight: 700; }
+  .day:hover:not(:disabled) b { color: var(--vio); }
+  .day.today b::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--vio); }
+  .day:disabled { cursor: default; color: var(--full); }
+  .day:disabled i { color: var(--full); }
+  .day.full b { text-decoration: line-through; color: var(--full); }
+  .day.full i { color: var(--bad); font-weight: 700; }
+  .day.mid::before, .day.start::before, .day.end::before { transform: scaleX(1); }
+  .day.start::before { left: 50%; }
+  .day.end::before { right: 50%; }
+  .day.start.end::before, .day.start.solo::before { transform: scaleX(0); }
+  .day.pvS::before { background: color-mix(in srgb, var(--band) 55%, transparent); }
+  .day.pvEnd::before { transform: scaleX(1); right: 50%; background: color-mix(in srgb, var(--band) 55%, transparent); transition-delay: 0s; }
+  .day.start::after, .day.end::after { transform: scale(1); }
+  .day.start b, .day.end b, .day.start i, .day.end i { color: #fff !important; }
+  .day.pv::before { transform: scaleX(1); background: color-mix(in srgb, var(--band) 55%, transparent); transition-delay: 0s; }
+  .day.pvEnd::after { transform: scale(.88); background: color-mix(in srgb, var(--vio) 22%, transparent); box-shadow: none; transition-delay: 0s; }
+  .day.pvEnd.bad::after { background: color-mix(in srgb, var(--bad) 24%, transparent); }
+  .day.c0::before { border-radius: 10px 0 0 10px; } .day.c6::before { border-radius: 0 10px 10px 0; }
+  .day.shake { animation: shake .45s ease; }
+  @keyframes shake { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
+  .day:focus-visible { outline: none; }
+  .day:focus-visible::after { transform: scale(1); background: transparent; box-shadow: inset 0 0 0 2px var(--vio); }
+  .day.start:focus-visible::after, .day.end:focus-visible::after { background: linear-gradient(160deg, var(--vio2), var(--vio)); box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--vio); }
+  .tip {
+    position: absolute; z-index: 3; padding: 6px 9px; border-radius: 10px; background: #1c1838; color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap;
+    pointer-events: none; opacity: 0; transform: translate(-50%, -100%) translateY(4px) scale(.9); transition: opacity .2s, transform .3s cubic-bezier(.34, 1.56, .64, 1), left .25s cubic-bezier(.22, 1, .36, 1), top .25s cubic-bezier(.22, 1, .36, 1);
+  }
+  [data-theme="dark"] .tip { background: #f1eeff; color: #1c1838; }
+  .tip.on { opacity: 1; transform: translate(-50%, -100%) translateY(-4px) scale(1); }
+  .tip.bad { background: var(--bad); color: #fff; }
+  .tip::after { content: ""; position: absolute; left: 50%; bottom: -4px; width: 8px; height: 8px; margin-left: -4px; background: inherit; transform: rotate(45deg); }
+
+  /* ---------- Guests, total and reserve ---------- */
+  .foot { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-top: 10px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .guests { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 13px; background: var(--soft); }
+  .guests button { width: 30px; height: 30px; border: 0; border-radius: 10px; background: var(--card); color: var(--ink); font: 800 16px/1 var(--ff); cursor: pointer; transition: transform .2s cubic-bezier(.34, 1.56, .64, 1); }
+  .guests button:active { transform: scale(.88); }
+  .guests button:disabled { opacity: .35; cursor: default; }
+  .guests output { min-width: 50px; text-align: center; font-size: 11.5px; font-weight: 700; line-height: 1.1; }
+  .guests output b { display: block; font-size: 15px; }
+  .total { min-width: 0; }
+  .total small { display: block; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .total strong { display: block; font-size: 17px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .reserve {
+    position: relative; height: 44px; padding: 0 16px; border: 0; border-radius: 14px; cursor: pointer; color: #fff; font: 800 13.5px/1 var(--ff);
+    background: linear-gradient(180deg, var(--vio2), var(--vio)); box-shadow: 0 12px 20px -12px var(--vio);
+    transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), filter .25s, opacity .25s;
+  }
+  .reserve:hover { transform: translateY(-2px); }
+  .reserve:active { transform: scale(.96); }
+  .reserve[aria-disabled="true"] { filter: grayscale(.7); opacity: .55; }
+  .reserve.busy { color: transparent; }
+  .reserve.busy::after { content: ""; position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px; border-radius: 50%; box-shadow: inset -5px 0 0 0 #fff; animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(1turn); } }
+  .msg { margin: 8px 0 0; min-height: 16px; font-size: 12px; color: var(--muted); }
+  .msg.bad { color: var(--bad); font-weight: 700; }
+
+  /* ---------- Key card ---------- */
+  .keybox { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; background: color-mix(in srgb, var(--card) 55%, transparent); backdrop-filter: blur(4px); opacity: 0; pointer-events: none; transition: opacity .3s; }
+  .keybox.on { opacity: 1; pointer-events: auto; }
+  .keycard {
+    position: relative; width: min(100%, 310px); aspect-ratio: 1.58; padding: 16px 18px; border-radius: 18px; color: #fff; overflow: hidden;
+    background: radial-gradient(80% 90% at 100% 0%, #9b7bff, transparent 60%), linear-gradient(150deg, #2c2378, #120e3a);
+    box-shadow: 0 30px 50px -24px rgba(30, 10, 120, .8); transform: translateY(140%) rotate(-8deg); transition: transform .75s cubic-bezier(.34, 1.36, .64, 1);
+    display: flex; flex-direction: column;
+  }
+  .keybox.on .keycard { transform: none; }
+  .keycard::before { content: ""; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .25) 45%, transparent 60%); transform: translateX(-100%); }
+  .keybox.on .keycard::before { animation: sheen 1.2s .7s ease-out; }
+  @keyframes sheen { to { transform: translateX(100%); } }
+  .keycard small { font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; opacity: .75; }
+  .keycard strong { font-size: 30px; letter-spacing: -.02em; margin-top: 2px; }
+  .keycard p { margin: 0; font-size: 12px; opacity: .9; }
+  .chip { position: absolute; right: 18px; top: 18px; width: 34px; height: 26px; border-radius: 6px; background: linear-gradient(135deg, #ffe39a, #d39a2a); }
+  .chip::after { content: ""; position: absolute; inset: 6px 8px; border: 1px solid rgba(90, 60, 0, .45); border-radius: 3px; }
+  .keycard .row { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+  .again { padding: 8px 12px; border: 0; border-radius: 10px; background: #fff; color: #1c1838; font: 800 12px/1 var(--ff); cursor: pointer; }
+  .star { position: absolute; left: 50%; top: 45%; width: 9px; height: 9px; pointer-events: none; background: var(--c); clip-path: polygon(50% 0, 61% 38%, 100% 50%, 61% 62%, 50% 100%, 39% 62%, 0 50%, 39% 38%); animation: star 1.3s cubic-bezier(.2, .7, .3, 1) forwards; }
+  @keyframes star { from { transform: translate(0, 0) scale(.4) rotate(0); opacity: 1; } to { transform: translate(var(--x), var(--y)) scale(1.2) rotate(200deg); opacity: 0; } }
+
+  button:focus-visible { outline: 3px solid var(--vio); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 370px) { .body { padding: 12px 12px 14px; } .foot { grid-template-columns: auto minmax(0, 1fr); } .reserve { grid-column: 1 / -1; } .day { height: 38px; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .001ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" id="card" aria-labelledby="title">
+    <div class="scene" aria-hidden="true">
+      <svg viewBox="0 0 400 112" preserveAspectRatio="xMidYMax slice">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a1650"/><stop offset=".7" stop-color="#3b2f86"/><stop offset="1" stop-color="#6b4fb8"/></linearGradient>
+        </defs>
+        <rect width="400" height="112" fill="url(#sky)"/>
+        <g fill="#fff">
+          <circle class="twk" cx="24" cy="18" r="1.2"/><circle class="twk" cx="64" cy="40" r=".9"/><circle class="twk" cx="98" cy="14" r="1.3"/><circle class="twk" cx="140" cy="30" r="1"/>
+          <circle class="twk" cx="178" cy="12" r="1.1"/><circle class="twk" cx="232" cy="24" r=".8"/><circle class="twk" cx="262" cy="10" r="1.2"/><circle class="twk" cx="350" cy="52" r="1"/>
+          <circle class="twk" cx="384" cy="30" r="1.3"/><circle class="twk" cx="120" cy="56" r=".8"/><circle class="twk" cx="40" cy="62" r=".9"/><circle class="twk" cx="300" cy="44" r=".8"/>
+        </g>
+        <!-- moon: drawn for the phase on your arrival night -->
+        <g transform="translate(262 26)"><circle r="13" fill="#3a3478"/><path id="moonLit" fill="#fff6d6"/><circle r="20" fill="#fff6d6" opacity=".08"/></g>
+        <!-- hills and pines -->
+        <path d="M0 112 V84 Q60 62 120 80 T240 76 T400 70 V112 Z" fill="#241d5c"/>
+        <g fill="#16113f">
+          <path d="M20 112 L34 70 L48 112Z"/><path d="M44 112 L56 80 L68 112Z"/><path d="M330 112 L346 66 L362 112Z"/><path d="M356 112 L368 82 L380 112Z"/><path d="M300 112 L311 86 L322 112Z"/>
+        </g>
+        <!-- the lodge -->
+        <g transform="translate(110 40)">
+          <rect x="128" y="2" width="10" height="20" fill="#3a2d6e"/>
+          <g class="smoke"><circle cx="133" cy="0" r="4"/><circle cx="133" cy="0" r="4"/><circle cx="133" cy="0" r="4"/></g>
+          <path d="M-8 26 L90 -4 L188 26 Z" fill="#2d2468"/>
+          <rect x="0" y="24" width="180" height="48" fill="#3c3180"/>
+          <rect x="0" y="24" width="180" height="3" fill="#5b4bb0"/>
+          <g id="wins"></g>
+          <rect x="82" y="56" width="16" height="16" rx="2" fill="#ffbe55" opacity=".85"/>
+        </g>
+      </svg>
+      <span class="nightsTag" id="nightsTag">0 nights</span>
+      <span class="moonchip" id="moonChip">Moon tonight</span>
+    </div>
+
+    <div class="body">
+      <div class="top">
+        <div>
+          <h1 id="title">Pine Hill Lodge</h1>
+          <p class="sub">Nathia Gali · 2 to 14 nights</p>
+        </div>
+        <p class="rate"><b>PKR 18,500</b>a night · Fri, Sat 23,000</p>
+      </div>
+
+      <div class="tiles">
+        <div class="tile on" id="tileIn"><small>Check-in</small><span class="ph" id="inText">Pick a date</span></div>
+        <div class="moonpill" id="moonPill" aria-hidden="true"><span id="nightsNum">0</span><small>nights</small></div>
+        <div class="tile" id="tileOut"><small>Check-out</small><span class="ph" id="outText">Pick a date</span></div>
+      </div>
+
+      <div class="calhead">
+        <button class="nav" id="prev" type="button" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <h2 id="monthName" aria-live="polite">Month</h2>
+        <button class="nav" id="next" type="button" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
+      <div class="cal" id="cal">
+        <div class="wd" aria-hidden="true"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
+        <div class="grid" id="grid" role="group" aria-label="Choose your dates"></div>
+        <div class="tip" id="tip" aria-hidden="true"></div>
+      </div>
+
+      <div class="foot">
+        <div class="guests" role="group" aria-label="Guests">
+          <button type="button" id="gMinus" aria-label="One guest fewer">−</button>
+          <output id="gOut" aria-live="polite"><b id="gNum">2</b>guests</output>
+          <button type="button" id="gPlus" aria-label="One more guest">+</button>
+        </div>
+        <div class="total"><small id="breakdown">Pick your nights</small><strong id="total">PKR 0</strong></div>
+        <button class="reserve" id="reserve" type="button" aria-disabled="true">Reserve</button>
+      </div>
+      <p class="msg" id="msg" role="status" aria-live="polite">Pick your check-in date</p>
+    </div>
+
+    <div class="keybox" id="keybox" aria-hidden="true">
+      <div class="keycard" role="status">
+        <span class="chip" aria-hidden="true"></span>
+        <small>Room held · Pine Hill Lodge</small>
+        <strong id="kRoom">Room 214</strong>
+        <p id="kDates">Dates</p>
+        <p id="kTotal">Total</p>
+        <div class="row"><p>Pay at the desk</p><button class="again" id="again" type="button">Change dates</button></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var NS = "http://www.w3.org/2000/svg";
+  var RATE = 18500, WEEKEND = 23000, EXTRA = 3000, TAX = .16, MIN = 2, MAX = 14;
+
+  // ---------- Dates as whole day numbers (UTC) so the maths never trips over time zones ----------
+  var now = new Date();
+  var TODAY = Math.round(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 864e5);
+  function parts(n) { var d = new Date(n * 864e5); return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate() }; }
+  function dayNum(y, m, d) { return Math.round(Date.UTC(y, m, d) / 864e5); }
+  function weekday(n) { return (n + 4) % 7; } // 0 = Sunday (1 Jan 1970 was a Thursday)
+  var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  var WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function short(n) { var p = parts(n); return WD[weekday(n)] + " " + p.d + " " + MONTHS[p.m].slice(0, 3); }
+  function rate(n) { var w = weekday(n); return w === 5 || w === 6 ? WEEKEND : RATE; }
+  // a few nights are already booked out
+  var FULL = {}; [9, 10, 16, 23, 24, 31, 37, 38, 45, 52, 53, 60, 66, 74, 81, 88, 95, 102, 109, 116].forEach(function (k) { FULL[TODAY + k] = true; });
+  function full(n) { return !!FULL[n]; }
+  function pkr(v) { return "PKR " + Math.round(v).toLocaleString("en-US"); }
+
+  // ---------- Moon phase for the arrival night (synodic month from a known new moon) ----------
+  function moonPhase(n) { var age = ((n - 10962.76) % 29.530589 + 29.530589) % 29.530589; return age / 29.530589; } // 6 Jan 2000 new moon
+  function drawMoon(n) {
+    var f = moonPhase(n), r = 13, rx = Math.abs(Math.cos(f * 2 * Math.PI)) * r, d;
+    if (f < .5) d = "M0 -13 A13 13 0 0 1 0 13 A" + rx.toFixed(2) + " 13 0 0 " + (f < .25 ? 0 : 1) + " 0 -13Z";
+    else d = "M0 -13 A13 13 0 0 0 0 13 A" + rx.toFixed(2) + " 13 0 0 " + (f < .75 ? 0 : 1) + " 0 -13Z";
+    $("#moonLit").setAttribute("d", f < .02 || f > .98 ? "" : d);
+    var name = f < .03 || f > .97 ? "New moon" : f < .22 ? "Waxing crescent" : f < .28 ? "First quarter" : f < .47 ? "Waxing gibbous" : f < .53 ? "Full moon" : f < .72 ? "Waning gibbous" : f < .78 ? "Last quarter" : "Waning crescent";
+    $("#moonChip").textContent = name + (n === TODAY ? " tonight" : " on arrival");
+  }
+
+  // ---------- Lodge windows: 14, one per night ----------
+  // bottom row: three windows each side of the door; top row: eight. They light bottom-left to top-right.
+  var winsEl = $("#wins"), wins = [];
+  [[10, 52], [32, 52], [54, 52], [112, 52], [134, 52], [156, 52]].concat([0, 1, 2, 3, 4, 5, 6, 7].map(function (c) { return [8 + c * 21.5, 32]; })).forEach(function (xy) {
+    var w = document.createElementNS(NS, "rect");
+    w.setAttribute("class", "win"); w.setAttribute("x", xy[0]); w.setAttribute("y", xy[1]); w.setAttribute("width", 14); w.setAttribute("height", 12); w.setAttribute("rx", 2);
+    winsEl.appendChild(w); wins.push(w);
+  });
+  var litTimers = [];
+  function lightWindows(nLit, nPeek) {
+    litTimers.forEach(clearTimeout); litTimers = [];
+    wins.forEach(function (w, i) {
+      var want = i < nLit ? "lit" : i < nPeek ? "peek" : "";
+      if (w.getAttribute("class") === "win " + want || (want === "" && w.getAttribute("class") === "win")) return;
+      litTimers.push(setTimeout(function () { w.setAttribute("class", want ? "win " + want : "win"); }, want === "lit" && !reduce.matches ? i * 60 : 0));
+    });
+  }
+
+  // ---------- State ----------
+  var checkIn = null, checkOut = null, hoverN = null, guests = 2, view, ticketOn = false;
+  var grid = $("#grid"), tip = $("#tip"), msg = $("#msg"), reserve = $("#reserve");
+  var firstMonth = parts(TODAY);
+  view = { y: firstMonth.y, m: firstMonth.m };
+  var LAST_OFFSET = 5; // months ahead you can book
+
+  function stayOk(a, b) {
+    if (b - a < MIN) return "Minimum stay is " + MIN + " nights";
+    if (b - a > MAX) return "Longest stay is " + MAX + " nights";
+    for (var n = a; n < b; n++) if (full(n)) return short(n) + " is fully booked";
+    return "";
+  }
+  function cost(a, b) { var s = 0; for (var n = a; n < b; n++) s += rate(n) + Math.max(0, guests - 2) * EXTRA; return s; }
+
+  // ---------- Render one month ----------
+  var focusN = TODAY;
+  function render(dir) {
+    var first = dayNum(view.y, view.m, 1), days = parts(dayNum(view.y, view.m + 1, 0)).d, lead = (weekday(first) + 6) % 7;
+    $("#monthName").textContent = MONTHS[view.m] + " " + view.y;
+    var html = "";
+    for (var k = 0; k < lead; k++) html += "<span></span>";
+    for (var d = 1; d <= days; d++) {
+      var n = first + d - 1, col = (lead + d - 1) % 7, past = n < TODAY, isFull = full(n), w = weekday(n);
+      var cls = "day c" + col + (n === TODAY ? " today" : "") + (isFull ? " full" : "") + (w === 5 || w === 6 ? " wkend" : "");
+      var price = isFull ? "Full" : past ? "" : (rate(n) / 1000).toFixed(1).replace(".0", "") + "k";
+      var label = short(n) + (isFull ? ", fully booked, check-out only" : past ? ", past" : ", " + pkr(rate(n)) + " a night");
+      html += '<button type="button" class="' + cls + '" data-n="' + n + '" tabindex="-1"' + (past ? " disabled" : "") + ' aria-label="' + label + '"><b>' + d + "</b><i>" + price + "</i></button>";
+    }
+    grid.innerHTML = html;
+    if (dir) { grid.classList.remove("slide", "slideBack"); void grid.offsetWidth; grid.classList.add(dir > 0 ? "slide" : "slideBack"); }
+    var startView = view.y * 12 + view.m, base = firstMonth.y * 12 + firstMonth.m;
+    // aria-disabled (not disabled) so the arrows stay pressable and answer with a little bump at the ends
+    $("#prev").setAttribute("aria-disabled", String(startView <= base));
+    $("#next").setAttribute("aria-disabled", String(startView >= base + LAST_OFFSET));
+    paint();
+    rove();
+  }
+  function cell(n) { return grid.querySelector('[data-n="' + n + '"]'); }
+  function rove() {
+    var b = cell(focusN) || grid.querySelector(".day:not(:disabled)");
+    grid.querySelectorAll(".day").forEach(function (x) { x.tabIndex = -1; });
+    if (b) b.tabIndex = 0;
+  }
+
+  // ---------- Paint the range, the preview and the summary ----------
+  function paint() {
+    var choosingOut = checkIn !== null && checkOut === null;
+    var pvEnd = choosingOut && hoverN !== null && hoverN > checkIn ? hoverN : null;
+    var k = 0;
+    grid.querySelectorAll(".day").forEach(function (b) {
+      var n = +b.dataset.n;
+      var inRange = checkOut !== null && n > checkIn && n < checkOut;
+      b.classList.toggle("start", n === checkIn);
+      b.classList.toggle("solo", n === checkIn && choosingOut && pvEnd === null); // no band until there is an end
+      b.classList.toggle("end", n === checkOut);
+      b.classList.toggle("mid", inRange);
+      b.classList.toggle("pv", pvEnd !== null && n > checkIn && n < pvEnd);
+      b.classList.toggle("pvEnd", pvEnd !== null && n === pvEnd);
+      b.classList.toggle("pvS", pvEnd !== null && n === checkIn); // the start half-band matches the lighter preview
+      b.classList.toggle("bad", pvEnd !== null && n === pvEnd && !!stayOk(checkIn, pvEnd));
+      if (inRange) b.style.setProperty("--k", k++); else b.style.removeProperty("--k");
+    });
+    var nights = checkOut !== null ? checkOut - checkIn : 0, pvNights = pvEnd ? pvEnd - checkIn : 0;
+    $("#inText").textContent = checkIn !== null ? short(checkIn) : "Pick a date";
+    $("#inText").classList.toggle("ph", checkIn === null);
+    $("#outText").textContent = checkOut !== null ? short(checkOut) : "Pick a date";
+    $("#outText").classList.toggle("ph", checkOut === null);
+    $("#tileIn").classList.toggle("on", checkIn === null);
+    $("#tileOut").classList.toggle("on", choosingOut);
+    var shown = nights || pvNights;
+    if ($("#nightsNum").textContent !== String(shown)) { $("#nightsNum").textContent = shown; var mp = $("#moonPill"); mp.classList.remove("bump"); void mp.offsetWidth; mp.classList.add("bump"); }
+    $("#nightsTag").textContent = shown + (shown === 1 ? " night" : " nights");
+    $("#nightsTag").classList.toggle("on", shown > 0);
+    lightWindows(Math.min(nights, 14), Math.min(Math.max(nights, pvNights), 14));
+    drawMoon(checkIn !== null ? checkIn : TODAY);
+    // totals
+    if (nights) {
+      var sub = cost(checkIn, checkOut), total = sub * (1 + TAX);
+      countTo(total);
+      $("#breakdown").textContent = nights + " nights + 16% tax";
+    } else { countTo(0); $("#breakdown").textContent = checkIn !== null ? "Pick check-out" : "Pick your nights"; }
+    reserve.setAttribute("aria-disabled", String(!nights));
+    $("#gMinus").disabled = guests <= 1; $("#gPlus").disabled = guests >= 4;
+    $("#gNum").textContent = guests;
+    // tooltip over the hovered day
+    var hb = hoverN !== null && cell(hoverN);
+    if (hb && checkIn !== null && checkOut === null && hoverN > checkIn) {
+      var why = stayOk(checkIn, hoverN), calBox = $("#cal").getBoundingClientRect(), bb = hb.getBoundingClientRect();
+      tip.textContent = why || (hoverN - checkIn) + " nights · " + pkr(cost(checkIn, hoverN) * (1 + TAX));
+      tip.classList.toggle("bad", !!why);
+      var x = bb.left - calBox.left + bb.width / 2, half = tip.offsetWidth / 2 + 4;
+      tip.style.left = Math.max(half, Math.min(calBox.width - half, x)) + "px";
+      tip.style.top = (bb.top - calBox.top + 2) + "px";
+      tip.classList.add("on");
+    } else tip.classList.remove("on");
+  }
+
+  // smooth count-up of the total
+  var shownTotal = 0, countRaf = 0;
+  function countTo(v) {
+    cancelAnimationFrame(countRaf);
+    var from = shownTotal, t0 = performance.now(), el = $("#total");
+    if (reduce.matches) { shownTotal = v; el.textContent = pkr(v); return; }
+    (function step(t) {
+      var k = Math.min(1, (t - t0) / 650), e = 1 - Math.pow(1 - k, 3);
+      shownTotal = from + (v - from) * e; el.textContent = pkr(shownTotal);
+      if (k < 1) countRaf = requestAnimationFrame(step);
+    })(t0);
+  }
+
+  // ---------- Choosing dates ----------
+  function say(t, bad) { msg.textContent = t; msg.classList.toggle("bad", !!bad); }
+  function choose(n) {
+    if (ticketOn) return;
+    if (n < TODAY) return;
+    if (checkIn === null || checkOut !== null || n <= checkIn) {
+      if (full(n)) { shake(n); say(short(n) + " is fully booked. Pick another check-in.", true); return; }
+      checkIn = n; checkOut = null;
+      say("Check-in " + short(n) + ". Now pick your check-out date.");
+    } else {
+      var why = stayOk(checkIn, n);
+      if (why) { shake(n); say(why + ". Try another check-out date.", true); return; }
+      checkOut = n;
+      var total = cost(checkIn, checkOut) * (1 + TAX);
+      say((checkOut - checkIn) + " nights, " + short(checkIn) + " to " + short(checkOut) + ", " + pkr(total) + " in all.");
+    }
+    focusN = n; hoverN = null;
+    paint(); rove();
+  }
+  function shake(n) { var b = cell(n); if (!b) return; b.classList.remove("shake"); void b.offsetWidth; b.classList.add("shake"); }
+  function showMonthOf(n) {
+    var p = parts(n);
+    if (p.y !== view.y || p.m !== view.m) { var dir = (p.y * 12 + p.m) - (view.y * 12 + view.m); view = { y: p.y, m: p.m }; render(dir); }
+  }
+
+  grid.addEventListener("click", function (e) { var b = e.target.closest(".day"); if (b && !b.disabled) choose(+b.dataset.n); });
+  grid.addEventListener("pointerover", function (e) { var b = e.target.closest(".day"); if (b && !b.disabled) { hoverN = +b.dataset.n; paint(); } });
+  grid.addEventListener("pointerleave", function () { hoverN = null; paint(); });
+  grid.addEventListener("focusin", function (e) { var b = e.target.closest(".day"); if (b) { hoverN = +b.dataset.n; paint(); } });
+  grid.addEventListener("keydown", function (e) {
+    var step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 7, ArrowUp: -7 }[e.key], b = e.target.closest(".day");
+    if (!b) return;
+    var n = +b.dataset.n, to = null;
+    if (step) to = n + step;
+    else if (e.key === "PageDown") { var p = parts(n); to = dayNum(p.y, p.m + 1, Math.min(p.d, 28)); }
+    else if (e.key === "PageUp") { var q = parts(n); to = dayNum(q.y, q.m - 1, Math.min(q.d, 28)); }
+    else if (e.key === "Escape") { checkIn = checkOut = null; paint(); say("Dates cleared. Pick your check-in date."); return; }
+    if (to === null) return;
+    e.preventDefault();
+    var base = firstMonth.y * 12 + firstMonth.m, tp = parts(to);
+    if (to < TODAY || tp.y * 12 + tp.m > base + LAST_OFFSET) return;
+    focusN = to; showMonthOf(to); rove();
+    var nb = cell(to); if (nb) nb.focus();
+  });
+  function edgeBump(btn, text) { btn.classList.remove("bump"); void btn.offsetWidth; btn.classList.add("bump"); say(text); }
+  $("#prev").addEventListener("click", function (e) {
+    var btn = e.currentTarget;
+    if (btn.getAttribute("aria-disabled") === "true") { edgeBump(btn, "This is the current month. Stays start from today."); return; }
+    view = { y: view.m ? view.y : view.y - 1, m: (view.m + 11) % 12 }; focusN = Math.max(TODAY, dayNum(view.y, view.m, 1)); render(-1);
+  });
+  $("#next").addEventListener("click", function (e) {
+    var btn = e.currentTarget;
+    if (btn.getAttribute("aria-disabled") === "true") { edgeBump(btn, "Bookings open " + LAST_OFFSET + " months ahead."); return; }
+    view = { y: view.m === 11 ? view.y + 1 : view.y, m: (view.m + 1) % 12 }; focusN = dayNum(view.y, view.m, 1); render(1);
+  });
+  $("#gMinus").addEventListener("click", function () { if (guests > 1) { guests--; paint(); } });
+  $("#gPlus").addEventListener("click", function () { if (guests < 4) { guests++; paint(); say(guests > 2 ? "Extra guest: PKR 3,000 a night each" : msg.textContent); } });
+
+  // ---------- Reserve: busy moon, then the key card slides in with stars ----------
+  var keybox = $("#keybox"), busy = false;
+  function stars() {
+    if (reduce.matches) return;
+    var cols = ["#ffbe55", "#b3a0ff", "#ffffff", "#ff9ac1", "#7fe3ff"];
+    for (var i = 0; i < 26; i++) {
+      var s = document.createElement("i"), a = Math.random() * Math.PI * 2, d = 80 + Math.random() * 100;
+      s.className = "star";
+      s.style.cssText = "--c:" + cols[i % cols.length] + ";--x:" + (Math.cos(a) * d).toFixed(0) + "px;--y:" + (Math.sin(a) * d * .8).toFixed(0) + "px;animation-delay:" + (Math.random() * 150).toFixed(0) + "ms";
+      keybox.appendChild(s); setTimeout(s.remove.bind(s), 1600);
+    }
+  }
+  async function doReserve(btn, fromDemo) {
+    if (busy || ticketOn) return;
+    if (checkOut === null) {
+      say(checkIn === null ? "Pick your check-in date first" : "Now pick a check-out date", true);
+      var t = $(checkIn === null ? "#tileIn" : "#tileOut"); t.classList.remove("on"); void t.offsetWidth; t.classList.add("on");
+      return;
+    }
+    busy = true; btn.classList.add("busy"); say("Holding your room...");
+    await wait(reduce.matches ? 120 : 950);
+    btn.classList.remove("busy"); busy = false;
+    if (fromDemo && !demoOn) return;
+    var room = 200 + ((checkIn * 7) % 18) + 1;
+    $("#kRoom").textContent = "Room " + room;
+    $("#kDates").textContent = short(checkIn) + " to " + short(checkOut) + " · " + (checkOut - checkIn) + " nights · " + guests + " guests";
+    $("#kTotal").textContent = pkr(cost(checkIn, checkOut) * (1 + TAX)) + " incl. tax";
+    ticketOn = true; keybox.classList.add("on"); keybox.setAttribute("aria-hidden", "false");
+    say("Room " + room + " is held for you.");
+    setTimeout(stars, 420);
+    if (!fromDemo) $("#again").focus({ preventScroll: true });
+  }
+  reserve.addEventListener("click", function (e) { var btn = e.currentTarget; doReserve(btn); });
+  function resetAll() {
+    ticketOn = false; keybox.classList.remove("on"); keybox.setAttribute("aria-hidden", "true");
+    checkIn = checkOut = hoverN = null; guests = 2; paint(); say("Pick your check-in date");
+  }
+  $("#again").addEventListener("click", function () { resetAll(); var b = cell(focusN) || grid.querySelector(".day:not(:disabled)"); if (b) b.focus(); });
+
+  // ---------- Start ----------
+  render(0);
+
+  // ---------- Auto demo: sweeps a stay across the calendar, reserves, resets; stops at the first real touch ----------
+  var demoOn = true;
+  function stopDemo(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false;
+    resetAll(); // hand the visitor a clean calendar
+  }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  function firstStay(from, len) { for (var a = from; a < from + 60; a++) if (!full(a) && !stayOk(a, a + len)) return a; return from; }
+  async function hoverTo(a, b, ms) { for (var n = a; n <= b; n++) { showMonthOf(n); hoverN = n; paint(); await pause(ms); } }
+  async function demo() {
+    try {
+      await pause(900);
+      var round = 0;
+      while (demoOn) {
+        var len = round % 2 ? 3 : 4, a = firstStay(TODAY + 2 + (round % 3) * 3, len);
+        await hoverTo(a - 2, a, 170); choose(a); await pause(450);
+        if (round % 2) { hoverN = a + 1; paint(); await pause(500); choose(a + 1); await pause(1200); } // too short: the day shakes
+        await hoverTo(a + 1, a + len, 260); await pause(300); choose(a + len); await pause(900);
+        if (round % 2 === 0) { $("#gPlus").click(); await pause(700); }
+        await doReserve(reserve, true); await pause(2700);
+        resetAll(); await pause(1100);
+        round++;
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>

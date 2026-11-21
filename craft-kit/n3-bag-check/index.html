@@ -1,0 +1,510 @@
+<!doctype html>
+<!-- Chill & Craft · Bag Check · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bag Check · file scan progress tracker</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: airport grey and safety orange (light), control-room navy (dark) ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #e3e8ee;
+    --bg2: #f4f6f9;
+    --card: #ffffff;
+    --ink: #142033;
+    --muted: #5d6b80;
+    --line: #dde3eb;
+    --soft: #f1f4f8;
+    --metal: #c9d1dc;
+    --metal2: #9aa6b6;
+    --orange: #ff8a1f;
+    --ok: #15a565;
+    --warn: #e59a00;
+    --bad: #e0413c;
+    --shadow: rgba(20, 35, 60, .26);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #070b12;
+    --bg2: #0e1420;
+    --card: #121a28;
+    --ink: #e6edf7;
+    --muted: #8e9bb0;
+    --line: #233046;
+    --soft: #0d1420;
+    --metal: #39465a;
+    --metal2: #27313f;
+    --ok: #34d58a;
+    --warn: #ffbf3a;
+    --bad: #ff6863;
+    --shadow: rgba(0, 0, 0, .7);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: var(--ff); color: var(--ink); background: var(--bg); }
+  .stage {
+    min-height: 100vh; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr); padding: 18px 14px; overflow: hidden; overflow-x: clip;
+    background: radial-gradient(60% 45% at 50% 0%, color-mix(in srgb, var(--orange) 12%, transparent), transparent 70%), linear-gradient(180deg, var(--bg2), var(--bg));
+  }
+  .card {
+    position: relative; width: min(100%, 420px); padding: 18px 16px 16px; border-radius: 28px; background: var(--card); border: 1px solid var(--line);
+    box-shadow: 0 40px 80px -46px var(--shadow), 0 12px 26px -18px var(--shadow);
+    animation: rise .8s cubic-bezier(.22, 1.3, .36, 1) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(.97); } }
+  .card.drop { box-shadow: 0 0 0 3px var(--orange), 0 40px 80px -46px var(--shadow); }
+  .dropTip { position: absolute; inset: 0; z-index: 9; display: grid; place-items: center; border-radius: 28px; background: color-mix(in srgb, var(--card) 80%, transparent); font-weight: 800; color: var(--orange); opacity: 0; pointer-events: none; transition: opacity .2s; backdrop-filter: blur(3px); }
+  .card.drop .dropTip { opacity: 1; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 0 4px; }
+  h1 { margin: 0; font-size: clamp(18px, 5vw, 21px); letter-spacing: -.02em; }
+  .sub { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .led { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; background: var(--soft); font: 700 10.5px/1 var(--mono); letter-spacing: .06em; color: var(--muted); }
+  .led i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px var(--ok); animation: led 1.6s ease-in-out infinite; }
+  .led.busy i { background: var(--orange); box-shadow: 0 0 6px var(--orange); animation-duration: .4s; }
+  @keyframes led { 50% { opacity: .3; } }
+
+  /* ---------- The x-ray monitor ---------- */
+  .monitor { position: relative; margin-top: 12px; padding: 7px; border-radius: 18px; background: linear-gradient(180deg, var(--metal), var(--metal2)); }
+  .monitor canvas { display: block; width: 100%; height: 118px; border-radius: 12px; background: #050d1a; }
+  .monitor.flash-ok canvas { box-shadow: 0 0 0 2px var(--ok), 0 0 22px -4px var(--ok); }
+  .monitor.flash-warn canvas { box-shadow: 0 0 0 2px var(--warn), 0 0 22px -4px var(--warn); }
+  .monitor.flash-bad canvas { box-shadow: 0 0 0 2px var(--bad), 0 0 22px -4px var(--bad); }
+
+  /* ---------- Conveyor, tunnel and the suitcase ---------- */
+  .machine { position: relative; height: 92px; margin-top: 8px; overflow: hidden; border-radius: 14px; background: linear-gradient(180deg, var(--soft), color-mix(in srgb, var(--soft) 70%, var(--metal))); }
+  .belt { position: absolute; left: 0; right: 0; bottom: 10px; height: 12px; background: repeating-linear-gradient(90deg, #2b3442 0 10px, #3a4556 10px 20px); border-radius: 6px; animation: belt 2.4s linear infinite; }
+  .belt.run { animation-duration: .5s; }
+  @keyframes belt { to { background-position: 40px 0; } }
+  .legs { position: absolute; left: 6%; right: 6%; bottom: 0; height: 10px; display: flex; justify-content: space-between; }
+  .legs i { width: 6px; height: 10px; background: var(--metal2); border-radius: 2px; }
+  /* the tunnel is only a frame (borders), so the bag stays visible through the tinted curtain inside */
+  .tunnel { position: absolute; left: 33%; width: 34%; top: 6px; bottom: 16px; z-index: 3; border-radius: 12px 12px 4px 4px; border: 8px solid var(--metal2); border-top: 20px solid var(--metal); border-bottom: 0; box-shadow: 0 6px 14px -8px var(--shadow); }
+  .tunnel::before { content: "X-RAY"; position: absolute; left: 50%; top: -14px; transform: translateX(-50%); font: 800 9px/1 var(--mono); letter-spacing: .22em; color: var(--muted); }
+  .tunnel .mouth { position: absolute; inset: 0; border-radius: 4px 4px 0 0; background: linear-gradient(180deg, rgba(6, 14, 28, .42), rgba(6, 14, 28, .6)); overflow: hidden; }
+  .curtain { position: absolute; top: 0; bottom: 0; width: 12px; display: flex; gap: 1px; }
+  .curtain.l { left: 0; } .curtain.r { right: 0; }
+  .curtain i { flex: 1; background: linear-gradient(180deg, #3d4a5c, #222b38); transform-origin: top; }
+  .flap .curtain i { animation: flap .5s ease-in-out 2; }
+  .flap .curtain i:nth-child(2) { animation-delay: .06s; } .flap .curtain i:nth-child(3) { animation-delay: .12s; }
+  @keyframes flap { 50% { transform: skewX(18deg) scaleY(.94); } }
+  .beam { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: #6cf; box-shadow: 0 0 10px #6cf; opacity: .25; }
+  .busy .beam { opacity: 1; animation: beam .9s ease-in-out infinite alternate; }
+  @keyframes beam { from { transform: translateX(-30px); } to { transform: translateX(30px); } }
+  .bag { position: absolute; z-index: 2; bottom: 21px; left: -28%; width: 92px; height: 62px; transform: translateX(-50%); transition: left .9s cubic-bezier(.45, 0, .25, 1); }
+  .bag.inside { left: 50%; }
+  .bag.out { left: 80%; }
+  /* inside the tunnel the bag shows through the curtain in x-ray colours */
+  .bag svg { transition: filter .35s; }
+  .bag.inside svg { filter: grayscale(1) brightness(1.7) sepia(1) hue-rotate(160deg) saturate(3.2) drop-shadow(0 0 6px rgba(102, 204, 255, .8)); transition: filter .35s .55s; }
+  .bag.inside.out svg { filter: none; transition-delay: .15s; }
+  .bag.gone { left: 128%; transition-duration: .7s; }
+  .bag.jump { transition: none; }
+  .bag svg { width: 100%; height: 100%; overflow: visible; }
+  .bag .tagText { font: 700 7.5px var(--mono); fill: #1a2333; }
+  .bag .ext { font: 800 9px var(--ff); fill: #fff; text-anchor: middle; }
+  .bag.roll svg { animation: jiggle .25s ease-in-out infinite alternate; }
+  @keyframes jiggle { to { transform: translateY(-1px) rotate(.6deg); } }
+  .stamp {
+    position: absolute; z-index: 4; left: 80%; bottom: 30px; padding: 4px 8px; border: 2.5px solid currentColor; border-radius: 6px; font: 900 12px/1 var(--mono); letter-spacing: .12em;
+    transform: translateX(-50%) rotate(-12deg) scale(2.2); opacity: 0; pointer-events: none; background: color-mix(in srgb, var(--card) 70%, transparent);
+  }
+  .stamp.on { animation: stamp .45s cubic-bezier(.3, 1.6, .5, 1) forwards; }
+  @keyframes stamp { to { transform: translateX(-50%) rotate(-12deg) scale(1); opacity: 1; } }
+  .stamp.ok { color: var(--ok); } .stamp.warn { color: var(--warn); } .stamp.bad { color: var(--bad); }
+
+  /* ---------- Actions ---------- */
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .btn {
+    position: relative; height: 44px; padding: 0 12px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: 700 13px/1 var(--ff);
+    transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), border-color .2s, background .2s;
+  }
+  .btn:hover { transform: translateY(-2px); border-color: var(--orange); }
+  .btn:active { transform: scale(.96); }
+  .btn svg { width: 17px; height: 17px; flex: none; }
+  .btn.main { border: 0; color: #fff; background: linear-gradient(180deg, #ffa24a, var(--orange)); box-shadow: 0 12px 20px -12px var(--orange); }
+  .btn.main:focus-within { outline: 3px solid var(--orange); outline-offset: 2px; }
+  .fileIn { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+
+  /* ---------- Checklist ---------- */
+  .rows { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 2px; }
+  .rows li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 11px; font-size: 13px; transition: background .3s; }
+  .rows li.now { background: var(--soft); }
+  .rows .st { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--line); color: #fff; transition: background .3s, transform .35s cubic-bezier(.34, 1.56, .64, 1); }
+  .rows .st svg { width: 12px; height: 12px; display: none; }
+  .rows li[data-s="run"] .st { background: transparent; box-shadow: inset 0 0 0 2.5px var(--line); border-top: 2.5px solid var(--orange); animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(1turn); } }
+  .rows li[data-s="ok"] .st { background: var(--ok); } .rows li[data-s="ok"] .s-ok { display: block; }
+  .rows li[data-s="warn"] .st { background: var(--warn); } .rows li[data-s="warn"] .s-warn { display: block; }
+  .rows li[data-s="bad"] .st { background: var(--bad); } .rows li[data-s="bad"] .s-bad { display: block; }
+  .rows li[data-s="ok"] .st, .rows li[data-s="warn"] .st, .rows li[data-s="bad"] .st { animation: popIn .4s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes popIn { from { transform: scale(.4); } }
+  .rows b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rows em { font: 600 11.5px/1.2 var(--mono); font-style: normal; color: var(--muted); text-align: right; max-width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rows li[data-s="warn"] em { color: var(--warn); } .rows li[data-s="bad"] em { color: var(--bad); }
+  .verdict { display: flex; align-items: center; gap: 9px; margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: var(--soft); font-size: 12.5px; color: var(--muted); min-height: 40px; transition: background .3s, color .3s; }
+  .verdict.ok { background: color-mix(in srgb, var(--ok) 13%, var(--card)); color: var(--ink); }
+  .verdict.warn { background: color-mix(in srgb, var(--warn) 15%, var(--card)); color: var(--ink); }
+  .verdict.bad { background: color-mix(in srgb, var(--bad) 13%, var(--card)); color: var(--ink); }
+  .verdict strong { flex: none; font: 800 11px/1 var(--mono); letter-spacing: .1em; padding: 5px 7px; border-radius: 7px; background: var(--line); color: var(--muted); }
+  .verdict.ok strong { background: var(--ok); color: #fff; } .verdict.warn strong { background: var(--warn); color: #241600; } .verdict.bad strong { background: var(--bad); color: #fff; }
+  .spark { position: absolute; z-index: 5; width: 6px; height: 6px; border-radius: 2px; background: var(--c); pointer-events: none; animation: spark 1s cubic-bezier(.2, .7, .3, 1) forwards; }
+  @keyframes spark { from { transform: translate(0, 0) rotate(0); opacity: 1; } to { transform: translate(var(--x), var(--y)) rotate(200deg); opacity: 0; } }
+
+  button:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
+  @media (max-width: 370px) { .card { padding: 14px 12px; } .rows em { max-width: 130px; } .btn { font-size: 12.3px; padding: 0 8px; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .001ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" id="card" aria-labelledby="title">
+    <div class="dropTip" aria-hidden="true">Drop the file to scan it</div>
+    <div class="head">
+      <div><h1 id="title">Bag check for files</h1><p class="sub">Look inside a file before you send it. It never leaves your device.</p></div>
+      <span class="led" id="led"><i aria-hidden="true"></i><span id="ledText">READY</span></span>
+    </div>
+
+    <div class="monitor" id="monitor"><canvas id="xray" aria-hidden="true"></canvas></div>
+
+    <div class="machine" id="machine" aria-hidden="true">
+      <div class="belt" id="belt"></div>
+      <div class="legs"><i></i><i></i><i></i><i></i></div>
+      <div class="bag" id="bag">
+        <svg viewBox="0 0 92 62">
+          <path d="M34 10 V4 Q34 1 37 1 H55 Q58 1 58 4 V10" fill="none" stroke="#2b3442" stroke-width="3.5"/>
+          <rect x="4" y="9" width="84" height="50" rx="9" fill="#ff8a1f"/>
+          <rect x="4" y="9" width="84" height="50" rx="9" fill="url(#bagShine)"/>
+          <rect x="22" y="9" width="6" height="50" fill="#d96a00"/><rect x="64" y="9" width="6" height="50" fill="#d96a00"/>
+          <rect x="6" y="54" width="10" height="7" rx="3" fill="#2b3442"/><rect x="76" y="54" width="10" height="7" rx="3" fill="#2b3442"/>
+          <rect x="33" y="22" width="26" height="20" rx="4" id="extBox" fill="#3d8bff"/>
+          <text class="ext" id="extText" x="46" y="35.5">PDF</text>
+          <rect x="12" y="44" width="68" height="11" rx="2.5" fill="#fff6d8" stroke="#c9b27a" stroke-width=".8"/><text class="tagText" id="tagText" x="46" y="52" text-anchor="middle">menu.pdf</text>
+          <defs><linearGradient id="bagShine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".15"/></linearGradient></defs>
+        </svg>
+      </div>
+      <div class="tunnel" id="tunnel"><div class="mouth"><span class="curtain l"><i></i><i></i><i></i></span><span class="beam"></span><span class="curtain r"><i></i><i></i><i></i></span></div></div>
+      <span class="stamp" id="stamp">CLEARED</span>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="sample" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 14h6M9 17h4"/></svg>Try a sample</button>
+      <label class="btn main"><input class="fileIn" id="file" type="file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>Choose a file</label>
+    </div>
+
+    <ul class="rows" id="rows" aria-label="Scan steps">
+      <li data-s="wait"><span class="st"><svg class="s-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><b>Read the bytes</b><em>waiting</em></li>
+      <li data-s="wait"><span class="st"></span><b>Real file type</b><em>waiting</em></li>
+      <li data-s="wait"><span class="st"></span><b>Hidden code</b><em>waiting</em></li>
+      <li data-s="wait"><span class="st"></span><b>Randomness</b><em>waiting</em></li>
+      <li data-s="wait"><span class="st"></span><b>Size to send</b><em>waiting</em></li>
+    </ul>
+    <p class="verdict" id="verdict" role="status" aria-live="polite"><strong>IDLE</strong><span id="vText">Drop, paste or choose any file, or try a sample.</span></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var MAX_READ = 64 * 1024 * 1024, SEND_LIMIT = 25 * 1024 * 1024;
+
+  // ---------- Status icons for every row ----------
+  var ICONS = '<svg class="s-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' +
+    '<svg class="s-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M12 6v8M12 18.5v.5"/></svg>' +
+    '<svg class="s-bad" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>';
+  var rows = [].slice.call(document.querySelectorAll("#rows li"));
+  rows.forEach(function (li) { li.querySelector(".st").innerHTML = ICONS; });
+  function row(i, s, text) { var li = rows[i]; li.dataset.s = s; li.classList.toggle("now", s === "run"); if (text !== undefined) li.querySelector("em").textContent = text; }
+
+  // ---------- What the first bytes say a file really is ----------
+  function sniff(b) {
+    var h = function (arr, at) { at = at || 0; return arr.every(function (v, i) { return b[at + i] === v; }); };
+    if (h([0x89, 0x50, 0x4E, 0x47])) return { k: "png", name: "PNG image" };
+    if (h([0xFF, 0xD8, 0xFF])) return { k: "jpg", name: "JPEG photo" };
+    if (h([0x47, 0x49, 0x46, 0x38])) return { k: "gif", name: "GIF image" };
+    if (h([0x52, 0x49, 0x46, 0x46]) && h([0x57, 0x45, 0x42, 0x50], 8)) return { k: "webp", name: "WebP image" };
+    if (h([0x25, 0x50, 0x44, 0x46])) return { k: "pdf", name: "PDF document" };
+    if (h([0x50, 0x4B, 0x03, 0x04]) || h([0x50, 0x4B, 0x05, 0x06])) return { k: "zip", name: "ZIP archive" };
+    if (h([0x1F, 0x8B])) return { k: "gz", name: "GZIP archive" };
+    if (h([0x49, 0x44, 0x33]) || (b[0] === 0xFF && (b[1] & 0xE0) === 0xE0)) return { k: "mp3", name: "MP3 audio" };
+    if (h([0x66, 0x74, 0x79, 0x70], 4)) return { k: "mp4", name: "MP4 video or audio" };
+    if (h([0x4D, 0x5A])) return { k: "exe", name: "Windows program" };
+    if (h([0x7F, 0x45, 0x4C, 0x46])) return { k: "exe", name: "Linux program" };
+    // no signature: is it text?
+    var n = Math.min(b.length, 65536), ok = 0;
+    for (var i = 0; i < n; i++) { var c = b[i]; if (c === 9 || c === 10 || c === 13 || (c >= 32 && c < 127) || c >= 128) ok++; }
+    if (n && ok / n > .97) {
+      var head = latin1(b.subarray(0, 512)).trim().toLowerCase();
+      if (/^<!doctype html|^<html|<head|<body/.test(head)) return { k: "html", name: "Web page (HTML text)" };
+      if (/^<svg|^<\?xml[^>]*>\s*<svg/.test(head)) return { k: "svg", name: "SVG drawing (text)" };
+      if (/^[\[{]/.test(head)) return { k: "text", name: "JSON text" };
+      return { k: "text", name: "Plain text" };
+    }
+    return { k: "bin", name: "Unknown binary" };
+  }
+  var EXPECT = { png: ["png"], jpg: ["jpg"], jpeg: ["jpg"], gif: ["gif"], webp: ["webp"], pdf: ["pdf"], zip: ["zip"], docx: ["zip"], xlsx: ["zip"], pptx: ["zip"], docm: ["zip"], xlsm: ["zip"], gz: ["gz"], mp3: ["mp3"], mp4: ["mp4"], m4a: ["mp4"], mov: ["mp4"],
+    exe: ["exe"], dll: ["exe"], txt: ["text"], csv: ["text"], md: ["text"], json: ["text"], log: ["text"], html: ["html", "text"], htm: ["html", "text"], svg: ["svg", "text"], xml: ["text", "svg"], js: ["text"], css: ["text"] };
+  function latin1(u8) { var s = "", step = 8192; for (var i = 0; i < u8.length; i += step) s += String.fromCharCode.apply(null, u8.subarray(i, i + step)); return s; }
+  function entropy(b) {
+    var n = Math.min(b.length, 8 * 1024 * 1024), hist = new Uint32Array(256);
+    for (var i = 0; i < n; i++) hist[b[i]]++;
+    var e = 0; for (var k = 0; k < 256; k++) if (hist[k]) { var p = hist[k] / n; e -= p * Math.log2(p); }
+    return e;
+  }
+  var PATTERNS = [["<scr" + "ipt", "script tag"], ["javascript:", "javascript link"], ["eval(", "eval call"], ["/javascript", "PDF script"], ["/openaction", "PDF auto-run"], ["/launch", "PDF launch"], ["vbaproject.bin", "Office macros"], ["powershell", "PowerShell"], ["cmd.exe", "command shell"]];
+  // Blob.arrayBuffer where it exists, FileReader in older browsers
+  function readBlob(b) {
+    if (b.arrayBuffer) return b.arrayBuffer();
+    return new Promise(function (ok, no) { var fr = new FileReader(); fr.onload = function () { ok(fr.result); }; fr.onerror = function () { no(fr.error); }; fr.readAsArrayBuffer(b); });
+  }
+  function size(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
+
+  // ---------- X-ray monitor: each cell is one slice of the real file ----------
+  var cv = $("#xray"), ctx = cv.getContext("2d"), COLS = 46, ROWS = 12, cells = null, shown = 0, phase = "idle", label = "READY", sizeLabel = "";
+  function fit() { var r = cv.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1); cv.width = Math.max(10, Math.round(r.width * d)); cv.height = Math.max(10, Math.round(r.height * d)); }
+  function classify(b) {
+    var N = COLS * ROWS, out = new Array(N);
+    for (var c = 0; c < N; c++) {
+      var s = Math.floor(c * b.length / N), e = Math.floor((c + 1) * b.length / N);
+      if (e <= s) { out[c] = null; continue; }
+      var take = Math.min(256, e - s), pr = 0, zero = 0, seen = new Uint8Array(256), uniq = 0, sum = 0;
+      for (var i = 0; i < take; i++) { var v = b[s + Math.floor(i * (e - s) / take)]; sum += v; if (v >= 32 && v < 127 || v === 10 || v === 13 || v === 9) pr++; if (v === 0) zero++; if (!seen[v]) { seen[v] = 1; uniq++; } }
+      // airport colours: orange = soft text, green = dense random data, blue = structured binary, navy = empty space
+      // text brightness follows the slice's average letter, so words and numbers make a visible texture
+      out[c] = pr / take > .85 ? [sum / take > 80 ? "#ff9a3c" : "#ffc06a", .35 + Math.min(1, Math.abs(sum / take - 64) / 60) * .6] : zero / take > .6 ? ["#1d3f99", .8] : uniq / take > .55 ? ["#43d18a", .5 + uniq / take * .5] : ["#3d8bff", .55 + uniq / take * .4];
+    }
+    return out;
+  }
+  var tStart = performance.now();
+  function draw(now) {
+    var w = cv.width, h = cv.height, d = w / cv.clientWidth || 1, t = (now - tStart) / 1000;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#050d1a"; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = "rgba(80,140,255,.07)"; ctx.lineWidth = 1;
+    for (var gx = 0; gx < w; gx += 12 * d) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke(); }
+    // suitcase silhouette
+    var bw = w * .74, bh = h * .62, bx = (w - bw) / 2, by = h * .26;
+    ctx.strokeStyle = "rgba(120,200,255,.55)"; ctx.lineWidth = 1.5 * d;
+    round(bx, by, bw, bh, 8 * d); ctx.stroke();
+    round(bx + bw * .4, by - 9 * d, bw * .2, 12 * d, 4 * d); ctx.stroke();
+    var cw = bw / COLS, ch = bh / ROWS;
+    if (cells) {
+      for (var c = 0; c < cells.length; c++) {
+        var col = c % COLS, rw = Math.floor(c / COLS), x = bx + col * cw, y = by + rw * ch;
+        // the file is drawn column by column as the beam passes over it
+        var revealed = (col + rw / ROWS) / COLS < shown;
+        if (!cells[c] || !revealed) continue;
+        ctx.globalAlpha = cells[c][1] * (.85 + .15 * Math.sin(t * 3 + c));
+        ctx.fillStyle = cells[c][0];
+        ctx.fillRect(x + .6 * d, y + .6 * d, cw - 1.2 * d, ch - 1.2 * d);
+      }
+      ctx.globalAlpha = 1;
+    }
+    // scan beam
+    var sx = phase === "scan" ? bx + bw * shown : phase === "idle" ? bx + bw * (.5 + .5 * Math.sin(t * .9)) : -100;
+    if (sx > 0) {
+      var g = ctx.createLinearGradient(sx - 18 * d, 0, sx + 4 * d, 0);
+      g.addColorStop(0, "rgba(102,204,255,0)"); g.addColorStop(1, "rgba(102,204,255,.5)");
+      ctx.fillStyle = g; ctx.fillRect(sx - 18 * d, 0, 22 * d, h);
+      ctx.fillStyle = "#9fe3ff"; ctx.fillRect(sx, 0, 1.5 * d, h);
+    }
+    ctx.font = "700 " + 10 * d + "px ui-monospace, Menlo, Consolas, monospace";
+    ctx.fillStyle = phase === "ok" ? "#34d58a" : phase === "warn" ? "#ffbf3a" : phase === "bad" ? "#ff6863" : "#9fe3ff";
+    ctx.textBaseline = "top";
+    ctx.fillText(label, 10 * d, 8 * d);
+    ctx.fillStyle = "rgba(159,227,255,.7)";
+    var tw = ctx.measureText(sizeLabel).width;
+    ctx.fillText(sizeLabel, w - tw - 10 * d, 8 * d);
+    requestAnimationFrame(draw);
+  }
+  function round(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+  // ---------- The scan itself ----------
+  var bag = $("#bag"), belt = $("#belt"), tunnel = $("#tunnel"), stamp = $("#stamp"), monitor = $("#monitor"), led = $("#led"), verdict = $("#verdict"), scanId = 0;
+  var EXT_COL = { pdf: "#e0413c", png: "#3d8bff", jpg: "#3d8bff", jpeg: "#3d8bff", gif: "#3d8bff", webp: "#3d8bff", zip: "#7a4dff", docx: "#2f6fe0", xlsx: "#15a565", txt: "#5d6b80", exe: "#111827" };
+  function setVerdict(kind, word, text) {
+    verdict.className = "verdict" + (kind ? " " + kind : "");
+    verdict.querySelector("strong").textContent = word;
+    $("#vText").textContent = text;
+  }
+  async function scan(file) {
+    var id = ++scanId;
+    var name = file.name || "pasted-file", ext = (name.match(/\.([a-z0-9]{1,5})$/i) || [, ""])[1].toLowerCase();
+    // reset the line
+    rows.forEach(function (_, i) { row(i, "wait", "waiting"); });
+    stamp.className = "stamp"; monitor.className = "monitor"; cells = null; shown = 0; phase = "scan"; label = "LOADING"; sizeLabel = size(file.size);
+    led.classList.add("busy"); $("#ledText").textContent = "SCANNING"; tunnel.parentNode.classList.add("busy");
+    setVerdict("", "SCAN", "Checking " + name + "...");
+    $("#tagText").textContent = name.length > 14 ? name.slice(0, 13) + "…" : name;
+    $("#extText").textContent = (ext || "?").toUpperCase().slice(0, 4);
+    $("#extBox").setAttribute("fill", EXT_COL[ext] || "#3d8bff");
+    bag.className = "bag jump"; void bag.offsetWidth; bag.className = "bag roll";
+    belt.classList.add("run");
+    await wait(30);
+    if (id !== scanId) return;
+    bag.classList.add("inside"); tunnel.classList.add("flap");
+    // 1. read every byte (up to 64 MB), with a real progress count
+    row(0, "run", "0 B");
+    var limit = Math.min(file.size, MAX_READ), bytes = new Uint8Array(limit), off = 0, step = 4 * 1024 * 1024;
+    var readStart = performance.now();
+    while (off < limit) {
+      var buf = new Uint8Array(await readBlob(file.slice(off, Math.min(limit, off + step))));
+      if (id !== scanId) return;
+      bytes.set(buf, off); off += buf.length;
+      row(0, "run", size(off) + " of " + size(file.size));
+    }
+    await wait(Math.max(0, (reduce.matches ? 100 : 900) - (performance.now() - readStart)));
+    if (id !== scanId) return;
+    tunnel.classList.remove("flap");
+    cells = classify(bytes);
+    label = "SCANNING";
+    // reveal the x-ray picture while the checks run
+    var revealStart = performance.now(), revealMs = reduce.matches ? 200 : 1700;
+    var revealTimer = setInterval(function () { shown = Math.min(1, (performance.now() - revealStart) / revealMs); label = "SCANNING " + Math.round(shown * 100) + "%"; if (shown >= 1) clearInterval(revealTimer); }, 30);
+    row(0, "ok", size(limit) + (limit < file.size ? " (first 64 MB)" : ""));
+    var issues = [], level = 0; // 0 clear, 1 check, 2 stop
+    // 2. real type vs the name
+    row(1, "run", "reading signature");
+    await wait(reduce.matches ? 40 : 360);
+    if (id !== scanId) return clearInterval(revealTimer);
+    var kind = sniff(bytes), want = EXPECT[ext];
+    var mismatch = want && want.indexOf(kind.k) < 0;
+    if (kind.k === "exe") { row(1, "bad", kind.name); issues.push("it is a program"); level = 2; }
+    else if (mismatch) { row(1, "warn", "named ." + ext + ", is " + kind.name); issues.push("its name hides its real type"); level = Math.max(level, 1); }
+    else row(1, "ok", kind.name + (ext ? " · matches ." + ext : ""));
+    // 3. code tucked inside
+    row(2, "run", "searching");
+    await wait(reduce.matches ? 40 : 420);
+    if (id !== scanId) return clearInterval(revealTimer);
+    var text = latin1(bytes.subarray(0, Math.min(bytes.length, 16 * 1024 * 1024))).toLowerCase(), found = [];
+    PATTERNS.forEach(function (p) { if (text.indexOf(p[0]) > -1) found.push(p[1]); });
+    var codeOk = kind.k === "html" || kind.k === "svg" || ["js", "html", "htm"].indexOf(ext) > -1;
+    if (!found.length) row(2, "ok", "none found");
+    else if (codeOk) row(2, "ok", found.join(", ") + " (normal here)");
+    else { row(2, mismatch ? "bad" : "warn", found.join(", ")); issues.push("it carries " + found.join(" and ")); level = Math.max(level, mismatch ? 2 : 1); }
+    // 4. randomness
+    row(3, "run", "measuring");
+    await wait(reduce.matches ? 40 : 380);
+    if (id !== scanId) return clearInterval(revealTimer);
+    var e = entropy(bytes), packedOk = ["zip", "gz", "jpg", "png", "webp", "mp3", "mp4", "gif", "pdf"].indexOf(kind.k) > -1;
+    if (e > 7.5 && !packedOk && bytes.length > 4096) { row(3, "warn", e.toFixed(2) + " bits/byte · packed?"); issues.push("its data looks packed or encrypted"); level = Math.max(level, 1); }
+    else row(3, "ok", e.toFixed(2) + " bits/byte" + (e > 7.5 ? " · compressed" : e < 5 ? " · plain" : ""));
+    // 5. size for email and chat
+    row(4, "run", "");
+    await wait(reduce.matches ? 40 : 300);
+    if (id !== scanId) return clearInterval(revealTimer);
+    if (file.size > SEND_LIMIT) { row(4, "warn", size(file.size) + " · over 25 MB"); issues.push("it is too big for most email"); level = Math.max(level, 1); }
+    else row(4, "ok", size(file.size) + " · fine to send");
+    // wait for the picture to finish, then roll the bag out and stamp it
+    while (shown < 1) { await wait(40); if (id !== scanId) return clearInterval(revealTimer); }
+    var kindName = ["ok", "warn", "bad"][level], word = ["CLEARED", "CHECK", "STOP"][level];
+    phase = kindName; label = word;
+    bag.classList.add("out"); tunnel.classList.add("flap");
+    await wait(reduce.matches ? 60 : 900);
+    if (id !== scanId) return;
+    bag.classList.remove("roll"); belt.classList.remove("run"); tunnel.classList.remove("flap");
+    stamp.textContent = word; stamp.className = "stamp " + kindName + " on";
+    monitor.className = "monitor flash-" + kindName;
+    led.classList.remove("busy"); $("#ledText").textContent = word; tunnel.parentNode.classList.remove("busy");
+    setVerdict(kindName, word, level === 0 ? name + " looks safe to send." : "Careful: " + name + " " + issues.join(", and ") + ".");
+    if (level === 0) sparks();
+  }
+  function sparks() {
+    if (reduce.matches) return;
+    var m = $("#machine"), cols = ["#34d58a", "#ffbf3a", "#9fe3ff", "#ff8a1f"];
+    for (var i = 0; i < 16; i++) {
+      var s = document.createElement("i"), a = -Math.PI * Math.random(), r = 30 + Math.random() * 40;
+      s.className = "spark";
+      s.style.cssText = "left:80%;bottom:44px;--c:" + cols[i % 4] + ";--x:" + (Math.cos(a) * r).toFixed(0) + "px;--y:" + (Math.sin(a) * r).toFixed(0) + "px";
+      m.appendChild(s); setTimeout(s.remove.bind(s), 1100);
+    }
+  }
+
+  // ---------- Samples: real files built right here, so the same code path runs ----------
+  var SAMPLES = [
+    function () {
+      var body = "%PDF-1.4\n%âãÏÓ\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Count 1 /Kids [3 0 R] >> endobj\n";
+      var menu = ["Chicken curry 1,850", "Lentil soup 950", "Grilled kebabs (4) 1,200", "Garlic bread 120", "Vermicelli pudding 450", "Mint lemonade 300"];
+      for (var i = 0; i < 60; i++) body += "BT /F1 12 Tf 72 " + (720 - i * 11) + " Td (" + menu[i % menu.length] + ") Tj ET\n";
+      body += "xref\n0 4\ntrailer << /Root 1 0 R >>\n%%EOF\n";
+      return new File([body], "eid-menu.pdf", { type: "application/pdf" });
+    },
+    function () {
+      var page = "<!doctype html><html><head><title>Receipt</title></head><body><h1>Your receipt</h1><p>Order 5521 paid PKR 4,300</p>" +
+        "<scr" + "ipt>document.title = 'Pay again now';</scr" + "ipt>" + new Array(40).join("<p>Thank you for shopping with us.</p>") + "</body></html>";
+      return new File([page], "receipt.png", { type: "image/png" });
+    },
+    function () {
+      var n = 48 * 1024, b = new Uint8Array(n);
+      for (var o = 0; o < n; o += 65536) crypto.getRandomValues(b.subarray(o, Math.min(n, o + 65536)));
+      b.set([0x50, 0x4B, 0x03, 0x04, 0x14, 0, 0, 0, 8, 0], 0);
+      var names = "PK\u0003\u0004 hunza-01.jpg hunza-02.jpg skardu-lake.jpg";
+      for (var k = 0; k < names.length; k++) b[30 + k] = names.charCodeAt(k) & 255;
+      return new File([b], "holiday-photos.zip", { type: "application/zip" });
+    }
+  ];
+  var sampleN = 0;
+  // every scan goes through here so a file that cannot be read (a folder, a vanished file) ends cleanly
+  function run(file) {
+    return scan(file).catch(function () {
+      scanId++; phase = "bad"; label = "READ ERROR"; led.classList.remove("busy"); $("#ledText").textContent = "ERROR";
+      bag.classList.remove("roll"); belt.classList.remove("run"); tunnel.classList.remove("flap"); tunnel.parentNode.classList.remove("busy");
+      rows.forEach(function (li, i) { if (li.dataset.s === "run") row(i, "bad", "could not read"); });
+      setVerdict("bad", "ERROR", "That file could not be read. Try another one.");
+    });
+  }
+  $("#sample").addEventListener("click", function () { run(SAMPLES[sampleN++ % SAMPLES.length]()); });
+  $("#file").addEventListener("change", function (e) { var f = e.target.files && e.target.files[0]; if (f) run(f); e.target.value = ""; });
+  // drag and drop anywhere on the card, or paste a copied file
+  var card = $("#card"), depth = 0;
+  card.addEventListener("dragenter", function (e) { e.preventDefault(); depth++; card.classList.add("drop"); });
+  card.addEventListener("dragover", function (e) { e.preventDefault(); });
+  card.addEventListener("dragleave", function () { if (--depth <= 0) { depth = 0; card.classList.remove("drop"); } });
+  card.addEventListener("drop", function (e) { e.preventDefault(); depth = 0; card.classList.remove("drop"); var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) run(f); });
+  document.addEventListener("paste", function (e) { var f = e.clipboardData && e.clipboardData.files && e.clipboardData.files[0]; if (f) { e.preventDefault(); run(f); } });
+
+  // ---------- Start ----------
+  fit();
+  window.addEventListener("resize", fit);
+  requestAnimationFrame(draw);
+
+  // ---------- Auto demo: runs the three samples in turn; stops at the first real touch ----------
+  var demoOn = true;
+  function stopDemo(e) { if (e.isTrusted && demoOn) demoOn = false; }
+  ["pointerdown", "keydown", "wheel", "touchstart", "dragenter"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  async function demo() {
+    try {
+      await pause(500);
+      while (demoOn) {
+        await run(SAMPLES[sampleN++ % SAMPLES.length]());
+        if (!demoOn) break;
+        await pause(2600);
+        bag.classList.add("gone"); stamp.className = "stamp";
+        await pause(800);
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>

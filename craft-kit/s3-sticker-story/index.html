@@ -1,0 +1,548 @@
+<!doctype html>
+<!-- Chill & Craft · Sticker Story · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sticker Story · Make a story card and share it</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: lilac studio, hot pink to orange actions ---------- */
+  :root {
+    --bg: #f0eafb;
+    --blob1: #ffd3e6;
+    --blob2: #d9d0ff;
+    --card: #ffffff;
+    --field: #f6f3fc;
+    --ink: #1f1633;
+    --muted: #7a7091;
+    --line: rgba(31, 22, 51, 0.12);
+    --hot1: #ff3d7f;
+    --hot2: #ff8a3d;
+    --ok: #18a66b;
+    --shadow: rgba(70, 40, 120, 0.35);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #120e1f;
+    --blob1: #3d1430;
+    --blob2: #211a4d;
+    --card: #1b1630;
+    --field: #241e3d;
+    --ink: #f3eefc;
+    --muted: #a99fc2;
+    --line: rgba(243, 238, 252, 0.11);
+    --hot1: #ff4f8b;
+    --hot2: #ff9a52;
+    --ok: #3fd193;
+    --shadow: rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, input { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 3px solid var(--hot1); outline-offset: 2px; }
+
+  /* ---------- Stage ---------- */
+  /* one column as wide as the screen, so the long stories row can never stretch the card */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 18px 16px; overflow: hidden; isolation: isolate; }
+  .stage::before, .stage::after { content: ""; position: absolute; z-index: -1; width: 60vmax; height: 60vmax; border-radius: 50%; filter: blur(60px); opacity: 0.8; animation: float 14s ease-in-out infinite; }
+  .stage::before { left: -20vmax; top: -24vmax; background: var(--blob1); }
+  .stage::after { right: -22vmax; bottom: -26vmax; background: var(--blob2); animation-delay: -7s; }
+  @keyframes float { 50% { transform: translate(5vmax, 4vmax) scale(1.08); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(0.98); } }
+
+  .card { width: min(720px, 100%); padding: 16px; border-radius: 30px; background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(10px); box-shadow: 0 0 0 1px var(--line), 0 50px 90px -50px var(--shadow); animation: rise 0.85s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+
+  /* stories row along the top */
+  .stories { display: flex; gap: 14px; padding: 2px 4px 12px; overflow-x: clip; }
+  .st { display: grid; justify-items: center; gap: 4px; flex: none; width: 60px; font-size: 0.68rem; font-weight: 700; color: var(--muted); }
+  .st .ring { position: relative; width: 58px; height: 58px; }
+  .st .ring svg.r { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+  .st .face { position: absolute; inset: 5px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; color: #fff; font-size: 0.86rem; font-weight: 900; }
+  .st .face svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .st .plus { position: absolute; right: -1px; bottom: -1px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--hot1); color: #fff; font-size: 0.9rem; font-weight: 900; line-height: 1; box-shadow: 0 0 0 2.5px var(--card); transition: transform 0.4s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .st.me.posted .plus { transform: scale(0); }
+  .st.me b { color: var(--ink); }
+
+  .work { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: start; }
+
+  /* ---------- The 9:16 story card ---------- */
+  .storywrap { position: relative; height: min(440px, 72vh); aspect-ratio: 9 / 16; border-radius: 22px; overflow: hidden; box-shadow: 0 30px 50px -28px var(--shadow), 0 0 0 1px var(--line); touch-action: none; }
+  .storywrap > svg { display: block; width: 100%; height: 100%; }
+  .storywrap svg * { transform-box: view-box; }
+  .stk { cursor: grab; outline: none; }
+  .stk:active { cursor: grabbing; }
+  .stk .sel { opacity: 0; transition: opacity 0.2s; }
+  .stk:focus-visible .sel, .stk.drag .sel { opacity: 1; }
+  .stk .in { transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); transform-origin: 0 0; }
+  .stk.drag .in { transform: scale(1.1); }
+  .bin { position: absolute; left: 50%; bottom: 14px; display: grid; place-items: center; width: 50px; height: 50px; margin-left: -25px; border-radius: 50%; background: rgba(0, 0, 0, 0.45); color: #fff; opacity: 0; transform: translateY(20px) scale(0.7); transition: opacity 0.25s, transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1), background 0.2s; pointer-events: none; }
+  .bin svg { width: 22px; height: 22px; }
+  .bin.show { opacity: 1; transform: none; }
+  .bin.hot { background: #ff3d5a; transform: scale(1.2); }
+  .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  .badge { position: absolute; left: 50%; top: 12px; padding: 6px 12px; border-radius: 999px; background: rgba(0, 0, 0, 0.5); color: #fff; font-size: 0.72rem; font-weight: 800; white-space: nowrap; transform: translate(-50%, -150%); transition: transform 0.5s cubic-bezier(0.3, 1.5, 0.5, 1); pointer-events: none; }
+  .badge.show { transform: translate(-50%, 0); }
+
+  /* ---------- Controls ---------- */
+  .tools { display: grid; gap: 14px; min-width: 0; }
+  .lbl { display: block; margin-bottom: 7px; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .cap { width: 100%; height: 44px; padding: 0 14px; border: 1.5px solid var(--line); border-radius: 14px; background: var(--field); font-size: 0.9rem; font-weight: 650; }
+  .cap:focus { outline: none; border-color: var(--hot1); box-shadow: 0 0 0 4px color-mix(in srgb, var(--hot1) 18%, transparent); }
+  .swatches { display: flex; gap: 8px; }
+  .sw { width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px transparent; transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1), box-shadow 0.2s; }
+  .sw:hover { transform: scale(1.08); }
+  .sw[aria-pressed="true"] { box-shadow: 0 0 0 2.5px var(--card), 0 0 0 5px var(--ink); }
+  .tray { display: grid; grid-template-columns: repeat(4, minmax(0, 72px)); gap: 8px; }
+  .tk { display: grid; place-items: center; aspect-ratio: 1; padding: 4px; border: 1.5px solid var(--line); border-radius: 16px; background: var(--field); cursor: pointer; transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1), border-color 0.2s; }
+  .tk svg { width: 100%; height: 100%; max-width: 66px; overflow: visible; transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .tk:hover { border-color: var(--hot1); }
+  .tk:hover svg { transform: rotate(-6deg) scale(1.08); }
+  .tk:active { transform: scale(0.92); }
+  .acts { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; padding: 0 16px; border: 1.5px solid var(--line); border-radius: 15px; background: transparent; font-weight: 850; font-size: 0.9rem; cursor: pointer; transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.2s; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: scale(0.95); }
+  .btn svg { width: 19px; height: 19px; }
+  .btn.share { border: 0; background: linear-gradient(100deg, var(--hot1), var(--hot2)); color: #fff; box-shadow: 0 14px 24px -14px var(--hot1), inset 0 -3px 0 rgba(0, 0, 0, 0.14); }
+  .btn.done { background: var(--ok); }
+  .hint { margin: -4px 0 0; font-size: 0.74rem; color: var(--muted); line-height: 1.4; }
+
+  .fx { position: fixed; inset: 0; z-index: 30; overflow: hidden; pointer-events: none; }
+  .flyer { position: absolute; left: 0; top: 0; overflow: hidden; border-radius: 22px; }
+  .flyer svg { display: block; width: 100%; height: 100%; }
+  .peel { position: absolute; left: 0; top: 0; overflow: visible; filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.3)); }
+  .bit { position: absolute; left: 0; top: 0; width: 9px; height: 9px; }
+  .toast { position: fixed; left: 50%; bottom: 18px; z-index: 40; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 999px; background: var(--ink); color: var(--card); font-size: 0.84rem; font-weight: 700; transform: translate(-50%, 200%); transition: transform 0.6s cubic-bezier(0.3, 1.5, 0.4, 1); }
+  .toast.show { transform: translate(-50%, 0); }
+
+  @media (max-width: 640px) {
+    .card { padding: 12px; }
+    .work { grid-template-columns: 1fr; justify-items: center; }
+    .storywrap { height: min(380px, 62vh); }
+    .tools { width: 100%; }
+    .tray { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .tk { aspect-ratio: auto; height: 58px; border-radius: 13px; padding: 4px; }
+    .stories { gap: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stage::before, .stage::after, .card { animation: none !important; }
+    .stk .in, .bin, .sw, .tk, .tk svg, .btn, .toast, .badge, .st .plus { transition-duration: 0.01s; }
+    .fx { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <section class="card" aria-labelledby="title">
+      <h1 class="sr-only" id="title">Sticker Story: design a story card, then share it</h1>
+      <div class="stories" aria-label="Stories">
+        <div class="st me" id="me"><div class="ring"><svg class="r" viewBox="0 0 58 58" aria-hidden="true"><defs><linearGradient id="ringG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb02e" /><stop offset=".5" stop-color="#ff3d7f" /><stop offset="1" stop-color="#8a4dff" /></linearGradient></defs><circle cx="29" cy="29" r="27" fill="none" stroke="var(--line)" stroke-width="2.5" stroke-dasharray="4 4" id="meDash" /><circle cx="29" cy="29" r="27" fill="none" stroke="url(#ringG)" stroke-width="3" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" id="meProg" /></svg><span class="face" id="meFace" style="background:linear-gradient(135deg,#6f5af2,#c64fd6)">HA</span><span class="plus" aria-hidden="true">+</span></div><b>Your story</b></div>
+        <div class="st"><div class="ring"><svg class="r" viewBox="0 0 58 58" aria-hidden="true"><circle cx="29" cy="29" r="27" fill="none" stroke="url(#ringG)" stroke-width="3" /></svg><span class="face" style="background:#e0703a">ZA</span></div>Zara</div>
+        <div class="st"><div class="ring"><svg class="r" viewBox="0 0 58 58" aria-hidden="true"><circle cx="29" cy="29" r="27" fill="none" stroke="url(#ringG)" stroke-width="3" /></svg><span class="face" style="background:#2c8fd8">OM</span></div>Omar</div>
+        <div class="st"><div class="ring"><svg class="r" viewBox="0 0 58 58" aria-hidden="true"><circle cx="29" cy="29" r="27" fill="none" stroke="var(--line)" stroke-width="2.5" /></svg><span class="face" style="background:#1f9a73">SN</span></div>Sana</div>
+        <div class="st"><div class="ring"><svg class="r" viewBox="0 0 58 58" aria-hidden="true"><circle cx="29" cy="29" r="27" fill="none" stroke="url(#ringG)" stroke-width="3" /></svg><span class="face" style="background:#c4447a">MR</span></div>Mariam</div>
+        <div class="st"><div class="ring"><svg class="r" viewBox="0 0 58 58" aria-hidden="true"><circle cx="29" cy="29" r="27" fill="none" stroke="var(--line)" stroke-width="2.5" /></svg><span class="face" style="background:#8a63d2">BL</span></div>Bilal</div>
+      </div>
+
+      <div class="work">
+        <div class="storywrap" id="wrap">
+          <!-- the story card: plain colours only, so it can be saved as a picture -->
+          <svg id="story" viewBox="0 0 270 480" role="img" aria-label="Story card preview">
+            <defs>
+              <linearGradient id="bgA" x1="0" y1="0" x2=".4" y2="1"><stop offset="0" stop-color="#ff5f8f" /><stop offset="1" stop-color="#ffa53d" /></linearGradient>
+              <linearGradient id="bgB" x1="0" y1="0" x2=".4" y2="1"><stop offset="0" stop-color="#ff5f8f" /><stop offset="1" stop-color="#ffa53d" /></linearGradient>
+              <clipPath id="wipe"><circle id="wipeC" cx="135" cy="240" r="0" /></clipPath>
+              <linearGradient id="skyP" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd3ff" /><stop offset="1" stop-color="#d8f1ff" /></linearGradient>
+              <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#29b6c8" /><stop offset="1" stop-color="#127d9e" /></linearGradient>
+              <filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity=".28" /></filter>
+              <clipPath id="photoClip"><rect x="45" y="138" width="180" height="168" rx="3" /></clipPath>
+            </defs>
+            <g id="cardArt">
+              <rect width="270" height="480" fill="url(#bgA)" />
+              <rect width="270" height="480" fill="url(#bgB)" clip-path="url(#wipe)" />
+              <circle cx="230" cy="60" r="70" fill="#fff" opacity=".12" />
+              <circle cx="30" cy="420" r="90" fill="#fff" opacity=".1" />
+              <text id="capText" x="135" y="78" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="26" font-weight="900" fill="#fff" filter="url(#sh)">Weekend in Hunza</text>
+              <text x="135" y="100" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="11" font-weight="700" fill="#fff" opacity=".85" letter-spacing="1.5">3 DAYS · 21 NOV</text>
+              <!-- the polaroid photo -->
+              <g transform="rotate(-4 135 230)" filter="url(#sh)">
+                <rect x="35" y="128" width="200" height="222" rx="6" fill="#fff" />
+                <g clip-path="url(#photoClip)">
+                  <rect x="45" y="138" width="180" height="168" fill="url(#skyP)" />
+                  <circle cx="190" cy="170" r="14" fill="#fff6c9" />
+                  <path d="M45 250 85 186 108 214 140 168 176 222 196 200 225 238V306H45Z" fill="#6f7fa3" />
+                  <path d="M85 186 95 202 102 196 108 214 98 206 90 212ZM140 168 152 188 160 182 168 200 154 192 146 198Z" fill="#fff" />
+                  <path d="M45 262 90 236 130 252 176 234 225 256V306H45Z" fill="#3f7d5b" />
+                  <rect x="45" y="268" width="180" height="38" fill="url(#lake)" />
+                  <path d="M60 280h30M120 288h40M170 278h34" stroke="#fff" stroke-width="2" opacity=".45" stroke-linecap="round" />
+                </g>
+                <text x="135" y="334" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-style="italic" font-weight="700" fill="#4a3d5c">so blue it looks fake</text>
+              </g>
+              <g id="stk"></g>
+            </g>
+          </svg>
+          <div class="flash" id="flash"></div>
+          <div class="badge" id="badge">On your story · 24 h</div>
+          <div class="bin" id="bin" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg></div>
+        </div>
+
+        <div class="tools">
+          <div><label class="lbl" for="cap">Caption</label><input class="cap" id="cap" maxlength="22" value="Weekend in Hunza" autocomplete="off" /></div>
+          <div><span class="lbl" id="bgLbl">Background</span><div class="swatches" id="swatches" role="group" aria-labelledby="bgLbl"></div></div>
+          <div><span class="lbl" id="tkLbl">Stickers · tap to add</span><div class="tray" id="tray" role="group" aria-labelledby="tkLbl"></div></div>
+          <p class="hint">Drag stickers on the card, or focus one and use the arrow keys. R turns it, Delete removes it, or drag it onto the bin.</p>
+          <div class="acts">
+            <button class="btn share" id="share" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-dasharray="3 2.4" /><path d="M12 8v8M8 12h8" /></svg><span id="shareText">Share to story</span></button>
+            <button class="btn" id="save" type="button" aria-label="Save as picture"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>Save</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <p class="sr-only" id="status" aria-live="polite"></p>
+    <div class="toast" id="toast" role="status"></div>
+    <div class="fx" id="fx" aria-hidden="true"></div>
+  </main>
+
+<script>
+  // ---------- Sticker Story: dress up a story card with stickers, then share or save it ----------
+  const $ = (s) => document.querySelector(s);
+  const NS = "http://www.w3.org/2000/svg";
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  function play(el, frames, opts) {
+    if (calm() || !el || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  const say = (t) => { $("#status").textContent = t; };
+  let toastT = 0;
+  function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("show"), 2600); }
+  const story = $("#story"), wrap = $("#wrap"), layer = $("#stk"), fx = $("#fx");
+  const FONT = 'font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"';
+
+  // ---------- Sticker artwork (each drawn around 0,0, with a white die-cut edge) ----------
+  const STICKERS = [
+    { id: "wow", name: "WOW burst", r: 36, art: () => { let p = ""; for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2, rr = i % 2 ? 25 : 35; p += (i ? "L" : "M") + (Math.cos(a) * rr).toFixed(1) + " " + (Math.sin(a) * rr).toFixed(1); } return '<path d="' + p + 'Z" fill="#ffd23f" stroke="#fff" stroke-width="5" stroke-linejoin="round" paint-order="stroke" /><text y="6" text-anchor="middle" ' + FONT + ' font-size="17" font-weight="900" fill="#1b1430" transform="rotate(-8)">WOW</text>'; } },
+    { id: "pin", name: "Hunza location", r: 48, art: () => '<rect x="-50" y="-16" width="100" height="32" rx="16" fill="#fff" /><path d="M-34-8a7 7 0 0 1 14 0c0 6-7 13-7 13s-7-7-7-13Z" fill="#ff3d7f" /><circle cx="-27" cy="-8" r="2.6" fill="#fff" /><text x="7" y="5" text-anchor="middle" ' + FONT + ' font-size="14" font-weight="850" fill="#1b1430">Hunza</text>' },
+    { id: "heart", name: "Heart", r: 30, art: () => '<path d="M0 22C-30 2-30-20-15-24-7-26-2-20 0-15 2-20 7-26 15-24 30-20 30 2 0 22Z" fill="#ff3d5a" stroke="#fff" stroke-width="5" stroke-linejoin="round" paint-order="stroke" /><ellipse cx="-11" cy="-12" rx="5" ry="3.4" fill="#fff" opacity=".55" transform="rotate(-30 -11 -12)" />' },
+    { id: "sun", name: "Sun in shades", r: 34, art: () => { let rays = ""; for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; rays += '<path d="M' + (Math.cos(a) * 26).toFixed(1) + " " + (Math.sin(a) * 26).toFixed(1) + "L" + (Math.cos(a) * 34).toFixed(1) + " " + (Math.sin(a) * 34).toFixed(1) + '" />'; } return '<g stroke="#ffb703" stroke-width="5" stroke-linecap="round">' + rays + '</g><circle r="22" fill="#ffc93c" stroke="#fff" stroke-width="4" paint-order="stroke" /><path d="M-17-5h34v3c0 6-4 9-8 9s-7-3-8-7h-2c-1 4-4 7-8 7s-8-3-8-9Z" fill="#1b1430" /><path d="M-8 10q8 6 16 0" fill="none" stroke="#1b1430" stroke-width="2.4" stroke-linecap="round" />'; } },
+    { id: "poll", name: "Poll", r: 56, art: () => '<rect x="-58" y="-32" width="116" height="64" rx="14" fill="#fff" /><text y="-14" text-anchor="middle" ' + FONT + ' font-size="11" font-weight="850" fill="#1b1430">Go again next year?</text><rect x="-48" y="-5" width="96" height="14" rx="7" fill="#f1ecfa" /><rect x="-48" y="-5" width="71" height="14" rx="7" fill="#ff8ab0" /><text x="-42" y="5.5" ' + FONT + ' font-size="9" font-weight="800" fill="#1b1430">Yes! 74%</text><rect x="-48" y="13" width="96" height="14" rx="7" fill="#f1ecfa" /><rect x="-48" y="13" width="25" height="14" rx="7" fill="#c9bdf5" /><text x="-42" y="23.5" ' + FONT + ' font-size="9" font-weight="800" fill="#1b1430">Maybe 26%</text>' },
+    { id: "link", name: "Link", r: 52, art: () => '<rect x="-54" y="-16" width="108" height="32" rx="16" fill="#fff" /><g fill="none" stroke="#3a6bff" stroke-width="3" stroke-linecap="round"><path d="M-38-1a5 5 0 0 1 0-7l3-3a5 5 0 0 1 7 7" /><path d="M-31 1a5 5 0 0 1 0 7l-3 3a5 5 0 0 1-7-7" /></g><text x="8" y="5" text-anchor="middle" ' + FONT + ' font-size="12.5" font-weight="850" fill="#3a6bff">See the trip</text>' },
+    { id: "spark", name: "Sparkles", r: 30, art: () => { const star = (x, y, s, c) => '<path transform="translate(' + x + " " + y + ") scale(" + s + ')" d="M0-14C2-4 4-2 14 0 4 2 2 4 0 14-2 4-4 2-14 0-4-2-2-4 0-14Z" fill="' + c + '" stroke="#fff" stroke-width="3" paint-order="stroke" />'; return star(-8, 4, 1.25, "#ffe066") + star(14, -12, 0.75, "#fff") + star(16, 16, 0.55, "#ffd23f"); } },
+    { id: "tag", name: "Mention Zara", r: 40, art: () => '<rect x="-40" y="-15" width="80" height="30" rx="9" fill="#7b4dff" stroke="#fff" stroke-width="4" paint-order="stroke" /><text y="5" text-anchor="middle" ' + FONT + ' font-size="14" font-weight="850" fill="#fff">@zara</text>' }
+  ];
+  // each sticker has a home spot on the card that keeps it clear of the caption; repeats step a little further each time
+  const SPOTS = { wow: [72, 146], pin: [196, 134], heart: [214, 304], sun: [208, 404], poll: [122, 414], link: [104, 432], spark: [46, 244], tag: [64, 322] };
+  const used = {};
+
+  // tray buttons
+  STICKERS.forEach((s) => {
+    $("#tray").insertAdjacentHTML("beforeend", '<button class="tk" type="button" data-id="' + s.id + '" aria-label="Add ' + s.name + ' sticker"><svg viewBox="' + (-s.r - 8) + " " + (-s.r - 8) + " " + (s.r * 2 + 16) + " " + (s.r * 2 + 16) + '" aria-hidden="true">' + s.art() + "</svg></button>");
+  });
+
+  // ---------- Placed stickers: drag, keys, bin ----------
+  let placed = [], busy = false;
+  const MAX = 8;
+  function setT(p) { p.g.setAttribute("transform", "translate(" + p.x.toFixed(1) + " " + p.y.toFixed(1) + ") rotate(" + p.rot + ")"); }
+  function addSticker(id, fromBtn) {
+    const def = STICKERS.find((s) => s.id === id);
+    if (!def) return;
+    if (placed.length >= MAX) { toast("That is plenty of stickers"); play(wrap, [{ transform: "rotate(0)" }, { transform: "rotate(-1.5deg)" }, { transform: "rotate(1.5deg)" }, { transform: "rotate(0)" }], { duration: 360 }); return; }
+    const [x0, y0] = SPOTS[id], n = (used[id] = (used[id] || 0) + 1) - 1;
+    const x = Math.max(30, Math.min(240, x0 + ((n % 3) - (n ? 1 : 0)) * 26)), y = Math.max(40, Math.min(450, y0 - Math.floor((n + 1) / 2) * 30));
+    const p = { def, x: x + (Math.random() - 0.5) * 16, y: y + (Math.random() - 0.5) * 16, rot: Math.round((Math.random() - 0.5) * 22) };
+    p.g = document.createElementNS(NS, "g");
+    p.g.setAttribute("class", "stk");
+    p.g.setAttribute("tabindex", "0");
+    p.g.setAttribute("aria-label", def.name + " sticker. Arrow keys move it, R turns it, Delete removes it.");
+    p.g.innerHTML = '<g class="in"><g filter="url(#sh)">' + def.art() + '</g><circle class="sel" r="' + (def.r + 6) + '" fill="none" stroke="#fff" stroke-width="1.6" stroke-dasharray="5 4" /></g>';
+    setT(p);
+    layer.appendChild(p.g);
+    placed.push(p);
+    bindSticker(p);
+    // peel off the tray, fly to the card, slap down with a squash
+    const inner = p.g.firstChild;
+    if (fromBtn && !calm()) {
+      inner.style.opacity = "0";
+      flyPeel(fromBtn, def, p).then(() => { inner.style.opacity = ""; slap(inner); });
+    } else slap(inner);
+    say(def.name + " sticker added");
+    return p;
+  }
+  function slap(inner) {
+    play(inner, [
+      { transform: "scale(1.7) rotate(-14deg)", opacity: 0.3 },
+      { transform: "scale(.86) rotate(4deg)", opacity: 1, offset: 0.45 },
+      { transform: "scale(1.07) rotate(-2deg)", offset: 0.72 },
+      { transform: "scale(1) rotate(0)" }
+    ], { duration: 620, easing: "ease-out" });
+  }
+  function toScreen(x, y) { const pt = story.createSVGPoint(); pt.x = x; pt.y = y; const p = pt.matrixTransform(story.getScreenCTM()); return [p.x, p.y]; }
+  function flyPeel(btn, def, p) {
+    const r = btn.getBoundingClientRect();
+    const k = story.getBoundingClientRect().width / 270;
+    const size = def.r * 2 + 16;
+    const node = document.createElementNS(NS, "svg");
+    node.setAttribute("viewBox", (-def.r - 8) + " " + (-def.r - 8) + " " + size + " " + size);
+    node.setAttribute("class", "peel");
+    node.setAttribute("width", size * k); node.setAttribute("height", size * k);
+    node.innerHTML = def.art();
+    fx.appendChild(node);
+    const [tx, ty] = toScreen(p.x, p.y);
+    const half = (size * k) / 2;
+    const sx = r.left + r.width / 2 - half, sy = r.top + r.height / 2 - half, ex = tx - half, ey = ty - half;
+    const s0 = Math.min(r.width, r.height) / (size * k);
+    return node.animate([
+      { transform: "translate(" + sx + "px," + sy + "px) scale(" + s0 + ") rotate(0)" },
+      { transform: "translate(" + sx + "px," + (sy - 18) + "px) scale(" + s0 * 1.15 + ") rotate(-12deg)", offset: 0.2 },
+      { transform: "translate(" + ((sx + ex) / 2) + "px," + (Math.min(sy, ey) - 60) + "px) scale(1.25) rotate(" + (p.rot - 20) + "deg)", offset: 0.62 },
+      { transform: "translate(" + ex + "px," + ey + "px) scale(1.1) rotate(" + p.rot + "deg)" }
+    ], { duration: 640, easing: "cubic-bezier(.45,0,.3,1)" }).finished.catch(() => {}).then(() => node.remove());
+  }
+  function removeSticker(p) {
+    placed = placed.filter((q) => q !== p);
+    used[p.def.id] = Math.max(0, (used[p.def.id] || 1) - 1);
+    const g = p.g;
+    play(g.firstChild, [{ transform: "scale(1)", opacity: 1 }, { transform: "scale(1.25)", opacity: 1, offset: 0.3 }, { transform: "scale(0) rotate(40deg)", opacity: 0 }], { duration: 380, easing: "ease-in" }).then(() => g.remove());
+    say(p.def.name + " sticker removed");
+  }
+  function bindSticker(p) {
+    const g = p.g, bin = $("#bin");
+    let start = null;
+    g.addEventListener("pointerdown", (e) => {
+      if (busy) return;
+      e.preventDefault();
+      g.setPointerCapture(e.pointerId);
+      const k = 270 / story.getBoundingClientRect().width;
+      start = { cx: e.clientX, cy: e.clientY, x: p.x, y: p.y, k };
+      g.classList.add("drag");
+      layer.appendChild(g); // bring to front
+      bin.classList.add("show");
+    });
+    g.addEventListener("pointermove", (e) => {
+      if (!start) return;
+      p.x = Math.max(10, Math.min(260, start.x + (e.clientX - start.cx) * start.k));
+      p.y = Math.max(10, Math.min(470, start.y + (e.clientY - start.cy) * start.k));
+      setT(p);
+      const b = bin.getBoundingClientRect();
+      bin.classList.toggle("hot", e.clientX > b.left - 10 && e.clientX < b.right + 10 && e.clientY > b.top - 10 && e.clientY < b.bottom + 10);
+    });
+    const end = () => {
+      if (!start) return;
+      start = null;
+      g.classList.remove("drag");
+      if (bin.classList.contains("hot")) removeSticker(p);
+      bin.classList.remove("show", "hot");
+    };
+    g.addEventListener("pointerup", end);
+    g.addEventListener("pointercancel", end);
+    g.addEventListener("keydown", (e) => {
+      const step = e.shiftKey ? 18 : 6;
+      const mv = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+      if (mv) { e.preventDefault(); p.x = Math.max(10, Math.min(260, p.x + mv[0])); p.y = Math.max(10, Math.min(470, p.y + mv[1])); setT(p); }
+      else if (e.key === "r" || e.key === "R") { e.preventDefault(); p.rot = (p.rot + 15) % 360; setT(p); say(p.def.name + " turned"); }
+      else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeSticker(p); const next = placed[placed.length - 1]; if (next) next.g.focus(); else $("#tray").firstElementChild.focus(); }
+    });
+  }
+  $("#tray").addEventListener("click", (e) => { const b = e.target.closest(".tk"); if (b && !busy) addSticker(b.dataset.id, b); });
+
+  // ---------- Caption ----------
+  const cap = $("#cap"), capText = $("#capText");
+  function setCaption() {
+    const t = cap.value.trim();
+    capText.textContent = t;
+    capText.setAttribute("font-size", String(t.length > 17 ? 21 : t.length > 13 ? 24 : 27));
+  }
+  cap.addEventListener("input", setCaption);
+
+  // ---------- Backgrounds: the new gradient wipes in as a growing circle ----------
+  const BGS = [["Sunset", "#ff5f8f", "#ffa53d"], ["Grape", "#7b4dff", "#3fa9ff"], ["Mint", "#18b89a", "#b5e655"], ["Night", "#1d1b4f", "#d0449a"]];
+  let bgIx = 0;
+  BGS.forEach((b, i) => $("#swatches").insertAdjacentHTML("beforeend", '<button class="sw" type="button" data-i="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="' + b[0] + ' background" style="background:linear-gradient(135deg,' + b[1] + "," + b[2] + ')"></button>'));
+  $("#swatches").addEventListener("click", (e) => { const b = e.target.closest(".sw"); if (b) setBg(+b.dataset.i); });
+  function stops(id, b) { const s = document.querySelectorAll("#" + id + " stop"); s[0].setAttribute("stop-color", b[1]); s[1].setAttribute("stop-color", b[2]); }
+  let wipeRaf = 0;
+  function setBg(i) {
+    if (i === bgIx) return;
+    bgIx = i;
+    document.querySelectorAll(".sw").forEach((s) => s.setAttribute("aria-pressed", String(+s.dataset.i === i)));
+    const b = BGS[i], c = $("#wipeC");
+    stops("bgB", b);
+    say(b[0] + " background");
+    cancelAnimationFrame(wipeRaf);
+    if (calm()) { stops("bgA", b); c.setAttribute("r", "0"); return; }
+    const t0 = performance.now();
+    const f = (now) => {
+      const p = Math.min(1, Math.max(0, now - t0) / 650), e = 1 - Math.pow(1 - p, 3);
+      c.setAttribute("r", (e * 560).toFixed(1));
+      if (p < 1) wipeRaf = requestAnimationFrame(f); else { stops("bgA", b); c.setAttribute("r", "0"); }
+    };
+    wipeRaf = requestAnimationFrame(f);
+  }
+
+  // ---------- Share: lift, morph into a circle, fly into your story ring, post ----------
+  $("#share").addEventListener("click", () => share());
+  async function share() {
+    if (busy) return;
+    busy = true;
+    const shareText = $("#shareText"), btn = $("#share");
+    const me = $("#me"), prog = $("#meProg");
+    shareText.textContent = "Sharing…";
+    $("#badge").classList.remove("show");
+    // 1. anticipation: the card lifts and the stickers jiggle
+    await play(wrap, [{ transform: "none" }, { transform: "translateY(-8px) scale(1.025) rotate(-1deg)" }], { duration: 300, easing: "cubic-bezier(.3,0,.3,1)", fill: "forwards" });
+    placed.forEach((p, k) => play(p.g.firstChild, [{ transform: "rotate(0)" }, { transform: "rotate(-8deg)" }, { transform: "rotate(6deg)" }, { transform: "rotate(0)" }], { duration: 360, delay: k * 30 }));
+    // 2. main: a copy of the card turns into a circle and flies to your story
+    const ring = me.querySelector(".ring").getBoundingClientRect();
+    wrap.getAnimations().forEach((a) => a.cancel()); // measure the card at rest; the copy starts in the lifted pose
+    if (!calm()) {
+      const r = wrap.getBoundingClientRect();
+      const fly = document.createElement("div");
+      fly.className = "flyer";
+      fly.style.width = r.width + "px"; fly.style.height = r.height + "px";
+      fly.appendChild(story.cloneNode(true));
+      fly.querySelectorAll("[id]").forEach((n) => { if (n.tagName !== "linearGradient" && n.tagName !== "clipPath" && n.tagName !== "filter" && n.tagName !== "circle") n.removeAttribute("id"); });
+      fx.appendChild(fly);
+      wrap.style.opacity = "0";
+      const ins = (r.height - r.width) / 2, s = (ring.width - 10) / r.width;
+      const dx = ring.left + ring.width / 2 - (r.left + r.width / 2), dy = ring.top + ring.height / 2 - (r.top + r.height / 2);
+      await fly.animate([
+        { transform: "translate(" + r.left + "px," + (r.top - 8) + "px) scale(1.025)", clipPath: "inset(0px 0px 0px 0px round 22px)" },
+        { transform: "translate(" + r.left + "px," + (r.top - 14) + "px) scale(.9)", clipPath: "inset(" + ins + "px 0px " + ins + "px 0px round " + r.width / 2 + "px)", offset: 0.38 },
+        { transform: "translate(" + (r.left + dx) + "px," + (r.top + dy) + "px) scale(" + s + ")", clipPath: "inset(" + ins + "px 0px " + ins + "px 0px round " + r.width / 2 + "px)" }
+      ], { duration: 900, easing: "cubic-bezier(.55,0,.2,1)" }).finished.catch(() => {});
+      fly.remove();
+    }
+    // 3. progress: a mini copy sits in your avatar while the ring fills
+    const face = $("#meFace");
+    face.innerHTML = '<svg viewBox="0 0 270 480" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#cardArt" /></svg>';
+    face.style.background = "#000";
+    me.classList.add("posted");
+    $("#meDash").setAttribute("opacity", "0");
+    play(me.querySelector(".ring"), [{ transform: "scale(1)" }, { transform: "scale(1.18)" }, { transform: "scale(1)" }], { duration: 460, easing: "cubic-bezier(.3,1.6,.5,1)" });
+    say("Posting your story…");
+    if (calm()) prog.setAttribute("stroke-dashoffset", "0");
+    else await new Promise((res) => { const t0 = performance.now(); const f = (now) => { const p = Math.min(1, Math.max(0, now - t0) / 1300); prog.setAttribute("stroke-dashoffset", (100 - 100 * (1 - Math.pow(1 - p, 2))).toFixed(1)); if (p < 1) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); });
+    // 4. finish: confetti bits from the ring, the card comes back with a badge
+    burst(ring.left + ring.width / 2, ring.top + ring.height / 2);
+    btn.classList.add("done");
+    shareText.textContent = "Shared";
+    toast("Shared to your story · visible for 24 hours");
+    say("Shared to your story");
+    wrap.style.opacity = "1";
+    play(wrap, [{ transform: "scale(.88)", opacity: 0 }, { transform: "scale(1.02)", opacity: 1, offset: 0.7 }, { transform: "none", opacity: 1 }], { duration: 560, easing: "ease-out" });
+    $("#badge").classList.add("show");
+    await wait(1800);
+    btn.classList.remove("done");
+    shareText.textContent = "Share again";
+    busy = false;
+  }
+  function burst(x, y) {
+    if (calm()) return;
+    const cols = ["#ff3d7f", "#ffb02e", "#8a4dff", "#3fa9ff", "#18b89a"];
+    for (let i = 0; i < 22; i++) {
+      const b = document.createElement("i");
+      b.className = "bit";
+      b.style.background = cols[i % cols.length];
+      b.style.borderRadius = i % 3 === 0 ? "50%" : i % 3 === 1 ? "2px" : "50% 0";
+      fx.appendChild(b);
+      const a = Math.random() * Math.PI * 2, d = 40 + Math.random() * 60;
+      b.animate([
+        { transform: "translate(" + x + "px," + y + "px) scale(.3) rotate(0)", opacity: 1 },
+        { transform: "translate(" + (x + Math.cos(a) * d) + "px," + (y + Math.sin(a) * d) + "px) scale(1) rotate(" + (Math.random() * 360) + "deg)", opacity: 1, offset: 0.6 },
+        { transform: "translate(" + (x + Math.cos(a) * d * 1.2) + "px," + (y + Math.sin(a) * d + 40) + "px) scale(.6) rotate(" + (Math.random() * 720) + "deg)", opacity: 0 }
+      ], { duration: 900 + Math.random() * 400, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = () => b.remove();
+    }
+  }
+
+  // ---------- Save: render the card to a 1080 x 1920 PNG ----------
+  $("#save").addEventListener("click", (e) => save(e.currentTarget, true));
+  async function save(btn, real) {
+    play($("#flash"), [{ opacity: 0.9 }, { opacity: 0 }], { duration: 420, easing: "ease-out" });
+    play(wrap, [{ transform: "scale(1)" }, { transform: "scale(.97)" }, { transform: "scale(1)" }], { duration: 300 });
+    if (!real) return;
+    try {
+      const clone = story.cloneNode(true);
+      clone.setAttribute("xmlns", NS);
+      clone.setAttribute("width", "1080"); clone.setAttribute("height", "1920");
+      clone.querySelectorAll(".sel").forEach((n) => n.remove());
+      clone.querySelectorAll(".in").forEach((n) => n.removeAttribute("class"));
+      const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: "image/svg+xml" }));
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+      const c = document.createElement("canvas");
+      c.width = 1080; c.height = 1920;
+      c.getContext("2d").drawImage(img, 0, 0, 1080, 1920);
+      URL.revokeObjectURL(url);
+      const blob = await new Promise((res) => c.toBlob(res, "image/png"));
+      if (!blob) throw new Error("no image");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "my-story.png";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast("Saved my-story.png");
+      say("Saved my-story.png");
+    } catch (err) {
+      toast("This browser blocked the picture save");
+      say("Could not save the picture in this browser");
+    }
+  }
+
+  // ---------- Auto-demo: add stickers, try a background, nudge one, share; then a fresh card ----------
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) => window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  function queueDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(runDemo, ms); }
+  const PLANS = [["wow", "pin", "heart", "poll"], ["sun", "link", "spark", "tag"], ["pin", "spark", "heart", "wow"]];
+  const btnFor = (id) => document.querySelector('.tk[data-id="' + id + '"]');
+  async function runDemo() {
+    if (!demoOn || busy) return;
+    const plan = PLANS[round % PLANS.length];
+    for (const id of plan) {
+      if (!demoOn) return;
+      play(btnFor(id), [{ transform: "scale(1)" }, { transform: "scale(.9)" }, { transform: "scale(1)" }], { duration: 240 });
+      addSticker(id, btnFor(id));
+      await wait(calm() ? 200 : 700);
+    }
+    if (!demoOn) return;
+    setBg((bgIx + 1) % BGS.length);
+    await wait(900);
+    // glide the last sticker a little, as if dragged
+    const p = placed[placed.length - 1];
+    if (p && demoOn) {
+      const x0 = p.x, y0 = p.y;
+      p.g.classList.add("drag");
+      for (let i = 1; i <= 20; i++) { if (!demoOn) break; p.x = x0 - i * 1.6; p.y = y0 - Math.sin((i / 20) * Math.PI) * 18; setT(p); await wait(calm() ? 0 : 22); }
+      p.g.classList.remove("drag");
+    }
+    await wait(600);
+    if (!demoOn) return;
+    await share();
+    round++;
+    await wait(1600);
+    if (!demoOn) return;
+    // clear the card for the next round
+    placed.slice().forEach((q, k) => setTimeout(() => removeSticker(q), k * 90));
+    queueDemo(1400);
+  }
+
+  // ---------- Start ----------
+  setCaption();
+  queueDemo(450);
+</script>
+</body>
+</html>

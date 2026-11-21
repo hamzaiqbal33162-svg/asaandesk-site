@@ -1,0 +1,422 @@
+<!doctype html>
+<!-- Chill & Craft · Try Again · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Try Again · Retry button with backoff and success</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg-a: #fbf1f3;
+    --bg-b: #ead9e3;
+    --card: #ffffff;
+    --ink: #2a2233;
+    --muted: #7a6d86;
+    --line: rgba(42, 34, 51, 0.09);
+    --coral: #ff5b5b;
+    --coral-rgb: 255, 91, 91;
+    --mint: #1fbf8f;
+    --mint-rgb: 31, 191, 143;
+    --cloud: #ecebff;
+    --cloud-b: #d7d4fb;
+    --focus: #6a4cff;
+    --shadow: rgba(90, 50, 80, 0.35);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #1d1824;
+    --bg-b: #0b090e;
+    --card: #1c1924;
+    --ink: #f1edf7;
+    --muted: #a69cb4;
+    --line: rgba(241, 237, 247, 0.09);
+    --coral: #ff6b6b;
+    --coral-rgb: 255, 107, 107;
+    --mint: #36d6a2;
+    --mint-rgb: 54, 214, 162;
+    --cloud: #2d2a3d;
+    --cloud-b: #3b3752;
+    --focus: #b9a8ff;
+    --shadow: rgba(0, 0, 0, 0.75);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg-b); }
+  .stage { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; overflow: hidden; background: radial-gradient(90% 70% at 50% 25%, var(--bg-a), var(--bg-b)); }
+  .card { position: relative; width: min(400px, 100%); padding: 22px 22px 20px; border-radius: 30px; background: var(--card); box-shadow: 0 40px 70px -40px var(--shadow), 0 1px 0 var(--line); text-align: center; }
+  .eyebrow { margin: 0 0 2px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); text-align: left; }
+  h1 { margin: 0; font-size: 1.35rem; font-weight: 850; text-align: left; }
+
+  /* ---------- Illustration: the cloud, the link and the photos ---------- */
+  .scene { position: relative; height: 196px; margin: 12px 0 14px; }
+  .cloud { position: absolute; left: 50%; top: 4px; width: 132px; margin-left: -66px; height: auto; overflow: visible; }
+  .cloud .body { fill: var(--cloud); stroke: var(--cloud-b); stroke-width: 2; transition: fill 0.4s, stroke 0.4s; }
+  .card.done .cloud .body { fill: rgba(var(--mint-rgb), 0.16); stroke: rgba(var(--mint-rgb), 0.55); }
+  .cloud .wifi { fill: none; stroke: var(--muted); stroke-width: 3; stroke-linecap: round; }
+  .cloud .slash { stroke: var(--coral); stroke-width: 3; stroke-linecap: round; transition: opacity 0.3s; }
+  .card.online .cloud .slash { opacity: 0; }
+  .card.online .cloud .wifi { stroke: var(--focus); }
+  .cloud .tick { fill: none; stroke: var(--mint); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+  .link { position: absolute; left: 50%; top: 82px; width: 4px; height: 44px; margin-left: -2px; border-radius: 2px; background: repeating-linear-gradient(180deg, var(--muted) 0 5px, transparent 5px 10px); opacity: 0.45; }
+  .card.online .link { background: repeating-linear-gradient(180deg, var(--focus) 0 5px, transparent 5px 10px); opacity: 0.9; }
+  .card.flow .link { animation: flow 0.5s linear infinite; }
+  @keyframes flow { to { background-position: 0 -10px; } }
+  .link::after { content: ""; position: absolute; left: 50%; top: 50%; width: 18px; height: 3px; margin: -1.5px 0 0 -9px; border-radius: 2px; background: var(--coral); rotate: -35deg; transition: opacity 0.3s; }
+  .card.online .link::after { opacity: 0; }
+  .photos { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 12px; }
+  .ph { position: relative; width: 62px; height: 62px; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 14px -8px var(--shadow); transition: opacity 0.3s, filter 0.3s; }
+  .ph::before, .ph::after { content: ""; position: absolute; }
+  .ph.a { background: linear-gradient(180deg, #ff9a6b, #ffcf7a); }
+  .ph.a::before { left: 20px; top: 26px; width: 22px; height: 22px; border-radius: 50%; background: #fff3c4; }
+  .ph.a::after { left: 0; right: 0; bottom: 0; height: 18px; background: #8d5a8a; }
+  .ph.b { background: linear-gradient(180deg, #8ec5ff, #d8ecff); }
+  .ph.b::before { left: 4px; bottom: 0; width: 0; height: 0; border-left: 22px solid transparent; border-right: 22px solid transparent; border-bottom: 36px solid #4a7c6a; }
+  .ph.b::after { left: 24px; bottom: 0; width: 0; height: 0; border-left: 18px solid transparent; border-right: 18px solid transparent; border-bottom: 28px solid #2f5e4f; }
+  .ph.c { background: linear-gradient(180deg, #7fd8e6, #2f9fc4 60%, #f4dfa6 60%); }
+  .ph.c::before { left: -6px; right: -6px; top: 30px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.7); }
+  .ph.c::after { right: 10px; top: 8px; width: 12px; height: 12px; border-radius: 50%; background: #fff7d1; }
+  .ph .bd { position: absolute; right: 4px; top: 4px; z-index: 1; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--coral); color: #fff; font-size: 0.7rem; font-weight: 900; box-shadow: 0 0 0 2px var(--card); }
+  .ph.up .bd { background: var(--mint); }
+  .ph.sent { filter: saturate(0.8); }
+
+  /* ---------- Message ---------- */
+  .msg { margin: 6px 0 0; font-size: 1rem; font-weight: 800; }
+  .sub { margin: 4px auto 0; max-width: 28em; font-size: 0.82rem; color: var(--muted); min-height: 2.6em; }
+
+  /* ---------- The retry button: a pill that becomes a spinning circle, then a check ---------- */
+  .act { position: relative; display: grid; place-items: center; height: 70px; margin-top: 10px; }
+  .retry { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 176px; height: 54px; padding: 0; border: 0; border-radius: 27px; background: var(--coral); color: #fff; font: inherit; font-size: 0.95rem; font-weight: 800; cursor: pointer; overflow: hidden; box-shadow: 0 14px 24px -12px rgba(var(--coral-rgb), 0.9); -webkit-tap-highlight-color: transparent;
+    transition: width 0.5s cubic-bezier(0.6, -0.25, 0.3, 1.35), background 0.35s, box-shadow 0.35s; }
+  .retry:hover { box-shadow: 0 16px 28px -12px rgba(var(--coral-rgb), 1); }
+  .retry:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .retry.round { width: 54px; }
+  .retry.ok { background: var(--mint); box-shadow: 0 14px 24px -12px rgba(var(--mint-rgb), 0.9); }
+  .retry svg { flex: none; width: 24px; height: 24px; overflow: visible; }
+  .retry .lbl { white-space: nowrap; transition: opacity 0.2s, max-width 0.45s; max-width: 120px; overflow: hidden; }
+  .retry.round .lbl { opacity: 0; max-width: 0; }
+  .retry.round { gap: 0; }
+  .ring { position: absolute; left: 50%; top: 50%; width: 70px; height: 70px; margin: -35px 0 0 -35px; pointer-events: none; opacity: 0; transition: opacity 0.25s; rotate: -90deg; }
+  .ring.show { opacity: 1; }
+  .ring circle { fill: none; stroke-width: 3.5; stroke-linecap: round; }
+  .ring .bg { stroke: var(--line); }
+  .ring .fg { stroke: var(--focus); transition: stroke 0.3s; }
+  .ring.bad .fg { stroke: var(--coral); }
+  .ring.good .fg { stroke: var(--mint); }
+
+  .net { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; font-size: 0.8rem; font-weight: 700; color: var(--muted); }
+  .sw { position: relative; width: 44px; height: 26px; padding: 0; border: 0; border-radius: 13px; background: var(--line); cursor: pointer; transition: background 0.25s; }
+  .sw::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .sw[aria-checked="true"] { background: var(--focus); }
+  .sw[aria-checked="true"]::after { transform: translateX(18px); }
+  .sw:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .reset { display: none; margin: 10px auto 0; padding: 4px 8px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.78rem; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .reset.show { display: inline-block; }
+  .reset:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+  .fx { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .fx i { position: absolute; border-radius: 2px; }
+  .fly { position: absolute; z-index: 3; pointer-events: none; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (min-width: 1100px) and (min-height: 820px) { .card { scale: 1.12; } }
+  @media (prefers-reduced-motion: reduce) {
+    .retry, .retry .lbl, .ring, .sw, .sw::after, .ph, .cloud .body { transition: none; }
+    .card.flow .link { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <section class="card" id="card" aria-labelledby="ttl">
+      <p class="eyebrow">Photo backup</p>
+      <h1 id="ttl">Try Again</h1>
+
+      <div class="scene" id="scene" aria-hidden="true">
+        <svg class="cloud" id="cloud" viewBox="0 0 132 84">
+          <path class="body" d="M34 78 C 14 78, 4 64, 8 50 C 11 39, 22 34, 31 36 C 34 18, 50 8, 66 8 C 84 8, 98 20, 100 36 C 114 34, 128 44, 126 60 C 124 72, 114 78, 102 78 Z" />
+          <g id="wifi">
+            <path class="wifi" d="M50 46 a 22 22 0 0 1 32 0" /><path class="wifi" d="M56 53 a 13 13 0 0 1 20 0" /><circle cx="66" cy="61" r="3" fill="currentColor" style="color: var(--muted)" />
+            <path class="slash" d="M50 40 L 82 66" />
+          </g>
+          <path class="tick" id="ctick" d="M50 46 l 11 11 l 22 -22" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+        </svg>
+        <i class="link"></i>
+        <div class="photos" id="photos">
+          <div class="ph a"><span class="bd">!</span></div>
+          <div class="ph b"><span class="bd">!</span></div>
+          <div class="ph c"><span class="bd">!</span></div>
+        </div>
+      </div>
+
+      <p class="msg" id="msg">Couldn't back up 3 photos</p>
+      <p class="sub" id="sub">No connection. Your photos are safe on this phone.</p>
+
+      <div class="act">
+        <svg class="ring" id="ring" viewBox="0 0 70 70" aria-hidden="true"><circle class="bg" cx="35" cy="35" r="32" /><circle class="fg" id="ring-fg" cx="35" cy="35" r="32" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" /></svg>
+        <button class="retry" id="retry" type="button" aria-describedby="sub">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <g class="arr" id="arr"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" /><path d="M19.8 4.2v4.4h-4.4" /></g>
+            <path id="chk" d="M6 12.5l4 4 8-9" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" stroke-width="2.8" />
+          </svg>
+          <span class="lbl" id="lbl">Try again</span>
+        </button>
+      </div>
+      <div class="net"><span id="net-lbl">Wi-Fi off</span><button class="sw" id="wifi-sw" type="button" role="switch" aria-checked="false" aria-label="Wi-Fi (simulate the connection)"></button></div>
+      <button class="reset" id="reset" type="button">Lose the connection again</button>
+      <div class="fx" id="fx" aria-hidden="true"></div>
+      <p class="sr" id="live" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+<script>
+  // Try Again: a retry button that does what retry buttons should.
+  // Press = the arrow winds back and the pill squashes → it shrinks to a circle and the arrow spins while a ring
+  // searches → offline: the ring turns red and pulls back, the button shakes and counts down to an automatic retry
+  // (3 s, then 6 s, then 12 s) → online: the photos fly up into the cloud one by one, the ring closes, the circle turns
+  // mint, the arrow becomes a check and confetti pops. Turning Wi-Fi back on during a countdown retries at once.
+  (function () {
+    "use strict";
+    var $ = function (id) { return document.getElementById(id); };
+    var calm = matchMedia("(prefers-reduced-motion: reduce)");
+    var card = $("card"), retry = $("retry"), lbl = $("lbl"), arr = $("arr"), chk = $("chk"), ring = $("ring"), ringFg = $("ring-fg"), sw = $("wifi-sw"), netLbl = $("net-lbl");
+    var msg = $("msg"), sub = $("sub"), live = $("live"), reset = $("reset"), fx = $("fx"), scene = $("scene"), cloud = $("cloud"), ctick = $("ctick"), wifi = $("wifi");
+    var photos = [].slice.call(document.querySelectorAll(".ph"));
+    var MAX = 4, BACKOFF = [3, 6, 12];
+    var S = { online: false, state: "failed", attempt: 0, run: 0, countdown: 0, cdTimer: 0, spin: 0, spinV: 0, ring: 0, ringTo: 0, sent: 0 };
+
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, calm.matches ? Math.min(ms, 250) : ms); }); }
+    function say(m, s, a11y) { if (m != null) msg.textContent = m; if (s != null) sub.textContent = s; live.textContent = a11y || ((m || "") + " " + (s || "")).trim(); }
+
+    // ---------- Network switch (simulates the connection) ----------
+    function setOnline(on) {
+      S.online = on;
+      sw.setAttribute("aria-checked", String(on));
+      netLbl.textContent = on ? "Wi-Fi on" : "Wi-Fi off";
+      card.classList.toggle("online", on);
+      if (on && S.state === "waiting") { clearInterval(S.cdTimer); say("Back online", "Retrying now…"); attempt(); }
+    }
+    sw.addEventListener("click", function () { setOnline(!S.online); });
+
+    // ---------- Spin, ring and morphs ----------
+    function morph(round) { retry.classList.toggle("round", round); }
+    function showCheck(on) {
+      arr.getAnimations().forEach(function (a) { a.cancel(); });
+      chk.getAnimations().forEach(function (a) { a.cancel(); });
+      arr.style.opacity = on ? "0" : "1";
+      chk.style.strokeDashoffset = on ? "0" : "1";
+      if (calm.matches) return;
+      arr.animate([{ opacity: on ? 1 : 0 }, { opacity: on ? 0 : 1 }], { duration: 220 });
+      chk.animate([{ strokeDashoffset: on ? 1 : 0 }, { strokeDashoffset: on ? 0 : 1 }], { duration: on ? 380 : 160, delay: on ? 140 : 0, easing: "cubic-bezier(.3,1.3,.5,1)", fill: "backwards" });
+    }
+    function shake(el) {
+      if (calm.matches) return;
+      el.animate([{ transform: "translateX(0)" }, { transform: "translateX(-9px)" }, { transform: "translateX(8px)" }, { transform: "translateX(-6px)" }, { transform: "translateX(4px)" }, { transform: "translateX(0)" }], { duration: 460, easing: "ease-out" });
+    }
+    function confetti() {
+      if (calm.matches) return;
+      var a = retry.getBoundingClientRect(), c = card.getBoundingClientRect(), s = c.width / (card.offsetWidth || 1) || 1;
+      var x = (a.left - c.left + a.width / 2) / s, y = (a.top - c.top + a.height / 2) / s;
+      var cols = ["#ff5b5b", "#1fbf8f", "#6a4cff", "#ffc44d", "#4cc3ff"];
+      for (var i = 0; i < 34; i++) {
+        (function (i) {
+          var p = document.createElement("i"), ang = Math.random() * Math.PI * 2, d = 50 + Math.random() * 90, w = 5 + Math.random() * 5;
+          p.style.cssText = "left:" + x + "px;top:" + y + "px;width:" + w + "px;height:" + (w * (i % 3 ? 0.5 : 1)) + "px;background:" + cols[i % cols.length] + (i % 4 === 0 ? ";border-radius:50%" : "");
+          fx.appendChild(p);
+          var dx = Math.cos(ang) * d, dy = Math.sin(ang) * d * 0.8 - 30;
+          p.animate([
+            { transform: "translate(-50%,-50%) translate(0,0) rotate(0)", opacity: 1 },
+            { transform: "translate(-50%,-50%) translate(" + dx + "px," + dy + "px) rotate(" + (Math.random() * 360) + "deg)", opacity: 1, offset: 0.45 },
+            { transform: "translate(-50%,-50%) translate(" + dx * 1.15 + "px," + (dy + 70) + "px) rotate(" + (Math.random() * 720) + "deg)", opacity: 0 }
+          ], { duration: 1100 + Math.random() * 500, easing: "cubic-bezier(.15,.7,.35,1)" }).onfinish = function () { p.remove(); };
+        })(i);
+      }
+    }
+    // a photo flies up the link into the cloud
+    function send(i) {
+      var ph = photos[i], sr = scene.getBoundingClientRect(), s = sr.width / (scene.offsetWidth || 1) || 1;
+      var r = ph.getBoundingClientRect(), cl = cloud.getBoundingClientRect();
+      var x0 = (r.left - sr.left) / s, y0 = (r.top - sr.top) / s, x1 = (cl.left - sr.left + cl.width / 2) / s - 31, y1 = (cl.top - sr.top + cl.height * 0.55) / s - 31;
+      ph.classList.add("up", "sent");
+      ph.querySelector(".bd").textContent = "✓";
+      if (calm.matches) return;
+      var c = ph.cloneNode(true);
+      c.classList.add("fly");
+      c.style.left = x0 + "px"; c.style.top = y0 + "px";
+      c.querySelector(".bd").remove();
+      scene.appendChild(c);
+      c.animate([
+        { transform: "translate(0,0) scale(1) rotate(0)", opacity: 1 },
+        { transform: "translate(" + (x1 - x0) * 0.5 + "px," + ((y1 - y0) * 0.5 - 30) + "px) scale(0.8) rotate(" + (i - 1) * 10 + "deg)", opacity: 1, offset: 0.5 },
+        { transform: "translate(" + (x1 - x0) + "px," + (y1 - y0) + "px) scale(0.2) rotate(0)", opacity: 0 }
+      ], { duration: 620, easing: "cubic-bezier(.4,0,.3,1)" }).onfinish = function () {
+        c.remove();
+        cloud.animate([{ transform: "scale(1)" }, { transform: "scale(1.08, 0.94)" }, { transform: "scale(1)" }], { duration: 300, easing: "ease-out" });
+      };
+      ph.animate([{ transform: "translateY(0)" }, { transform: "translateY(-6px)" }, { transform: "translateY(0)" }], { duration: 320, easing: "ease-out" });
+    }
+
+    // ---------- One attempt ----------
+    async function attempt() {
+      if (S.state === "busy" || S.state === "failing" || S.state === "done") return;
+      clearInterval(S.cdTimer);
+      var run = ++S.run;
+      S.state = "busy"; S.attempt++;
+      retry.setAttribute("aria-busy", "true");
+      lbl.textContent = "Retrying";
+      say("Connecting…", "Attempt " + S.attempt + " of " + MAX + ".");
+      // anticipation: wind the arrow back and squash
+      if (!calm.matches) {
+        retry.animate([{ transform: "scale(1)" }, { transform: "scale(1.05, 0.9)", offset: 0.5 }, { transform: "scale(1)" }], { duration: 260, easing: "ease-out" });
+        S.spinV = -260;
+      }
+      await wait(170);
+      morph(true);
+      ring.classList.remove("bad", "good");
+      ring.classList.add("show");
+      S.spinV = 900; S.ringTo = 0.3;
+      await wait(700);
+      if (!S.online) { S.ringTo = 0.55; await wait(800); }
+      if (run !== S.run) return;
+      if (!S.online) return fail(run);
+      // connected: upload the photos still waiting
+      card.classList.add("flow");
+      say("Uploading…", "Connected. Sending your photos.");
+      var left = photos.map(function (p, i) { return p.classList.contains("up") ? -1 : i; }).filter(function (i) { return i >= 0; });
+      for (var k = 0; k < left.length; k++) {
+        S.ringTo = 0.35 + (0.6 * (k + 1)) / left.length;
+        send(left[k]);
+        await wait(380);
+        if (run !== S.run) return;
+      }
+      S.ringTo = 1;
+      await wait(420);
+      if (run !== S.run) return;
+      succeed();
+    }
+    function fail(run) {
+      S.state = "failing";
+      S.spinV = 0; S.ringTo = 0;
+      ring.classList.add("bad");
+      shake(retry);
+      setTimeout(function () {
+        if (run !== S.run) return;
+        morph(false);
+        ring.classList.remove("show");
+        retry.removeAttribute("aria-busy");
+        if (S.attempt >= MAX) {
+          S.state = "failed"; S.attempt = 0;
+          lbl.textContent = "Try again";
+          say("Still offline", "Tried " + MAX + " times. Check your Wi-Fi, then press Try again.");
+          return;
+        }
+        // back off and count down to the next automatic try
+        S.state = "waiting";
+        S.countdown = BACKOFF[Math.min(BACKOFF.length - 1, S.attempt - 1)];
+        lbl.textContent = "Retry in " + S.countdown;
+        say("Still no connection", "Retrying by itself in " + S.countdown + " s. Press to retry now.");
+        S.cdTimer = setInterval(function () {
+          if (S.state !== "waiting") { clearInterval(S.cdTimer); return; }
+          S.countdown--;
+          if (S.countdown <= 0) { clearInterval(S.cdTimer); attempt(); return; }
+          lbl.textContent = "Retry in " + S.countdown;
+          sub.textContent = "Retrying by itself in " + S.countdown + " s. Press to retry now.";
+        }, 1000);
+      }, calm.matches ? 0 : 420);
+    }
+    function succeed() {
+      S.state = "done";
+      card.classList.remove("flow");
+      card.classList.add("done");
+      ring.classList.add("good");
+      retry.classList.add("ok");
+      S.spinV = 0;
+      showCheck(true);
+      if (!calm.matches) {
+        retry.animate([{ transform: "scale(1)" }, { transform: "scale(1.18)", offset: 0.35 }, { transform: "scale(0.96)", offset: 0.7 }, { transform: "scale(1)" }], { duration: 520, easing: "ease-out" });
+        wifi.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: "forwards" });
+        ctick.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: 420, delay: 160, easing: "ease-out", fill: "forwards" });
+      } else { wifi.style.opacity = "0"; ctick.style.strokeDashoffset = "0"; }
+      confetti();
+      say("All 3 photos backed up", "Safe in the cloud after " + S.attempt + " attempt" + (S.attempt > 1 ? "s" : "") + ".");
+      setTimeout(function () {
+        if (S.state !== "done") return;
+        ring.classList.remove("show");
+        morph(false);
+        lbl.textContent = "Backed up";
+        retry.removeAttribute("aria-busy");
+        retry.setAttribute("aria-disabled", "true");
+        reset.classList.add("show");
+      }, calm.matches ? 0 : 1500);
+    }
+    function resetAll() {
+      S.run++; clearInterval(S.cdTimer);
+      S.state = "failed"; S.attempt = 0; S.ringTo = 0; S.ring = 0; S.spinV = 0;
+      card.classList.remove("done", "flow");
+      retry.classList.remove("ok", "round");
+      retry.removeAttribute("aria-disabled"); retry.removeAttribute("aria-busy");
+      ring.classList.remove("show", "bad", "good");
+      showCheck(false);
+      wifi.getAnimations().forEach(function (a) { a.cancel(); }); wifi.style.opacity = "";
+      ctick.getAnimations().forEach(function (a) { a.cancel(); }); ctick.style.strokeDashoffset = "1";
+      photos.forEach(function (p) { p.classList.remove("up", "sent"); p.querySelector(".bd").textContent = "!"; });
+      lbl.textContent = "Try again";
+      reset.classList.remove("show");
+      setOnline(false);
+      say("Couldn't back up 3 photos", "No connection. Your photos are safe on this phone.");
+    }
+    retry.addEventListener("click", function () {
+      if (S.state === "done") { live.textContent = "Already backed up."; return; }
+      if (S.state === "busy" || S.state === "failing") return;
+      attempt();
+    });
+    reset.addEventListener("click", function () { resetAll(); retry.focus(); });
+
+    // ---------- Frame loop: arrow spin with momentum, ring progress ----------
+    var last = performance.now();
+    function frame(now) {
+      var dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      last = now;
+      if (!calm.matches) {
+        S.spin += S.spinV * dt;
+        if (S.state !== "busy") S.spinV *= Math.pow(0.02, dt);   // coast to a stop
+        else if (S.spinV < 900) S.spinV += 2600 * dt;
+        if (S.state !== "done") arr.setAttribute("transform", "rotate(" + (S.spin % 360).toFixed(1) + " 12 12)");
+        S.ring += (S.ringTo - S.ring) * Math.min(1, dt * 5);
+      } else S.ring = S.ringTo;
+      ringFg.style.strokeDashoffset = (1 - S.ring).toFixed(4);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    // ---------- Auto demo: fail once offline, switch Wi-Fi on, succeed, reset ----------
+    var demoOn = !calm.matches, timer = 0;
+    function stopDemo(e) { if (e.isTrusted && demoOn) { demoOn = false; clearTimeout(timer); } }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, stopDemo, { capture: true, passive: true }); });
+    function later(ms) { return new Promise(function (r) { timer = setTimeout(r, ms); }); }
+    async function demo() {
+      await later(550);
+      while (demoOn) {
+        attempt();
+        await later(3300); if (!demoOn) return;
+        setOnline(true);
+        await later(4200); if (!demoOn) return;
+        resetAll();
+        await later(1500); if (!demoOn) return;
+      }
+    }
+    if (demoOn) demo();
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,472 @@
+<!doctype html>
+<!-- Chill & Craft · Piece Fit · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piece Fit · puzzle slider check</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: misty teal (light), deep lake night (dark) ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --bg: #dcefee;
+    --bg2: #f2faf9;
+    --card: #ffffff;
+    --ink: #10282b;
+    --muted: #5a7477;
+    --line: #dbe8e8;
+    --soft: #eef6f6;
+    --teal: #12a397;
+    --teal2: #39c9b9;
+    --ok: #13a86b;
+    --bad: #e0474c;
+    --shadow: rgba(10, 60, 60, .26);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #071214;
+    --bg2: #0d1d20;
+    --card: #11201f;
+    --ink: #e4f4f2;
+    --muted: #8fb0ad;
+    --line: #213634;
+    --soft: #0b1817;
+    --teal: #2fd0be;
+    --teal2: #6ee7d8;
+    --ok: #3ddc97;
+    --bad: #ff6b6f;
+    --shadow: rgba(0, 0, 0, .7);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: var(--ff); color: var(--ink); background: var(--bg); }
+  .stage {
+    min-height: 100vh; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr); padding: 18px 14px; overflow: hidden; overflow-x: clip;
+    background: radial-gradient(60% 45% at 50% 0%, color-mix(in srgb, var(--teal) 18%, transparent), transparent 70%), linear-gradient(180deg, var(--bg2), var(--bg));
+  }
+  .card {
+    position: relative; width: min(100%, 400px); padding: 18px 18px 16px; border-radius: 28px; background: var(--card); border: 1px solid var(--line);
+    box-shadow: 0 40px 80px -46px var(--shadow), 0 12px 26px -18px var(--shadow);
+    animation: rise .8s cubic-bezier(.22, 1.3, .36, 1) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(.97); } }
+  .head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+  .shield { width: 40px; height: 40px; }
+  .shield .body { fill: color-mix(in srgb, var(--teal) 16%, transparent); stroke: var(--teal); stroke-width: 2; transition: fill .4s, stroke .4s; }
+  .shield .tick { fill: none; stroke: var(--ok); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 20; stroke-dashoffset: 20; transition: stroke-dashoffset .45s .15s; }
+  .shield .q { fill: var(--teal); font: 800 12px var(--ff); text-anchor: middle; transition: opacity .2s; }
+  .ok .shield .body { fill: color-mix(in srgb, var(--ok) 18%, transparent); stroke: var(--ok); }
+  .ok .shield .tick { stroke-dashoffset: 0; }
+  .ok .shield .q { opacity: 0; }
+  h1 { margin: 0; font-size: clamp(17px, 4.8vw, 19px); letter-spacing: -.02em; }
+  .sub { margin: 1px 0 0; font-size: 12px; color: var(--muted); }
+  .refresh { width: 38px; height: 38px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; display: grid; place-items: center; transition: transform .5s cubic-bezier(.34, 1.56, .64, 1), background .2s; }
+  .refresh:hover { background: var(--soft); }
+  .refresh.spin { transform: rotate(-1turn); }
+  .refresh svg { width: 18px; height: 18px; }
+
+  /* ---------- The picture with its gap and the loose piece ---------- */
+  .pic { position: relative; margin-top: 14px; border-radius: 18px; overflow: hidden; aspect-ratio: 320 / 190; background: var(--soft); box-shadow: inset 0 0 0 1px var(--line); }
+  .pic svg { display: block; width: 100%; height: 100%; touch-action: none; }
+  .pic .fade { transition: opacity .45s; }
+  .pic .fade.out { opacity: 0; }
+  .hole { fill: rgba(0, 20, 25, .5); stroke: rgba(255, 255, 255, .75); stroke-width: 1.2; }
+  .holeShade { fill: none; stroke: rgba(0, 0, 0, .35); stroke-width: 4; }
+  .outline { fill: none; stroke: rgba(255, 255, 255, .95); stroke-width: 1.4; }
+  .seam { fill: none; stroke: #fff6c2; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 18 100; stroke-dashoffset: 118; opacity: 0; filter: drop-shadow(0 0 4px #ffe27a); }
+  .ok .seam { animation: seam 1.1s ease-out forwards; }
+  @keyframes seam { 0% { opacity: 1; stroke-dashoffset: 118; } 85% { opacity: 1; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+  .shimmer { animation: shim 3s ease-in-out infinite; }
+  .shimmer:nth-child(2n) { animation-delay: -1.4s; }
+  @keyframes shim { 50% { opacity: .15; } }
+  .glowFx { opacity: 0; transition: opacity .5s; }
+  .ok .glowFx { opacity: 1; }
+  .bird { fill: none; stroke: #1d2b2e; stroke-width: 1.4; stroke-linecap: round; opacity: 0; }
+  .ok .bird { animation: fly 2.6s ease-in-out forwards; }
+  .ok .bird:nth-child(2) { animation-delay: .2s; } .ok .bird:nth-child(3) { animation-delay: .35s; }
+  @keyframes fly { 0% { opacity: 0; transform: translate(0, 10px); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(90px, -26px); } }
+  .badge {
+    position: absolute; left: 50%; top: 50%; padding: 8px 14px; border-radius: 999px; background: rgba(5, 25, 25, .72); color: #fff; font-size: 12.5px; font-weight: 700;
+    transform: translate(-50%, -50%) scale(.6); opacity: 0; transition: transform .45s cubic-bezier(.34, 1.56, .64, 1), opacity .25s; pointer-events: none; white-space: nowrap; backdrop-filter: blur(6px);
+  }
+  .badge.on { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  .dot { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: var(--c); pointer-events: none; animation: pop 1s cubic-bezier(.2, .7, .3, 1) forwards; }
+  @keyframes pop { from { transform: translate(0, 0) scale(1); opacity: 1; } to { transform: translate(var(--x), var(--y)) scale(.3); opacity: 0; } }
+
+  /* ---------- Slider ---------- */
+  .track {
+    position: relative; height: 52px; margin-top: 12px; border-radius: 16px; background: var(--soft); box-shadow: inset 0 0 0 1.5px var(--line); overflow: hidden;
+    transition: box-shadow .3s, background .3s;
+  }
+  .track.bad { animation: trackBad .5s ease; }
+  @keyframes trackBad { 30% { box-shadow: inset 0 0 0 2px var(--bad); background: color-mix(in srgb, var(--bad) 10%, var(--soft)); } }
+  .ok .track { box-shadow: inset 0 0 0 2px var(--ok); }
+  .trail { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 16px; background: linear-gradient(90deg, color-mix(in srgb, var(--teal) 10%, transparent), color-mix(in srgb, var(--teal) 32%, transparent)); }
+  .ok .trail { background: linear-gradient(90deg, color-mix(in srgb, var(--ok) 12%, transparent), color-mix(in srgb, var(--ok) 34%, transparent)); }
+  .hint {
+    position: absolute; inset: 0; display: grid; place-items: center; padding-left: 60px; font-size: 13px; font-weight: 700; color: var(--muted); pointer-events: none;
+    background: linear-gradient(100deg, var(--muted) 40%, var(--ink) 50%, var(--muted) 60%) 0 0 / 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    animation: hint 2.4s linear infinite; transition: opacity .3s;
+  }
+  @keyframes hint { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+  .handle {
+    position: absolute; left: 4px; top: 4px; width: 58px; height: 44px; border-radius: 13px; display: grid; place-items: center; cursor: grab; touch-action: none; outline: none;
+    background: linear-gradient(180deg, var(--teal2), var(--teal)); color: #fff; box-shadow: 0 8px 16px -8px var(--teal); transition: background .3s, box-shadow .3s;
+  }
+  .handle:active { cursor: grabbing; }
+  .handle:focus-visible { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--teal); }
+  .handle svg { width: 22px; height: 22px; }
+  .handle .ic { display: none; }
+  .handle[data-s="idle"] .i-go, .handle[data-s="drag"] .i-go, .handle[data-s="check"] .i-wait, .handle[data-s="ok"] .i-ok, .handle[data-s="bad"] .i-bad { display: block; }
+  .handle[data-s="check"] .i-wait { animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(1turn); } }
+  .handle[data-s="ok"] { background: linear-gradient(180deg, #33d18f, var(--ok)); box-shadow: 0 8px 16px -8px var(--ok); }
+  .handle[data-s="bad"] { background: linear-gradient(180deg, #ff7f82, var(--bad)); }
+  .handle[data-s="idle"] .i-go { animation: nudge 1.8s ease-in-out infinite; }
+  @keyframes nudge { 0%, 60%, 100% { transform: none; } 75% { transform: translateX(4px); } }
+
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+  .msg { margin: 0; font-size: 12.5px; color: var(--muted); min-height: 17px; }
+  .msg.good { color: var(--ok); font-weight: 700; }
+  .msg.bad { color: var(--bad); font-weight: 700; }
+  .tries { display: flex; gap: 5px; flex: none; }
+  .tries i { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); transition: background .3s, transform .3s; }
+  .tries i.used { background: var(--line); transform: scale(.8); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+  @media (max-width: 370px) { .card { padding: 14px 12px; } .hint { font-size: 12px; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .001ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" id="card" aria-labelledby="title">
+    <div class="head">
+      <svg class="shield" viewBox="0 0 40 40" aria-hidden="true">
+        <path class="body" d="M20 4 L33 9 V19 C33 27 27 33 20 36 C13 33 7 27 7 19 V9 Z"/>
+        <text class="q" x="20" y="24">?</text>
+        <path class="tick" d="M14 20 l4.5 4.5 L27 15"/>
+      </svg>
+      <div><h1 id="title">Quick check</h1><p class="sub">Slide the piece into the gap in the picture</p></div>
+      <button class="refresh" id="refresh" type="button" aria-label="New picture"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+    </div>
+
+    <div class="pic" id="pic">
+      <svg viewBox="0 0 320 190" id="svg" aria-hidden="true">
+        <defs>
+          <clipPath id="pc"><path id="pcPath"/></clipPath>
+          <filter id="lift" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow id="liftShadow" dx="0" dy="4" stdDeviation="3" flood-color="#000" flood-opacity=".45"/></filter>
+        </defs>
+        <g class="fade" id="fade">
+          <g id="scene"></g>
+          <path class="holeShade" id="holeShade"/>
+          <path class="hole" id="hole"/>
+        </g>
+        <g id="piece" filter="url(#lift)">
+          <g id="pieceTilt">
+            <g clip-path="url(#pc)"><use href="#scene"/></g>
+            <path class="outline" id="outline"/>
+            <path class="seam" id="seam" pathLength="100"/>
+          </g>
+        </g>
+        <g class="glowFx"><path class="bird" d="M60 60 q4 -4 8 0 q4 -4 8 0"/><path class="bird" d="M74 52 q3 -3 6 0 q3 -3 6 0"/><path class="bird" d="M50 50 q3 -3 6 0 q3 -3 6 0"/></g>
+      </svg>
+      <span class="badge" id="badge">Verified</span>
+    </div>
+
+    <div class="track" id="track">
+      <div class="trail" id="trail"></div>
+      <span class="hint" id="hint" aria-hidden="true">Slide to fit the piece</span>
+      <div class="handle" id="handle" role="slider" tabindex="0" data-s="idle" aria-label="Puzzle piece position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Piece at the start" aria-describedby="msg">
+        <svg class="ic i-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+        <svg class="ic i-wait" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>
+        <svg class="ic i-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        <svg class="ic i-bad" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </div>
+    </div>
+
+    <div class="foot">
+      <p class="msg" id="msg" role="status" aria-live="polite">Drag the handle, or focus it and use the arrow keys</p>
+      <span class="tries" id="tries" aria-label="3 tries left"><i></i><i></i><i></i></span>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var W = 320, H = 190, S = 46, START = 8, TOL = 4.5; // piece size, where the piece waits, how close counts as a fit
+  var dark = function () { return document.documentElement.dataset.theme === "dark"; };
+
+  // ---------- Seeded randomness so every picture can be drawn again exactly ----------
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  // ---------- Palettes: valley light by day, moonlit by night ----------
+  var DAY = [
+    { sky: ["#ffb38a", "#ffe3c4"], sun: "#fff1c9", far: "#8e86b8", mid: "#5f6f9e", near: "#2f5e63", lake: ["#7fb7c4", "#2f6f7a"], tree: "#1e4a45" },
+    { sky: ["#8fd3e8", "#e8f7f4"], sun: "#ffffff", far: "#9fb6c9", mid: "#5f8fa3", near: "#2f6a55", lake: ["#8fd0cf", "#2c7a76"], tree: "#1d4d3a" },
+    { sky: ["#c9a5e8", "#ffd6c8"], sun: "#fff4d6", far: "#a48cc4", mid: "#6e5f9e", near: "#3f4f74", lake: ["#a7a5d8", "#3d4a7a"], tree: "#262f4f" }
+  ];
+  var NIGHT = [
+    { sky: ["#0b1a3a", "#2a3f6e"], sun: "#f3f0dc", far: "#3a4a78", mid: "#26355e", near: "#14263a", lake: ["#2a4466", "#0c1a2c"], tree: "#08131f" },
+    { sky: ["#10213a", "#3c3a6e"], sun: "#fff6dc", far: "#47457e", mid: "#2c2c5c", near: "#172236", lake: ["#343f72", "#101a30"], tree: "#0a111f" }
+  ];
+
+  // ---------- Draw a lake-and-mountains scene ----------
+  function ridge(r, base, amp, step) {
+    var pts = [], x = -10;
+    while (x <= W + 40) { pts.push([x, base - amp * (.35 + r() * .65)]); x += step * (.7 + r() * .6); }
+    var d = "M-10 " + H + " L" + pts[0][0] + " " + pts[0][1].toFixed(1);
+    for (var i = 1; i < pts.length; i++) { var p = pts[i - 1], q = pts[i]; d += " Q" + p[0].toFixed(1) + " " + p[1].toFixed(1) + " " + ((p[0] + q[0]) / 2).toFixed(1) + " " + ((p[1] + q[1]) / 2).toFixed(1); }
+    // finish on the last point (past the right edge) so the ridge never ends in a cliff inside the picture
+    var lp = pts[pts.length - 1];
+    return { d: d + " L" + lp[0].toFixed(1) + " " + lp[1].toFixed(1) + " L" + lp[0].toFixed(1) + " " + H + " Z", pts: pts };
+  }
+  function drawScene(seed) {
+    var r = rng(seed), night = dark(), pal = (night ? NIGHT : DAY)[Math.floor(r() * (night ? NIGHT.length : DAY.length))];
+    var shore = 126 + r() * 14, sunX = 30 + r() * 260, sunY = 30 + r() * 30;
+    var far = ridge(r, shore - 10, 70, 34), mid = ridge(r, shore - 2, 42, 28), near = ridge(r, shore + 4, 16, 22);
+    var g = '<defs><linearGradient id="sk' + seed + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + pal.sky[0] + '"/><stop offset="1" stop-color="' + pal.sky[1] + '"/></linearGradient>' +
+      '<linearGradient id="lk' + seed + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + pal.lake[0] + '"/><stop offset="1" stop-color="' + pal.lake[1] + '"/></linearGradient>' +
+      '<radialGradient id="sg' + seed + '"><stop offset="0" stop-color="' + pal.sun + '" stop-opacity=".9"/><stop offset="1" stop-color="' + pal.sun + '" stop-opacity="0"/></radialGradient>' +
+      '<clipPath id="lc' + seed + '"><rect x="0" y="' + shore.toFixed(1) + '" width="' + W + '" height="' + H + '"/></clipPath></defs>';
+    g += '<rect width="' + W + '" height="' + H + '" fill="url(#sk' + seed + ')"/>';
+    if (night) for (var s = 0; s < 34; s++) g += '<circle class="shimmer" cx="' + (r() * W).toFixed(1) + '" cy="' + (r() * shore * .7).toFixed(1) + '" r="' + (.4 + r() * .9).toFixed(2) + '" fill="#fff"/>';
+    g += '<circle cx="' + sunX.toFixed(1) + '" cy="' + sunY.toFixed(1) + '" r="34" fill="url(#sg' + seed + ')"/><circle cx="' + sunX.toFixed(1) + '" cy="' + sunY.toFixed(1) + '" r="' + (night ? 9 : 13) + '" fill="' + pal.sun + '"/>';
+    // faint clouds
+    for (var c = 0; c < 3; c++) { var cx = r() * W, cy = 20 + r() * 50; g += '<ellipse cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" rx="' + (18 + r() * 22).toFixed(1) + '" ry="' + (3 + r() * 3).toFixed(1) + '" fill="#fff" opacity="' + (night ? .08 : .45) + '"/>'; }
+    g += '<path d="' + far.d + '" fill="' + pal.far + '"/>';
+    // snow on the tallest peaks
+    far.pts.forEach(function (p) { if (p[1] < shore - 56) g += '<path d="M' + (p[0] - 9).toFixed(1) + " " + (p[1] + 8).toFixed(1) + " L" + p[0].toFixed(1) + " " + (p[1] + 1).toFixed(1) + " L" + (p[0] + 9).toFixed(1) + " " + (p[1] + 8).toFixed(1) + ' Q' + p[0].toFixed(1) + " " + (p[1] + 5).toFixed(1) + " " + (p[0] - 9).toFixed(1) + " " + (p[1] + 8).toFixed(1) + 'Z" fill="#fff" opacity="' + (night ? .55 : .9) + '"/>'; });
+    g += '<path d="' + mid.d + '" fill="' + pal.mid + '"/><path d="' + near.d + '" fill="' + pal.near + '"/>';
+    // the lake, with the mountains mirrored in it
+    g += '<rect x="0" y="' + shore.toFixed(1) + '" width="' + W + '" height="' + (H - shore).toFixed(1) + '" fill="url(#lk' + seed + ')"/>';
+    g += '<g clip-path="url(#lc' + seed + ')" opacity=".35"><g transform="translate(0 ' + (2 * shore).toFixed(1) + ') scale(1 -1)"><path d="' + far.d + '" fill="' + pal.far + '"/><path d="' + mid.d + '" fill="' + pal.mid + '"/></g></g>';
+    for (var l = 0; l < 9; l++) { var lx = r() * W, ly = shore + 6 + r() * (H - shore - 10); g += '<rect class="shimmer" x="' + lx.toFixed(1) + '" y="' + ly.toFixed(1) + '" width="' + (8 + r() * 22).toFixed(1) + '" height="1.2" rx=".6" fill="#fff" opacity=".55"/>'; }
+    // poplars along the shore
+    for (var t = 0; t < 9; t++) {
+      var tx = r() * W, th = 16 + r() * 22;
+      g += '<ellipse cx="' + tx.toFixed(1) + '" cy="' + (shore - th / 2 + 2).toFixed(1) + '" rx="' + (3 + r() * 2).toFixed(1) + '" ry="' + (th / 2).toFixed(1) + '" fill="' + pal.tree + '"/>';
+    }
+    // a small boat
+    var bx = 40 + r() * 220, by = shore + 18 + r() * 20;
+    g += '<path d="M' + bx.toFixed(1) + " " + by.toFixed(1) + " h18 l-4 5 h-10 z" + '" fill="' + (night ? "#0a1420" : "#3b2a20") + '"/><path d="M' + (bx + 9).toFixed(1) + " " + by.toFixed(1) + " v-12 l7 10 z" + '" fill="' + (night ? "#cfd8e8" : "#fff4e6") + '"/>';
+    $("#scene").innerHTML = g;
+  }
+
+  // ---------- Jigsaw piece outline: knobs on top and right, a socket on the left ----------
+  function piecePath(x, y) {
+    var a = S * .35, b = S * .3, k = S * .17;
+    return "M" + x + " " + y + " h" + a + " a" + k + " " + k + " 0 1 1 " + b + " 0 h" + (S - a - b) +
+      " v" + a + " a" + k + " " + k + " 0 1 1 0 " + b + " v" + (S - a - b) +
+      " h" + -S + " v" + -(S - a - b) + " a" + k + " " + k + " 0 1 0 0 " + -b + " z";
+  }
+
+  // ---------- State ----------
+  var gap = { x: 0, y: 0 }, seed = 1, triesLeft = 3, state = "idle", t0Drag = 0;
+  var pos = { x: START, v: 0, t: START }, lift = { p: 0, t: 0 }, handleP = 0;
+  var card = $("#card"), piece = $("#piece"), tilt = $("#pieceTilt"), handle = $("#handle"), track = $("#track"), trail = $("#trail"), hint = $("#hint"), msg = $("#msg"), badge = $("#badge");
+  var MAXX = W - S * 1.3; // furthest the piece can travel
+  function newPuzzle(s) {
+    seed = s;
+    var r = rng(s * 7919 + 3);
+    gap.x = Math.round(130 + r() * (MAXX - 140));
+    gap.y = Math.round(18 + r() * (H - S - 36));
+    drawScene(s);
+    var d = piecePath(gap.x, gap.y);
+    $("#pcPath").setAttribute("d", d); $("#hole").setAttribute("d", d); $("#holeShade").setAttribute("d", d);
+    $("#outline").setAttribute("d", d); $("#seam").setAttribute("d", d);
+  }
+  function setState(s) { state = s; handle.dataset.s = s === "drag" ? "drag" : s; }
+  function say(t, cls) { msg.textContent = t; msg.className = "msg" + (cls ? " " + cls : ""); }
+  function trackRange() { return track.clientWidth - handle.offsetWidth - 8; }
+  function setHandle(p) {
+    handleP = Math.max(0, Math.min(1, p));
+    pos.t = START + handleP * (MAXX - START);
+    var px = handleP * trackRange();
+    handle.style.transform = "translateX(" + px.toFixed(1) + "px)";
+    trail.style.width = (px + handle.offsetWidth + 4).toFixed(1) + "px";
+    hint.style.opacity = Math.max(0, 1 - handleP * 2.5);
+    var pct = Math.round(handleP * 100);
+    handle.setAttribute("aria-valuenow", pct);
+    handle.setAttribute("aria-valuetext", pct ? "Piece at " + pct + " percent" : "Piece at the start");
+  }
+
+  // ---------- Animation loop: the piece trails the handle with a spring, tilts with speed, lifts while held ----------
+  var last = performance.now();
+  function frame(now) {
+    var dt = Math.min(3, (now - last) / 16.7);
+    last = now;
+    for (var s = 0; s < dt; s++) {
+      pos.v = pos.v * .7 + (pos.t - pos.x) * .2; pos.x += pos.v;
+      lift.p += (lift.t - lift.p) * .2;
+    }
+    if (reduce.matches) { pos.x = pos.t; pos.v = 0; lift.p = lift.t; }
+    var ang = Math.max(-9, Math.min(9, pos.v * 1.6)), cx = gap.x + S / 2, cy = gap.y + S / 2, sc = 1 + lift.p * .05;
+    piece.setAttribute("transform", "translate(" + (pos.x - gap.x).toFixed(2) + " " + (-lift.p * 2).toFixed(2) + ")");
+    tilt.setAttribute("transform", "rotate(" + ang.toFixed(2) + " " + cx + " " + cy + ") translate(" + cx + " " + cy + ") scale(" + sc.toFixed(3) + ") translate(" + -cx + " " + -cy + ")");
+    $("#liftShadow").setAttribute("stdDeviation", (2 + lift.p * 3).toFixed(2));
+    $("#liftShadow").setAttribute("dy", (3 + lift.p * 5).toFixed(2));
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Dragging ----------
+  var dragging = false, grabOffset = 0;
+  function pointerP(e) { var b = track.getBoundingClientRect(); return (e.clientX - b.left - 4 - grabOffset) / trackRange(); }
+  handle.addEventListener("pointerdown", function (e) {
+    if (state === "check" || state === "ok") return;
+    dragging = true; setState("drag"); lift.t = 1; t0Drag = performance.now();
+    var hb = handle.getBoundingClientRect(); grabOffset = e.clientX - hb.left;
+    try { handle.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+    handle.focus({ preventScroll: true });
+    e.preventDefault();
+  });
+  handle.addEventListener("pointermove", function (e) { if (dragging) setHandle(pointerP(e)); });
+  function endDrag() { if (!dragging) return; dragging = false; check(); }
+  handle.addEventListener("pointerup", endDrag);
+  handle.addEventListener("pointercancel", endDrag);
+  handle.addEventListener("keydown", function (e) {
+    if (state === "check" || state === "ok") return;
+    var step = e.shiftKey ? .08 : .015, k = e.key;
+    if (k === "ArrowRight" || k === "ArrowUp") { e.preventDefault(); if (!t0Drag) t0Drag = performance.now(); setState("drag"); setHandle(handleP + step); }
+    else if (k === "ArrowLeft" || k === "ArrowDown") { e.preventDefault(); if (!t0Drag) t0Drag = performance.now(); setState("drag"); setHandle(handleP - step); }
+    else if (k === "Home") { e.preventDefault(); setHandle(0); }
+    else if (k === "End") { e.preventDefault(); setHandle(1); }
+    else if (k === "Enter" || k === " ") { e.preventDefault(); check(); }
+  });
+
+  // ---------- Checking the fit ----------
+  var checkId = 0;
+  async function check() {
+    var id = ++checkId;
+    if (handleP === 0) { setState("idle"); lift.t = 0; return; }
+    setState("check"); lift.t = .4;
+    say("Checking the fit...");
+    await wait(reduce.matches ? 60 : 380);
+    if (id !== checkId) return;
+    var off = Math.abs(pos.t - gap.x);
+    if (off <= TOL) success();
+    else fail(off);
+  }
+  function success() {
+    var secs = ((performance.now() - (t0Drag || performance.now())) / 1000);
+    pos.t = gap.x; lift.t = 0; pos.v += 1.2; // a small spring into the slot
+    setState("ok"); card.classList.add("ok");
+    badge.textContent = "Verified in " + Math.max(.3, secs).toFixed(1) + " s";
+    badge.classList.add("on");
+    say("You are human. The piece fits.", "good");
+    burst();
+  }
+  function fail(off) {
+    triesLeft--;
+    paintTries();
+    setState("bad"); lift.t = 0;
+    track.classList.remove("bad"); void track.offsetWidth; track.classList.add("bad");
+    say((off < 18 ? "So close, " : "Not quite, ") + (pos.t < gap.x ? "a little further right." : "back a little to the left.") + (triesLeft ? "" : " New picture coming up."), "bad");
+    var id = checkId;
+    setTimeout(function () {
+      if (id !== checkId) return;
+      setHandle(0); t0Drag = 0; setState("idle");
+      if (!triesLeft) refresh(true);
+    }, reduce.matches ? 200 : 650);
+  }
+  function burst() {
+    if (reduce.matches) return;
+    var pic = $("#pic"), sx = pic.clientWidth / W, cols = ["#fff6c2", "#39c9b9", "#ffffff", "#ffb38a", "#3ddc97"];
+    for (var i = 0; i < 18; i++) {
+      var d = document.createElement("i"), a = Math.random() * Math.PI * 2, r = 24 + Math.random() * 46;
+      d.className = "dot";
+      d.style.cssText = "left:" + ((gap.x + S / 2) * sx).toFixed(0) + "px;top:" + ((gap.y + S / 2) * sx).toFixed(0) + "px;--c:" + cols[i % 5] + ";--x:" + (Math.cos(a) * r).toFixed(0) + "px;--y:" + (Math.sin(a) * r).toFixed(0) + "px";
+      pic.appendChild(d); setTimeout(d.remove.bind(d), 1100);
+    }
+  }
+  function paintTries() {
+    [].forEach.call(document.querySelectorAll("#tries i"), function (d, i) { d.classList.toggle("used", i >= triesLeft); });
+    $("#tries").setAttribute("aria-label", triesLeft + " tr" + (triesLeft === 1 ? "y" : "ies") + " left");
+  }
+
+  // ---------- New picture ----------
+  var refreshBtn = $("#refresh"), fade = $("#fade");
+  async function refresh(auto) {
+    checkId++;
+    refreshBtn.classList.remove("spin"); void refreshBtn.offsetWidth; refreshBtn.classList.add("spin");
+    card.classList.remove("ok"); badge.classList.remove("on");
+    setHandle(0); setState("idle"); lift.t = 0; t0Drag = 0;
+    fade.classList.add("out"); piece.style.opacity = "0";
+    await wait(reduce.matches ? 0 : 320);
+    newPuzzle(seed + 1);
+    pos.x = pos.t = START;
+    fade.classList.remove("out"); piece.style.opacity = "";
+    triesLeft = 3; paintTries();
+    say(auto === true ? "Too many tries, so here is a new picture." : "New picture. Slide the piece into the gap.");
+  }
+  piece.style.transition = "opacity .3s";
+  refreshBtn.addEventListener("click", function () { refresh(false); });
+  if (window.matchMedia("(prefers-color-scheme: dark)").addEventListener) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { drawScene(seed); });
+  window.addEventListener("resize", function () { setHandle(handleP); });
+
+  // ---------- Start ----------
+  newPuzzle(1 + Math.floor(Math.random() * 50));
+  setHandle(0);
+  requestAnimationFrame(frame);
+
+  // ---------- Auto demo: a pretend finger slides the piece (once a little short) until it fits ----------
+  var demoOn = true;
+  function stopDemo(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false; dragging = false;
+    if (state !== "idle") { checkId++; card.classList.remove("ok"); badge.classList.remove("on"); setHandle(0); setState("idle"); lift.t = 0; t0Drag = 0; triesLeft = 3; paintTries(); say("Drag the handle, or focus it and use the arrow keys"); }
+  }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  async function slide(toP, ms) {
+    var from = handleP, s = performance.now();
+    while (true) {
+      if (!demoOn) throw 0;
+      var k = Math.min(1, (performance.now() - s) / ms), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      setHandle(from + (toP - from) * e);
+      if (k >= 1) return;
+      await wait(16);
+    }
+  }
+  function gapP() { return (gap.x - START) / (MAXX - START); }
+  async function demo() {
+    try {
+      await pause(700);
+      var round = 0;
+      while (demoOn) {
+        setState("drag"); lift.t = 1; t0Drag = performance.now();
+        if (round % 2) {
+          await slide(gapP() - .16, 900); await pause(250);
+          await check(); await pause(1300);
+          setState("drag"); lift.t = 1;
+        }
+        await slide(gapP() + .07, 800); await pause(160);
+        await slide(gapP(), 420); await pause(220);
+        await check(); await pause(2600);
+        await refresh(false); await pause(1000);
+        round++;
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>

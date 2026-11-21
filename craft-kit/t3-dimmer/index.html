@@ -1,0 +1,379 @@
+<!doctype html>
+<!-- Chill & Craft · Dimmer · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dimmer · Tap and slide light switch</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg-a: #e9d6ca;
+    --bg-b: #c9a998;
+    --wall-off: #a3877c;
+    --lit-a: #ffe6c8;
+    --lit-b: #e9c2a3;
+    --ink: #2a1a15;
+    --muted: #6d544a;
+    --panel: rgba(255, 249, 243, 0.8);
+    --line: rgba(42, 26, 21, 0.1);
+    --plate: #f6f0e8;
+    --plate-b: #ddd3c6;
+    --amber: #ff9a3c;
+    --amber-rgb: 255, 154, 60;
+    --focus: #c2541f;
+    --shadow: rgba(70, 35, 20, 0.45);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #24171a;
+    --bg-b: #0b0706;
+    --wall-off: #1a1210;
+    --lit-a: #7a4630;
+    --lit-b: #3a2219;
+    --ink: #f6e9df;
+    --muted: #b79c8e;
+    --panel: rgba(24, 15, 12, 0.72);
+    --line: rgba(246, 233, 223, 0.1);
+    --plate: #e9e1d6;
+    --plate-b: #c9bfb1;
+    --amber: #ffab55;
+    --amber-rgb: 255, 171, 85;
+    --focus: #ffab55;
+    --shadow: rgba(0, 0, 0, 0.75);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg-b); }
+  .stage { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; overflow: hidden; background: radial-gradient(90% 70% at 50% 25%, var(--bg-a), var(--bg-b)); }
+  /* the room: an unlit wall, with the lamp's warm light laid over it (opacity follows the brightness) */
+  .room { --b: 0; position: relative; width: min(440px, 100%); border-radius: 30px; overflow: hidden; isolation: isolate; background: var(--wall-off); box-shadow: 0 40px 70px -40px var(--shadow), 0 1px 0 var(--line); }
+  .room::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: var(--b); background: radial-gradient(85% 60% at 50% 34%, var(--lit-a), var(--lit-b) 60%, var(--wall-off)); }
+  .scene { position: relative; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+  /* ---------- Controls: switch plate + panel ---------- */
+  .controls { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 16px; padding: 6px 18px 20px; }
+  .plate { position: relative; display: grid; grid-template-columns: auto 8px; align-items: center; gap: 9px; padding: 16px 12px 16px 16px; border-radius: 20px; background: linear-gradient(160deg, var(--plate), var(--plate-b)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 0 rgba(0, 0, 0, 0.08), 0 16px 26px -16px var(--shadow); }
+  .plate::before, .plate::after { content: ""; position: absolute; left: 50%; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff, #b8ad9e); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+  .plate::before { top: 5px; }
+  .plate::after { bottom: 5px; }
+  .paddle { position: relative; display: block; width: 60px; height: 118px; padding: 0; border: 0; border-radius: 15px; background: none; cursor: ns-resize; touch-action: none; -webkit-tap-highlight-color: transparent; perspective: 260px; }
+  .paddle:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .pd-face { position: absolute; inset: 0; border-radius: 15px; background: linear-gradient(180deg, #fffdf9, #ece4d8 55%, #ddd2c3); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.08), inset 0 2px 0 #fff, 0 6px 10px -6px rgba(60, 35, 20, 0.55); transform-origin: 50% 50%; transition: transform 0.4s cubic-bezier(0.3, 1.8, 0.45, 1); }
+  .paddle.press .pd-face { transform: scale(0.965) translateY(1px); transition-duration: 0.08s; }
+  /* the grip groove, which slides with the level */
+  .pd-grip { position: absolute; left: 14px; right: 14px; height: 18px; top: calc(12px + (1 - var(--lv, 0.6)) * 76px); border-radius: 9px; background: repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.12) 0 2px, transparent 2px 5px); }
+  /* locator light: green when off (to find it in the dark), amber when on */
+  .pd-led { position: absolute; left: 50%; bottom: 9px; width: 16px; height: 3px; margin-left: -8px; border-radius: 2px; background: #5fd38a; box-shadow: 0 0 6px #5fd38a; }
+  .room.on .pd-led { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .ticks { display: grid; gap: 5px; }
+  .ticks i { width: 8px; height: 5px; border-radius: 2px; background: rgba(0, 0, 0, 0.12); transition: background 0.2s, box-shadow 0.2s; }
+  .ticks i.lit { background: var(--amber); box-shadow: 0 0 6px rgba(var(--amber-rgb), 0.8); }
+  .panel { min-width: 0; padding: 14px 16px; border-radius: 20px; background: var(--panel); box-shadow: 0 1px 0 var(--line); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  .eyebrow { margin: 0; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: 0; font-size: 1.15rem; font-weight: 850; }
+  .level { display: flex; align-items: baseline; gap: 2px; margin: 6px 0 0; font-size: 2.3rem; font-weight: 850; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .level small { font-size: 0.95rem; color: var(--muted); }
+  .warmth { margin: 4px 0 8px; font-size: 0.78rem; font-weight: 700; color: var(--muted); }
+  input[type="range"] { --v: 64%; -webkit-appearance: none; appearance: none; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+  input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, #ff7b2c, #ffd49a var(--v), var(--line) var(--v)); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -7px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(var(--amber-rgb), 0.35), 0 3px 6px rgba(0, 0, 0, 0.3); }
+  input[type="range"]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--line); }
+  input[type="range"]::-moz-range-progress { height: 6px; border-radius: 3px; background: linear-gradient(90deg, #ff7b2c, #ffd49a); }
+  input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(var(--amber-rgb), 0.35), 0 3px 6px rgba(0, 0, 0, 0.3); }
+  .presets { display: flex; gap: 6px; margin-top: 8px; }
+  .presets button { flex: 1; height: 32px; padding: 0 4px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--ink); font: inherit; font-size: 0.76rem; font-weight: 750; cursor: pointer; transition: background 0.2s, transform 0.3s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .presets button:active { transform: scale(0.94); }
+  .presets button[aria-pressed="true"] { background: var(--ink); color: var(--plate); border-color: transparent; }
+  .presets button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .hint { grid-column: 1 / -1; margin: -4px 0 0; font-size: 0.74rem; font-weight: 650; color: var(--muted); text-align: center; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 370px) { .controls { gap: 12px; padding: 6px 12px 16px; } .level { font-size: 2rem; } }
+  @media (min-width: 1100px) and (min-height: 820px) { .room { scale: 1.12; } }
+  @media (prefers-reduced-motion: reduce) { .pd-face, .presets button, .ticks i { transition: none; } }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <section class="room" id="room" aria-labelledby="ttl">
+      <div class="scene" id="scene">
+        <svg id="svg" viewBox="0 0 360 290" aria-hidden="true">
+          <defs>
+            <linearGradient id="cone" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#ffd9a3" stop-opacity="0.7" /><stop offset="1" stop-color="#ffd9a3" stop-opacity="0" /></linearGradient>
+            <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#fff1d6" stop-opacity="1" /><stop offset="0.25" stop-color="#ffc77a" stop-opacity="0.55" /><stop offset="1" stop-color="#ff9a3c" stop-opacity="0" /></radialGradient>
+            <radialGradient id="pool" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#fff0d2" stop-opacity="0.9" /><stop offset="1" stop-color="#ffd49a" stop-opacity="0" /></radialGradient>
+            <linearGradient id="wood" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#9b6440" /><stop offset="1" stop-color="#5c3520" /></linearGradient>
+            <linearGradient id="shade" x1="0" x2="1"><stop offset="0" stop-color="#1f3330" /><stop offset="0.4" stop-color="#36504b" /><stop offset="1" stop-color="#142220" /></linearGradient>
+          </defs>
+          <!-- a framed print on the wall -->
+          <g id="print">
+            <rect x="34" y="56" width="62" height="80" rx="3" fill="#3b2a22" />
+            <rect x="40" y="62" width="50" height="68" fill="#e9dccb" />
+            <circle cx="65" cy="88" r="13" fill="#e58b52" /><path d="M40 130 L 58 104 L 70 116 L 80 100 L 90 112 V130 Z" fill="#5b7f74" />
+          </g>
+          <!-- side table with a vase, books and a mug -->
+          <g id="furniture">
+            <ellipse cx="180" cy="290" rx="150" ry="10" fill="rgba(0,0,0,0.18)" />
+            <path d="M74 252 h212 v38 h-212z" fill="url(#wood)" />
+            <ellipse cx="180" cy="252" rx="112" ry="15" fill="#b57a50" />
+            <ellipse cx="180" cy="250" rx="112" ry="15" fill="#c98e61" />
+            <path d="M104 246 C 100 226, 106 210, 116 204 C 126 210, 132 226, 128 246 Z" fill="#3d6e8f" />
+            <path d="M112 206 C 108 180, 100 170, 92 160 M116 204 C 118 176, 128 164, 138 156 M114 206 C 112 186, 116 172, 114 158" fill="none" stroke="#5b4636" stroke-width="2" stroke-linecap="round" />
+            <g fill="#f2a6a0"><circle cx="92" cy="160" r="5" /><circle cx="138" cy="156" r="5" /><circle cx="114" cy="157" r="4.5" /><circle cx="100" cy="171" r="3.5" /><circle cx="128" cy="166" r="3.5" /></g>
+            <rect x="196" y="236" width="68" height="10" rx="2" fill="#3d6b5f" /><rect x="200" y="226" width="60" height="10" rx="2" fill="#e0b04f" /><rect x="194" y="217" width="64" height="9" rx="2" fill="#a8483c" />
+            <path d="M228 202 h22 v15 a5 5 0 0 1 -5 5 h-12 a5 5 0 0 1 -5 -5z" fill="#f4efe6" /><path d="M250 206 a5 5 0 0 1 0 10" fill="none" stroke="#f4efe6" stroke-width="3" />
+          </g>
+          <ellipse id="pool-e" cx="180" cy="250" rx="96" ry="12" fill="url(#pool)" opacity="0" />
+          <!-- the pendant lamp, swaying from the ceiling -->
+          <g id="lamp">
+            <path d="M180 -10 V 100" stroke="#1d1d1d" stroke-width="2" />
+            <polygon id="cone-p" points="134,150 226,150 330,300 30,300" fill="url(#cone)" opacity="0" />
+            <rect x="172" y="92" width="16" height="12" rx="3" fill="#b8893f" />
+            <path d="M180 100 C 150 100, 132 124, 126 150 L 234 150 C 228 124, 210 100, 180 100 Z" fill="url(#shade)" />
+            <path d="M126 150 L 234 150" stroke="#c89b4a" stroke-width="3" stroke-linecap="round" />
+            <ellipse id="inner" cx="180" cy="150" rx="53" ry="6" fill="#2a2420" />
+            <circle id="halo-c" cx="180" cy="160" r="64" fill="url(#halo)" opacity="0" />
+            <circle cx="180" cy="160" r="11" fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.35)" stroke-width="1" />
+            <path id="fil" d="M174 156 l2 6 l2 -6 l2 6 l2 -6 l2 6" fill="none" stroke="#5a3a2a" stroke-width="1.4" stroke-linejoin="round" />
+          </g>
+        </svg>
+        <canvas id="motes" aria-hidden="true"></canvas>
+      </div>
+
+      <div class="controls">
+        <div class="plate">
+          <button class="paddle" id="paddle" type="button" role="switch" aria-checked="false" aria-label="Pendant light" aria-describedby="hint">
+            <span class="pd-face"><span class="pd-grip" id="grip"></span><span class="pd-led"></span></span>
+          </button>
+          <span class="ticks" id="ticks" aria-hidden="true"></span>
+        </div>
+        <div class="panel">
+          <p class="eyebrow">Living room</p>
+          <h1 id="ttl">Dimmer</h1>
+          <p class="level" aria-hidden="true"><span id="pct">0</span><small>%</small></p>
+          <p class="warmth" id="warmth">Off · set to 64%</p>
+          <input type="range" id="dim" min="1" max="100" value="64" aria-label="Brightness" />
+          <div class="presets" role="group" aria-label="Light scenes">
+            <button type="button" data-v="100" aria-pressed="false">Read</button>
+            <button type="button" data-v="45" aria-pressed="false">Relax</button>
+            <button type="button" data-v="12" aria-pressed="false">Night</button>
+          </div>
+        </div>
+        <p class="hint" id="hint">Tap to switch · drag up or down to dim</p>
+      </div>
+      <p class="sr" id="live" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+<script>
+  // Dimmer: one paddle that is both a switch and a slider.
+  // Tap = the paddle dips → the filament glows deep orange, flickers twice → the light springs up past the set level
+  // and settles, the cone and the pool on the table fade in and dust motes start to drift. Off = a warm afterglow
+  // that cools from orange to dark. Drag the paddle (or use the slider, the arrow keys or a scene) to dim: lower
+  // levels also turn warmer, like a real filament bulb.
+  (function () {
+    "use strict";
+    var $ = function (id) { return document.getElementById(id); };
+    var calm = matchMedia("(prefers-reduced-motion: reduce)");
+    var room = $("room"), scene = $("scene"), canvas = $("motes"), ctx = canvas.getContext("2d");
+    var paddle = $("paddle"), grip = $("grip"), ticksBox = $("ticks"), pct = $("pct"), warmth = $("warmth"), range = $("dim"), live = $("live");
+    var lamp = $("lamp"), cone = $("cone-p"), halo = $("halo-c"), fil = $("fil"), inner = $("inner"), pool = $("pool-e");
+    var dimmed = [$("print"), $("furniture")];
+    var presets = [].slice.call(document.querySelectorAll(".presets button"));
+    var ticks = [];
+    for (var i = 0; i < 10; i++) { var tk = document.createElement("i"); ticksBox.appendChild(tk); ticks.unshift(tk); }
+
+    var S = { on: false, level: 64, b: 0, bv: 0, heat: 0, onAt: -1e9, tween: 0 };
+
+    // ---------- State changes ----------
+    function kelvin(l) { return Math.round((1900 + l * 10) / 50) * 50; }
+    function setOn(on, quiet) {
+      if (on === S.on) return;
+      S.on = on;
+      paddle.setAttribute("aria-checked", String(on));
+      room.classList.toggle("on", on);
+      if (on) S.onAt = performance.now();
+      if (!quiet) live.textContent = on ? "Light on at " + S.level + "%." : "Light off.";
+      syncPresets();
+    }
+    function setLevel(v, quiet) {
+      S.level = Math.max(1, Math.min(100, Math.round(v)));
+      range.value = S.level;
+      range.style.setProperty("--v", S.level + "%");
+      grip.style.setProperty("--lv", (S.level / 100).toFixed(3));
+      if (!quiet) live.textContent = "Brightness " + S.level + "%.";
+      syncPresets();
+    }
+    function syncPresets() { presets.forEach(function (p) { p.setAttribute("aria-pressed", String(S.on && +p.dataset.v === S.level)); }); }
+    // glide the level (scenes and the demo)
+    function glide(to, ms) {
+      var from = S.level, start = performance.now(), id = ++S.tween;
+      if (calm.matches) { setLevel(to, true); return Promise.resolve(); }
+      return new Promise(function (res) {
+        (function step(n) {
+          if (id !== S.tween) { res(); return; }
+          var p = Math.min(1, (n - start) / ms), e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+          setLevel(from + (to - from) * e, true);
+          if (p < 1) requestAnimationFrame(step); else res();
+        })(start);
+      });
+    }
+
+    // ---------- The paddle: tap to switch, drag to dim ----------
+    var drag = null, suppressClick = false;
+    paddle.addEventListener("pointerdown", function (e) {
+      paddle.classList.add("press");
+      drag = { id: e.pointerId, y: e.clientY, start: S.level, moved: false };
+      try { paddle.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
+    });
+    paddle.addEventListener("pointermove", function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var dy = e.clientY - drag.y;
+      if (!drag.moved && Math.abs(dy) > 6) { drag.moved = true; S.tween++; if (!S.on) { drag.start = 1; setOn(true, true); } }
+      if (drag.moved) setLevel(drag.start - dy * 0.85, true);
+    });
+    function endDrag() {
+      paddle.classList.remove("press");
+      if (drag && drag.moved) { suppressClick = true; live.textContent = "Brightness " + S.level + "%."; setTimeout(function () { suppressClick = false; }, 60); }
+      drag = null;
+    }
+    paddle.addEventListener("pointerup", endDrag);
+    paddle.addEventListener("pointercancel", endDrag);
+    paddle.addEventListener("click", function () {
+      if (suppressClick) { suppressClick = false; return; }
+      S.tween++;
+      setOn(!S.on);
+    });
+    paddle.addEventListener("keydown", function (e) {
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      e.preventDefault();
+      S.tween++;
+      if (!S.on) setOn(true, true);
+      setLevel(S.level + (e.key === "ArrowUp" ? 10 : -10));
+    });
+    range.addEventListener("input", function () { S.tween++; setLevel(+range.value, true); if (!S.on) setOn(true, true); });
+    range.addEventListener("change", function () { live.textContent = "Brightness " + S.level + "%."; });
+    presets.forEach(function (p) {
+      p.addEventListener("click", function () {
+        var v = +p.dataset.v;
+        if (!S.on) setOn(true, true);
+        glide(v, 650).then(function () { syncPresets(); });
+        live.textContent = p.textContent + " scene: " + v + "%.";
+      });
+    });
+
+    // ---------- Canvas size (motes are drawn in SVG units) ----------
+    var W = 0, H = 0, dpr = 1, k = 1;
+    function size() {
+      W = scene.clientWidth; H = scene.clientHeight; dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); k = W / 360 || 1;
+    }
+    size();
+    addEventListener("resize", size);
+    if (window.ResizeObserver) new ResizeObserver(size).observe(scene);
+    var motes = [];
+    for (var m = 0; m < 28; m++) motes.push({ y: 160 + Math.random() * 110, u: Math.random() * 2 - 1, r: 0.6 + Math.random() * 1.3, ph: Math.random() * 6.3, sp: 3 + Math.random() * 6 });
+
+    // ---------- Main loop ----------
+    function mix(a, b, t) { return Math.round(a + (b - a) * t); }
+    var last = performance.now(), lastPct = -1, lastTxt = "", lastTicks = -1;
+    function frame(now) {
+      var dt = Math.min(0.05, Math.max(0, (now - last) / 1000)), t = now / 1000;
+      last = now;
+      var target = S.on ? S.level / 100 : 0;
+      // switching on: a dim orange flicker first, then the spring up
+      var since = (now - S.onAt) / 1000;
+      if (S.on && since < 0.36) target *= [0.08, 0.3, 0.04, 0.42, 0.12, 1][Math.min(5, Math.floor(since / 0.06))];
+      if (calm.matches) { S.b = target; S.bv = 0; }
+      else {
+        var kk = S.on ? 140 : 60, cc = S.on ? 11 : 13;
+        S.bv += (-(S.b - target) * kk - S.bv * cc) * dt; S.b += S.bv * dt;
+        if (S.b < 0) { S.b = 0; S.bv = 0; }
+      }
+      // the filament's heat lags behind, so it glows orange for a moment after switching off
+      S.heat += (Math.max(S.b, 0) - S.heat) * Math.min(1, dt * (S.b > S.heat ? 14 : 2.2));
+      var b = Math.max(0, Math.min(1.15, S.b)), h = Math.max(0, Math.min(1, S.heat));
+      room.style.setProperty("--b", Math.min(1, b * 0.95).toFixed(3));
+      var lift = "brightness(" + (0.42 + 0.6 * Math.min(1, b)).toFixed(3) + ")";
+      dimmed.forEach(function (g) { g.style.filter = lift; });
+      cone.setAttribute("opacity", (Math.min(1, b) * 0.85).toFixed(3));
+      halo.setAttribute("opacity", Math.min(1, b * 1.1).toFixed(3));
+      halo.setAttribute("r", (34 + 40 * Math.min(1.1, b)).toFixed(1));
+      pool.setAttribute("opacity", Math.min(1, b).toFixed(3));
+      // filament colour: dark → deep red-orange → warm white (warmer when dimmed)
+      var warm = S.level / 100;
+      var fr = h < 0.02 ? [90, 58, 42] : [255, mix(90, 180 + 60 * warm, Math.min(1, h * 1.4)), mix(30, 110 + 110 * warm, Math.max(0, h - 0.3) / 0.7)];
+      fil.setAttribute("stroke", "rgb(" + fr.join(",") + ")");
+      fil.setAttribute("stroke-width", (1.4 + h * 0.8).toFixed(2));
+      inner.setAttribute("fill", "rgb(" + mix(42, 255, Math.min(1, b)) + "," + mix(36, 214, Math.min(1, b)) + "," + mix(32, 160, Math.min(1, b)) + ")");
+      // the lamp sways a little on its cord
+      if (!calm.matches) lamp.setAttribute("transform", "rotate(" + (Math.sin(t * 0.8) * 1.1 + Math.sin(t * 1.9) * 0.25).toFixed(3) + " 180 -10)");
+      // read-outs
+      var shown = Math.round(Math.min(1, b) * 100);
+      if (shown !== lastPct) { lastPct = shown; pct.textContent = shown; }
+      var txt = S.on ? (S.level < 30 ? "Candle glow" : S.level < 70 ? "Warm white" : "Bright white") + " · " + kelvin(S.level).toLocaleString("en-US") + " K" : "Off · set to " + S.level + "%";
+      if (txt !== lastTxt) { lastTxt = txt; warmth.textContent = txt; }
+      var lit = S.on ? Math.max(1, Math.round(S.level / 10)) : 0;
+      if (lit !== lastTicks) { lastTicks = lit; ticks.forEach(function (el, i) { el.classList.toggle("lit", i < lit); }); }
+      drawMotes(t, dt, b);
+      requestAnimationFrame(frame);
+    }
+    function drawMotes(t, dt, b) {
+      ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
+      ctx.clearRect(0, 0, 360, 290);
+      if (b < 0.02 || calm.matches) return;
+      var sw = Math.sin(t * 0.8) * 1.1 * Math.PI / 180;
+      motes.forEach(function (p) {
+        p.y -= p.sp * dt * 0.6; p.ph += dt * 0.7;
+        if (p.y < 158) p.y = 280;
+        var half = 46 + ((p.y - 150) / 150) * 104, x = 180 + p.u * half * 0.85 + Math.sin(p.ph) * 6 + (p.y + 10) * sw;
+        var a = Math.min(1, b) * (0.35 + 0.45 * Math.sin(p.ph * 2.3 + p.u * 4) ** 2) * (1 - (p.y - 158) / 140);
+        ctx.fillStyle = "rgba(255,236,200," + Math.max(0, a).toFixed(3) + ")";
+        ctx.beginPath(); ctx.arc(x, p.y, p.r, 0, 6.3); ctx.fill();
+      });
+    }
+    setLevel(64, true);
+    requestAnimationFrame(frame);
+
+    // ---------- Auto demo: switch on, dim down, bring up, switch off ----------
+    var demoOn = !calm.matches, timer = 0;
+    function stopDemo(e) { if (e.isTrusted && demoOn) { demoOn = false; clearTimeout(timer); S.tween++; } }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (ev) { addEventListener(ev, stopDemo, { capture: true, passive: true }); });
+    function later(ms) { return new Promise(function (r) { timer = setTimeout(r, ms); }); }
+    function nudge(dir) { if (!calm.matches) paddle.querySelector(".pd-face").animate([{ transform: "translateY(0)" }, { transform: "translateY(" + dir * 2 + "px) scale(0.98)" }, { transform: "translateY(0)" }], { duration: 900, easing: "ease-in-out" }); }
+    async function demo() {
+      await later(600); if (!demoOn) return;
+      while (demoOn) {
+        paddle.classList.add("press"); setTimeout(function () { paddle.classList.remove("press"); }, 120);
+        setOn(true, true);
+        await later(2000); if (!demoOn) return;
+        nudge(1); await glide(16, 900); if (!demoOn) return;
+        await later(900); if (!demoOn) return;
+        nudge(-1); await glide(92, 1000); if (!demoOn) return;
+        await later(1300); if (!demoOn) return;
+        paddle.classList.add("press"); setTimeout(function () { paddle.classList.remove("press"); }, 120);
+        setOn(false, true);
+        await later(1600); if (!demoOn) return;
+        await glide(64, 10);
+      }
+    }
+    if (demoOn) demo();
+  })();
+</script>
+</body>
+</html>

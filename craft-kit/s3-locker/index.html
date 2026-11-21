@@ -1,0 +1,497 @@
+<!doctype html>
+<!-- Chill & Craft · Locker · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Locker · Share a file with a password and an expiry</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: sky-blue lockers, lemon accents ---------- */
+  :root {
+    --bg: #e7f1fd;
+    --card: #ffffff;
+    --field: #f1f6fd;
+    --ink: #10243d;
+    --muted: #61758f;
+    --line: rgba(16, 36, 61, 0.13);
+    --lk1: #5ea2f5;
+    --lk2: #3d84e0;
+    --lk3: #2b68bb;
+    --cell: #0f2440;
+    --lemon: #ffd84d;
+    --lemon2: #f2c200;
+    --led: #3df0a5;
+    --lcd: #0c1a2c;
+    --lcdInk: #7ef7c6;
+    --ok: #17a065;
+    --bad: #db4a3c;
+    --shadow: rgba(30, 70, 130, 0.35);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1218;
+    --card: #151c25;
+    --field: #1b2430;
+    --ink: #e8f1fb;
+    --muted: #93a5bb;
+    --line: rgba(232, 241, 251, 0.1);
+    --lk1: #2f4a6c;
+    --lk2: #263d5a;
+    --lk3: #1b2d44;
+    --cell: #070d15;
+    --lemon: #ffdc5c;
+    --lemon2: #f5c518;
+    --led: #45e0ff;
+    --lcd: #060b11;
+    --lcdInk: #45e0ff;
+    --ok: #3fd193;
+    --bad: #ff6b5e;
+    --shadow: rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, input { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 3px solid var(--lemon2); outline-offset: 2px; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 20px 16px; overflow: hidden; isolation: isolate; background: linear-gradient(transparent 0 calc(100% - 1px), color-mix(in srgb, var(--ink) 4%, transparent) 0) 0 0 / 100% 44px, radial-gradient(60% 60% at 30% 40%, color-mix(in srgb, var(--lk1) 22%, transparent), transparent 70%), var(--bg); }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(0.98); } }
+  .card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; width: min(780px, 100%); padding: 18px; border-radius: 28px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 50px 90px -50px var(--shadow); animation: rise 0.85s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+
+  /* ---------- Locker bank ---------- */
+  .bank { display: grid; gap: 10px; align-content: start; padding: 14px; border-radius: 22px; background: linear-gradient(180deg, color-mix(in srgb, var(--lk3) 18%, var(--card)), color-mix(in srgb, var(--lk3) 30%, var(--card))); box-shadow: inset 0 0 0 1px var(--line); }
+  .lcd { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 40px; padding: 0 12px; border-radius: 10px; background: var(--lcd); color: var(--lcdInk); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.06em; box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.7), 0 0 0 3px color-mix(in srgb, var(--lk3) 70%, #000); text-shadow: 0 0 8px currentColor; overflow: hidden; white-space: nowrap; }
+  .lcd .blink { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0.2; } }
+  .grid { display: grid; grid-template-columns: repeat(3, 84px); gap: 6px; }
+  .lk { position: relative; height: 98px; border-radius: 7px; background: var(--cell); perspective: 500px; box-shadow: inset 0 6px 14px rgba(0, 0, 0, 0.6); }
+  .door { position: absolute; inset: 0; transform-style: preserve-3d; transform-origin: 0 50%; }
+  .door .fr, .door .bk { position: absolute; inset: 0; border-radius: 7px; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+  .door .fr { background: linear-gradient(160deg, var(--lk1), var(--lk2) 60%, var(--lk3)); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), inset 0 -3px 0 rgba(0, 0, 0, 0.15); }
+  .door .bk { transform: rotateY(180deg); background: linear-gradient(200deg, var(--lk3), color-mix(in srgb, var(--lk3) 70%, #000)); }
+  .vents { position: absolute; left: 14px; right: 14px; top: 12px; display: grid; gap: 3px; }
+  .vents i { height: 3px; border-radius: 2px; background: rgba(0, 0, 0, 0.22); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15); }
+  .plate { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 1px 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.85); color: #10243d; font-size: 0.6rem; font-weight: 900; }
+  .handle { position: absolute; right: 9px; top: 50%; width: 7px; height: 22px; margin-top: -11px; border-radius: 4px; background: linear-gradient(90deg, #e9eef5, #9fb0c4); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3); transform-origin: 50% 50%; transition: transform 0.35s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .lk.mine.locked .handle { transform: rotate(90deg); }
+  .led { position: absolute; right: 7px; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: #ff6b5e; box-shadow: 0 0 6px #ff6b5e; }
+  .lk.busyLk .led { animation: blink 2.4s steps(1) infinite; }
+  .lk.mine .led { background: var(--lemon); box-shadow: 0 0 8px var(--lemon); }
+  .lk.mine.locked .led { background: var(--led); box-shadow: 0 0 8px var(--led); }
+  .lk.mine.ping .led { animation: blink 0.25s steps(1) 6; }
+  .sticker { position: absolute; left: 10px; top: 36px; padding: 2px 5px; border-radius: 3px; background: var(--lemon); color: #3a2f00; font-size: 0.5rem; font-weight: 900; transform: rotate(-6deg); }
+  /* inside your locker: a glow and the file card */
+  .inside { position: absolute; inset: 6px; display: grid; place-items: center; border-radius: 4px; background: radial-gradient(70% 60% at 50% 40%, rgba(255, 216, 77, 0.28), transparent 70%); }
+  .hint { font-size: 0.56rem; font-weight: 800; color: rgba(255, 255, 255, 0.55); text-align: center; letter-spacing: 0.06em; line-height: 1.3; }
+  .file { position: relative; width: 46px; height: 58px; border-radius: 5px 13px 5px 5px; background: #fff; box-shadow: 0 6px 10px -4px rgba(0, 0, 0, 0.6); display: none; }
+  .file::before { content: ""; position: absolute; right: 0; top: 0; width: 13px; height: 13px; border-radius: 0 0 0 5px; background: linear-gradient(225deg, transparent 50%, #d7dfea 50%); }
+  .file b { position: absolute; left: 4px; bottom: 7px; padding: 1px 4px; border-radius: 3px; color: #fff; font-size: 0.5rem; font-weight: 900; }
+  .file i { position: absolute; left: 6px; right: 10px; height: 2.5px; border-radius: 2px; background: #dfe6ef; }
+  .file img { position: absolute; inset: 6px 6px 18px; width: calc(100% - 12px); height: calc(100% - 24px); object-fit: cover; border-radius: 3px; }
+  .lk.mine.has .file { display: block; }
+  .lk.mine.has .hint { display: none; }
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; width: 54px; padding: 5px; border-radius: 7px; background: color-mix(in srgb, var(--lk3) 60%, #000); }
+  .keypad i { height: 8px; border-radius: 2px; background: rgba(255, 255, 255, 0.22); }
+  .keypad i.hit { background: var(--lemon); box-shadow: 0 0 6px var(--lemon); }
+  .bankfoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.68rem; color: var(--muted); font-weight: 700; }
+
+  /* ---------- Form ---------- */
+  .form { display: grid; gap: 12px; align-content: start; min-width: 0; }
+  .form h1 { margin: 0; font-size: 1.12rem; letter-spacing: -0.015em; }
+  .form header p { margin: 2px 0 0; font-size: 0.78rem; color: var(--muted); }
+  .lbl { display: block; margin-bottom: 6px; font-size: 0.64rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .drop { position: relative; display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 9px 12px; border: 1.5px dashed color-mix(in srgb, var(--lk2) 55%, transparent); border-radius: 15px; background: var(--field); cursor: pointer; transition: border-color 0.2s, background 0.2s, transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .drop:hover, .drop.over { border-color: var(--lk2); background: color-mix(in srgb, var(--lk1) 12%, var(--field)); }
+  .drop.over { transform: scale(1.02); }
+  .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .drop:focus-within { box-shadow: 0 0 0 3px var(--lemon2); }
+  .ficon { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 11px; background: linear-gradient(140deg, var(--lk1), var(--lk3)); color: #fff; }
+  .ficon svg { width: 20px; height: 20px; }
+  .ftxt { flex: 1; min-width: 0; font-size: 0.82rem; }
+  .ftxt b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ftxt small { color: var(--muted); font-size: 0.72rem; }
+  .pw { display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 5px 0 12px; border: 1.5px solid var(--line); border-radius: 13px; background: var(--field); }
+  .pw:focus-within { border-color: var(--lk2); box-shadow: 0 0 0 4px color-mix(in srgb, var(--lk1) 22%, transparent); }
+  .pw input { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; font-size: 0.9rem; font-weight: 650; }
+  .pw input:focus { outline: none; }
+  .eye { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; }
+  .eye:hover { background: var(--card); color: var(--ink); }
+  .eye svg { width: 18px; height: 18px; }
+  .meter { display: grid; grid-template-columns: repeat(4, 1fr) auto; align-items: center; gap: 4px; margin-top: 6px; font-size: 0.68rem; font-weight: 800; color: var(--muted); }
+  .meter i { height: 4px; border-radius: 2px; background: var(--line); transition: background 0.3s; }
+  .meter span { min-width: 46px; text-align: right; }
+  .opts { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+  .chips { display: flex; gap: 5px; flex-wrap: wrap; }
+  .chip { height: 34px; padding: 0 11px; border: 1.5px solid var(--line); border-radius: 10px; background: transparent; font-size: 0.78rem; font-weight: 750; cursor: pointer; transition: background 0.2s, border-color 0.2s, color 0.2s; }
+  .chip:hover { border-color: var(--lk2); }
+  .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--card); }
+  .step { display: inline-flex; align-items: center; height: 34px; border: 1.5px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .step button { width: 32px; height: 100%; border: 0; background: transparent; font-weight: 900; cursor: pointer; }
+  .step button:hover { background: var(--field); }
+  .step output { min-width: 26px; text-align: center; font-weight: 850; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+  .act { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; padding: 0 16px; border: 1.5px solid var(--line); border-radius: 15px; background: transparent; font-weight: 850; font-size: 0.9rem; cursor: pointer; transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.2s; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: scale(0.95); }
+  .btn svg { width: 19px; height: 19px; }
+  .btn.lock { border: 0; background: linear-gradient(180deg, var(--lemon), var(--lemon2)); color: #2b2300; box-shadow: 0 14px 22px -14px var(--lemon2), inset 0 -3px 0 rgba(0, 0, 0, 0.12); }
+  .btn.del { color: var(--bad); }
+  .btn[disabled] { opacity: 0.45; cursor: default; transform: none; }
+  .btn[aria-disabled="true"] { cursor: progress; }
+  .result { display: grid; gap: 6px; padding: 10px 10px 10px 12px; border-radius: 15px; background: var(--field); box-shadow: inset 0 0 0 1.5px var(--line); }
+  .linkrow { display: flex; align-items: center; gap: 8px; }
+  .linkrow span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; font-weight: 650; color: var(--muted); }
+  .linkrow span b { color: var(--ink); }
+  .copy { height: 34px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--ink); color: var(--card); font-size: 0.78rem; font-weight: 850; cursor: pointer; flex: none; }
+  .copy.ok { background: var(--ok); color: #fff; }
+  .copy[disabled] { opacity: 0.4; cursor: default; }
+  .info { margin: 0; font-size: 0.74rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .info b { color: var(--ink); }
+  .info.bad, .info.bad b { color: var(--bad); }
+
+  .fx { position: fixed; inset: 0; z-index: 30; overflow: hidden; pointer-events: none; }
+  .fly { position: absolute; left: 0; top: 0; width: 30px; height: 38px; border-radius: 4px 9px 4px 4px; background: #fff; box-shadow: 0 6px 12px -4px rgba(0, 0, 0, 0.45); }
+  .fly::after { content: ""; position: absolute; left: 4px; right: 6px; bottom: 6px; height: 7px; border-radius: 2px; background: var(--lk2); }
+  .bit { position: absolute; left: 0; top: 0; width: 6px; height: 6px; border-radius: 1px; background: var(--lemon); }
+
+  @media (max-width: 720px) {
+    .card { grid-template-columns: 1fr; }
+    .bank { justify-items: center; }
+    .lcd { width: 100%; }
+  }
+  @media (max-width: 420px) {
+    .card { padding: 14px; }
+    .grid { grid-template-columns: repeat(3, 72px); }
+    .lk { height: 86px; }
+    .opts { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card, .lcd .blink, .lk.busyLk .led, .lk.mine.ping .led { animation: none !important; }
+    .handle, .drop, .btn, .meter i { transition-duration: 0.01s; }
+    .fx { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <section class="card" aria-labelledby="title">
+      <div class="bank" aria-hidden="true">
+        <div class="lcd mono" id="lcd"><span id="lcdL">LOCKER 14</span><span id="lcdR" class="blink">OPEN</span></div>
+        <div class="grid" id="grid"></div>
+        <div class="bankfoot"><span>Share wall · Block C</span><span class="keypad" id="keypad"></span></div>
+      </div>
+
+      <div class="form">
+        <header><h1 id="title">Share a file in a locker</h1><p>It locks with your password and empties itself when time runs out.</p></header>
+        <label class="drop" id="drop">
+          <input type="file" id="file" />
+          <span class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5" /><path d="M5 15v4h14v-4" /></svg></span>
+          <span class="ftxt"><b id="fname">Choose a file or drop it here</b><small id="fmeta">Any type, up to 2 GB</small></span>
+        </label>
+        <div>
+          <label class="lbl" for="pass">Password</label>
+          <div class="pw"><input id="pass" type="password" autocomplete="new-password" placeholder="At least 6 characters" aria-describedby="pwLabel" /><button class="eye" id="eye" type="button" aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg></button></div>
+          <div class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i><span id="pwLabel">Empty</span></div>
+        </div>
+        <div class="opts">
+          <div><span class="lbl" id="expLbl">Expires after</span><div class="chips" id="exp" role="group" aria-labelledby="expLbl"><button class="chip" type="button" data-v="3600" aria-pressed="false">1 hour</button><button class="chip" type="button" data-v="86400" aria-pressed="true">1 day</button><button class="chip" type="button" data-v="604800" aria-pressed="false">7 days</button></div></div>
+          <div><span class="lbl" id="dlLbl">Downloads</span><div class="step" role="group" aria-labelledby="dlLbl"><button type="button" id="dlMinus" aria-label="Fewer downloads">−</button><output id="dl" aria-live="polite">3</output><button type="button" id="dlPlus" aria-label="More downloads">+</button></div></div>
+        </div>
+        <div class="act">
+          <button class="btn lock" id="lock" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg><span id="lockText">Lock &amp; share</span></button>
+          <button class="btn del" id="del" type="button" disabled>Delete link</button>
+        </div>
+        <div class="result">
+          <div class="linkrow"><span id="link">Your link appears here</span><button class="copy" id="copy" type="button" disabled>Copy</button></div>
+          <p class="info" id="info" aria-live="polite">Pick a file, set a password, then lock it.</p>
+        </div>
+      </div>
+    </section>
+    <div class="fx" id="fx" aria-hidden="true"></div>
+  </main>
+
+<script>
+  // ---------- Locker: put a file in a locker, lock it with a password, share the link until it expires ----------
+  const $ = (s) => document.querySelector(s);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  function play(el, frames, opts) {
+    if (calm() || !el || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  const fx = $("#fx");
+  const info = $("#info");
+  const say = (html, bad) => { info.innerHTML = html; info.classList.toggle("bad", !!bad); };
+
+  // ---------- Build the locker wall: 3 x 3, yours is number 14 in the middle ----------
+  const NUMS = [10, 11, 12, 13, 14, 15, 16, 17, 18];
+  $("#grid").innerHTML = NUMS.map((n, i) => {
+    const mine = n === 14;
+    return '<div class="lk' + (mine ? " mine" : "") + (n === 11 || n === 17 ? " busyLk" : "") + '" id="lk' + n + '">' +
+      (mine ? '<div class="inside"><span class="hint">DROP<br />A FILE</span><div class="file" id="fileCard"><i style="top:10px"></i><i style="top:16px"></i><i style="top:22px;right:16px"></i><b id="ext">PDF</b></div></div>' : "") +
+      '<div class="door" id="door' + n + '"><div class="fr"><div class="vents"><i></i><i></i><i></i></div>' + (n === 16 ? '<span class="sticker">FRAGILE</span>' : "") + '<span class="led"></span><span class="handle"></span><span class="plate">' + n + '</span></div><div class="bk"></div></div></div>';
+  }).join("");
+  $("#keypad").innerHTML = "<i></i>".repeat(9);
+  const door = $("#door14"), lk = $("#lk14");
+  let doorAngle = -112;
+  function setDoor(a) { doorAngle = a; door.style.transform = "rotateY(" + a + "deg)"; }
+  async function swing(to, dur, overshoot) {
+    const from = doorAngle;
+    setDoor(to);
+    const mid = to + (to - from) * -overshoot;
+    await play(door, [{ transform: "rotateY(" + from + "deg)" }, { transform: "rotateY(" + mid + "deg)", offset: 0.7 }, { transform: "rotateY(" + to + "deg)" }], { duration: dur, easing: "cubic-bezier(.5,0,.3,1)" });
+  }
+  function lcd(l, r, blink) { $("#lcdL").textContent = l; const R = $("#lcdR"); R.textContent = r; R.classList.toggle("blink", !!blink); }
+
+  // ---------- File: a real file from the picker or a drop; images get a thumbnail ----------
+  let file = null; // { name, size, type, thumb }
+  const human = (b) => (b >= 1e9 ? (b / 1e9).toFixed(1) + " GB" : b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : b >= 1e3 ? Math.round(b / 1e3) + " KB" : b + " B");
+  const extOf = (n) => { const m = /\.([a-z0-9]{1,5})$/i.exec(n); return m ? m[1].toUpperCase() : "FILE"; };
+  const EXT_COL = { PDF: "#e2483d", PNG: "#1f9a62", JPG: "#1f9a62", JPEG: "#1f9a62", WEBP: "#1f9a62", ZIP: "#7a55d6", DOC: "#2f6fd6", DOCX: "#2f6fd6", XLSX: "#1d8a4a", CSV: "#1d8a4a", MP4: "#d6457a" };
+  function setFile(f, real) {
+    if (locked || busy) return;
+    file = f;
+    $("#fname").textContent = f.name;
+    $("#fmeta").textContent = human(f.size) + " · " + (real ? "ready" : "sample file");
+    const ext = extOf(f.name), card = $("#fileCard");
+    $("#ext").textContent = ext;
+    $("#ext").style.background = EXT_COL[ext] || "#4a5d78";
+    const old = card.querySelector("img"); if (old) old.remove();
+    if (f.thumb) { const im = document.createElement("img"); im.alt = ""; im.src = f.thumb; card.appendChild(im); }
+    lk.classList.add("has");
+    play(card, [{ transform: "translateY(-30px) scale(.6)", opacity: 0 }, { transform: "translateY(4px) scale(1.05)", opacity: 1, offset: 0.7 }, { transform: "none", opacity: 1 }], { duration: 520, easing: "ease-out" });
+    lcd("LOCKER 14", "FILE IN", false);
+    say("<b>" + esc(f.name) + "</b> is in locker 14. Set a password and lock it.");
+  }
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  function readReal(f) {
+    const base = { name: f.name, size: f.size, type: f.type };
+    if (/^image\//.test(f.type) && f.size < 15e6) {
+      const r = new FileReader();
+      r.onload = () => setFile(Object.assign(base, { thumb: r.result }), true);
+      r.onerror = () => setFile(base, true);
+      r.readAsDataURL(f);
+    } else setFile(base, true);
+  }
+  $("#file").addEventListener("change", (e) => { const f = e.target.files && e.target.files[0]; if (f) readReal(f); e.target.value = ""; });
+  const drop = $("#drop");
+  ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) readReal(f); });
+
+  // ---------- Password with a strength meter ----------
+  const pass = $("#pass");
+  function strength(p) {
+    if (!p) return 0;
+    let s = 0;
+    if (p.length >= 6) s++;
+    if (p.length >= 10) s++;
+    if (/[a-z]/.test(p) && /[A-Z]/.test(p)) s++;
+    if (/\d/.test(p) && /[^A-Za-z0-9]/.test(p)) s++;
+    return Math.max(1, s);
+  }
+  const PW = [["Empty", ""], ["Weak", "var(--bad)"], ["Okay", "#f08a24"], ["Good", "var(--lk2)"], ["Strong", "var(--ok)"]];
+  function meter() {
+    const s = strength(pass.value);
+    document.querySelectorAll(".meter i").forEach((b, i) => { b.style.background = i < s ? PW[s][1] : ""; });
+    $("#pwLabel").textContent = PW[s][0];
+    $("#pwLabel").style.color = PW[s][1];
+    // a key on the keypad lights for each character
+    const keys = $("#keypad").children;
+    if (pass.value) { const k = keys[pass.value.length % 9]; k.classList.add("hit"); setTimeout(() => k.classList.remove("hit"), 160); }
+  }
+  pass.addEventListener("input", meter);
+  $("#eye").addEventListener("click", (e) => {
+    const show = pass.type === "password";
+    pass.type = show ? "text" : "password";
+    e.currentTarget.setAttribute("aria-pressed", String(show));
+    e.currentTarget.setAttribute("aria-label", show ? "Hide password" : "Show password");
+  });
+
+  // ---------- Expiry and download limit ----------
+  let exp = 86400, dls = 3;
+  $("#exp").addEventListener("click", (e) => { const c = e.target.closest(".chip"); if (!c || locked || busy) return; exp = +c.dataset.v; document.querySelectorAll("#exp .chip").forEach((x) => x.setAttribute("aria-pressed", String(x === c))); });
+  function setDl(n) { if (locked || busy) return; dls = Math.max(1, Math.min(10, n)); $("#dl").textContent = dls; }
+  $("#dlMinus").addEventListener("click", () => setDl(dls - 1));
+  $("#dlPlus").addEventListener("click", () => setDl(dls + 1));
+
+  // ---------- Lock & share: check, close the door, latch, link ----------
+  let locked = false, busy = false, share = null, tick = 0;
+  $("#lock").addEventListener("click", () => lockIt());
+  async function lockIt() {
+    if (busy || locked) return;
+    if (!file) { say("Pick a file first.", true); play(drop, [{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "translateX(0)" }], { duration: 360 }); return; }
+    if (pass.value.length < 6) { say("The password needs at least 6 characters.", true); play(pass.parentNode, [{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "translateX(0)" }], { duration: 360 }); pass.focus({ preventScroll: true }); return; }
+    busy = true;
+    const btn = $("#lock");
+    btn.setAttribute("aria-disabled", "true");
+    $("#lockText").textContent = "Locking…";
+    // 1. anticipation: the file card settles back, the keypad runs the code
+    play($("#fileCard"), [{ transform: "none" }, { transform: "translateY(3px) scale(.96)" }, { transform: "none" }], { duration: 300 });
+    const keys = [...$("#keypad").children];
+    for (let i = 0; i < 4; i++) { const k = keys[(i * 4 + 1) % 9]; k.classList.add("hit"); await wait(calm() ? 0 : 90); k.classList.remove("hit"); }
+    // 2. main: the door swings shut with a bounce, the handle turns, the light goes green
+    lcd("LOCKER 14", "CLOSING", true);
+    await swing(0, 620, 0.08);
+    play(lk, [{ transform: "translateX(0)" }, { transform: "translateX(-2px)" }, { transform: "translateX(2px)" }, { transform: "translateX(0)" }], { duration: 220 });
+    lk.classList.add("locked");
+    sparks(lk);
+    // 3. progress: the link is made
+    const token = "14-" + Array.from({ length: 4 }, () => "ABCDEFGHJKMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 31)]).join("");
+    share = { token, until: Date.now() + exp * 1000, left: dls, max: dls };
+    $("#link").innerHTML = "share.example/l/<b>" + token + "</b>";
+    $("#copy").disabled = false; $("#del").disabled = false;
+    locked = true;
+    [pass, $("#file")].forEach((x) => { x.disabled = true; });
+    // 4. finish
+    $("#lockText").textContent = "Locked";
+    btn.removeAttribute("aria-disabled");
+    btn.disabled = true;
+    refresh();
+    clearInterval(tick); tick = setInterval(refresh, 1000);
+    busy = false;
+  }
+  function left(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    if (d) return d + " d " + h + " h";
+    return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(x).padStart(2, "0");
+  }
+  function refresh() {
+    if (!share) return;
+    const ms = share.until - Date.now();
+    if (ms <= 0) { expire("Expired"); return; }
+    lcd("L14 · " + share.left + "/" + share.max, "EXP " + left(ms), false);
+    say("<b>Locked</b> with a password · <b>" + share.left + " of " + share.max + "</b> downloads left · expires in <b>" + left(ms) + "</b>");
+  }
+
+  // someone opens the link (simulated in the demo): the light flickers, a copy of the file flies out
+  function download(who) {
+    if (!share || share.left <= 0) return;
+    share.left--;
+    lk.classList.remove("ping"); void lk.offsetWidth; lk.classList.add("ping");
+    if (!calm()) {
+      const r = lk.getBoundingClientRect();
+      const f = document.createElement("i");
+      f.className = "fly";
+      fx.appendChild(f);
+      const x = r.left + r.width / 2 - 15, y = r.top + r.height / 2 - 19;
+      f.animate([{ transform: "translate(" + x + "px," + y + "px) scale(.4)", opacity: 0 }, { transform: "translate(" + (x + 30) + "px," + (y - 50) + "px) scale(1) rotate(10deg)", opacity: 1, offset: 0.4 }, { transform: "translate(" + (x + 160) + "px," + (y - 120) + "px) scale(.6) rotate(30deg)", opacity: 0 }], { duration: 1100, easing: "cubic-bezier(.3,.6,.4,1)" }).onfinish = () => f.remove();
+    }
+    refresh();
+    if (share.left === 0) { setTimeout(() => expire("All downloads used"), calm() ? 0 : 900); return; }
+    say("Downloaded by <b>" + who + "</b> · <b>" + share.left + " of " + share.max + "</b> left · expires in <b>" + left(share.until - Date.now()) + "</b>");
+  }
+
+  // ---------- Delete or expire: unlatch, the door swings open, the file dissolves ----------
+  $("#del").addEventListener("click", () => expire("Link deleted"));
+  async function expire(why) {
+    if (!locked || busy) return;
+    busy = true;
+    clearInterval(tick);
+    $("#del").disabled = true; $("#copy").disabled = true;
+    lk.classList.remove("locked");
+    lcd("LOCKER 14", "OPENING", true);
+    await wait(calm() ? 0 : 300);
+    await swing(-112, 760, 0.06);
+    // the file breaks into little squares and is gone
+    const card = $("#fileCard"), r = card.getBoundingClientRect();
+    if (!calm()) {
+      for (let i = 0; i < 16; i++) {
+        const b = document.createElement("i");
+        b.className = "bit";
+        b.style.background = i % 2 ? "#fff" : "var(--lemon)";
+        fx.appendChild(b);
+        const x = r.left + (i % 4) * 11 + 4, y = r.top + Math.floor(i / 4) * 14 + 4;
+        b.animate([{ transform: "translate(" + x + "px," + y + "px) scale(1)", opacity: 1 }, { transform: "translate(" + (x + (Math.random() - 0.5) * 60) + "px," + (y - 30 - Math.random() * 40) + "px) scale(.2) rotate(120deg)", opacity: 0 }], { duration: 700 + Math.random() * 300, delay: i * 25, easing: "cubic-bezier(.2,.7,.3,1)", fill: "backwards" }).onfinish = () => b.remove();
+      }
+      await play(card, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(.6)" }], { duration: 420, easing: "ease-in" });
+    }
+    lk.classList.remove("has");
+    file = null; share = null; locked = false;
+    $("#fname").textContent = "Choose a file or drop it here";
+    $("#fmeta").textContent = "Any type, up to 2 GB";
+    $("#link").innerHTML = "<s>Link no longer works</s>";
+    [pass, $("#file")].forEach((x) => { x.disabled = false; });
+    pass.value = ""; meter();
+    $("#lock").disabled = false;
+    $("#lockText").textContent = "Lock & share";
+    lcd("LOCKER 14", "EMPTY", false);
+    say("<b>" + why + ".</b> The locker is empty again.", why !== "Link deleted");
+    busy = false;
+  }
+  function sparks(el) {
+    if (calm()) return;
+    const r = el.getBoundingClientRect();
+    for (let i = 0; i < 12; i++) {
+      const b = document.createElement("i");
+      b.className = "bit";
+      fx.appendChild(b);
+      const x = r.right - 10, y = r.top + r.height / 2, a = (i / 12) * Math.PI * 2, d = 24 + Math.random() * 22;
+      b.animate([{ transform: "translate(" + x + "px," + y + "px) scale(.5)", opacity: 1 }, { transform: "translate(" + (x + Math.cos(a) * d) + "px," + (y + Math.sin(a) * d) + "px) scale(1) rotate(90deg)", opacity: 0 }], { duration: 600, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = () => b.remove();
+    }
+  }
+
+  // ---------- Copy the link ----------
+  async function writeClipboard(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* fall back below */ }
+    try { const ta = document.createElement("textarea"); ta.value = text; ta.style.cssText = "position:fixed;left:-9999px"; document.body.appendChild(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok; } catch (e) { return false; }
+  }
+  $("#copy").addEventListener("click", async (e) => {
+    const btn = e.currentTarget; // keep it before the await
+    if (!share) return;
+    const ok = await writeClipboard("https://share.example/l/" + share.token);
+    btn.textContent = ok ? "Copied" : "Select it";
+    btn.classList.toggle("ok", ok);
+    clearTimeout(btn._t); btn._t = setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("ok"); }, 1500);
+  });
+
+  // ---------- Auto-demo: a sample file, a typed password, lock, two downloads, delete ----------
+  const SAMPLES = [{ name: "Price-list-November.pdf", size: 2.4e6, exp: 86400, dl: 3 }, { name: "Wedding-shoot-selects.zip", size: 186e6, exp: 604800, dl: 5 }, { name: "Quarterly-sales.xlsx", size: 640e3, exp: 3600, dl: 2 }];
+  const PWS = ["Lahore#2026", "Shoot-Day-7", "Q4sales!"];
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) => window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  function queueDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(runDemo, ms); }
+  async function runDemo() {
+    if (!demoOn) return;
+    if (busy) { queueDemo(600); return; } // the locker is still opening or closing
+    if (locked) { await expire("Link deleted"); await wait(900); }
+    const s = SAMPLES[round % SAMPLES.length], pw = PWS[round % PWS.length];
+    round++;
+    setFile({ name: s.name, size: s.size }, false);
+    exp = s.exp; document.querySelectorAll("#exp .chip").forEach((x) => x.setAttribute("aria-pressed", String(+x.dataset.v === s.exp)));
+    setDl(s.dl);
+    await wait(700);
+    for (let i = 1; i <= pw.length; i++) { if (!demoOn) return; pass.value = pw.slice(0, i); meter(); await wait(calm() ? 0 : 70); }
+    await wait(400);
+    if (!demoOn) return;
+    await lockIt();
+    const who = ["someone in Karachi", "someone in Islamabad", "someone in Multan"];
+    for (let i = 0; i < 2; i++) { await wait(1500); if (!demoOn || !locked) return; download(who[(round + i) % 3]); }
+    await wait(1800);
+    if (!demoOn) return;
+    queueDemo(200);
+  }
+
+  // ---------- Start: the door of 14 stands open, waiting ----------
+  setDoor(-112);
+  meter();
+  play(door, [{ transform: "rotateY(0deg)" }, { transform: "rotateY(-120deg)", offset: 0.75 }, { transform: "rotateY(-112deg)" }], { duration: 900, delay: 300, easing: "cubic-bezier(.4,0,.3,1)", fill: "backwards" });
+  queueDemo(900);
+</script>
+</body>
+</html>

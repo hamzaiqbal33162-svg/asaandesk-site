@@ -1,0 +1,487 @@
+<!doctype html>
+<!-- Chill & Craft · Voice Find · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Find · search with a voice-style waveform</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: peach paper with a coral-to-violet signal (light), plum studio (dark) ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --bg: #fdeee9;
+    --bg2: #fff8f5;
+    --card: #ffffff;
+    --ink: #261320;
+    --muted: #7d6473;
+    --line: #f3e3e3;
+    --soft: #fbf3f3;
+    --coral: #ff6b5b;
+    --pink: #e5397a;
+    --vio: #7a4dff;
+    --mark: #ffe0d6;
+    --shadow: rgba(120, 30, 60, .25);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0f0910;
+    --bg2: #1a1019;
+    --card: #1b111b;
+    --ink: #f7e9f1;
+    --muted: #b195a6;
+    --line: #33212f;
+    --soft: #241722;
+    --mark: #5a2338;
+    --shadow: rgba(0, 0, 0, .7);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: var(--ff); color: var(--ink); background: var(--bg); }
+  .stage {
+    min-height: 100vh; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr); padding: 18px 14px; overflow: hidden; overflow-x: clip;
+    background:
+      radial-gradient(50% 40% at 20% 10%, color-mix(in srgb, var(--coral) 20%, transparent), transparent 70%),
+      radial-gradient(50% 40% at 85% 90%, color-mix(in srgb, var(--vio) 18%, transparent), transparent 70%),
+      linear-gradient(180deg, var(--bg2), var(--bg));
+  }
+  .card {
+    position: relative; width: min(100%, 420px); padding: 18px 16px 14px; border-radius: 28px; background: var(--card); border: 1px solid var(--line);
+    box-shadow: 0 40px 80px -46px var(--shadow), 0 12px 26px -18px var(--shadow);
+    animation: rise .8s cubic-bezier(.22, 1.3, .36, 1) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(.97); } }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 4px; }
+  h1 { margin: 0; font-size: clamp(18px, 5vw, 21px); letter-spacing: -.02em; }
+  .sub { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .live { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; background: var(--soft); font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+  .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: background .3s; }
+  .live.on { color: var(--pink); }
+  .live.on i { background: var(--pink); animation: blink 1s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+
+  /* ---------- Search pill ---------- */
+  .search {
+    position: relative; display: flex; align-items: center; gap: 4px; height: 54px; margin-top: 14px; padding: 0 6px 0 14px; border-radius: 18px;
+    background: var(--soft); border: 1.5px solid var(--line); transition: border-color .25s, box-shadow .25s, background .25s;
+  }
+  .search:focus-within, .search.listening { border-color: var(--pink); background: var(--card); box-shadow: 0 0 0 4px color-mix(in srgb, var(--pink) 16%, transparent); }
+  .search > svg { width: 19px; height: 19px; flex: none; color: var(--muted); }
+  .search input { flex: 1; min-width: 0; height: 100%; padding: 0 6px; border: 0; background: transparent; color: var(--ink); font: 600 15.5px/1 var(--ff); outline: none; }
+  .search input::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+  .search input::placeholder { color: var(--muted); font-weight: 500; }
+  .clear { width: 32px; height: 32px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+  .clear[hidden] { display: none; }
+  .clear:hover { background: var(--line); color: var(--ink); }
+  .clear svg { width: 16px; height: 16px; }
+  .mic {
+    position: relative; flex: none; width: 42px; height: 42px; border: 0; border-radius: 14px; cursor: pointer; color: #fff; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--coral), var(--pink) 55%, var(--vio)); box-shadow: 0 10px 18px -10px var(--pink);
+    transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), border-radius .3s;
+  }
+  .mic:hover { transform: scale(1.06); }
+  .mic:active { transform: scale(.92); }
+  .mic svg { width: 20px; height: 20px; position: relative; z-index: 1; }
+  .mic .stop, .mic .ok { display: none; }
+  .mic.listening .glyph { display: none; } .mic.listening .stop { display: block; }
+  .mic.done .glyph { display: none; } .mic.done .ok { display: block; }
+  .mic.listening { border-radius: 50%; }
+  .mic.listening::before, .mic.listening::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--pink); animation: ring 1.4s ease-out infinite; }
+  .mic.listening::after { animation-delay: .7s; }
+  @keyframes ring { from { transform: scale(1); opacity: .8; } to { transform: scale(1.9); opacity: 0; } }
+  .mic.thinking .glyph { animation: think .5s ease-in-out infinite alternate; }
+  @keyframes think { to { transform: scale(.75); opacity: .6; } }
+  .mic .ok path { stroke-dasharray: 20; stroke-dashoffset: 20; animation: draw .4s .05s ease forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+
+  /* ---------- Waveform strip ---------- */
+  .wave {
+    position: relative; display: flex; align-items: center; justify-content: space-between; gap: 2px; height: 62px; margin-top: 10px; padding: 0 12px; border-radius: 16px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--soft) 70%, var(--card)), var(--soft)); overflow: hidden;
+  }
+  .wave i { flex: 1; min-width: 2px; max-width: 6px; height: 4px; border-radius: 3px; background: var(--c); opacity: .9; }
+  .wave .cap { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .tries { display: flex; gap: 6px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+  .tries::-webkit-scrollbar { display: none; }
+  .tries span { flex: none; font-size: 11px; font-weight: 700; color: var(--muted); align-self: center; }
+  .tries button {
+    flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 7px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    font: 600 12px/1 var(--ff); cursor: pointer; transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), border-color .2s;
+  }
+  .tries button:hover { transform: translateY(-2px); border-color: var(--pink); }
+  .tries svg { width: 12px; height: 12px; color: var(--pink); }
+
+  /* ---------- Results ---------- */
+  .count { margin: 12px 4px 6px; font-size: 12px; color: var(--muted); min-height: 16px; }
+  .count b { color: var(--ink); }
+  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 262px; overflow-y: auto; scrollbar-width: thin; }
+  .ep {
+    display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 14px; cursor: pointer;
+    transition: background .2s; animation: epIn .45s cubic-bezier(.22, 1.2, .36, 1) both; animation-delay: calc(var(--i) * 40ms);
+  }
+  @keyframes epIn { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+  .ep.kept { animation: none; }
+  .ep:hover, .ep.active { background: var(--soft); }
+  .ep.active { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--pink) 50%, transparent); }
+  .cover { position: relative; width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; color: #fff; font: 800 13px/1 var(--ff); background: linear-gradient(135deg, var(--a), var(--b)); overflow: hidden; }
+  .eq { display: none; gap: 2px; align-items: flex-end; height: 16px; }
+  .eq i { width: 3px; height: 100%; border-radius: 2px; background: #fff; animation: eq .8s ease-in-out infinite alternate; transform-origin: bottom; }
+  .eq i:nth-child(2) { animation-delay: -.3s; } .eq i:nth-child(3) { animation-delay: -.55s; }
+  @keyframes eq { from { transform: scaleY(.25); } to { transform: scaleY(1); } }
+  .ep.playing .eq { display: flex; } .ep.playing .ini { display: none; }
+  .ep.paused .eq i { animation-play-state: paused; }
+  .ep .t { min-width: 0; }
+  .ep strong { display: block; font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ep small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ep mark { background: var(--mark); color: inherit; border-radius: 4px; padding: 0 2px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--coral) 30%, transparent); }
+  .ep svg { width: 46px; height: 22px; color: color-mix(in srgb, var(--pink) 70%, var(--muted)); }
+  .empty { padding: 18px 8px; text-align: center; font-size: 12.5px; color: var(--muted); }
+
+  /* ---------- Now playing ---------- */
+  .now {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; margin-top: 10px; padding: 9px 10px 9px 12px; border-radius: 16px;
+    background: var(--soft); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line);
+    transition: background .4s, color .4s, box-shadow .4s; position: relative; overflow: hidden;
+  }
+  /* the player stays in place (no layout jump) and lights up when an episode starts */
+  .now.on { background: linear-gradient(135deg, #2a1326, #1a0d1e); color: #fff; box-shadow: 0 12px 24px -14px rgba(60, 10, 40, .8); animation: nowOn .5s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes nowOn { from { transform: scale(.97); } }
+  .now:not(.on) #stopBtn { visibility: hidden; }
+  .now:not(.on) button { background: var(--card); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+  .now strong { display: block; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .now small { display: block; font-size: 11px; opacity: .7; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .now .bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: linear-gradient(90deg, var(--coral), var(--pink), var(--vio)); transform-origin: left; transform: scaleX(0); }
+  .now button { width: 36px; height: 36px; border: 0; border-radius: 12px; background: rgba(255, 255, 255, .12); color: #fff; cursor: pointer; display: grid; place-items: center; }
+  .now button:hover { background: rgba(255, 255, 255, .2); }
+  .now button svg { width: 16px; height: 16px; }
+
+  button:focus-visible, .ep.kb { outline: 3px solid var(--pink); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 370px) { .card { padding: 14px 12px 12px; } .ep svg { display: none; } .ep { grid-template-columns: 40px minmax(0, 1fr); } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .001ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="card" aria-labelledby="title">
+    <div class="head">
+      <div><h1 id="title">Find an episode</h1><p class="sub">16 episodes on the podcast shelf</p></div>
+      <span class="live" id="live"><i aria-hidden="true"></i><span id="liveText">Ready</span></span>
+    </div>
+
+    <div class="search" id="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="q" type="search" placeholder="Search or press the mic" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="list" aria-autocomplete="list" aria-label="Search episodes">
+      <button class="clear" id="clear" type="button" aria-label="Clear search" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button class="mic" id="mic" type="button" aria-label="Voice demo: say a sample phrase" aria-pressed="false">
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+        <svg class="stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2.5"/></svg>
+        <svg class="ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      </button>
+    </div>
+
+    <div class="wave" id="wave" aria-hidden="true"><span class="cap" id="cap">Type and the signal ripples</span></div>
+
+    <div class="tries" aria-label="Sample voice phrases">
+      <span>Try saying</span>
+      <button type="button" data-say="street food lahore"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/></svg>street food lahore</button>
+      <button type="button" data-say="rain sounds for sleep"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/></svg>rain sounds for sleep</button>
+      <button type="button" data-say="cricket legends"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/></svg>cricket legends</button>
+    </div>
+
+    <p class="count" id="count" role="status" aria-live="polite"></p>
+    <ul class="list" id="list" role="listbox" aria-label="Episodes"></ul>
+
+    <div class="now" id="now" aria-live="polite">
+      <div><strong id="nowTitle">Nothing playing yet</strong><small id="nowTime">Pick an episode, or press play for the top one</small></div>
+      <button type="button" id="playPause" aria-label="Play the top episode"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path id="ppIcon" d="M8 5l11 7-11 7z"/></svg></button>
+      <button type="button" id="stopBtn" aria-label="Stop playing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <span class="bar" id="nowBar"></span>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  // ---------- The shelf: made-up episodes ----------
+  var EPS = [
+    ["Tea stall stories from Anarkali", "City Walks", 32, "tea lahore street stories food", "#ff8a5b", "#e5397a"],
+    ["The last tonga driver of Rawalpindi", "City Walks", 27, "history horses rawalpindi stories", "#f6b042", "#e2672f"],
+    ["Street food Lahore: one night in the old city", "Food Lines", 41, "food lahore night street", "#ff6b5b", "#b8326b"],
+    ["How Karachi wakes up at 5 am", "City Walks", 22, "karachi morning city", "#4fb6ff", "#5a52e6"],
+    ["Tape-ball cricket legends of the gully", "Boundary Talk", 38, "cricket sport legends street", "#3fcf8e", "#167a6a"],
+    ["Fast bowlers and the art of reverse swing", "Boundary Talk", 45, "cricket sport bowling", "#2fb4a4", "#2a5a9a"],
+    ["Rain sounds over Murree for sleep", "Quiet Hours", 60, "sleep rain calm sounds", "#7a8cff", "#4a2fb4"],
+    ["Ocean waves at Clifton beach", "Quiet Hours", 55, "sleep sea calm karachi sounds", "#43c6db", "#2d63c8"],
+    ["Starting a home bakery with PKR 50,000", "Small Shop", 29, "business baking money food", "#ffb35b", "#d4602b"],
+    ["Pricing your handmade products", "Small Shop", 24, "business money craft", "#e6a43a", "#9a5b16"],
+    ["Truck art: painting the roads", "Colour Talk", 33, "art trucks design colour", "#ff5ba7", "#7a4dff"],
+    ["Learning to code at 40", "Late Bloomers", 36, "tech learning code", "#5a7dff", "#2a2f8a"],
+    ["Mangoes of Multan: a summer guide", "Food Lines", 26, "food fruit summer multan", "#ffc83a", "#e0791c"],
+    ["Hiking to Fairy Meadows", "Trail Notes", 48, "travel mountains hiking", "#53c98a", "#2a7a4a"],
+    ["Kite flying and the spring festival", "Colour Talk", 31, "kites festival lahore spring", "#ff7a4a", "#c42f8a"],
+    ["Night trains across Punjab", "Trail Notes", 39, "travel trains night punjab", "#6a6bff", "#251a6a"]
+  ].map(function (e, i) { return { id: i, title: e[0], show: e[1], min: e[2], tags: e[3], a: e[4], b: e[5] }; });
+
+  function esc(s) { return s.replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function hash(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  // a little static waveform for each episode, always the same for the same title
+  function spark(title) {
+    var h = hash(title), r = "";
+    for (var i = 0; i < 12; i++) { h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0; var v = 4 + (h % 15); r += '<rect x="' + i * 4 + '" y="' + (11 - v / 2) + '" width="2.4" height="' + v + '" rx="1.2"/>'; }
+    return '<svg viewBox="0 0 48 22" fill="currentColor" aria-hidden="true">' + r + "</svg>";
+  }
+
+  // ---------- Search: score every episode, highlight what matched ----------
+  function words(q) { return q.toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 1 && ["for", "the", "of", "a", "an", "and", "to", "in", "at"].indexOf(w) < 0; }); }
+  function score(ep, ws) {
+    var t = ep.title.toLowerCase(), s = 0, hit = 0;
+    ws.forEach(function (w) {
+      var ws2 = (t + " " + ep.show.toLowerCase() + " " + ep.tags).split(/[^a-z0-9]+/);
+      var exact = ws2.indexOf(w) > -1, prefix = ws2.some(function (x) { return x.indexOf(w) === 0; });
+      if (exact || prefix) hit++;
+      s += (t.indexOf(w) > -1 ? 3 : 0) + (exact ? 2 : prefix ? 1 : 0);
+    });
+    return hit ? s + hit * 4 : 0;
+  }
+  function highlight(text, ws) {
+    if (!ws.length) return esc(text);
+    var re = new RegExp("(" + ws.map(function (w) { return w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("|") + ")", "gi");
+    return esc(text).replace(re, "<mark>$1</mark>");
+  }
+  var list = $("#list"), qIn = $("#q"), count = $("#count"), results = [], activeIdx = -1, lastKey = "";
+  function runSearch(force) {
+    var q = qIn.value.trim(), ws = words(q), key = ws.join(" ");
+    $("#clear").hidden = !qIn.value;
+    if (key === lastKey && !force) return;
+    lastKey = key;
+    results = ws.length ? EPS.map(function (e) { return { e: e, s: score(e, ws) }; }).filter(function (r) { return r.s > 0; }).sort(function (a, b) { return b.s - a.s; }).map(function (r) { return r.e; }) : EPS.slice(0, 6);
+    activeIdx = -1; qIn.removeAttribute("aria-activedescendant");
+    // episodes already on screen stay put; only newcomers slide in, so fast typing never blanks the list
+    var had = {}; list.querySelectorAll(".ep").forEach(function (li) { had[li.dataset.id] = 1; });
+    list.innerHTML = results.length ? results.map(function (e, i) {
+      return '<li class="ep' + (had[e.id] ? " kept" : "") + (playing && playing.id === e.id ? " playing" + (paused ? " paused" : "") : "") + '" id="ep' + e.id + '" role="option" aria-selected="false" data-id="' + e.id + '" style="--i:' + Math.min(i, 8) + ";--a:" + e.a + ";--b:" + e.b + '">' +
+        '<span class="cover"><span class="ini">' + e.show.split(" ").map(function (w) { return w[0]; }).join("") + '</span><span class="eq"><i></i><i></i><i></i></span></span>' +
+        '<span class="t"><strong>' + highlight(e.title, ws) + "</strong><small>" + highlight(e.show, ws) + " · " + e.min + " min</small></span>" + spark(e.title) + "</li>";
+    }).join("") : '<li class="empty">No episode matches that. Try "lahore", "sleep" or "cricket".</li>';
+    count.innerHTML = ws.length ? "<b>" + results.length + "</b> episode" + (results.length === 1 ? "" : "s") + " for “" + esc(q) + "”" : "Popular this week";
+  }
+  function setActive(i) {
+    var items = list.querySelectorAll(".ep");
+    if (!items.length) return;
+    activeIdx = (i + items.length) % items.length;
+    items.forEach(function (li, k) { li.classList.toggle("active", k === activeIdx); li.setAttribute("aria-selected", String(k === activeIdx)); });
+    var li = items[activeIdx];
+    qIn.setAttribute("aria-activedescendant", li.id);
+    var top = li.offsetTop - list.offsetTop, bottom = top + li.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top; else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+  }
+
+  // ---------- The waveform: idle breath, typing ripples and speech ----------
+  var wave = $("#wave"), BARS = 46, bars = [], ripples = [], speaking = false, env = 0, envT = 0, nextSyl = 0;
+  for (var i = 0; i < BARS; i++) {
+    var b = document.createElement("i"), k = i / (BARS - 1);
+    // colour runs coral -> pink -> violet along the strip
+    var c = k < .5 ? mixHex("#ff6b5b", "#e5397a", k * 2) : mixHex("#e5397a", "#7a4dff", (k - .5) * 2);
+    b.style.setProperty("--c", c);
+    wave.insertBefore(b, $("#cap"));
+    bars.push(b);
+  }
+  function mixHex(a, b2, t) {
+    var p = function (h, j) { return parseInt(h.slice(1 + j * 2, 3 + j * 2), 16); };
+    return "#" + [0, 1, 2].map(function (j) { return Math.round(p(a, j) + (p(b2, j) - p(a, j)) * t).toString(16).padStart(2, "0"); }).join("");
+  }
+  function ripple(ch) {
+    // vowels ring louder than consonants; the pulse starts roughly where the caret is
+    var amp = /[aeiou]/i.test(ch) ? .9 : /[a-z]/i.test(ch) ? .6 : .35;
+    var at = Math.min(BARS - 3, 3 + qIn.value.length * 1.6);
+    ripples.push({ x: at, t: performance.now(), a: amp });
+    if (ripples.length > 14) ripples.shift();
+  }
+  var H = 46, t0 = performance.now();
+  function frame(now) {
+    var t = (now - t0) / 1000;
+    if (speaking && now > nextSyl) { envT = .35 + Math.random() * .65; nextSyl = now + 110 + Math.random() * 160; }
+    if (!speaking) envT = 0;
+    env += (envT - env) * .25;
+    if (speaking && now > nextSyl - 60) envT *= .6; // syllables fall away between bursts
+    for (var i = 0; i < BARS; i++) {
+      var h = reduce.matches ? .14 : .15 + .08 * Math.sin(t * 2.2 + i * .38) + .05 * Math.sin(t * 3.7 - i * .21);
+      for (var r = 0; r < ripples.length; r++) {
+        var rp = ripples[r], age = (now - rp.t) / 1000, front = age * 34;
+        var d1 = i - (rp.x + front), d2 = i - (rp.x - front);
+        h += rp.a * Math.exp(-age * 2.6) * (Math.exp(-d1 * d1 / 6) + Math.exp(-d2 * d2 / 6)) * (reduce.matches ? .3 : 1);
+      }
+      if (env > .01) {
+        var center = Math.exp(-Math.pow((i - BARS / 2) / (BARS / 3.2), 2));
+        var n = .55 + .45 * Math.sin(i * 1.7 + t * 23) * Math.sin(i * .63 - t * 17);
+        h += env * center * n * (reduce.matches ? .5 : 1.05);
+      }
+      bars[i].style.height = Math.max(4, Math.min(H, h * H)).toFixed(1) + "px";
+    }
+    ripples = ripples.filter(function (rp) { return now - rp.t < 1600; });
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Typing ----------
+  var cap = $("#cap");
+  qIn.addEventListener("input", function (e) {
+    var ch = e.data || (qIn.value.slice(-1) || " ");
+    if (speaking || mic.classList.contains("thinking")) { voiceId++; speaking = false; micState("idle"); } // typing takes over from the voice demo
+    ripple(ch);
+    runSearch();
+    cap.textContent = qIn.value ? results.length + " found" : "Type and the signal ripples";
+  });
+  qIn.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive(activeIdx + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive(activeIdx - 1); }
+    else if (e.key === "Enter") { e.preventDefault(); var li = list.querySelectorAll(".ep")[Math.max(0, activeIdx)]; if (li) play(+li.dataset.id); }
+    else if (e.key === "Escape") { clearAll(); }
+  });
+  function clearAll() { qIn.value = ""; runSearch(); cap.textContent = "Type and the signal ripples"; ripple(" "); }
+  $("#clear").addEventListener("click", function () { clearAll(); qIn.focus(); });
+  list.addEventListener("click", function (e) { var li = e.target.closest(".ep"); if (li) play(+li.dataset.id); });
+
+  // ---------- Voice demo: the waveform talks, the words land in the box ----------
+  var mic = $("#mic"), live = $("#live"), liveText = $("#liveText"), voiceId = 0, PHRASES = ["street food lahore", "rain sounds for sleep", "cricket legends", "night trains"], phraseN = 0;
+  function micState(s) {
+    mic.classList.toggle("listening", s === "listening");
+    mic.classList.toggle("thinking", s === "thinking");
+    mic.classList.toggle("done", s === "done");
+    $("#search").classList.toggle("listening", s === "listening");
+    mic.setAttribute("aria-pressed", String(s === "listening"));
+    mic.setAttribute("aria-label", s === "listening" ? "Stop listening" : "Voice demo: say a sample phrase");
+    live.classList.toggle("on", s === "listening");
+    liveText.textContent = { listening: "Sample voice", thinking: "Matching", done: "Got it", idle: "Ready" }[s]; // the demo voice says so plainly
+  }
+  async function listen(phrase) {
+    var id = ++voiceId;
+    micState("listening");
+    qIn.value = ""; runSearch();
+    cap.textContent = "Sample voice · no microphone used";
+    speaking = true;
+    await wait(reduce.matches ? 100 : 450);
+    var ws = phrase.split(" ");
+    for (var w = 0; w < ws.length; w++) {
+      for (var c = 0; c < ws[w].length; c++) {
+        if (id !== voiceId) return;
+        qIn.value += ws[w][c];
+        await wait(reduce.matches ? 0 : 38);
+      }
+      runSearch();
+      if (w < ws.length - 1) qIn.value += " ";
+      await wait(reduce.matches ? 60 : 340);
+    }
+    if (id !== voiceId) return;
+    finishListen(id);
+  }
+  async function finishListen(id) {
+    speaking = false;
+    micState("thinking");
+    await wait(reduce.matches ? 60 : 420);
+    if (id !== voiceId) return;
+    runSearch(true);
+    micState("done");
+    cap.textContent = results.length + " found for your words";
+    for (var k = 0; k < 6; k++) ripples.push({ x: 4 + k * 8, t: performance.now() + k * 40, a: .7 });
+    await wait(900);
+    if (id === voiceId) micState("idle");
+  }
+  mic.addEventListener("click", function () {
+    if (mic.classList.contains("listening")) { var id = ++voiceId; finishListen(id); return; } // stop early: keep the words heard so far
+    listen(PHRASES[phraseN++ % PHRASES.length]);
+  });
+  document.querySelector(".tries").addEventListener("click", function (e) { var b = e.target.closest("button[data-say]"); if (b) listen(b.dataset.say); });
+
+  // ---------- Playing an episode (simulated, so the bar moves while you watch) ----------
+  var playing = null, paused = false, startAt = 0, played = 0, now = $("#now"), tick = 0;
+  function fmt(s) { return Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0"); }
+  function play(id) {
+    var e = EPS[id];
+    if (playing && playing.id === id) { togglePause(); return; }
+    playing = e; paused = false; played = 0; startAt = performance.now();
+    list.querySelectorAll(".ep").forEach(function (li) { li.classList.toggle("playing", +li.dataset.id === id); li.classList.remove("paused"); });
+    $("#nowTitle").textContent = e.title;
+    now.classList.add("on");
+    setPP();
+    clearInterval(tick); tick = setInterval(updateNow, 250); updateNow();
+  }
+  function updateNow() {
+    if (!playing) return;
+    var secs = played + (paused ? 0 : (performance.now() - startAt) / 1000);
+    $("#nowTime").textContent = fmt(secs) + " / " + playing.min + ":00 · " + playing.show;
+    $("#nowBar").style.transform = "scaleX(" + Math.min(1, secs / (playing.min * 60)).toFixed(4) + ")";
+  }
+  function setPP() {
+    $("#ppIcon").setAttribute("d", paused ? "M8 5l11 7-11 7z" : "M7 5h3.5v14H7zM13.5 5H17v14h-3.5z");
+    $("#playPause").setAttribute("aria-label", paused ? "Play" : "Pause");
+  }
+  function togglePause() {
+    if (!playing) return;
+    if (paused) { startAt = performance.now(); paused = false; } else { played += (performance.now() - startAt) / 1000; paused = true; }
+    var li = list.querySelector(".ep.playing"); if (li) li.classList.toggle("paused", paused);
+    setPP(); updateNow();
+  }
+  function stopPlaying() {
+    playing = null; clearInterval(tick); now.classList.remove("on");
+    $("#nowTitle").textContent = "Nothing playing yet"; $("#nowTime").textContent = "Pick an episode, or press play for the top one";
+    $("#nowBar").style.transform = "scaleX(0)"; $("#ppIcon").setAttribute("d", "M8 5l11 7-11 7z"); $("#playPause").setAttribute("aria-label", "Play the top episode");
+    list.querySelectorAll(".ep.playing").forEach(function (li) { li.classList.remove("playing", "paused"); });
+  }
+  $("#playPause").addEventListener("click", function () { if (playing) togglePause(); else play(results.length ? results[0].id : 0); });
+  $("#stopBtn").addEventListener("click", stopPlaying);
+
+  // ---------- Start ----------
+  runSearch(true);
+  requestAnimationFrame(frame);
+
+  // ---------- Auto demo: types a search, plays a result, then asks by voice; stops at the first real touch ----------
+  var demoOn = true;
+  function stopDemo(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false; voiceId++; speaking = false; micState("idle");
+    stopPlaying(); qIn.value = ""; runSearch(true); cap.textContent = "Type and the signal ripples";
+  }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  async function typeQ(text) { for (var i = 0; i < text.length; i++) { qIn.value += text[i]; ripple(text[i]); runSearch(); cap.textContent = results.length + " found"; await pause(150 + Math.random() * 90); } }
+  async function demo() {
+    try {
+      await pause(600);
+      var round = 0;
+      while (demoOn) {
+        await typeQ(round % 2 ? "sleep" : "lahore"); await pause(700);
+        setActive(0); await pause(500); setActive(1); await pause(600);
+        play(+list.querySelectorAll(".ep")[activeIdx].dataset.id); await pause(2200);
+        clearAll(); await pause(500);
+        listen(PHRASES[(round * 2 + 1) % PHRASES.length]);
+        await pause(3600);
+        if (results.length) play(results[0].id);
+        await pause(2400);
+        stopPlaying(); clearAll(); micState("idle"); await pause(900);
+        round++;
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,427 @@
+<!doctype html>
+<!-- Chill & Craft · Broadcast · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Broadcast · Post to your channel and watch it spread</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: navy and amber; a dawn city in light, a night city in dark ---------- */
+  :root {
+    --bg: #e6ebf7;
+    --card: #ffffff;
+    --field: #f2f5fc;
+    --ink: #121a3a;
+    --muted: #66708f;
+    --line: rgba(18, 26, 58, 0.12);
+    --amber: #ff8a2a;
+    --amber2: #e86f10;
+    --ok: #16a067;
+    --sky1: #b9cdf6; --sky2: #eef2fd; --dot: 40, 60, 140; --lit: 255, 138, 42; --tower: #1c2550; --glow: 255, 170, 90;
+    --shadow: rgba(30, 40, 90, 0.35);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #070a19;
+    --card: #10152e;
+    --field: #161c3a;
+    --ink: #eef1ff;
+    --muted: #98a0c6;
+    --line: rgba(238, 241, 255, 0.1);
+    --amber: #ffb340;
+    --amber2: #ff9a1f;
+    --ok: #3fd193;
+    --sky1: #050816; --sky2: #1b1f52; --dot: 130, 150, 255; --lit: 255, 190, 80; --tower: #8b95d6; --glow: 255, 180, 70;
+    --shadow: rgba(0, 0, 0, 0.75);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  button, textarea { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 20px 16px; overflow: hidden; isolation: isolate; background: radial-gradient(60% 50% at 50% 0%, color-mix(in srgb, var(--amber) 16%, transparent), transparent 70%), var(--bg); }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(0.98); } }
+  .card { width: min(680px, 100%); border-radius: 28px; overflow: hidden; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 50px 90px -50px var(--shadow); animation: rise 0.85s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+
+  /* ---------- The city of followers (canvas) ---------- */
+  .scene { position: relative; aspect-ratio: 640 / 250; min-height: 190px; background: linear-gradient(180deg, var(--sky1), var(--sky2)); }
+  .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .hud { position: absolute; left: 14px; top: 12px; display: grid; gap: 4px; padding: 9px 12px; border-radius: 14px; background: color-mix(in srgb, var(--card) 78%, transparent); backdrop-filter: blur(6px); box-shadow: 0 0 0 1px var(--line); font-size: 0.72rem; color: var(--muted); }
+  .hud b { font-size: 1.02rem; color: var(--ink); }
+  .hud .bar { width: 120px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .hud .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--amber), #ffd36b); }
+  .live { position: absolute; right: 14px; top: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: color-mix(in srgb, var(--card) 78%, transparent); backdrop-filter: blur(6px); box-shadow: 0 0 0 1px var(--line); font-size: 0.72rem; font-weight: 800; }
+  .live i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .live.on i { background: #ff4b4b; box-shadow: 0 0 0 0 rgba(255, 75, 75, 0.6); animation: ping 1.3s infinite; }
+  @keyframes ping { to { box-shadow: 0 0 0 9px rgba(255, 75, 75, 0); } }
+
+  /* ---------- Channel panel ---------- */
+  .panel { display: grid; gap: 12px; padding: 16px 18px 18px; }
+  .ch { display: flex; align-items: center; gap: 11px; }
+  .chav { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border-radius: 50%; background: linear-gradient(140deg, #ffb35c, #e0522f); color: #fff; font-weight: 900; font-size: 0.82rem; box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--amber); }
+  .ch h1 { margin: 0; font-size: 1rem; letter-spacing: -0.01em; }
+  .ch p { margin: 1px 0 0; font-size: 0.74rem; color: var(--muted); }
+  .ch .tag { margin-left: auto; padding: 4px 9px; border-radius: 8px; background: var(--field); font-size: 0.68rem; font-weight: 800; color: var(--muted); }
+  .compose { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .compose textarea { height: 50px; resize: none; padding: 13px 15px; border: 1.5px solid var(--line); border-radius: 16px; background: var(--field); font-size: 0.9rem; line-height: 1.35; }
+  .compose textarea:focus { outline: none; border-color: var(--amber); box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber) 18%, transparent); }
+  .compose.shake { animation: shake 0.45s; }
+  @keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+  .go { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 50px; padding: 0 18px; border: 0; border-radius: 16px; overflow: hidden; background: linear-gradient(180deg, var(--amber), var(--amber2)); color: #1d1206; font-weight: 900; font-size: 0.9rem; cursor: pointer; box-shadow: 0 14px 22px -14px var(--amber2), inset 0 -3px 0 rgba(0, 0, 0, 0.14); transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .go:hover { transform: translateY(-2px); }
+  .go:active { transform: scale(0.95); }
+  .go svg { width: 20px; height: 20px; }
+  .go .chg { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: #fff; opacity: 0.7; }
+  .go[aria-disabled="true"] { cursor: progress; }
+  .pics { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .lbl { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
+  .pic { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px 0 4px; border: 1.5px solid var(--line); border-radius: 11px; background: transparent; font-size: 0.76rem; font-weight: 750; cursor: pointer; transition: border-color 0.2s, background 0.2s, transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .pic svg { width: 26px; height: 26px; border-radius: 7px; }
+  .pic:hover { transform: translateY(-1px); }
+  .pic[aria-pressed="true"] { border-color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, transparent); }
+  .feed { min-height: 74px; }
+  .empty { margin: 0; padding: 14px; border-radius: 16px; border: 1.5px dashed var(--line); font-size: 0.8rem; color: var(--muted); text-align: center; }
+  .post { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 10px; border-radius: 16px; background: var(--field); box-shadow: 0 0 0 1px var(--line); }
+  .post.noimg { grid-template-columns: minmax(0, 1fr); }
+  .post svg.ph { width: 64px; height: 64px; border-radius: 12px; }
+  .post p { margin: 0; font-size: 0.84rem; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-size: 0.72rem; color: var(--muted); }
+  .meta .views { display: inline-flex; align-items: center; gap: 4px; }
+  .meta svg { width: 14px; height: 14px; }
+  .reacts { display: inline-flex; gap: 4px; }
+  .reacts span { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 7px; border-radius: 999px; background: var(--card); box-shadow: 0 0 0 1px var(--line); font-weight: 800; color: var(--ink); }
+  .reacts i { width: 9px; height: 9px; border-radius: 50%; }
+  .sent { color: var(--ok); font-weight: 800; }
+  .toast { position: fixed; left: 50%; bottom: 18px; z-index: 40; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 999px; background: var(--ink); color: var(--card); font-size: 0.84rem; font-weight: 700; transform: translate(-50%, 200%); transition: transform 0.6s cubic-bezier(0.3, 1.5, 0.4, 1); }
+  .toast.show { transform: translate(-50%, 0); }
+
+  @media (max-width: 520px) {
+    .panel { padding: 14px; }
+    .hud { left: 10px; top: 10px; padding: 7px 10px; }
+    .hud .bar { width: 90px; }
+    .live { right: 10px; top: 10px; }
+    .ch .tag { display: none; }
+    .go span { display: none; }
+    .pics .lbl { display: none; }
+    .go { padding: 0 15px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card, .live.on i, .compose.shake { animation: none !important; }
+    .go, .pic, .toast { transition-duration: 0.01s; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <section class="card" aria-labelledby="title">
+      <div class="scene" id="scene">
+        <canvas id="cv" role="img" aria-label="A city of followers around a broadcast mast; dots light up as your post reaches them"></canvas>
+        <div class="hud"><span>Reached <b class="num" id="reached">0</b> of <span class="num" id="followers">12,400</span></span><span class="bar"><i id="reachBar"></i></span></div>
+        <div class="live" id="live"><i></i><span id="liveText">Idle</span></div>
+      </div>
+      <div class="panel">
+        <div class="ch"><span class="chav" aria-hidden="true">LB</span><div><h1 id="title">Lahore Bakes</h1><p>Channel · 12.4K followers</p></div><span class="tag">Only you can post</span></div>
+        <div class="compose" id="compose">
+          <label class="sr-only" for="msg">Update for your followers</label>
+          <textarea id="msg" maxlength="200" placeholder="Write an update for your followers…"></textarea>
+          <button class="go" id="go" type="button"><i class="chg" id="chg"></i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 13v8M9 21h6" /><circle cx="12" cy="10" r="2" /><path d="M7.5 5.5a6.5 6.5 0 0 0 0 9M16.5 5.5a6.5 6.5 0 0 1 0 9M4.6 2.8a10.5 10.5 0 0 0 0 14.4M19.4 2.8a10.5 10.5 0 0 1 0 14.4" /></svg><span id="goText">Broadcast</span></button>
+        </div>
+        <div class="pics" role="group" aria-labelledby="picLbl"><span class="lbl" id="picLbl">Photo</span></div>
+        <div class="feed" id="feed" aria-live="polite"><p class="empty">Your channel posts will show here.</p></div>
+      </div>
+    </section>
+    <div class="toast" id="toast" role="status"></div>
+  </main>
+
+<script>
+  // ---------- Broadcast: post once and watch it ripple out across every follower ----------
+  const $ = (s) => document.querySelector(s);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  const calm = () => reduce.matches;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  function play(el, frames, opts) {
+    if (calm() || !el || !el.animate) return Promise.resolve();
+    return el.animate(frames, opts).finished.catch(() => {});
+  }
+  let toastT = 0;
+  function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("show"), 2600); }
+  const FOLLOWERS = 12400;
+  const fmt = (n) => Math.round(n).toLocaleString("en-US");
+
+  // ---------- Photos to attach (drawn cakes) ----------
+  const PICS = [
+    { id: "fudge", name: "Fudge cake", svg: '<rect width="64" height="64" fill="#ffe1c2" /><ellipse cx="32" cy="50" rx="24" ry="6" fill="#d9b48f" /><path d="M12 30h40v18c0 3-9 5-20 5s-20-2-20-5Z" fill="#5a2f1c" /><ellipse cx="32" cy="30" rx="20" ry="6" fill="#7a4228" /><path d="M14 31c3 6 6-2 9 4s6-3 9 3 6-3 9 2 6-3 7-6" fill="none" stroke="#3b1c10" stroke-width="3" stroke-linecap="round" /><circle cx="32" cy="22" r="5" fill="#e0303a" /><path d="M32 17c1-4 4-5 6-5" stroke="#3f7a3a" stroke-width="1.6" fill="none" />' },
+    { id: "pista", name: "Pistachio slice", svg: '<rect width="64" height="64" fill="#e3f4d9" /><path d="M10 46 54 34V48L10 56Z" fill="#c9e3a8" /><path d="M10 40 54 28V36L10 48Z" fill="#fff6e0" /><path d="M10 34 54 22V30L10 42Z" fill="#9ccc6a" /><path d="M10 34 54 22 40 16 10 28Z" fill="#b6dc8a" /><g fill="#4f8a2f"><circle cx="24" cy="26" r="1.8" /><circle cx="33" cy="22" r="1.8" /><circle cx="42" cy="21" r="1.8" /></g>' },
+    { id: "rusk", name: "Rusk box", svg: '<rect width="64" height="64" fill="#fff0cc" /><path d="M10 26h44v26H10Z" fill="#e8a33a" /><path d="M10 26l6-8h32l6 8Z" fill="#f4c064" /><rect x="22" y="33" width="20" height="12" rx="2" fill="#fff6e0" /><path d="M16 22h32" stroke="#b97616" stroke-width="2" /><g fill="#c98a3a"><rect x="14" y="12" width="10" height="7" rx="2" transform="rotate(-12 19 15)" /><rect x="40" y="10" width="10" height="7" rx="2" transform="rotate(10 45 13)" /></g>' }
+  ];
+  let pic = "fudge";
+  PICS.forEach((p) => $(".pics").insertAdjacentHTML("beforeend", '<button class="pic" type="button" data-id="' + p.id + '" aria-pressed="' + (p.id === pic) + '"><svg viewBox="0 0 64 64" aria-hidden="true">' + p.svg + "</svg>" + p.name + "</button>"));
+  $(".pics").insertAdjacentHTML("beforeend", '<button class="pic" type="button" data-id="" aria-pressed="false">No photo</button>');
+  $(".pics").addEventListener("click", (e) => { const b = e.target.closest(".pic"); if (!b || busy) return; pic = b.dataset.id; document.querySelectorAll(".pic").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); });
+
+  // ---------- The canvas city: a ground plane of follower dots around a mast ----------
+  const cv = $("#cv"), ctx = cv.getContext("2d");
+  let W = 0, H = 0, dpr = 1, colors = {};
+  const dots = [];
+  // ground coordinates: u from -1 (left) to 1 (right), v from 0 (horizon) to 1 (front)
+  for (let r = 0; r < 15; r++) {
+    const v = 0.04 + (r / 14) * 0.96, cols = Math.round(16 + v * 26);
+    for (let c = 0; c < cols; c++) {
+      const u = -1 + (2 * (c + 0.5 + (r % 2) * 0.35)) / cols + (Math.random() - 0.5) * 0.02;
+      dots.push({ u, v, off: Math.random() < 0.08, tw: Math.random() * Math.PI * 2, hit: 0 });
+    }
+  }
+  const MAST = { u: 0.0, v: 0.42 };
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    colors = { dot: cs.getPropertyValue("--dot").trim(), lit: cs.getPropertyValue("--lit").trim(), tower: cs.getPropertyValue("--tower").trim(), glow: cs.getPropertyValue("--glow").trim(), dark: document.documentElement.dataset.theme === "dark" };
+  }
+  function size() {
+    const r = cv.getBoundingClientRect();
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = r.width; H = r.height;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  // perspective: rows bunch up toward the horizon and spread out toward you
+  const horizon = () => H * 0.36;
+  function toXY(u, v) {
+    const hy = horizon(), y = hy + Math.pow(v, 1.35) * (H - hy) * 0.98;
+    const spread = W * 0.62 * (0.3 + 0.7 * v);
+    return [W / 2 + u * spread, y];
+  }
+  // distance on the ground (the ground is wider than deep)
+  const gd = (u, v) => Math.hypot((u - MAST.u) * 1.6, (v - MAST.v) * 1.2);
+  const MAXD = gd(1, 1);
+
+  let wave = null; // { t0, dur }
+  const pops = []; // rising reactions
+  let beaconBoost = 0, charge = 0;
+  function frame(now) {
+    if (!W) { requestAnimationFrame(frame); return; }
+    ctx.clearRect(0, 0, W, H);
+    const hy = horizon();
+    // skyline along the horizon
+    ctx.fillStyle = colors.dark ? "rgba(20,24,70,.9)" : "rgba(28,37,80,.16)";
+    let x = 0, k = 0;
+    while (x < W) { const w = 18 + ((k * 37) % 26), h = 8 + ((k * 53) % 22); ctx.fillRect(x, hy - h, w - 3, h + 2); x += w; k++; }
+    // waves: up to three rings expanding over the ground
+    let front = -1;
+    if (wave) {
+      const p = (now - wave.t0) / wave.dur;
+      front = p * MAXD * 1.15;
+      for (let i = 0; i < 3; i++) {
+        const rr = front - i * 0.16;
+        if (rr <= 0 || rr > MAXD * 1.2) continue;
+        ctx.beginPath();
+        // the part of the ring beyond the horizon is skipped; the pen lifts there
+        let pen = false;
+        for (let a = 0; a <= 64; a++) {
+          const th = (a / 64) * Math.PI * 2, u = MAST.u + (Math.cos(th) * rr) / 1.6, v = MAST.v + (Math.sin(th) * rr) / 1.2;
+          if (v < 0) { pen = false; continue; }
+          const [px, py] = toXY(u, Math.min(1.2, v));
+          if (pen) ctx.lineTo(px, py); else { ctx.moveTo(px, py); pen = true; }
+        }
+        ctx.strokeStyle = "rgba(" + colors.lit + "," + (0.5 - i * 0.14) * Math.max(0, 1 - rr / (MAXD * 1.2)) + ")";
+        ctx.lineWidth = 2.2 - i * 0.5;
+        ctx.stroke();
+      }
+      if (p > 1.4) wave = null;
+    }
+    // follower dots
+    for (const d of dots) {
+      const [px, py] = toXY(d.u, d.v);
+      const s = 0.9 + d.v * 1.9;
+      if (!d.off && front > 0 && !d.hit && gd(d.u, d.v) < front) { d.hit = now; if (Math.random() < 0.09) pops.push({ x: px, y: py, t0: now + Math.random() * 600, kind: Math.floor(Math.random() * 3) }); }
+      let a, col;
+      if (d.hit) {
+        const age = (now - d.hit) / 1000, fade = d.fade ? Math.max(0, 1 - (now - d.fade) / 1600) : 1;
+        const flash = Math.max(0, 1 - age * 1.6);
+        a = (0.45 + flash * 0.55) * fade + (1 - fade) * 0.3;
+        col = fade > 0.02 ? colors.lit : colors.dot;
+        if (flash > 0 && fade > 0.5) { ctx.fillStyle = "rgba(" + colors.glow + "," + flash * 0.35 + ")"; ctx.beginPath(); ctx.arc(px, py, s * 3.2, 0, 7); ctx.fill(); }
+      } else {
+        a = 0.22 + 0.16 * Math.sin(now / 900 + d.tw);
+        col = colors.dot;
+      }
+      ctx.fillStyle = "rgba(" + col + "," + a.toFixed(3) + ")";
+      ctx.beginPath(); ctx.arc(px, py, s, 0, 7); ctx.fill();
+    }
+    drawMast(now);
+    // reactions float up and fade
+    for (let i = pops.length - 1; i >= 0; i--) {
+      const r = pops[i], t = (now - r.t0) / 1600;
+      if (t < 0) continue;
+      if (t > 1) { pops.splice(i, 1); continue; }
+      drawReact(r.x + Math.sin(t * 6 + r.x) * 4, r.y - t * 46, r.kind, Math.min(1, t * 5) * (1 - t), 0.7 + t * 0.5);
+    }
+    requestAnimationFrame(frame);
+  }
+  function drawMast(now) {
+    const [bx, by] = toXY(MAST.u, MAST.v), top = Math.max(16, by - H * 0.42), half = Math.max(6, W * 0.016);
+    ctx.strokeStyle = colors.tower; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(bx - half, by); ctx.lineTo(bx, top); ctx.lineTo(bx + half, by); ctx.stroke();
+    // cross braces
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 6; i++) {
+      const t = i / 6, y1 = by - (by - top) * t, w1 = half * (1 - t), t2 = (i + 1) / 6, y2 = by - (by - top) * t2, w2 = half * (1 - t2);
+      ctx.beginPath(); ctx.moveTo(bx - w1, y1); ctx.lineTo(bx + w2, y2); ctx.moveTo(bx + w1, y1); ctx.lineTo(bx - w2, y2); ctx.stroke();
+    }
+    // the charge climbing the mast before a broadcast
+    if (charge > 0) {
+      const y = by - (by - top) * charge;
+      const g = ctx.createRadialGradient(bx, y, 0, bx, y, 14);
+      g.addColorStop(0, "rgba(" + colors.glow + ",.95)"); g.addColorStop(1, "rgba(" + colors.glow + ",0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, y, 14, 0, 7); ctx.fill();
+    }
+    // beacon
+    const blink = (Math.sin(now / (beaconBoost > 0 ? 70 : 420)) + 1) / 2;
+    const rad = 3 + blink * 2 + beaconBoost * 6;
+    const g = ctx.createRadialGradient(bx, top, 0, bx, top, rad * 4);
+    g.addColorStop(0, "rgba(255,90,70," + (0.5 + blink * 0.5) + ")"); g.addColorStop(1, "rgba(255,90,70,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, top, rad * 4, 0, 7); ctx.fill();
+    ctx.fillStyle = "#ff5a46"; ctx.beginPath(); ctx.arc(bx, top, 2.6, 0, 7); ctx.fill();
+    // base glow on the ground
+    ctx.fillStyle = "rgba(" + colors.glow + "," + (0.12 + beaconBoost * 0.3) + ")";
+    ctx.beginPath(); ctx.ellipse(bx, by, half * 3, half * 0.9, 0, 0, 7); ctx.fill();
+  }
+  const REACT = ["#ff4d7a", "#ffc93c", "#ff7a2a"];
+  function drawReact(x, y, kind, alpha, sc) {
+    ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y); ctx.scale(sc, sc);
+    ctx.fillStyle = REACT[kind];
+    ctx.beginPath();
+    if (kind === 0) { ctx.moveTo(0, 5); ctx.bezierCurveTo(-9, -1, -6, -9, 0, -4); ctx.bezierCurveTo(6, -9, 9, -1, 0, 5); }
+    else if (kind === 1) { for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 - Math.PI / 2, r = i % 2 ? 2.8 : 7; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); } }
+    else { ctx.moveTo(0, -8); ctx.bezierCurveTo(6, -2, 6, 6, 0, 6); ctx.bezierCurveTo(-6, 6, -6, -2, 0, -8); }
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  // ---------- Broadcast ----------
+  let busy = false, posts = 0;
+  const msg = $("#msg");
+  $("#go").addEventListener("click", () => broadcast());
+  msg.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); broadcast(); } });
+  async function broadcast() {
+    if (busy) return;
+    const text = msg.value.trim();
+    if (!text && !pic) {
+      const c = $("#compose"); c.classList.remove("shake"); void c.offsetWidth; c.classList.add("shake");
+      toast("Write something or add a photo first");
+      return;
+    }
+    busy = true;
+    const go = $("#go");
+    go.setAttribute("aria-disabled", "true");
+    $("#goText").textContent = "Charging…";
+    // 1. anticipation: the charge climbs the mast, the beacon blinks fast
+    dots.forEach((d) => { d.hit = 0; d.fade = 0; });
+    if (!calm()) {
+      await new Promise((res) => { const t0 = performance.now(); const f = (now) => { const p = Math.min(1, Math.max(0, now - t0) / 700); charge = p; beaconBoost = p; $("#chg").style.width = p * 100 + "%"; if (p < 1) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); });
+    }
+    charge = 0;
+    $("#chg").style.width = "0";
+    // the post lands in the feed straight away, with live counters
+    const post = addPost(text, pic);
+    msg.value = "";
+    $("#live").classList.add("on"); $("#liveText").textContent = "Broadcasting";
+    $("#goText").textContent = "Sending…";
+    // 2. main: rings roll out over the city and light each follower they reach
+    const reachFinal = Math.round(FOLLOWERS * (0.9 + Math.random() * 0.06));
+    if (calm()) { dots.forEach((d) => { if (!d.off) d.hit = performance.now() - 3000; }); }
+    else wave = { t0: performance.now(), dur: 2600 };
+    // 3. progress: reached, views and reactions count up
+    const r = { heart: 0, star: 0, fire: 0 };
+    await new Promise((res) => {
+      const t0 = performance.now(), dur = calm() ? 1 : 2800;
+      const f = (now) => {
+        const p = Math.min(1, Math.max(0, now - t0) / dur), e = 1 - Math.pow(1 - p, 2.2);
+        const reached = reachFinal * e;
+        $("#reached").textContent = fmt(reached);
+        $("#reachBar").style.width = (reached / FOLLOWERS) * 100 + "%";
+        post.views.textContent = fmt(reached * 0.31);
+        r.heart = Math.round(e * 214); r.star = Math.round(e * 96); r.fire = Math.round(e * 58);
+        post.re.innerHTML = '<span><i style="background:#ff4d7a"></i>' + r.heart + '</span><span><i style="background:#ffc93c"></i>' + r.star + '</span><span><i style="background:#ff7a2a"></i>' + r.fire + "</span>";
+        if (p < 1) requestAnimationFrame(f); else res();
+      };
+      requestAnimationFrame(f);
+    });
+    // 4. finish: a burst at the top of the mast, the post is marked delivered
+    beaconBoost = 1;
+    post.state.textContent = "Delivered";
+    post.state.className = "sent";
+    play(post.el, [{ transform: "scale(1)" }, { transform: "scale(1.02)" }, { transform: "scale(1)" }], { duration: 380, easing: "cubic-bezier(.3,1.6,.5,1)" });
+    toast("Delivered to " + fmt(reachFinal) + " followers");
+    $("#liveText").textContent = "Delivered";
+    $("#goText").textContent = "Delivered";
+    await wait(calm() ? 200 : 900);
+    // 5. reset: the city settles down, the button is ready again
+    let b = 1;
+    await new Promise((res) => { const f = () => { b -= 0.04; beaconBoost = Math.max(0, b); if (b > 0 && !calm()) requestAnimationFrame(f); else { beaconBoost = 0; res(); } }; requestAnimationFrame(f); });
+    const now = performance.now();
+    dots.forEach((d) => { if (d.hit) d.fade = now + Math.random() * 1200; });
+    $("#live").classList.remove("on"); $("#liveText").textContent = "Idle";
+    $("#goText").textContent = "Broadcast";
+    go.removeAttribute("aria-disabled");
+    busy = false;
+  }
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  function addPost(text, picId) {
+    posts++;
+    const feed = $("#feed"), p = PICS.find((x) => x.id === picId);
+    const el = document.createElement("article");
+    el.className = "post" + (p ? "" : " noimg");
+    el.innerHTML = (p ? '<svg class="ph" viewBox="0 0 64 64" aria-hidden="true">' + p.svg + "</svg>" : "") +
+      "<div><p>" + (text ? esc(text) : "<em>" + p.name + "</em>") + '</p><div class="meta"><span>' + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + '</span><span class="views"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg><b class="num">0</b></span><span class="reacts"></span><span class="st">Sending…</span></div></div>';
+    feed.innerHTML = "";
+    feed.appendChild(el);
+    play(el, [{ transform: "translateY(16px) scale(.96)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 520, easing: "cubic-bezier(.3,1.4,.5,1)" });
+    return { el, views: el.querySelector(".views b"), re: el.querySelector(".reacts"), state: el.querySelector(".st") };
+  }
+
+  // ---------- Auto-demo: write an update, pick a photo, broadcast ----------
+  const DEMO = [
+    { t: "Fresh fudge cakes are out of the oven! Pre-orders open till 6 PM.", pic: "fudge" },
+    { t: "New this week: pistachio slices, only 40 trays.", pic: "pista" },
+    { t: "We deliver in Gulberg and DHA tonight. Order before 9.", pic: "" }
+  ];
+  let demoOn = true, demoTimer = 0, round = 0;
+  function stopDemo() { if (!demoOn) return; demoOn = false; clearTimeout(demoTimer); }
+  ["pointerdown", "keydown", "touchstart"].forEach((t) => window.addEventListener(t, (e) => { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }));
+  function queueDemo(ms) { clearTimeout(demoTimer); if (demoOn) demoTimer = setTimeout(runDemo, ms); }
+  async function runDemo() {
+    if (!demoOn || busy) return;
+    const d = DEMO[round++ % DEMO.length];
+    pic = d.pic;
+    document.querySelectorAll(".pic").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.id === d.pic)));
+    for (let i = 1; i <= d.t.length; i++) { if (!demoOn) return; msg.value = d.t.slice(0, i); await wait(calm() ? 0 : 18); }
+    await wait(250);
+    if (!demoOn) return;
+    await broadcast();
+    queueDemo(3200);
+  }
+
+  // ---------- Start ----------
+  readColors();
+  size();
+  if (window.ResizeObserver) new ResizeObserver(size).observe(cv); else addEventListener("resize", size);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => setTimeout(readColors, 0));
+  requestAnimationFrame(frame);
+  queueDemo(600);
+</script>
+</body>
+</html>

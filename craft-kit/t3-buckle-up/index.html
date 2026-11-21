@@ -1,0 +1,397 @@
+<!doctype html>
+<!-- Chill & Craft · Buckle Up · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Buckle Up · Seatbelt drive mode toggle</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours ---------- */
+  :root {
+    --bg-a: #eeeae4;
+    --bg-b: #d5cfc6;
+    --cabin: #e4dfd7;
+    --weave: rgba(70, 60, 50, 0.05);
+    --seat: #cfc7bb;
+    --seat-b: #b9b0a2;
+    --stitch: rgba(255, 255, 255, 0.55);
+    --ink: #1f1d1b;
+    --muted: #6e675e;
+    --card: #ffffff;
+    --card-line: rgba(31, 29, 27, 0.08);
+    --panel: rgba(255, 255, 255, 0.55);
+    --belt: #ef6a1f;
+    --belt-b: #c94f10;
+    --ok: #12b76a;
+    --warn: #e5372c;
+    --focus: #ef6a1f;
+    --shadow: rgba(60, 45, 30, 0.42);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #22252b;
+    --bg-b: #0b0c0f;
+    --cabin: #17191d;
+    --weave: rgba(255, 255, 255, 0.025);
+    --seat: #2a2d33;
+    --seat-b: #1d1f24;
+    --stitch: rgba(239, 106, 31, 0.5);
+    --ink: #f1eee9;
+    --muted: #9a958c;
+    --card: #23262c;
+    --card-line: rgba(241, 238, 233, 0.08);
+    --panel: rgba(255, 255, 255, 0.035);
+    --belt: #f07a2e;
+    --belt-b: #c95a17;
+    --ok: #3ee08f;
+    --warn: #ff4d42;
+    --focus: #ffa24d;
+    --shadow: rgba(0, 0, 0, 0.75);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg-b); }
+  .stage { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; overflow: hidden; background: radial-gradient(90% 70% at 50% 25%, var(--bg-a), var(--bg-b)); }
+  /* fabric: a fine cross weave */
+  .cabin { position: relative; width: min(430px, 100%); border-radius: 30px; overflow: hidden; isolation: isolate; background: repeating-linear-gradient(45deg, var(--weave) 0 2px, transparent 2px 5px), repeating-linear-gradient(-45deg, var(--weave) 0 2px, transparent 2px 5px), var(--cabin); box-shadow: 0 40px 70px -40px var(--shadow), 0 1px 0 var(--card-line); }
+
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 0; }
+  .eyebrow { margin: 0 0 2px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: 0; font-size: 1.35rem; font-weight: 850; letter-spacing: -0.01em; }
+  /* dashboard warning light: blinks red until you buckle */
+  .dash { flex: none; position: relative; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: #101114; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 8px 16px -10px rgba(0, 0, 0, 0.7); }
+  .dash svg { width: 28px; height: 28px; color: var(--warn); filter: drop-shadow(0 0 6px var(--warn)); animation: warn 1s steps(1) infinite; }
+  @keyframes warn { 50% { opacity: 0.18; filter: none; } }
+  .cabin.on .dash svg { color: var(--ok); filter: drop-shadow(0 0 6px var(--ok)); animation: none; }
+
+  /* ---------- Notifications panel ---------- */
+  .phone { position: relative; margin: 16px 16px 0; padding: 48px 12px 12px; border-radius: 22px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--card-line); }
+  .held { position: absolute; left: 50%; top: 10px; translate: -50% 0; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--ink); color: var(--cabin); font-size: 0.76rem; font-weight: 750; white-space: nowrap; transition: transform 0.5s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.3s; }
+  .held svg { width: 14px; height: 14px; }
+  .held b { font-variant-numeric: tabular-nums; }
+  .cabin:not(.on) .held { opacity: 0.0; transform: scale(0.6); }
+  .stack { position: relative; height: 178px; margin: 0; padding: 0; list-style: none; }
+  .card { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 12px; border-radius: 15px; background: var(--card); box-shadow: 0 1px 0 var(--card-line), 0 10px 18px -14px var(--shadow); transform-origin: 50% 0; transition: transform 0.6s cubic-bezier(0.3, 1.35, 0.5, 1), opacity 0.35s; }
+  .av { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: #fff; font-size: 0.7rem; font-weight: 850; }
+  .card p { margin: 0; min-width: 0; flex: 1; font-size: 0.8rem; line-height: 1.25; }
+  .card b { display: block; font-size: 0.78rem; }
+  .card p span { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card time { flex: none; align-self: flex-start; margin-top: 9px; font-size: 0.66rem; color: var(--muted); }
+  .quiet { position: absolute; left: 0; right: 0; top: 96px; display: grid; justify-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: 0.82rem; font-weight: 700; text-align: center; opacity: 0; transform: translateY(8px); transition: opacity 0.4s 0.35s, transform 0.5s 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .quiet svg { width: 30px; height: 30px; color: var(--ok); }
+  .cabin.on .quiet { opacity: 1; transform: none; }
+  .reply { position: absolute; left: 50%; top: 44px; translate: -50% 0; margin: 0; font-size: 0.7rem; font-weight: 700; color: var(--ok); white-space: nowrap; opacity: 0; }
+
+  /* ---------- Belt and buckle ---------- */
+  .belt { position: relative; margin-top: 4px; }
+  .belt svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .hit { position: absolute; left: 8%; right: 2%; top: 30%; bottom: 8%; border: 0; border-radius: 22px; background: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .hit:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .hint { position: absolute; right: 22px; top: 12px; text-align: right; margin: 0; font-size: 0.8rem; font-weight: 750; color: var(--muted); pointer-events: none; }
+  .hint b { color: var(--ink); }
+  .foot { position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 12px 20px 18px; }
+  .opt { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; font-weight: 700; color: var(--ink); cursor: pointer; }
+  .opt input { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 38px; height: 22px; margin: 0; border-radius: 11px; background: var(--seat-b); cursor: pointer; transition: background 0.25s; }
+  .opt input::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .opt input:checked { background: var(--ok); }
+  .opt input:checked::after { transform: translateX(16px); }
+  .opt input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (min-width: 1100px) and (min-height: 820px) { .cabin { scale: 1.12; } }
+  @media (prefers-reduced-motion: reduce) {
+    .card, .held, .quiet, .opt input, .opt input::after { transition: none; }
+    .dash svg { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <section class="cabin" id="cabin" aria-labelledby="ttl">
+      <header class="top">
+        <div><p class="eyebrow">Drive mode</p><h1 id="ttl">Buckle Up</h1></div>
+        <span class="dash" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="currentColor"><circle cx="13" cy="6" r="3.6" /><path d="M8 12.5c0-1.6 1.3-2.8 2.9-2.8h4.2c1.6 0 2.9 1.2 2.9 2.8V19h3.5c1.4 0 2.5 1.1 2.5 2.5V29h-3v-6.5H12c-2.2 0-4-1.8-4-4z" /><path d="M9.5 10.5 L 21 23.5" stroke="#101114" stroke-width="2.6" /><path d="M9.5 10.5 L 21 23.5" stroke="currentColor" stroke-width="1.2" opacity="0.6" /></svg>
+        </span>
+      </header>
+
+      <div class="phone" aria-label="Notifications">
+        <div class="held" id="held"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M10.6 1.4A6.5 6.5 0 1 0 14.6 10a5.2 5.2 0 0 1-4-8.6z" /></svg><span><b id="held-n">0</b> held for later</span></div>
+        <p class="reply" id="reply" aria-hidden="true"></p>
+        <ul class="stack" id="stack"></ul>
+        <p class="quiet" id="quiet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z" /><path d="M8.5 12.2l2.4 2.4 4.6-4.8" /></svg>Phone quiet while you drive</p>
+      </div>
+
+      <div class="belt">
+        <svg id="belt" viewBox="0 0 360 170" aria-hidden="true">
+          <defs>
+            <linearGradient id="metal" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#f4f6f8" /><stop offset="0.45" stop-color="#b9c0c8" /><stop offset="0.55" stop-color="#8f979f" /><stop offset="1" stop-color="#d6dbe0" /></linearGradient>
+            <linearGradient id="plastic" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3a3e45" /><stop offset="1" stop-color="#121418" /></linearGradient>
+            <linearGradient id="seat" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color: var(--seat)" /><stop offset="1" style="stop-color: var(--seat-b)" /></linearGradient>
+          </defs>
+          <!-- seat cushion the buckle is mounted on -->
+          <rect x="-30" y="128" width="420" height="260" rx="30" fill="url(#seat)" />
+          <path d="M-10 140 H 370" style="stroke: var(--stitch)" stroke-width="1.6" stroke-dasharray="5 4" />
+          <rect x="292" y="140" width="22" height="40" rx="4" fill="#1a1c20" />
+          <!-- webbing (redrawn every frame) -->
+          <path id="web-a" fill="none" style="stroke: var(--belt-b)" stroke-width="27" stroke-linecap="butt" />
+          <path id="web-b" fill="none" style="stroke: var(--belt)" stroke-width="22" stroke-linecap="butt" />
+          <path id="web-c" fill="none" stroke="rgba(0,0,0,0.13)" stroke-width="22" stroke-dasharray="1.2 2.4" stroke-linecap="butt" />
+          <!-- the metal tongue -->
+          <g id="tongue">
+            <rect x="-28" y="-21" width="42" height="42" rx="11" fill="url(#metal)" stroke="rgba(0,0,0,0.25)" />
+            <rect x="-19" y="-13" width="9" height="26" rx="3" fill="#2a2e34" />
+            <rect x="12" y="-12" width="58" height="24" rx="4" fill="url(#metal)" stroke="rgba(0,0,0,0.25)" />
+            <rect x="44" y="-5" width="16" height="10" rx="2" fill="#2a2e34" />
+          </g>
+          <!-- the buckle -->
+          <g id="recv">
+            <rect x="230" y="94" width="114" height="60" rx="17" fill="url(#plastic)" />
+            <rect x="232" y="96" width="110" height="10" rx="5" fill="rgba(255,255,255,0.08)" />
+            <rect x="230" y="111" width="11" height="26" rx="3" fill="#050608" />
+            <g id="release">
+              <rect x="268" y="103" width="64" height="42" rx="11" fill="#e3352b" />
+              <rect x="270" y="104" width="60" height="12" rx="6" fill="rgba(255,255,255,0.22)" />
+              <text x="300" y="129" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="900" letter-spacing="1.5" fill="#fff">PRESS</text>
+            </g>
+            <circle id="led" cx="251" cy="103" r="3.2" fill="#5b2a28" />
+          </g>
+          <g id="sparks" fill="none" stroke-width="2.6" stroke-linecap="round" style="stroke: var(--belt)">
+            <path d="M224 112 l-12 -10" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+            <path d="M222 124 l-16 0" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+            <path d="M224 136 l-12 10" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+            <path d="M286 90 l4 -12" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+          </g>
+          <text id="click" x="236" y="80" font-family="system-ui, sans-serif" font-size="15" font-weight="900" font-style="italic" style="fill: var(--ink)" opacity="0">click!</text>
+        </svg>
+        <p class="hint" id="hint">Tap the buckle to start <b>drive mode</b></p>
+        <button class="hit" id="buckle" type="button" role="switch" aria-checked="false" aria-label="Seatbelt and drive mode"></button>
+      </div>
+
+      <div class="foot">
+        <label class="opt"><input type="checkbox" id="auto" checked /> Auto-reply “Driving, will call back”</label>
+      </div>
+      <p class="sr" id="live" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+<script>
+  // Buckle Up: a seatbelt is the switch for a phone's drive mode.
+  // Buckle = the tongue pulls back a touch → slides into the buckle → click! (the buckle jolts, sparks, the light turns
+  // green) → the webbing snaps tight → the notifications are swept into a "held for later" pill and the phone goes
+  // quiet; new messages that arrive get held too (and an auto-reply goes out when that switch is on).
+  // Unbuckle = the red button sinks, the tongue springs out and swings, the belt goes slack and the messages drop back.
+  (function () {
+    "use strict";
+    var $ = function (id) { return document.getElementById(id); };
+    var calm = matchMedia("(prefers-reduced-motion: reduce)");
+    var cabin = $("cabin"), btn = $("buckle"), hint = $("hint"), live = $("live"), stack = $("stack"), heldN = $("held-n"), held = $("held"), reply = $("reply"), auto = $("auto");
+    var tongue = $("tongue"), recv = $("recv"), release = $("release"), led = $("led"), clickTxt = $("click"), webs = [$("web-a"), $("web-b"), $("web-c")];
+    var sparks = [].slice.call(document.querySelectorAll("#sparks path"));
+
+    // ---------- Messages that keep arriving ----------
+    var FEED = [
+      ["Sana", "#e0679a", "Are you on the way?"], ["Bank alert", "#3a8fd9", "PKR 2,500 received in your account"],
+      ["Team chat", "#8b6cf0", "Bilal: stand-up moved to 11:30"], ["Courier", "#f0a23a", "Your parcel is out for delivery"],
+      ["Ali", "#24b386", "Reached Lahore? Call when free"], ["Hina", "#d9573a", "Sent you the wedding photos"],
+      ["Mum", "#c2477a", "Drive safe, call me when you're home"], ["Calendar", "#4a7be0", "Dentist tomorrow at 4 pm"]
+    ];
+    var S = { on: false, msgs: [], next: 0, id: 0, held: 0, missed: 0 };
+    var els = {};
+    function newMsg() {
+      var f = FEED[S.next++ % FEED.length];
+      var m = { id: ++S.id, from: f[0], color: f[1], text: f[2] };
+      S.msgs.push(m);
+      if (S.msgs.length > 30) S.msgs.shift();
+      return m;
+    }
+    function initials(n) { return n.split(" ").map(function (w) { return w[0]; }).join("").slice(0, 2).toUpperCase(); }
+    function makeCard(m) {
+      var li = document.createElement("li");
+      li.className = "card";
+      li.innerHTML = '<span class="av" style="background:' + m.color + '">' + initials(m.from) + "</span><p><b></b><span></span></p><time>now</time>";
+      li.querySelector("b").textContent = m.from;
+      li.querySelector("p span").textContent = m.text;
+      return li;
+    }
+    var SLOT = 62, PILL = "translateY(-32px) scale(0.28)";
+    // place the newest three cards; cards that should not show fly into the pill (drive mode) or drop away
+    function layout(entry) {
+      var vis = S.on ? [] : S.msgs.slice(-3).reverse(), ids = vis.map(function (m) { return m.id; });
+      Object.keys(els).forEach(function (id) {
+        if (ids.indexOf(+id) >= 0) return;
+        var el = els[id], slot = +el.dataset.slot || 0;
+        delete els[id];
+        el.style.transitionDelay = (S.on ? slot * 80 : 0) + "ms";
+        el.style.transform = S.on ? PILL : "translateY(" + SLOT * 3 + "px) scale(0.94)";
+        el.style.opacity = "0";
+        setTimeout(function () { el.remove(); }, calm.matches ? 0 : 1000);
+      });
+      vis.forEach(function (m, i) {
+        var el = els[m.id];
+        if (!el) {
+          el = makeCard(m);
+          el.style.transition = "none";
+          el.style.transform = entry === "pill" ? PILL : "translateY(-24px) scale(0.95)";
+          el.style.opacity = "0";
+          stack.appendChild(el);
+          void el.offsetWidth;
+          el.style.transition = "";
+          els[m.id] = el;
+        }
+        el.dataset.slot = i;
+        el.style.zIndex = 10 - i;
+        el.style.transitionDelay = (entry === "pill" ? i * 90 + 120 : 0) + "ms";
+        el.style.transform = "translateY(" + i * SLOT + "px)";
+        el.style.opacity = "1";
+      });
+    }
+    // a message while driving: it peeks in, then gets tucked into the pill
+    function holdNew(m) {
+      var el = makeCard(m);
+      el.style.transition = "none"; el.style.transform = "translateY(-24px) scale(0.95)"; el.style.opacity = "0";
+      stack.appendChild(el); void el.offsetWidth; el.style.transition = "";
+      el.style.transform = "translateY(0)"; el.style.opacity = "1";
+      setTimeout(function () {
+        el.style.transform = PILL; el.style.opacity = "0";
+        setTimeout(function () {
+          el.remove();
+          S.held++; S.missed++;
+          heldN.textContent = S.held;
+          if (!calm.matches) held.animate([{ transform: "scale(1)" }, { transform: "scale(1.18)" }, { transform: "scale(1)" }], { duration: 380, easing: "ease-out" });
+          if (auto.checked) {
+            reply.textContent = "Auto-reply sent to " + m.from;
+            if (calm.matches) { reply.style.opacity = "1"; setTimeout(function () { reply.style.opacity = "0"; }, 1600); }
+            else reply.animate([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none", offset: 0.15 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }], { duration: 1800 });
+          }
+        }, calm.matches ? 0 : 450);
+      }, calm.matches ? 0 : 900);
+    }
+    function arrive() {
+      var m = newMsg();
+      if (S.on) holdNew(m); else layout("top");
+    }
+
+    // ---------- Belt physics: p = how far the tongue is in (0 out, 1 latched), s = slack in the webbing ----------
+    var P = { p: 0, v: 0, to: 0, s: 1, sv: 0, sto: 1, latched: false };
+    var REST = { x: 128, y: 108, r: -16 }, IN = { x: 214, y: 124, r: 0 }, ANCHOR = { x: -46, y: -34 };
+    function sparkFx() {
+      if (calm.matches) return;
+      recv.animate([{ transform: "translate(0,0)" }, { transform: "translate(3px,1px)" }, { transform: "translate(-1px,0)" }, { transform: "translate(0,0)" }], { duration: 220, easing: "ease-out" });
+      sparks.forEach(function (s, i) {
+        s.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0, offset: 0.45 }, { strokeDashoffset: -1 }], { duration: 420, delay: i * 25, easing: "ease-out" });
+      });
+      clickTxt.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(-2px)", offset: 0.25 }, { opacity: 1, offset: 0.7 }, { opacity: 0, transform: "translateY(-8px)" }], { duration: 800, easing: "ease-out" });
+    }
+    function latch() {
+      P.latched = true;
+      led.setAttribute("fill", getComputedStyle(cabin).getPropertyValue("--ok").trim() || "#12b76a");
+      sparkFx();
+      P.sto = 0; P.sv -= 6;   // the webbing snaps tight
+      setTimeout(function () {
+        if (!S.on) return;
+        cabin.classList.add("on");
+        layout();
+        S.held = Math.max(S.held, 0) + Math.min(3, S.msgs.length);
+        heldN.textContent = S.held;
+      }, calm.matches ? 0 : 160);
+    }
+
+    // ---------- The switch ----------
+    function setOn(on) {
+      if (on === S.on) return;
+      S.on = on;
+      btn.setAttribute("aria-checked", String(on));
+      if (on) {
+        S.missed = 0;
+        hint.innerHTML = "<b>Buckled</b> · drive mode on";
+        live.textContent = "Buckled. Drive mode on: notifications are held for later.";
+        if (calm.matches) { P.p = 1; P.v = 0; P.to = 1; P.s = 0; P.sto = 0; latch(); return; }
+        P.to = -0.1;   // pull back a touch before going in
+        setTimeout(function () { if (S.on) P.to = 1; }, 110);
+      } else {
+        P.latched = false;
+        led.setAttribute("fill", "#5b2a28");
+        cabin.classList.remove("on");
+        var got = S.missed;
+        hint.innerHTML = "Unbuckled · tap to start <b>drive mode</b>";
+        live.textContent = "Unbuckled. Drive mode off." + (got ? " " + got + " new message" + (got > 1 ? "s" : "") + " came in while you drove." : "");
+        S.held = 0;
+        if (calm.matches) { P.p = 0; P.to = 0; P.s = 1; P.sto = 1; layout("pill"); return; }
+        release.animate([{ transform: "translateY(0)" }, { transform: "translateY(2.5px)", offset: 0.4 }, { transform: "translateY(0)" }], { duration: 260, easing: "ease-out" });
+        setTimeout(function () {
+          if (S.on) return;
+          P.to = 0; P.v = -4.2;   // spring out past the rest point
+          P.sto = 1; P.sv += 5;
+          setTimeout(function () { if (!S.on) layout("pill"); }, 260);
+        }, 120);
+      }
+    }
+    btn.addEventListener("click", function () { setOn(!S.on); });
+
+    // ---------- Main loop ----------
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    var last = performance.now();
+    function frame(now) {
+      var dt = Math.min(0.033, Math.max(0, (now - last) / 1000)), t = now / 1000;
+      last = now;
+      if (!calm.matches) {
+        var latching = P.to > 0.5, k = latching ? 560 : 230, c = latching ? 32 : 13;
+        P.v += (-(P.p - P.to) * k - P.v * c) * dt; P.p += P.v * dt;
+        if (P.to === 1 && P.p > 1.03) { P.p = 1.03; P.v = Math.min(0, P.v) * -0.2; }
+        P.sv += (-(P.s - P.sto) * 170 - P.sv * 8) * dt; P.s += P.sv * dt;
+        if (P.to === 1 && !P.latched && P.p > 0.96 && S.on) latch();
+      }
+      // tongue pose: hanging and swaying when out, flat when latched
+      var p = P.p, pc = Math.max(0, Math.min(1, p));
+      var sway = (1 - pc) * Math.sin(t * 1.7) * 2.2;
+      var x = lerp(REST.x, IN.x, p), y = lerp(REST.y, IN.y, p) + (1 - pc) * Math.sin(t * 1.7 + 0.6) * 1.2, r = lerp(REST.r, IN.r, pc) + sway;
+      tongue.setAttribute("transform", "translate(" + x.toFixed(2) + " " + y.toFixed(2) + ") rotate(" + r.toFixed(2) + ")");
+      // webbing: from the shoulder anchor to the loop of the tongue, sagging with the slack (and a breath when tight)
+      var rad = (r * Math.PI) / 180, lx = x + Math.cos(rad) * -10, ly = y + Math.sin(rad) * -10;
+      var mx = (ANCHOR.x + lx) / 2, my = (ANCHOR.y + ly) / 2, dx = lx - ANCHOR.x, dy = ly - ANCHOR.y, len = Math.hypot(dx, dy) || 1;
+      var sag = 6 + Math.max(-0.3, P.s) * 46 + (S.on ? Math.sin(t * 1.1) * 1.6 : 0);
+      var cx = mx - (dy / len) * sag, cy = my + (dx / len) * sag;
+      // the last part of the strap runs straight into the loop, in line with the tongue
+      var ex = lx - Math.cos(rad) * 18, ey = ly - Math.sin(rad) * 18;
+      var d = "M" + ANCHOR.x + " " + ANCHOR.y + " Q" + cx.toFixed(1) + " " + cy.toFixed(1) + " " + ex.toFixed(1) + " " + ey.toFixed(1) + " L" + lx.toFixed(1) + " " + ly.toFixed(1);
+      webs.forEach(function (w) { w.setAttribute("d", d); });
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    // first messages, then one every few seconds
+    newMsg(); newMsg(); newMsg();
+    layout("top");
+    setInterval(arrive, 6200);
+
+    // ---------- Auto demo: buckle, drive a bit, unbuckle ----------
+    var demoOn = !calm.matches, timer = 0;
+    function stopDemo(e) { if (e.isTrusted && demoOn) { demoOn = false; clearTimeout(timer); } }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (ev) { addEventListener(ev, stopDemo, { capture: true, passive: true }); });
+    function later(ms) { return new Promise(function (r) { timer = setTimeout(r, ms); }); }
+    async function demo() {
+      await later(1500);
+      while (demoOn) {
+        setOn(true);
+        await later(4600); if (!demoOn) return;
+        setOn(false);
+        await later(3200); if (!demoOn) return;
+      }
+    }
+    if (demoOn) demo();
+  })();
+</script>
+</body>
+</html>

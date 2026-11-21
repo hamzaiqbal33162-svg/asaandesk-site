@@ -1,0 +1,543 @@
+<!doctype html>
+<!-- Chill & Craft · Tumbler · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tumbler · password field with a pin-tumbler lock</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: brushed steel and brass (light), gunmetal (dark) ---------- */
+  :root {
+    color-scheme: light;
+    --ff: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --bg: #e6eaf0;
+    --bg2: #f7f9fc;
+    --card: #ffffff;
+    --ink: #17202c;
+    --muted: #5c6777;
+    --line: #dde3ec;
+    --field: #f2f5f9;
+    --ok: #10a573;
+    --bad: #de4a3e;
+    --lvl: #c3cad5;
+    --shadow: rgba(26, 38, 62, .28);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0b0e13;
+    --bg2: #151a23;
+    --card: #161b24;
+    --ink: #e9edf4;
+    --muted: #8d98aa;
+    --line: #272e3b;
+    --field: #0f1319;
+    --ok: #2fd394;
+    --bad: #ff6b5e;
+    --lvl: #3a4352;
+    --shadow: rgba(0, 0, 0, .7);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: var(--ff); color: var(--ink); background: var(--bg); }
+  .stage {
+    min-height: 100vh; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr);
+    padding: 18px 14px; overflow: hidden; overflow-x: clip;
+    background:
+      radial-gradient(60% 46% at 50% 18%, color-mix(in srgb, var(--lvl) 30%, transparent), transparent 72%),
+      repeating-linear-gradient(90deg, rgba(255, 255, 255, .05) 0 1px, transparent 1px 4px),
+      linear-gradient(180deg, var(--bg2), var(--bg));
+    transition: background .6s;
+  }
+  .card {
+    position: relative; width: min(100%, 410px); padding: 20px 20px 18px; border-radius: 28px;
+    background: var(--card); border: 1px solid var(--line);
+    box-shadow: 0 40px 80px -48px var(--shadow), 0 12px 26px -18px var(--shadow);
+    animation: rise .8s cubic-bezier(.22, 1.3, .36, 1) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(.97); } }
+  .kicker { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: 4px 0 2px; font-size: clamp(19px, 5.2vw, 22px); letter-spacing: -.02em; }
+  .sub { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+
+  /* ---------- The padlock with a cut-away window onto its five pins ---------- */
+  .lockwrap { position: relative; display: grid; place-items: center; margin: 4px 0 2px; }
+  .lock { width: min(100%, 226px); height: auto; display: block; overflow: visible; }
+  .lock .all { transform-box: fill-box; transform-origin: 50% 100%; }
+  .lock .all.clunk { animation: clunk .55s cubic-bezier(.3, 1.6, .5, 1); }
+  @keyframes clunk { 0% { transform: scale(1, 1); } 30% { transform: scale(1.04, .94); } 60% { transform: scale(.98, 1.03); } 100% { transform: none; } }
+  .lock .all.nope { animation: nope .5s ease; }
+  @keyframes nope { 20% { transform: translateX(-6px) rotate(-2deg); } 40% { transform: translateX(5px) rotate(1.5deg); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+  .glint { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 16 420; opacity: .75; animation: glint 4.2s ease-in-out infinite; }
+  @keyframes glint { 0%, 30% { stroke-dashoffset: 40; } 75%, 100% { stroke-dashoffset: -330; } }
+  .keyhole { transform-box: fill-box; transform-origin: 50% 38%; transition: transform .6s cubic-bezier(.34, 1.56, .64, 1); }
+  .done .keyhole { transform: rotate(90deg); }
+  .chan.flash .slot { animation: flash .5s ease; }
+  @keyframes flash { 30% { fill: var(--bad); } }
+  .shadow { fill: var(--shadow); opacity: .55; transform-box: fill-box; transform-origin: center; transition: transform .5s; }
+  .ring { fill: none; stroke: var(--ok); stroke-width: 3; transform-box: fill-box; transform-origin: center; animation: ring .9s cubic-bezier(.2, .7, .3, 1) forwards; }
+  @keyframes ring { from { transform: scale(.4); opacity: .9; } to { transform: scale(1.9); opacity: 0; } }
+  .spark { stroke: #ffd36b; stroke-width: 2.4; stroke-linecap: round; animation: spark .8s cubic-bezier(.2, .7, .3, 1) forwards; }
+  @keyframes spark { from { transform: translate(0, 0); opacity: 1; } to { transform: translate(var(--x), var(--y)); opacity: 0; } }
+  .clickTag {
+    position: absolute; left: 50%; top: 10%; padding: 4px 10px; border-radius: 999px; font: 800 11px/1 var(--ff); letter-spacing: .14em;
+    color: #fff; background: var(--ok); pointer-events: none; opacity: 0; transform: translate(-50%, 10px);
+  }
+  .clickTag.on { animation: tag 1.3s cubic-bezier(.2, .9, .3, 1.2) forwards; }
+  @keyframes tag { 0% { opacity: 0; transform: translate(-50%, 14px) scale(.6); } 25% { opacity: 1; transform: translate(-50%, 0) scale(1.08); } 75% { opacity: 1; transform: translate(-50%, -8px) scale(1); } 100% { opacity: 0; transform: translate(-50%, -22px); } }
+
+  /* ---------- Password field ---------- */
+  label.lab { display: block; margin: 8px 0 6px; font-size: 12.5px; font-weight: 700; }
+  .field {
+    position: relative; display: flex; align-items: center; height: 50px; border-radius: 16px; background: var(--field);
+    border: 1.5px solid var(--line); transition: border-color .25s, box-shadow .25s;
+  }
+  .field:focus-within { border-color: var(--lvl); box-shadow: 0 0 0 4px color-mix(in srgb, var(--lvl) 25%, transparent); }
+  .field input {
+    flex: 1; min-width: 0; height: 100%; padding: 0 14px; border: 0; background: transparent; color: var(--ink);
+    font: 600 16px/1 var(--mono); letter-spacing: .04em; outline: none;
+  }
+  .field input::placeholder { font-family: var(--ff); letter-spacing: 0; color: var(--muted); font-weight: 500; }
+  .eye {
+    flex: none; width: 42px; height: 40px; margin-right: 4px; border: 0; border-radius: 12px; background: transparent; color: var(--muted);
+    display: grid; place-items: center; cursor: pointer; transition: background .2s, color .2s;
+  }
+  .eye:hover { background: color-mix(in srgb, var(--lvl) 18%, transparent); color: var(--ink); }
+  .eye svg { width: 22px; height: 22px; overflow: visible; }
+  .eye .lid { transform-box: fill-box; transform-origin: 50% 50%; transition: transform .3s cubic-bezier(.34, 1.56, .64, 1); }
+  .eye .pupil { transition: transform .3s; transform-box: fill-box; transform-origin: center; }
+  .eye[aria-pressed="false"] .pupil { transform: scale(0); }
+  .eye[aria-pressed="false"] .lid { transform: scaleY(.15); }
+  .eye .slash { stroke-dasharray: 26; stroke-dashoffset: 0; transition: stroke-dashoffset .35s; }
+  .eye[aria-pressed="true"] .slash { stroke-dashoffset: 26; }
+
+  /* ---------- Strength meter ---------- */
+  .meter { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin: 10px 0 6px; }
+  .meter i { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; position: relative; }
+  .meter i::after { content: ""; position: absolute; inset: 0; background: var(--lvl); transform: scaleX(0); transform-origin: left; transition: transform .45s cubic-bezier(.34, 1.4, .64, 1), background .4s; }
+  .meter i.on::after { transform: scaleX(1); }
+  .meter i:nth-child(2)::after { transition-delay: .04s; } .meter i:nth-child(3)::after { transition-delay: .08s; }
+  .meter i:nth-child(4)::after { transition-delay: .12s; } .meter i:nth-child(5)::after { transition-delay: .16s; }
+  .readout { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; font-size: 12px; color: var(--muted); }
+  .readout b { color: var(--ink); transition: color .3s; }
+  .readout .crack b { font-variant-numeric: tabular-nums; }
+
+  /* ---------- Rules: one per pin ---------- */
+  .rules { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 4px; }
+  .rules li {
+    display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 11px;
+    font-size: 13px; color: var(--muted); transition: color .3s, background .3s;
+  }
+  .rules li.met { color: var(--ink); background: color-mix(in srgb, var(--ok) 9%, transparent); }
+  .rules li.pop { animation: pop .5s cubic-bezier(.34, 1.56, .64, 1); }
+  @keyframes pop { 40% { transform: scale(1.035); } }
+  .rules li.ask { animation: ask .7s ease 2; }
+  @keyframes ask { 50% { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); } }
+  .rules svg { width: 22px; height: 22px; }
+  .rules .dot { fill: none; stroke: var(--line); stroke-width: 2; transition: fill .3s, stroke .3s; }
+  .rules .tick { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 14; stroke-dashoffset: 14; transition: stroke-dashoffset .35s .1s; }
+  .rules li.met .dot { fill: var(--ok); stroke: var(--ok); }
+  .rules li.met .tick { stroke-dashoffset: 0; }
+  .rules .pin { font: 700 10.5px/1 var(--mono); padding: 3px 6px; border-radius: 6px; background: var(--field); color: var(--muted); }
+  .rules li.met .pin { background: color-mix(in srgb, #d6a03c 22%, transparent); color: #9a6a18; }
+  [data-theme="dark"] .rules li.met .pin { color: #f2c66b; }
+
+  /* ---------- Buttons and status ---------- */
+  .actions { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; margin-top: 14px; }
+  .btn {
+    position: relative; height: 46px; padding: 0 14px; border-radius: 15px; border: 1.5px solid var(--line); background: var(--card);
+    color: var(--ink); font: 700 13.5px/1 var(--ff); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap;
+    transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), background .25s, border-color .25s, color .25s, box-shadow .25s;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: scale(.96); }
+  .btn svg { width: 17px; height: 17px; flex: none; }
+  .save { border: 0; background: linear-gradient(180deg, #2c3748, #18202c); color: #fff; box-shadow: 0 12px 20px -12px rgba(20, 30, 50, .8); }
+  [data-theme="dark"] .save { background: linear-gradient(180deg, #e8edf5, #c3cbd8); color: #10151d; }
+  .save[aria-disabled="true"] { opacity: .5; }
+  .save.ready { background: linear-gradient(180deg, #19c287, #0e9466); color: #fff; box-shadow: 0 14px 24px -12px rgba(16, 165, 115, .9); animation: nudge 1.8s ease-in-out infinite; }
+  @keyframes nudge { 0%, 72%, 100% { transform: none; } 82% { transform: translateY(-3px); } 92% { transform: translateY(0); } }
+  .save .key { transition: transform .5s cubic-bezier(.34, 1.56, .64, 1); transform-box: fill-box; transform-origin: 30% 50%; }
+  .save.busy .key { animation: turn .9s cubic-bezier(.5, 0, .3, 1) infinite; }
+  @keyframes turn { 50% { transform: rotate(90deg); } }
+  .status { margin: 10px 2px 0; min-height: 18px; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+  .status::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--lvl); box-shadow: 0 0 0 4px color-mix(in srgb, var(--lvl) 22%, transparent); transition: background .3s; }
+  .status.good { color: var(--ok); font-weight: 700; }
+
+  button:focus-visible, .field input:focus-visible { outline: none; }
+  button:focus-visible { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--lvl); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 420px) { .btn { padding: 0 11px; gap: 6px; } }
+  @media (max-width: 370px) { .card { padding: 16px 14px; } .rules li { font-size: 12.3px; } .btn { padding: 0 8px; font-size: 12.8px; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .001ms !important; transition-delay: 0s !important; }
+    .glint { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="stage" id="stage">
+  <section class="card" id="card" aria-labelledby="title">
+    <p class="kicker">Step 2 of 3 · Your shop account</p>
+    <h1 id="title">Lock in a password</h1>
+    <p class="sub">Hi Ayesha. Each rule you meet sets one pin. Set all five and the lock clicks shut.</p>
+
+    <div class="lockwrap">
+      <svg class="lock" id="lock" viewBox="0 -34 320 250" aria-hidden="true">
+        <defs>
+          <linearGradient id="steel" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#8d97a5"/><stop offset=".35" stop-color="#eef2f7"/><stop offset=".6" stop-color="#b8c1cd"/><stop offset="1" stop-color="#7b8594"/>
+          </linearGradient>
+          <linearGradient id="brass" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#f6d27a"/><stop offset=".45" stop-color="#d49b35"/><stop offset="1" stop-color="#9c6a1a"/>
+          </linearGradient>
+          <linearGradient id="pinS" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9aa4b2"/><stop offset=".5" stop-color="#f1f4f8"/><stop offset="1" stop-color="#8f99a7"/></linearGradient>
+          <linearGradient id="pinB" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c48a26"/><stop offset=".5" stop-color="#ffe29a"/><stop offset="1" stop-color="#b57d1f"/></linearGradient>
+          <clipPath id="win"><rect x="96" y="106" width="128" height="60" rx="10"/></clipPath>
+        </defs>
+        <ellipse class="shadow" id="shadow" cx="160" cy="206" rx="86" ry="7"/>
+        <g class="all" id="all">
+          <!-- shackle: the left leg stays in the body, the right leg lifts out when open -->
+          <g id="shackle">
+            <path d="M115 150 V62 A45 45 0 0 1 205 62 V104" fill="none" stroke="#6f7988" stroke-width="18"/>
+            <path d="M115 150 V62 A45 45 0 0 1 205 62 V104" fill="none" stroke="url(#steel)" stroke-width="15"/>
+            <path class="glint" d="M115 120 V62 A45 45 0 0 1 205 62 V100"/>
+          </g>
+          <!-- brass body -->
+          <rect x="74" y="94" width="172" height="106" rx="22" fill="url(#brass)"/>
+          <rect x="77.5" y="97.5" width="165" height="99" rx="19" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1.5"/>
+          <circle cx="88" cy="108" r="3" fill="#8a5c14"/><circle cx="232" cy="108" r="3" fill="#8a5c14"/>
+          <circle cx="88" cy="186" r="3" fill="#8a5c14"/><circle cx="232" cy="186" r="3" fill="#8a5c14"/>
+          <!-- cut-away window: housing above the shear line, plug below -->
+          <rect x="94" y="104" width="132" height="64" rx="12" fill="#6b4810"/>
+          <g clip-path="url(#win)">
+            <rect x="96" y="106" width="128" height="36" fill="#3b434f"/>
+            <rect x="96" y="142" width="128" height="24" fill="#a77420"/>
+            <g id="pins"></g>
+            <line x1="96" y1="142" x2="224" y2="142" stroke="#ffd36b" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/>
+          </g>
+          <!-- keyhole turns when every pin is set -->
+          <g class="keyhole" id="keyhole"><circle cx="160" cy="180" r="6" fill="#4a3108"/><rect x="157.5" y="181" width="5" height="10" rx="2" fill="#4a3108"/></g>
+          <g id="fx"></g>
+        </g>
+      </svg>
+      <span class="clickTag" id="clickTag" aria-hidden="true">CLICK</span>
+    </div>
+
+    <label class="lab" for="pw">New password</label>
+    <div class="field">
+      <input id="pw" type="password" autocomplete="new-password" spellcheck="false" placeholder="Type a password" aria-describedby="rules strength">
+      <button class="eye" id="eye" type="button" aria-pressed="false" aria-label="Show password">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path class="lid" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/>
+          <circle class="pupil" cx="12" cy="12" r="3"/>
+          <path class="slash" d="M4 4l16 16"/>
+        </svg>
+      </button>
+    </div>
+    <div class="meter" id="meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="readout" id="strength"><span>Strength <b id="lvlText">Empty</b></span><span class="crack">Time to crack <b id="crack">none yet</b></span></div>
+
+    <ul class="rules" id="rules" aria-label="Password rules"></ul>
+
+    <div class="actions">
+      <button class="btn" id="suggest" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
+        Suggest one
+      </button>
+      <button class="btn save" id="save" type="button" aria-disabled="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g class="key"><circle cx="7" cy="12" r="3.5"/><path d="M10.5 12H21M17 12v3.5M20 12v2.5"/></g></svg>
+        <span id="saveText">Save password</span>
+      </button>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite">Pins set: 0 of 5</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var NS = "http://www.w3.org/2000/svg";
+
+  // ---------- The five rules, one per pin ----------
+  var COMMON = ["password", "passw0rd", "qwerty", "admin", "welcome", "letmein", "iloveyou", "pakistan", "lahore", "karachi", "cricket", "football", "monkey", "dragon", "ayesha", "khan", "abc123", "111111", "000000"];
+  function hasRun(s) {
+    for (var i = 0; i + 2 < s.length; i++) {
+      var a = s.charCodeAt(i), b = s.charCodeAt(i + 1), c = s.charCodeAt(i + 2);
+      if (/[a-z0-9]/.test(s[i]) && ((b - a === 1 && c - b === 1) || (a - b === 1 && b - c === 1))) return true;
+    }
+    return false;
+  }
+  function weak(v) {
+    var low = v.toLowerCase();
+    return COMMON.some(function (w) { return low.indexOf(w) > -1; }) || /(.)\1\1/.test(v) || hasRun(low);
+  }
+  var RULES = [
+    { text: "At least 10 characters", test: function (v) { return v.length >= 10; } },
+    { text: "Upper and lower case letters", test: function (v) { return /[a-z]/.test(v) && /[A-Z]/.test(v); } },
+    { text: "At least one number", test: function (v) { return /\d/.test(v); } },
+    { text: "A symbol such as ! @ # or ?", test: function (v) { return /[^A-Za-z0-9\s]/.test(v); } },
+    { text: "No common word, your name or runs like 123", test: function (v) { return v.length >= 4 && !weak(v); } }
+  ];
+  var LEVELS = [["Empty", "#c3cad5", "#3a4352"], ["Very weak", "#e0493e", "#ff6b5e"], ["Weak", "#ec7a22", "#ff9640"], ["Fair", "#e2b21c", "#ffd04a"], ["Strong", "#7cbc2a", "#9be04a"], ["Locked tight", "#10a573", "#2fd394"]];
+
+  // ---------- Build the rule list and the pin channels ----------
+  var rulesEl = $("#rules"), pinsEl = $("#pins");
+  RULES.forEach(function (r, i) {
+    var li = document.createElement("li");
+    li.innerHTML = '<svg viewBox="0 0 22 22" aria-hidden="true"><circle class="dot" cx="11" cy="11" r="9"/><path class="tick" d="M6.5 11.5l3 3 6-6.5"/></svg><span>' + r.text + '</span><span class="pin" aria-hidden="true">PIN ' + (i + 1) + "</span>";
+    rulesEl.appendChild(li);
+  });
+  var lis = [].slice.call(rulesEl.children);
+
+  // each channel: a slot, a spring, a steel driver pin and a brass key pin.
+  // p = 0: the driver pin crosses the shear line (blocked); p = 1: the gap sits exactly on the shear line (set)
+  var pins = [];
+  for (var i = 0; i < 5; i++) {
+    var cx = 112 + i * 24, g = document.createElementNS(NS, "g");
+    g.setAttribute("class", "chan");
+    g.innerHTML =
+      '<rect class="slot" x="' + (cx - 7) + '" y="106" width="14" height="60" fill="#232932"/>' +
+      '<g class="spr"><polyline points="0,0 -4,.1 4,.2 -4,.3 4,.4 -4,.5 4,.6 -4,.7 4,.8 -4,.9 0,1" fill="none" stroke="#c8d0da" stroke-width="1.4" vector-effect="non-scaling-stroke"/></g>' +
+      '<g class="mv"><rect x="' + (cx - 5) + '" y="126" width="10" height="15.5" rx="2" fill="url(#pinS)"/>' +
+      '<rect class="block" x="' + (cx - 5) + '" y="142" width="10" height="0" fill="#ff5a4e" opacity=".7"/>' +
+      '<path d="M' + (cx - 5) + ' 142.5 h10 v10 l-5 4 l-5 -4 z" fill="url(#pinB)"/></g>' +
+      '<ellipse class="glow" cx="' + cx + '" cy="142" rx="7" ry="1.6" fill="#fff2b8" opacity="0"/>';
+    pinsEl.appendChild(g);
+    pins.push({ g: g, cx: cx, spr: g.querySelector(".spr"), mv: g.querySelector(".mv"), block: g.querySelector(".block"), glow: g.querySelector(".glow"), p: 0, v: 0, t: 0 });
+  }
+
+  // ---------- Springs: pins, shackle and the drop shadow ----------
+  var shackle = { y: -34, v: 0, t: -34 };
+  var shackleEl = $("#shackle"), shadowEl = $("#shadow"), allEl = $("#all"), lockSvg = $("#lock");
+  var last = performance.now(), t0 = last;
+  function frame(now) {
+    var dt = Math.min(3, (now - last) / 16.7);
+    last = now;
+    var idle = Math.sin((now - t0) / 900); // a slow breath so the springs never look frozen
+    for (var s = 0; s < dt; s++) {
+      pins.forEach(function (p) { p.v = p.v * .72 + (p.t - p.p) * .16; p.p += p.v; });
+      shackle.v = shackle.v * .74 + (shackle.t - shackle.y) * .12; shackle.y += shackle.v;
+    }
+    if (reduce.matches) { pins.forEach(function (p) { p.p = p.t; p.v = 0; }); shackle.y = shackle.t; }
+    pins.forEach(function (p, i) {
+      var dy = 10 * (1 - p.p) + (p.t === 0 && !reduce.matches ? Math.sin((now - t0) / 700 + i) * .6 : 0);
+      p.mv.setAttribute("transform", "translate(0 " + dy.toFixed(2) + ")");
+      p.spr.setAttribute("transform", "translate(" + p.cx + " 107) scale(1 " + (19 + dy).toFixed(2) + ")");
+      // the red part of the driver pin is the bit stuck below the shear line (y 142), in the moved group's own space
+      p.block.setAttribute("y", (142 - Math.max(0, dy)).toFixed(2));
+      p.block.setAttribute("height", Math.max(0, dy - .5).toFixed(2));
+      p.glow.setAttribute("opacity", Math.max(0, Math.min(1, p.p)) ** 3);
+    });
+    var sy = shackle.y + (shackle.t < 0 && !reduce.matches ? idle * .8 : 0);
+    shackleEl.setAttribute("transform", "translate(0 " + sy.toFixed(2) + ")");
+    shadowEl.style.transform = "scaleX(" + (1 + sy / 400).toFixed(3) + ")";
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Crack-time estimate (offline attacker, ten billion guesses a second) ----------
+  function crackTime(v) {
+    if (!v) return "none yet";
+    var cs = 0;
+    if (/[a-z]/.test(v)) cs += 26;
+    if (/[A-Z]/.test(v)) cs += 26;
+    if (/\d/.test(v)) cs += 10;
+    if (/[^A-Za-z0-9]/.test(v)) cs += 33;
+    var log = v.length * Math.log10(Math.max(cs, 2));
+    if (weak(v)) log = Math.min(log, 3 + Math.max(0, v.length - 6) * .8); // dictionary words fall fast
+    var secLog = log - 10 - Math.log10(2);
+    if (secLog < 0) return "instantly";
+    var sec = Math.pow(10, secLog);
+    var units = [[60, "second"], [60, "minute"], [24, "hour"], [30, "day"], [12, "month"], [1000, "year"]];
+    for (var k = 0; k < units.length; k++) {
+      if (sec < units[k][0]) { var n = Math.max(1, Math.round(sec)); return "about " + n + " " + units[k][1] + (n > 1 ? "s" : ""); }
+      sec /= units[k][0];
+    }
+    return sec < 1000 ? "thousands of years" : "longer than history";
+  }
+
+  // ---------- Reacting to the password ----------
+  var pw = $("#pw"), eye = $("#eye"), save = $("#save"), saveText = $("#saveText"), status = $("#status");
+  var meterBars = [].slice.call(document.querySelectorAll("#meter i"));
+  var met = [false, false, false, false, false], count = 0, saved = false;
+  function themeIdx() { return document.documentElement.dataset.theme === "dark" ? 2 : 1; }
+  function update() {
+    var v = pw.value, before = count;
+    count = 0;
+    RULES.forEach(function (r, i) {
+      var ok = r.test(v);
+      if (ok) count++;
+      if (ok !== met[i]) {
+        met[i] = ok;
+        lis[i].classList.toggle("met", ok);
+        lis[i].classList.remove("pop"); void lis[i].offsetWidth; if (ok) lis[i].classList.add("pop");
+        pins[i].t = ok ? 1 : 0;
+        pins[i].v += ok ? .12 : -.08; // a little extra kick so the pin overshoots and settles
+        if (!ok) { pins[i].g.classList.remove("flash"); void pins[i].g.getBBox(); pins[i].g.classList.add("flash"); }
+      }
+    });
+    var lv = LEVELS[v ? Math.max(1, count) : 0];
+    document.documentElement.style.setProperty("--lvl", lv[themeIdx()]);
+    $("#lvlText").textContent = lv[0];
+    $("#crack").textContent = crackTime(v);
+    meterBars.forEach(function (b, i) { b.classList.toggle("on", v && i < Math.max(1, count)); });
+    shackle.t = -34 * (1 - count / 5);
+    if (count === 5 && before < 5) lockShut();
+    if (count < 5 && before === 5) { lockSvg.classList.remove("done"); shackle.v -= 2; }
+    save.setAttribute("aria-disabled", String(count < 5));
+    save.classList.toggle("ready", count === 5 && !saved);
+    if (saved && v !== savedValue) { saved = false; saveText.textContent = "Save password"; }
+    status.classList.toggle("good", count === 5);
+    status.textContent = count === 5 ? "All five pins set. The lock is shut tight." : "Pins set: " + count + " of 5" + (v ? " · " + RULES[met.indexOf(false)].text.toLowerCase() + " next" : "");
+  }
+  pw.addEventListener("input", update);
+  pw.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); doSave(save); } });
+
+  // the satisfying finish: shackle slams down, keyhole turns, rings and sparks fly
+  var fx = $("#fx");
+  function lockShut() {
+    lockSvg.classList.add("done");
+    shackle.v = 5;
+    if (reduce.matches) return;
+    allEl.classList.remove("clunk"); void allEl.getBBox(); allEl.classList.add("clunk");
+    var tag = $("#clickTag"); tag.classList.remove("on"); void tag.offsetWidth; tag.classList.add("on");
+    [0, 160].forEach(function (d) {
+      setTimeout(function () {
+        var c = document.createElementNS(NS, "circle");
+        c.setAttribute("class", "ring"); c.setAttribute("cx", 160); c.setAttribute("cy", 120); c.setAttribute("r", 60);
+        fx.appendChild(c); setTimeout(function () { c.remove(); }, 950);
+      }, d);
+    });
+    [115, 205].forEach(function (x) {
+      for (var k = 0; k < 7; k++) {
+        var a = -Math.PI / 2 + (k - 3) * .38, l = document.createElementNS(NS, "line");
+        l.setAttribute("class", "spark");
+        l.setAttribute("x1", x); l.setAttribute("y1", 96); l.setAttribute("x2", x + Math.cos(a) * 6); l.setAttribute("y2", 96 + Math.sin(a) * 6);
+        l.style.setProperty("--x", (Math.cos(a) * 30).toFixed(1) + "px"); l.style.setProperty("--y", (Math.sin(a) * 30).toFixed(1) + "px");
+        fx.appendChild(l); setTimeout(function (n) { n.remove(); }.bind(null, l), 850);
+      }
+    });
+  }
+
+  // ---------- Show / hide ----------
+  function setShown(on) {
+    pw.type = on ? "text" : "password";
+    eye.setAttribute("aria-pressed", String(on));
+    eye.setAttribute("aria-label", on ? "Hide password" : "Show password");
+  }
+  eye.addEventListener("click", function () { setShown(pw.type === "password"); pw.focus({ preventScroll: true }); });
+
+  // ---------- Suggest: a random strong password typed in for you ----------
+  var typingId = 0;
+  function strongPassword() {
+    var sets = ["abcdefghijkmnpqrstuvwxyz", "ABCDEFGHJKLMNPQRSTUVWXYZ", "23456789", "!@#$%&*?+="], all = sets.join(""), out;
+    var rnd = function (n) { var a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; };
+    do {
+      out = sets.map(function (s) { return s[rnd(s.length)]; });
+      while (out.length < 14) out.push(all[rnd(all.length)]);
+      for (var k = out.length - 1; k > 0; k--) { var j = rnd(k + 1), t = out[k]; out[k] = out[j]; out[j] = t; }
+      out = out.join("");
+    } while (weak(out));
+    return out;
+  }
+  async function typeIn(text, speed) {
+    var id = ++typingId;
+    for (var k = 0; k < text.length; k++) {
+      if (id !== typingId) return false;
+      pw.value += text[k]; update();
+      await wait(reduce.matches ? 0 : speed + Math.random() * speed * .5);
+    }
+    return true;
+  }
+  async function eraseAll(speed) {
+    var id = ++typingId;
+    while (pw.value) {
+      if (id !== typingId) return false;
+      pw.value = pw.value.slice(0, -1); update();
+      await wait(reduce.matches ? 0 : speed);
+    }
+    return true;
+  }
+  var suggestId = 0;
+  $("#suggest").addEventListener("click", async function () {
+    var my = ++suggestId, made = strongPassword();
+    setShown(true);
+    await eraseAll(14);
+    if (my !== suggestId) return; // a newer press took over
+    await typeIn(made, 34);
+    if (my === suggestId) pw.focus({ preventScroll: true });
+  });
+
+  // ---------- Save: key turns, then a saved state ----------
+  var busy = false, savedValue = "";
+  async function doSave(btn) {
+    if (busy) return;
+    if (count < 5) {
+      allEl.classList.remove("nope"); void allEl.getBBox(); allEl.classList.add("nope");
+      lis.forEach(function (li, i) { li.classList.remove("ask"); if (!met[i]) { void li.offsetWidth; li.classList.add("ask"); } });
+      status.textContent = pw.value ? "Set every pin first: " + (5 - count) + " rule" + (5 - count > 1 ? "s" : "") + " still open" : "Type a password to start setting pins";
+      return;
+    }
+    busy = true;
+    btn.classList.remove("ready"); btn.classList.add("busy");
+    saveText.textContent = "Saving";
+    await wait(reduce.matches ? 120 : 900);
+    btn.classList.remove("busy");
+    busy = false; saved = true; savedValue = pw.value;
+    saveText.textContent = "Saved";
+    status.textContent = "Password saved. You can change it any time.";
+  }
+  save.addEventListener("click", function (e) { var btn = e.currentTarget; doSave(btn); });
+
+  // ---------- Start ----------
+  update();
+  requestAnimationFrame(frame);
+
+  // ---------- Auto demo: types a weak password, fixes it and saves; stops at the first real touch ----------
+  var demoOn = true;
+  function stopDemo(e) {
+    if (!e.isTrusted || !demoOn) return;
+    demoOn = false; typingId++;
+    if (demoTyped) { pw.value = ""; setShown(false); saved = false; saveText.textContent = "Save password"; update(); }
+    demoTyped = false;
+  }
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { window.addEventListener(t, stopDemo, { capture: true, passive: true }); });
+  var demoTyped = false;
+  async function pause(ms) { await wait(ms); if (!demoOn) throw 0; }
+  async function say(text, speed) { demoTyped = true; if (!(await typeIn(text, speed)) || !demoOn) throw 0; }
+  async function demo() {
+    try {
+      await pause(600);
+      while (demoOn) {
+        setShown(true);
+        await say("ayesha123", 85); await pause(900);
+        if (!(await eraseAll(40)) || !demoOn) throw 0;
+        await pause(300);
+        await say("Tea@Murree", 90); await pause(700);
+        await say("47", 160); await pause(1300);
+        await doSave(save); await pause(1800);
+        if (!(await eraseAll(30)) || !demoOn) throw 0;
+        saved = false; saveText.textContent = "Save password"; update();
+        await pause(1600);
+      }
+    } catch (e) { /* stopped by the visitor */ }
+  }
+  demo();
+})();
+</script>
+</body>
+</html>
