@@ -1,0 +1,628 @@
+<!doctype html>
+<!-- Chill & Craft · Shortlist · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shortlist · job listing card with a full apply flow</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: cobalt and coral on cool paper (light), midnight blue (dark) ---------- */
+  :root {
+    --bg: #e7ebfa; --bg-2: #f8f9ff; --card: #ffffff; --edge: rgba(17, 26, 58, 0.1); --ink: #111a3a; --muted: #5f6886; --soft: #f1f3fc; --soft-2: #e1e5f6;
+    --accent: #3047ff; --accent-2: #5d70ff; --on-accent: #fff; --coral: #ff6b57; --good: #1f9d66; --bad: #e0413a; --shadow: rgba(20, 30, 90, 0.28); --focus: #3047ff;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #060918; --bg-2: #11173a; --card: #0f142d; --edge: rgba(255, 255, 255, 0.09); --ink: #edf0ff; --muted: #99a1c6; --soft: #171d3e; --soft-2: #232a52;
+    --accent: #7f8dff; --accent-2: #a3adff; --on-accent: #0a0f2e; --coral: #ff8a75; --good: #4fd394; --bad: #ff6e66; --shadow: rgba(0, 0, 0, 0.7); --focus: #a3adff;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 3px; }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+
+  .stage { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; overflow: hidden; overflow: clip;
+    background: radial-gradient(60% 50% at 80% 0%, var(--bg-2), transparent 70%), var(--bg); }
+  /* soft floating shapes behind the card */
+  .blob { position: absolute; border-radius: 50%; filter: blur(50px); opacity: 0.5; pointer-events: none; animation: float 16s ease-in-out infinite alternate; }
+  .blob.b1 { width: 360px; height: 360px; left: 8%; top: 10%; background: var(--accent); opacity: 0.18; }
+  .blob.b2 { width: 300px; height: 300px; right: 10%; bottom: 6%; background: var(--coral); opacity: 0.16; animation-delay: -6s; }
+  @keyframes float { to { transform: translate(40px, -30px) scale(1.1); } }
+
+  .card { position: relative; width: min(600px, 100%); border-radius: 28px; background: var(--card); border: 1px solid var(--edge); overflow: hidden;
+    box-shadow: 0 50px 90px -50px var(--shadow), 0 12px 28px -20px var(--shadow); animation: rise 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards; }
+  @keyframes rise { from { opacity: 0; transform: translateY(46px) scale(0.96); } }
+  .views { position: relative; transition: height 0.55s cubic-bezier(0.3, 1.1, 0.4, 1); overflow: hidden; overflow: clip; }
+  .view { position: absolute; left: 0; right: 0; top: 0; padding: 24px; opacity: 0; visibility: hidden; transform: translateX(40px); transition: opacity 0.35s, transform 0.55s cubic-bezier(0.3, 1.3, 0.5, 1), visibility 0s 0.55s; }
+  .view.left { transform: translateX(-40px); }
+  .view.on { opacity: 1; visibility: visible; transform: none; transition: opacity 0.4s 0.08s, transform 0.6s cubic-bezier(0.3, 1.3, 0.5, 1) 0.05s, visibility 0s; }
+
+  /* ---------- Listing ---------- */
+  .co { display: flex; align-items: center; gap: 12px; }
+  .logo { position: relative; flex: none; width: 52px; height: 52px; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 20px -12px var(--accent); }
+  .logo svg { width: 100%; height: 100%; display: block; }
+  .logo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.55) 50%, transparent 65%); transform: translateX(-120%); animation: shine 4.5s ease-in-out infinite 1.2s; }
+  @keyframes shine { 30%, 100% { transform: translateX(120%); } }
+  .logo .flame { transform-box: fill-box; transform-origin: 50% 100%; animation: flick 1.6s ease-in-out infinite alternate; }
+  @keyframes flick { 50% { transform: scale(0.9, 1.08) rotate(-3deg); } 100% { transform: scale(1.04, 0.94) rotate(2deg); } }
+  .co .who { flex: 1; min-width: 0; }
+  .co strong { display: block; font-size: 14.5px; line-height: 1.3; }
+  .co strong svg { width: 15px; height: 15px; vertical-align: -2px; margin-left: 3px; }
+  .co span { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .save { position: relative; flex: none; width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--edge); background: var(--soft); display: grid; place-items: center; transition: transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .save:active { transform: scale(0.88); }
+  .save svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; transition: fill 0.2s, stroke 0.2s; }
+  .save[aria-pressed="true"] svg { fill: var(--coral); stroke: var(--coral); }
+  .save.drop svg { animation: drop 0.7s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  @keyframes drop { 0% { transform: translateY(0); } 25% { transform: translateY(-9px) scale(0.85, 1.1); } 55% { transform: translateY(2px) scale(1.15, 0.85); } 100% { transform: none; } }
+  .save i { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: var(--coral); left: 50%; top: 50%; opacity: 0; pointer-events: none; }
+  .save.drop i { animation: sparkle 0.6s ease-out; }
+  @keyframes sparkle { 0% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--a)) translateY(0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--a)) translateY(-26px) scale(0.3); } }
+
+  h1 { margin: 18px 0 10px; font-size: clamp(23px, 3.6vw, 30px); line-height: 1.12; letter-spacing: -0.02em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 99px; background: var(--soft); font-size: 12.5px; font-weight: 700; color: var(--muted); animation: chipin 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) backwards; animation-delay: calc(var(--k) * 60ms + 0.35s); }
+  .chip.hot { background: rgba(255, 107, 87, 0.13); color: var(--coral); }
+  @keyframes chipin { from { opacity: 0; transform: translateY(8px) scale(0.9); } }
+  .pay { margin-top: 18px; padding: 14px 16px; border-radius: 18px; background: var(--soft); }
+  .pay .row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .pay strong { font-size: 19px; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .pay small { font-size: 12px; color: var(--muted); font-weight: 650; }
+  .range { position: relative; height: 8px; border-radius: 99px; background: var(--soft-2); margin: 12px 0 6px; }
+  .range i { position: absolute; top: 0; bottom: 0; left: 15%; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--coral)); animation: band 1.1s cubic-bezier(0.3, 1.3, 0.5, 1) 0.6s forwards; }
+  @keyframes band { to { width: 21.4%; } }
+  .range b { position: absolute; top: 50%; left: 30%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--card); border: 3px solid var(--ink); opacity: 0; animation: mk 0.5s cubic-bezier(0.3, 1.8, 0.5, 1) 1.3s forwards; }
+  @keyframes mk { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: none; } }
+  .pay .scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-weight: 650; }
+  .sec { margin: 18px 0 8px; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  ul.do { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+  ul.do li { display: flex; gap: 10px; font-size: 14px; line-height: 1.45; }
+  ul.do li::before { content: ""; flex: none; width: 7px; height: 7px; margin-top: 7px; border-radius: 3px; background: var(--accent); transform: rotate(45deg); }
+  .perks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+  .perk { display: grid; justify-items: center; gap: 5px; padding: 10px 4px; border-radius: 14px; border: 1px solid var(--edge); text-align: center; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+  .perk svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .foot { display: flex; align-items: center; gap: 14px; margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--edge); }
+  .faces { display: flex; flex: none; }
+  .faces span { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--card); margin-left: -9px; display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #fff; }
+  .faces span:first-child { margin-left: 0; }
+  .foot .cnt { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+  .foot .cnt b { color: var(--ink); }
+  .cta { position: relative; flex: none; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 150px; height: 50px; padding: 0 20px; border: 0; border-radius: 16px; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 15px; box-shadow: 0 16px 26px -14px var(--accent); transition: transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1), background 0.3s, box-shadow 0.3s; overflow: hidden; }
+  .cta:active { transform: scale(0.95); }
+  .cta svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .cta:hover svg.arr { transform: translateX(4px); }
+  .cta.applied { background: var(--good); box-shadow: 0 16px 26px -14px var(--good); }
+  .withdraw { border: 0; background: none; padding: 6px 2px; font-size: 12.5px; font-weight: 750; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; display: none; }
+  .applied-on .withdraw { display: inline-block; }
+
+  /* ---------- Apply flow ---------- */
+  .ahead { display: flex; align-items: center; gap: 10px; }
+  .backbtn { flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--edge); background: var(--soft); display: grid; place-items: center; }
+  .backbtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .ahead strong { display: block; font-size: 15px; }
+  .ahead span { display: block; font-size: 12.5px; color: var(--muted); }
+  .steps { position: relative; display: flex; justify-content: space-between; margin: 20px 6px 18px; }
+  .steps::before, .steps .fill { content: ""; position: absolute; left: 16px; right: 16px; top: 15px; height: 3px; border-radius: 3px; background: var(--soft-2); }
+  .steps .fill { right: auto; width: calc((100% - 32px) * var(--sp, 0)); background: var(--accent); transition: width 0.6s cubic-bezier(0.3, 1.4, 0.5, 1); }
+  .step { position: relative; display: grid; justify-items: center; gap: 6px; font-size: 12px; font-weight: 750; color: var(--muted); z-index: 1; }
+  .step i { width: 33px; height: 33px; border-radius: 50%; display: grid; place-items: center; background: var(--card); border: 2px solid var(--soft-2); font-style: normal; font-weight: 850; font-size: 13px; transition: background 0.3s, border-color 0.3s, color 0.3s, transform 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .step.cur i { border-color: var(--accent); color: var(--accent); transform: scale(1.12); }
+  .step.cur { color: var(--ink); }
+  .step.ok i { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .step i svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .panes { position: relative; overflow: hidden; overflow: clip; transition: height 0.5s cubic-bezier(0.3, 1.1, 0.4, 1); }
+  .pane { position: absolute; left: 0; right: 0; top: 0; padding: 2px; opacity: 0; visibility: hidden; transform: translateX(36px); transition: opacity 0.3s, transform 0.5s cubic-bezier(0.3, 1.3, 0.5, 1), visibility 0s 0.5s; }
+  .pane.left { transform: translateX(-36px); }
+  .pane.on { opacity: 1; visibility: visible; transform: none; transition: opacity 0.35s 0.06s, transform 0.55s cubic-bezier(0.3, 1.3, 0.5, 1) 0.04s, visibility 0s; }
+  .field { margin-bottom: 12px; }
+  .field label { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 750; margin-bottom: 6px; }
+  .field label em { font-style: normal; font-weight: 650; color: var(--muted); }
+  .field input[type="text"], .field input[type="email"], .field input[type="url"], .field textarea { width: 100%; padding: 12px 14px; border-radius: 13px; border: 1.5px solid var(--soft-2); background: var(--soft); outline: none; font-size: 14.5px; transition: border-color 0.2s, background 0.2s, box-shadow 0.2s; }
+  .field textarea { resize: none; height: 92px; line-height: 1.45; }
+  .field input:focus, .field textarea:focus { border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
+  .field.bad input, .field.bad textarea { border-color: var(--bad); }
+  .field.bad { animation: shake 0.45s cubic-bezier(0.3, 0, 0.3, 1); }
+  @keyframes shake { 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+  .err { display: block; min-height: 0; font-size: 12px; font-weight: 700; color: var(--bad); margin-top: 5px; }
+  .err:empty { margin: 0; }
+  .drop-zone { position: relative; display: grid; justify-items: center; gap: 6px; padding: 22px 14px; border-radius: 18px; border: 2px dashed var(--soft-2); background: var(--soft); text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s, transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .drop-zone:hover, .drop-zone.over { border-color: var(--accent); }
+  .drop-zone.over { transform: scale(1.02); }
+  .drop-zone svg { width: 34px; height: 34px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .drop-zone.over svg { animation: lift 0.6s cubic-bezier(0.3, 1.6, 0.5, 1) infinite alternate; }
+  @keyframes lift { to { transform: translateY(-5px); } }
+  .drop-zone strong { font-size: 14px; }
+  .drop-zone span { font-size: 12px; color: var(--muted); }
+  .drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+  .drop-zone:focus-within { outline: 2.5px solid var(--focus); outline-offset: 3px; }
+  .sample { margin: 8px auto 0; display: block; border: 0; background: none; font-size: 12.5px; font-weight: 750; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  .file { display: none; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; border: 1.5px solid var(--edge); background: var(--card); animation: filein 0.5s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  .has-file .file { display: flex; }
+  .has-file .drop-zone, .has-file .sample { display: none; }
+  @keyframes filein { from { opacity: 0; transform: translateY(10px) scale(0.96); } }
+  .file .doc { flex: none; width: 40px; height: 48px; position: relative; }
+  .file .doc svg { width: 100%; height: 100%; }
+  .file .meta { flex: 1; min-width: 0; }
+  .file .meta strong { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file .meta span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .file .ring { flex: none; width: 34px; height: 34px; position: relative; }
+  .file .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .file .ring circle { fill: none; stroke-width: 3.5; }
+  .file .ring .val { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: calc(1 - var(--rp, 0)); }
+  .file .ring .tick { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transform: scale(0.4); transition: opacity 0.25s, transform 0.4s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .file .ring .tick svg { width: 16px; height: 16px; transform: none; fill: none; stroke: var(--good); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .file.ready .ring .tick { opacity: 1; transform: none; }
+  .file.ready .ring .val { stroke: var(--good); }
+  .rm { flex: none; width: 32px; height: 32px; border-radius: 10px; border: 0; background: var(--soft); display: grid; place-items: center; }
+  .rm svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+  .seg { display: flex; gap: 6px; padding: 4px; border-radius: 14px; background: var(--soft); }
+  .seg button { flex: 1; border: 0; background: none; padding: 9px 6px; border-radius: 10px; font-size: 13px; font-weight: 750; color: var(--muted); transition: background 0.25s, color 0.25s, transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 6px 12px -8px var(--shadow), 0 0 0 1px var(--edge); }
+  .seg button:active { transform: scale(0.94); }
+  .actions { display: flex; gap: 10px; margin-top: 18px; }
+  .actions .ghostbtn { flex: none; height: 50px; padding: 0 18px; border-radius: 16px; border: 1px solid var(--edge); background: var(--soft); font-weight: 750; }
+  .actions .cta { flex: 1; }
+  .cta.busy { pointer-events: none; }
+  .cta .spin { display: none; width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid currentColor; border-right-color: transparent; animation: rot 0.7s linear infinite; }
+  .cta.busy .spin { display: block; }
+  .cta.busy .lbl, .cta.busy svg { display: none; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  /* ---------- Sending: the form folds into a sheet that drops into the studio's tray ---------- */
+  .send { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 3; }
+  .send.on { opacity: 1; }
+  .send svg { width: 220px; height: 220px; overflow: visible; }
+  .sheet { transform-box: fill-box; transform-origin: center; }
+  .send.go .sheet { animation: sheet 1.5s cubic-bezier(0.5, 0, 0.3, 1) forwards; }
+  @keyframes sheet { 0% { transform: translateY(-70px) scale(1.5) rotate(-6deg); opacity: 0; } 25% { transform: translateY(-80px) scale(1) rotate(3deg); opacity: 1; } 70% { transform: translateY(32px) scale(0.92) rotate(0); opacity: 1; } 78% { transform: translateY(26px) scale(0.92, 0.86); } 100% { transform: translateY(30px) scale(0.92); opacity: 1; } }
+  .tray { transform-box: fill-box; transform-origin: 50% 100%; }
+  .send.go .tray { animation: tray 1.5s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  @keyframes tray { 0% { transform: translateY(30px) scale(0.8); opacity: 0; } 25% { transform: none; opacity: 1; } 72% { transform: none; } 80% { transform: scale(1.06, 0.92); } 100% { transform: none; } }
+  .lamp { fill: var(--soft-2); }
+  .send.go .lamp { animation: lamp 1.5s steps(1) forwards; }
+  @keyframes lamp { 78% { fill: var(--coral); } 100% { fill: var(--good); } }
+  .view.folding { transform: scale(0.6) translateY(-30px); opacity: 0; filter: blur(2px); transition: transform 0.45s cubic-bezier(0.6, 0, 0.8, 0.4), opacity 0.4s, filter 0.4s; }
+
+  /* ---------- Status ---------- */
+  .done-head { text-align: center; }
+  .done-head .badge { width: 64px; height: 64px; margin: 4px auto 10px; border-radius: 22px; background: var(--good); display: grid; place-items: center; box-shadow: 0 16px 26px -14px var(--good); animation: pop 0.7s cubic-bezier(0.3, 1.8, 0.5, 1) backwards 0.1s; }
+  .done-head .badge svg { width: 32px; height: 32px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 30; stroke-dashoffset: 30; animation: tick 0.5s ease-out 0.5s forwards; }
+  @keyframes pop { from { transform: scale(0) rotate(-30deg); } }
+  @keyframes tick { to { stroke-dashoffset: 0; } }
+  .done-head h2 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+  .done-head p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
+  .track { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 0; }
+  .track li { position: relative; display: flex; gap: 12px; padding-bottom: 16px; opacity: 0.4; transition: opacity 0.4s; }
+  .track li:last-child { padding-bottom: 0; }
+  .track li::before { content: ""; position: absolute; left: 15px; top: 32px; bottom: 0; width: 2px; background: var(--soft-2); }
+  .track li::after { content: ""; position: absolute; left: 15px; top: 32px; width: 2px; height: 0; background: var(--accent); transition: height 0.9s ease; }
+  .track li:last-child::before, .track li:last-child::after { display: none; }
+  .track li.ok { opacity: 1; }
+  .track li.ok.line::after { height: calc(100% - 32px); }
+  .dot { position: relative; flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--soft); border: 2px solid var(--soft-2); transition: background 0.3s, border-color 0.3s, transform 0.45s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .track li.ok .dot { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .track li.ok.pop .dot { animation: dotpop 0.6s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes dotpop { 40% { transform: scale(1.3); } }
+  .dot svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .track li.ok .eye { animation: blink 2.4s ease-in-out infinite 0.6s; transform-box: fill-box; transform-origin: center; }
+  @keyframes blink { 0%, 44%, 52%, 100% { transform: scaleY(1); } 48% { transform: scaleY(0.1); } }
+  .track .tx strong { display: block; font-size: 14px; }
+  .track .tx span { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .slots { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+  .slot { border: 1.5px solid var(--edge); background: var(--card); border-radius: 12px; padding: 8px 11px; font-size: 12.5px; font-weight: 750; transition: background 0.25s, border-color 0.25s, transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .slot:hover { border-color: var(--accent); }
+  .slot[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .slot:active { transform: scale(0.93); }
+  .slot:disabled { cursor: default; }
+  .finish { margin-top: 20px; width: 100%; }
+
+  canvas.fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }
+  .ghost { position: fixed; left: 0; top: 0; z-index: 40; width: 26px; height: 26px; pointer-events: none; opacity: 0; transform: translate(var(--gx, 70vw), var(--gy, 105vh)); transition: transform 0.8s cubic-bezier(0.55, 0, 0.25, 1), opacity 0.35s; }
+  .ghost.show { opacity: 1; }
+  .ghost svg { width: 100%; height: 100%; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35)); transition: transform 0.15s; }
+  .ghost.tap svg { transform: scale(0.82); }
+  .ghost::after { content: ""; position: absolute; left: -10px; top: -11px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--coral); opacity: 0; }
+  .ghost.tap::after { animation: tapring 0.5s ease-out; }
+  @keyframes tapring { from { transform: scale(0.4); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+
+  @media (max-width: 560px) {
+    .view { padding: 18px; }
+    .perks { gap: 6px; margin-top: 14px; }
+    .co strong { font-size: 13.5px; }
+    .perk { font-size: 10.5px; padding: 9px 3px; }
+    .faces { display: none; }
+    .foot { margin-top: 16px; padding-top: 14px; }
+    .cta { min-width: 0; padding: 0 16px; }
+    .pay { margin-top: 14px; padding: 12px 14px; }
+    .sec { margin: 14px 0 7px; }
+    ul.do li { font-size: 13.5px; }
+    ul.do li:nth-child(3) { display: none; }
+    h1 { margin-top: 14px; }
+    .steps { margin: 16px 4px 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <span class="blob b1"></span><span class="blob b2"></span>
+  <article class="card" id="card" aria-labelledby="jobT">
+    <div class="views" id="views">
+
+      <!-- 1. The listing -->
+      <section class="view on" id="vList" aria-label="Job details">
+        <div class="co">
+          <span class="logo" aria-hidden="true"><svg viewBox="0 0 52 52"><rect width="52" height="52" fill="#3047ff"/><path d="M0 40 Q26 30 52 40 V52 H0Z" fill="#2234d6"/><path d="M18 14h16l-2 4H20z M19 18h14v18a3 3 0 0 1-3 3H22a3 3 0 0 1-3-3z" fill="#fff" opacity="0.95"/><path class="flame" d="M26 23c3 3 4 5.5 2.6 8a3 3 0 0 1-5.2 0C22 28.5 23 26 26 23z" fill="#ff6b57"/></svg></span>
+          <div class="who"><strong>Lantern &amp; Loom Studio <svg viewBox="0 0 24 24" aria-label="Verified"><path d="M12 2l2.4 2.1 3.2-.3.9 3.1 2.8 1.6-1.1 3 1.1 3-2.8 1.6-.9 3.1-3.2-.3L12 22l-2.4-2.1-3.2.3-.9-3.1-2.8-1.6 1.1-3-1.1-3 2.8-1.6.9-3.1 3.2.3z" fill="#3047ff"/><path d="M8.5 12.2l2.4 2.3 4.6-4.8" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></strong><span>Karachi · Clifton · 40 people</span></div>
+          <button class="save" id="save" type="button" aria-pressed="false" aria-label="Save job"><svg viewBox="0 0 24 24"><path d="M6.5 3.5h11v17l-5.5-4-5.5 4z"/></svg><i style="--a:0deg"></i><i style="--a:72deg"></i><i style="--a:144deg"></i><i style="--a:216deg"></i><i style="--a:288deg"></i></button>
+        </div>
+        <h1 id="jobT">Senior Product Designer</h1>
+        <div class="chips">
+          <span class="chip" style="--k:0">Full time</span><span class="chip" style="--k:1">Hybrid · 3 days in office</span><span class="chip" style="--k:2">5+ years</span><span class="chip hot" style="--k:3">Posted 2 days ago</span>
+        </div>
+        <div class="pay">
+          <div class="row"><strong>PKR 450k – 600k</strong><small>per month</small></div>
+          <div class="range" aria-hidden="true"><i></i><b></b></div>
+          <div class="scale" aria-hidden="true"><span>Market PKR 200k</span><span>Typical 380k</span><span>1.2M</span></div>
+        </div>
+        <div class="sec">What you'll do</div>
+        <ul class="do">
+          <li>Lead design for our booking app used by 2,000 clinics across Pakistan.</li>
+          <li>Run research with real patients and front-desk teams every month.</li>
+          <li>Grow our design system with two designers and four engineers.</li>
+        </ul>
+        <div class="perks">
+          <div class="perk"><svg viewBox="0 0 24 24"><path d="M12 21s-8-4.6-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 6.4-8 11-8 11z"/><path d="M12 9v5M9.5 11.5h5"/></svg>Family health cover</div>
+          <div class="perk"><svg viewBox="0 0 24 24"><path d="M4 6.5L12 3l8 3.5-8 3.5z"/><path d="M7 8.5V13c0 1.7 2.2 3 5 3s5-1.3 5-3V8.5"/></svg>Learning budget</div>
+          <div class="perk"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg>Flexible hours</div>
+          <div class="perk"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2.5 19h19"/></svg>New laptop</div>
+        </div>
+        <div class="foot">
+          <div class="faces" aria-hidden="true"><span style="background:#ff6b57">SA</span><span style="background:#3047ff">HK</span><span style="background:#1f9d66">ZM</span><span style="background:#8b5cf6">+</span></div>
+          <div class="cnt"><b id="appliedN">38 applied</b><br>6 interviews this week</div>
+          <button class="cta" id="apply" type="button"><span class="lbl" id="applyLbl">Apply now</span><svg class="arr" viewBox="0 0 24 24" id="applyIcon"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
+        </div>
+        <div style="text-align:right;margin-top:6px" class="wd"><button class="withdraw" id="withdraw" type="button">Withdraw application</button></div>
+      </section>
+
+      <!-- 2. The apply flow -->
+      <section class="view" id="vApply" aria-label="Apply">
+        <div class="ahead">
+          <button class="backbtn" id="toList" type="button" aria-label="Back to the job"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <div><strong>Apply: Senior Product Designer</strong><span>Lantern &amp; Loom Studio · takes 2 minutes</span></div>
+        </div>
+        <div class="steps" id="steps" aria-hidden="true">
+          <span class="fill"></span>
+          <div class="step cur"><i>1</i>About you</div><div class="step"><i>2</i>Your CV</div><div class="step"><i>3</i>A short note</div>
+        </div>
+        <p class="sr-only" id="stepSr" aria-live="polite">Step 1 of 3: About you</p>
+        <div class="panes" id="panes">
+          <div class="pane on" id="p0">
+            <div class="field" id="fName"><label for="name">Full name</label><input type="text" id="name" autocomplete="name" placeholder="e.g. Mahnoor Iqbal" /><span class="err" id="eName"></span></div>
+            <div class="field" id="fEmail"><label for="email">Email</label><input type="email" id="email" autocomplete="email" placeholder="you@example.com" /><span class="err" id="eEmail"></span></div>
+          </div>
+          <div class="pane" id="p1">
+            <div class="field" id="fCv">
+              <label for="cv">CV <em>PDF, Word or text, up to 5 MB</em></label>
+              <div class="cvbox" id="cvbox">
+                <div class="drop-zone" id="dz">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V5M7.5 9.5L12 5l4.5 4.5"/><path d="M4.5 15v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3"/></svg>
+                  <strong>Drop your CV here or browse</strong><span>We read it right here in your browser</span>
+                  <input type="file" id="cv" accept=".pdf,.doc,.docx,.txt,.md,application/pdf,text/plain" />
+                </div>
+                <button class="sample" id="sample" type="button">No file handy? Use a sample CV</button>
+                <div class="file" id="file">
+                  <span class="doc" aria-hidden="true"><svg viewBox="0 0 40 48"><path d="M4 2h22l10 10v32a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="var(--soft-2)"/><path d="M26 2v10h10" fill="var(--edge)"/><rect x="0" y="28" width="28" height="12" rx="3" fill="#ff6b57"/><text id="ext" x="14" y="37" text-anchor="middle" font-size="8" font-weight="800" fill="#fff" font-family="system-ui, sans-serif">PDF</text></svg></span>
+                  <div class="meta"><strong id="fname">CV.pdf</strong><span id="fmeta">Reading…</span></div>
+                  <span class="ring" aria-hidden="true"><svg viewBox="0 0 34 34"><circle cx="17" cy="17" r="14" stroke="var(--soft-2)"/><circle class="val" cx="17" cy="17" r="14" pathLength="1"/></svg><span class="tick"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></span>
+                  <button class="rm" id="rm" type="button" aria-label="Remove file"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+                </div>
+              </div>
+              <span class="err" id="eCv"></span>
+            </div>
+            <div class="field"><label for="link">Portfolio link <em>optional</em></label><input type="url" id="link" placeholder="https://" /></div>
+          </div>
+          <div class="pane" id="p2">
+            <div class="field" id="fNote"><label for="note">Why this role? <em id="count">0 / 300</em></label><textarea id="note" maxlength="300" placeholder="Two or three lines are plenty."></textarea><span class="err" id="eNote"></span></div>
+            <div class="field"><label id="startL">You can start</label>
+              <div class="seg" role="group" aria-labelledby="startL"><button type="button" aria-pressed="false" data-v="Right away">Right away</button><button type="button" aria-pressed="true" data-v="In 2 weeks">In 2 weeks</button><button type="button" aria-pressed="false" data-v="In a month">In a month</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="ghostbtn" id="prev" type="button">Back</button>
+          <button class="cta" id="next" type="button"><span class="spin"></span><span class="lbl" id="nextLbl">Next</span><svg class="arr" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
+        </div>
+      </section>
+
+      <!-- 3. Status after sending -->
+      <section class="view" id="vDone" aria-label="Application status">
+        <div class="done-head"><div class="badge"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><h2>Application sent</h2><p id="doneP">Thanks, we have it.</p></div>
+        <ol class="track" id="track">
+          <li id="t0"><span class="dot"><svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2.5-6.5z"/></svg></span><div class="tx"><strong>Sent to the studio</strong><span id="t0s">Just now</span></div></li>
+          <li id="t1"><span class="dot"><svg viewBox="0 0 24 24"><path class="eye" d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.6"/></svg></span><div class="tx"><strong>Seen by the hiring team</strong><span id="t1s">Usually within a day</span></div></li>
+          <li id="t2"><span class="dot"><svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg></span><div class="tx"><strong>Shortlisted</strong><span id="t2s">You will hear from Sana in HR</span></div></li>
+          <li id="t3"><span class="dot"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><div class="tx"><strong>Pick an interview slot</strong><span id="t3s">Unlocks once you are shortlisted</span><div class="slots" id="slots"></div></div></li>
+        </ol>
+        <button class="cta finish" id="finish" type="button"><span class="lbl">Done</span></button>
+      </section>
+    </div>
+
+    <!-- the sheet and tray shown while sending -->
+    <div class="send" id="send" aria-hidden="true">
+      <svg viewBox="0 0 200 200">
+        <g class="tray"><path d="M30 120h140l-14 52H44z" fill="var(--accent)"/><path d="M30 120h140v8H30z" fill="var(--accent-2)"/><rect x="88" y="142" width="24" height="10" rx="5" fill="rgba(255,255,255,.25)"/><circle class="lamp" cx="152" cy="146" r="5"/></g>
+        <g class="sheet"><rect x="64" y="40" width="72" height="92" rx="6" fill="var(--card)" stroke="var(--edge)" stroke-width="2"/><rect x="74" y="52" width="26" height="26" rx="13" fill="var(--soft-2)"/><path d="M106 58h20M106 66h14M74 88h52M74 97h52M74 106h40M74 115h46" stroke="var(--soft-2)" stroke-width="4" stroke-linecap="round"/></g>
+      </svg>
+    </div>
+  </article>
+  <p class="sr-only" aria-live="polite" id="say"></p>
+</main>
+<canvas class="fx" id="fx" aria-hidden="true"></canvas>
+<div class="ghost" id="ghost" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 2.5v17l4.6-4.3 3 6.6 3.1-1.4-3-6.4 6.3-.4z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (s, r) { return (r || document).querySelector(s); };
+    var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+    function say(t) { $("#say").textContent = t; }
+    function wait(fn, ms) { return setTimeout(fn, reduce.matches ? Math.min(ms, 30) : ms); }
+    var S = { view: "vList", step: 0, file: null, ready: false, applied: false, saved: false, slot: null, timers: [] };
+
+    /* ---------- Views: the card's height follows the visible view ---------- */
+    var views = $("#views");
+    function fitHeight() { var v = $("#" + S.view); views.style.height = v.offsetHeight + "px"; var p = $("#p" + S.step); if (p) $("#panes").style.height = p.offsetHeight + "px"; }
+    function show(id, back) {
+      var old = $("#" + S.view); S.view = id;
+      old.classList.remove("on"); old.classList.toggle("left", !back);
+      var v = $("#" + id); v.classList.remove("left", "folding"); if (back) v.classList.add("left"); void v.offsetWidth; v.classList.remove("left"); v.classList.add("on");
+      fitHeight();
+      $$("button, input, textarea", old).forEach(function (el) { el.tabIndex = -1; });
+      $$("button, input, textarea", v).forEach(function (el) { el.tabIndex = 0; });
+    }
+    if (window.ResizeObserver) { var ro = new ResizeObserver(function () { fitHeight(); }); $$(".view, .pane").forEach(function (v) { ro.observe(v); }); }
+    addEventListener("resize", fitHeight);
+
+    /* ---------- Save: the bookmark hops and fills ---------- */
+    $("#save").addEventListener("click", function (e) {
+      var b = e.currentTarget; S.saved = !S.saved; b.setAttribute("aria-pressed", String(S.saved)); b.setAttribute("aria-label", S.saved ? "Saved, tap to remove" : "Save job");
+      b.classList.remove("drop"); void b.offsetWidth; if (S.saved) b.classList.add("drop");
+      say(S.saved ? "Job saved" : "Removed from saved jobs");
+    });
+
+    /* ---------- Apply: open the flow (or show the status if already applied) ---------- */
+    $("#apply").addEventListener("click", function () {
+      if (S.applied) { show("vDone"); return; }
+      show("vApply"); setStep(0, true); wait(function () { $("#name").focus({ preventScroll: true }); }, 450);
+      say("Apply, step 1 of 3: About you");
+    });
+    $("#toList").addEventListener("click", function () { show("vList", true); $("#apply").focus({ preventScroll: true }); });
+
+    /* ---------- Steps ---------- */
+    var NAMES = ["About you", "Your CV", "A short note"];
+    function setStep(n, instant) {
+      var back = n < S.step; S.step = n;
+      $$(".pane").forEach(function (p, i) {
+        p.classList.remove("left");
+        if (i === n) { if (back && !instant) { p.classList.add("left"); void p.offsetWidth; p.classList.remove("left"); } p.classList.add("on"); }
+        else { if (p.classList.contains("on")) p.classList.toggle("left", !back); p.classList.remove("on"); }
+        $$("input, textarea, button", p).forEach(function (el) { el.tabIndex = i === n ? 0 : -1; });
+      });
+      $$(".step").forEach(function (s, i) { s.classList.toggle("cur", i === n); s.classList.toggle("ok", i < n); $("i", s).innerHTML = i < n ? '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : String(i + 1); });
+      $("#steps").style.setProperty("--sp", (n / 2).toFixed(2));
+      $("#prev").style.visibility = n === 0 ? "hidden" : "visible";
+      $("#nextLbl").textContent = n === 2 ? "Send application" : "Next";
+      $("#stepSr").textContent = "Step " + (n + 1) + " of 3: " + NAMES[n];
+      fitHeight();
+    }
+    function bad(field, errEl, msg) {
+      var f = $(field); f.classList.remove("bad"); void f.offsetWidth; f.classList.add("bad"); $(errEl).textContent = msg; say(msg);
+    }
+    function clearBad(field, errEl) { $(field).classList.remove("bad"); $(errEl).textContent = ""; }
+    function check(n) {
+      if (n === 0) {
+        var ok = true, nm = $("#name").value.trim(), em = $("#email").value.trim();
+        if (nm.length < 2) { bad("#fName", "#eName", "Please add your full name."); ok = false; } else clearBad("#fName", "#eName");
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)) { bad("#fEmail", "#eEmail", "That email does not look right."); ok = false; } else clearBad("#fEmail", "#eEmail");
+        return ok;
+      }
+      if (n === 1) { if (!S.file) { bad("#fCv", "#eCv", "Add a CV to continue."); return false; } if (!S.ready) { bad("#fCv", "#eCv", "Still reading your file, one moment."); return false; } clearBad("#fCv", "#eCv"); return true; }
+      if (n === 2) { if ($("#note").value.trim().length < 10) { bad("#fNote", "#eNote", "A line or two, please (10 characters or more)."); return false; } clearBad("#fNote", "#eNote"); return true; }
+    }
+    $("#next").addEventListener("click", function () {
+      if (!check(S.step)) return;
+      if (S.step < 2) { setStep(S.step + 1); var f = $$("input, textarea", $("#p" + S.step))[0]; if (f && f.type !== "file") wait(function () { f.focus({ preventScroll: true }); }, 400); }
+      else sendIt();
+    });
+    $("#prev").addEventListener("click", function () { if (S.step > 0) setStep(S.step - 1); });
+    ["#name", "#email", "#note"].forEach(function (s) { $(s).addEventListener("input", function () { var f = $(s).closest(".field"); if (f.classList.contains("bad")) { f.classList.remove("bad"); $(".err", f).textContent = ""; } }); });
+    $("#name").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $("#email").focus(); } });
+    $("#email").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $("#next").click(); } });
+    $("#note").addEventListener("input", function () { $("#count").textContent = $("#note").value.length + " / 300"; });
+    $$(".seg button").forEach(function (b) { b.addEventListener("click", function () { $$(".seg button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); }); });
+
+    /* ---------- CV: really read the file in the browser (PDF page count, word count for text) ---------- */
+    var dz = $("#dz"), cvIn = $("#cv");
+    function human(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(0) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
+    function takeFile(f) {
+      if (!f) return;
+      if (f.size > 5 * 1048576) { bad("#fCv", "#eCv", "That file is " + human(f.size) + ". The limit is 5 MB."); return; }
+      clearBad("#fCv", "#eCv");
+      S.file = f; S.ready = false;
+      var ext = (f.name.split(".").pop() || "").toUpperCase().slice(0, 4);
+      $("#ext").textContent = ext || "FILE"; $("#fname").textContent = f.name; $("#fmeta").textContent = human(f.size) + " · reading…";
+      var box = $("#file"); box.classList.remove("ready"); $("#cvbox").classList.add("has-file"); box.style.setProperty("--rp", 0);
+      var t0 = performance.now(), real = 0, info = "", reader = new FileReader();
+      reader.onprogress = function (ev) { if (ev.lengthComputable) real = ev.loaded / ev.total; };
+      reader.onload = function () {
+        real = 1;
+        try {
+          var buf = new Uint8Array(reader.result), head = new TextDecoder("latin1").decode(buf.subarray(0, Math.min(buf.length, 2000000)));
+          if (/^%PDF/.test(head)) { var pages = (head.match(/\/Type\s*\/Page[^s]/g) || []).length; info = pages ? pages + (pages === 1 ? " page" : " pages") : "PDF"; }
+          else if (/^PK/.test(head)) info = "Word document";
+          else { var words = (new TextDecoder("utf-8").decode(buf).match(/\S+/g) || []).length; info = words + " words"; }
+        } catch (err) { info = "Ready"; }
+      };
+      reader.onerror = function () { bad("#fCv", "#eCv", "Could not read that file. Try another one."); removeFile(); };
+      reader.readAsArrayBuffer(f);
+      // show the ring for at least a moment, even for tiny files
+      (function step(now) {
+        if (S.file !== f) return;
+        var k = Math.min(real, (now - t0) / (reduce.matches ? 1 : 1100));
+        box.style.setProperty("--rp", k.toFixed(3));
+        if (k < 1) requestAnimationFrame(step);
+        else { S.ready = true; box.classList.add("ready"); $("#fmeta").textContent = human(f.size) + " · " + (info || "Ready"); say("CV added: " + f.name + ", " + info); }
+      })(t0);
+    }
+    function removeFile() { S.file = null; S.ready = false; cvIn.value = ""; $("#cvbox").classList.remove("has-file"); fitHeight(); }
+    cvIn.addEventListener("change", function () { takeFile(cvIn.files && cvIn.files[0]); });
+    ["dragenter", "dragover"].forEach(function (t) { dz.addEventListener(t, function (e) { e.preventDefault(); dz.classList.add("over"); }); });
+    ["dragleave", "drop"].forEach(function (t) { dz.addEventListener(t, function (e) { e.preventDefault(); dz.classList.remove("over"); }); });
+    dz.addEventListener("drop", function (e) { takeFile(e.dataTransfer && e.dataTransfer.files[0]); });
+    $("#rm").addEventListener("click", function () { removeFile(); say("File removed"); });
+    function sampleFile() {
+      var nm = ($("#name").value.trim() || "Sample").replace(/\s+/g, "-");
+      var text = "Product designer with seven years of experience in health and booking apps. Led research with clinics in Karachi and Lahore, built a design system from scratch and mentored three junior designers. Comfortable in code, careful with words.";
+      var f; try { f = new File([text], nm + "-CV.txt", { type: "text/plain" }); } catch (err) { f = new Blob([text], { type: "text/plain" }); f.name = nm + "-CV.txt"; }
+      takeFile(f);
+    }
+    $("#sample").addEventListener("click", sampleFile);
+
+    /* ---------- Send: button spins, the form folds into a sheet, the sheet drops into the tray ---------- */
+    function sendIt() {
+      var btn = $("#next"); btn.classList.add("busy"); say("Sending your application");
+      wait(function () {
+        $("#vApply").classList.add("folding");
+        var sd = $("#send"); sd.classList.add("on"); sd.classList.remove("go"); void sd.offsetWidth; sd.classList.add("go");
+        wait(function () {
+          sd.classList.remove("on"); btn.classList.remove("busy");
+          S.applied = true; $("#card").classList.add("applied-on");
+          $("#apply").classList.add("applied"); $("#applyLbl").textContent = "Applied · view status"; $("#appliedN").textContent = "39 applied";
+          $("#applyIcon").innerHTML = '<path d="M5 12.5l4.5 4.5L19 7.5"/>';
+          var nm = $("#name").value.trim().split(" ")[0] || "there";
+          $("#doneP").textContent = "Thanks, " + nm + ". Here is where it stands.";
+          startTrack();
+          show("vDone");
+          $("#vApply").classList.remove("folding");
+        }, 1650);
+      }, 700);
+    }
+    function clearTrack() { S.timers.forEach(clearTimeout); S.timers = []; }
+    function startTrack() {
+      clearTrack(); S.slot = null;
+      $$(".track li").forEach(function (li) { li.classList.remove("ok", "pop", "line"); });
+      $("#t1s").textContent = "Usually within a day"; $("#t2s").textContent = "You will hear from Sana in HR"; $("#t3s").textContent = "Unlocks once you are shortlisted"; $("#slots").innerHTML = "";
+      function mark(i, sub, then) {
+        S.timers.push(wait(function () {
+          var li = $("#t" + i); li.classList.add("ok", "pop"); if (i > 0) $("#t" + (i - 1)).classList.add("line");
+          if (sub) $("#t" + i + "s").textContent = sub;
+          if (then) then();
+        }, [300, 1700, 3300, 4300][i]));
+      }
+      mark(0, "Today, " + new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }));
+      mark(1, "Sana opened it a moment ago", function () { say("Seen by the hiring team"); });
+      mark(2, "Your portfolio stood out", function () { say("Shortlisted"); burst($("#t2 .dot")); });
+      mark(3, "Choose a time that suits you", function () { buildSlots(); fitHeight(); });
+    }
+    function buildSlots() {
+      var base = new Date(), out = "", n = 0, d = new Date(base);
+      while (n < 3) { d.setDate(d.getDate() + 1); if (d.getDay() === 0 || d.getDay() === 6) continue; var t = ["11:00 am", "3:30 pm", "12:00 pm"][n]; out += '<button type="button" class="slot" aria-pressed="false" data-s="' + d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) + ", " + t + '">' + d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" }) + " · " + t + "</button>"; n++; }
+      $("#slots").innerHTML = out;
+      $$(".slot").forEach(function (b) { b.addEventListener("click", function () { pickSlot(b); }); });
+    }
+    function pickSlot(b) {
+      S.slot = b.dataset.s; $$(".slot").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+      $("#t3s").textContent = "Interview booked: " + S.slot; $("#t3").classList.remove("pop"); void $("#t3").offsetWidth; $("#t3").classList.add("pop");
+      say("Interview booked for " + S.slot); burst(b);
+    }
+    $("#finish").addEventListener("click", function () { show("vList", true); $("#apply").focus({ preventScroll: true }); });
+    $("#withdraw").addEventListener("click", function () { resetAll(); say("Application withdrawn"); });
+    function resetAll() {
+      clearTrack(); S.applied = false; $("#card").classList.remove("applied-on");
+      $("#apply").classList.remove("applied"); $("#applyLbl").textContent = "Apply now"; $("#appliedN").textContent = "38 applied";
+      $("#applyIcon").innerHTML = '<path d="M5 12h13M13 6l6 6-6 6"/>';
+      ["#name", "#email", "#note", "#link"].forEach(function (s) { $(s).value = ""; }); $("#count").textContent = "0 / 300"; removeFile();
+      if (S.view !== "vList") show("vList", true);
+      setStep(0, true); fitHeight();
+    }
+
+    /* little confetti in the brand colours */
+    var cv = $("#fx"), ctx = cv.getContext("2d"), bits = [], fxRaf = 0;
+    function sizeFx() { var d = Math.min(2, devicePixelRatio || 1); cv.width = innerWidth * d; cv.height = innerHeight * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+    function burst(el) {
+      if (reduce.matches || !el) return;
+      var r = el.getBoundingClientRect(), cs = getComputedStyle(document.documentElement), cols = [cs.getPropertyValue("--accent").trim(), cs.getPropertyValue("--coral").trim(), "#ffc94d", cs.getPropertyValue("--good").trim()];
+      for (var i = 0; i < 46; i++) { var a = Math.random() * Math.PI * 2, v = 2 + Math.random() * 6; bits.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 3, s: 4 + Math.random() * 4, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3, c: cols[i % 4], life: 0 }); }
+      if (!fxRaf) fxRaf = requestAnimationFrame(fxStep);
+    }
+    function fxStep() {
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      bits = bits.filter(function (b) { return b.life < 80; });
+      bits.forEach(function (b) { b.life++; b.vy += 0.18; b.vx *= 0.98; b.x += b.vx; b.y += b.vy; b.r += b.vr; ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.globalAlpha = Math.min(1, (80 - b.life) / 20); ctx.fillStyle = b.c; ctx.fillRect(-b.s / 2, -b.s / 4, b.s, b.s / 2); ctx.restore(); });
+      fxRaf = bits.length ? requestAnimationFrame(fxStep) : 0;
+    }
+
+    /* ---------- Auto-demo: plays on load and every few seconds; any real input stops it ---------- */
+    var ghost = $("#ghost"), demoOn = !reduce.matches, timers = [];
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+    function aim(x, y) { ghost.style.setProperty("--gx", Math.min(innerWidth - 30, x) + "px"); ghost.style.setProperty("--gy", y + "px"); }
+    function ghostTo(el, then) {
+      var r = el.getBoundingClientRect(); ghost.classList.add("show"); aim(r.left + Math.min(r.width * 0.55, 90), r.top + r.height * 0.6);
+      later(function () { ghost.classList.add("tap"); later(function () { ghost.classList.remove("tap"); if (demoOn && then) then(); }, 170); }, 820);
+    }
+    function typeInto(el, text, ms) {
+      el.value = ""; el.dispatchEvent(new Event("input"));
+      text.split("").forEach(function (ch, i) { later(function () { el.value += ch; el.dispatchEvent(new Event("input")); }, i * ms); });
+    }
+    function stopDemo() { if (!demoOn) return; demoOn = false; timers.forEach(clearTimeout); ghost.classList.remove("show", "tap"); }
+    ["pointerdown", "keydown", "wheel", "touchstart", "dragenter"].forEach(function (t) { addEventListener(t, function (e) { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }); });
+    function demo() {
+      if (!demoOn) return;
+      if (S.applied) resetAll();
+      later(function () { ghostTo($("#save"), function () { $("#save").click(); }); }, 200);
+      later(function () { ghostTo($("#apply"), function () { $("#apply").click(); }); }, 1700);
+      later(function () { ghostTo($("#name"), function () { typeInto($("#name"), "Mahnoor Iqbal", 55); }); }, 3200);
+      later(function () { ghostTo($("#email"), function () { typeInto($("#email"), "mahnoor@example.com", 40); }); }, 5000);
+      later(function () { ghostTo($("#next"), function () { $("#next").click(); }); }, 6900);
+      later(function () { ghostTo($("#sample"), sampleFile); }, 8400);
+      later(function () { ghostTo($("#next"), function () { $("#next").click(); }); }, 10500);
+      later(function () { ghostTo($("#note"), function () { typeInto($("#note"), "I love calm, careful products for clinics.", 28); }); }, 12000);
+      later(function () { ghostTo($(".seg button"), function () { $(".seg button").click(); }); }, 14200);
+      later(function () { ghostTo($("#next"), function () { $("#next").click(); }); }, 15700);
+      later(function () { ghost.classList.remove("show"); }, 16900);
+      later(function () { var s = $(".slot"); if (s) ghostTo(s, function () { pickSlot(s); }); }, 24200);
+      later(function () { ghostTo($("#finish"), function () { $("#finish").click(); }); }, 26400);
+      later(function () { ghostTo($("#save"), function () { $("#save").click(); }); }, 28100);
+      later(function () { ghostTo($("#withdraw"), function () { $("#withdraw").click(); }); }, 29700);
+      later(function () { ghost.classList.remove("show"); }, 30900);
+      later(demo, 32500);
+    }
+
+    /* ---------- Start ---------- */
+    setStep(0, true);
+    $$("button, input, textarea", $("#vApply")).forEach(function (el) { el.tabIndex = -1; });
+    $$("button", $("#vDone")).forEach(function (el) { el.tabIndex = -1; });
+    fitHeight(); sizeFx(); addEventListener("resize", sizeFx);
+    if (demoOn) later(demo, 2000);
+  })();
+</script>
+</body>
+</html>

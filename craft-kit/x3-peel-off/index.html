@@ -1,0 +1,506 @@
+<!doctype html>
+<!-- Chill & Craft · Peel Off · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Peel Off · remove a calendar event like a sticker</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: planner paper with pastel stickers ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #f3eee4;
+    --bg-2: #e9f1ec;
+    --card: #fffdf8;
+    --grid: #ece5d6;
+    --grid-strong: #ddd3bf;
+    --line: #e7e0d0;
+    --ink: #2a2733;
+    --muted: #7a7486;
+    --sticker-ink: #1f1c26;
+    --back: #f4f2ee;
+    --back-2: #d9d5cc;
+    --danger: #d9344a;
+    --accent: #6a4bd8;
+    --sh: 70, 55, 30;
+    --focus: #4f46e5;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+    --row: 40px;
+    --mint: #9de3c3; --lav: #cbbcff; --butter: #ffe08a; --sky: #a7d8ff; --pink: #ffb7d2; --coral: #ffae94;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #131118;
+    --bg-2: #0f1615;
+    --card: #1c1922;
+    --grid: #2a2632;
+    --grid-strong: #3a3544;
+    --line: #2e2a37;
+    --ink: #f1eff6;
+    --muted: #a39db1;
+    --back: #e9e6ef;
+    --back-2: #b9b4c2;
+    --danger: #ff5b6e;
+    --accent: #a993ff;
+    --sh: 0, 0, 0;
+    --focus: #a5b4fc;
+    --mint: #7fdcb2; --lav: #b9a5ff; --butter: #ffd666; --sky: #86c8ff; --pink: #ff9fc4; --coral: #ff9a7c;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .frame {
+    position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 20px 16px;
+    overflow: hidden; overflow: clip;
+    background: radial-gradient(60% 50% at 10% 10%, var(--bg-2), transparent 70%), radial-gradient(50% 50% at 95% 90%, color-mix(in srgb, var(--pink) 25%, transparent), transparent 70%), var(--bg);
+  }
+  .card {
+    position: relative; width: min(660px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 18px 18px 16px;
+    box-shadow: 0 50px 90px -60px rgba(var(--sh), .75), 0 2px 8px -4px rgba(var(--sh), .15);
+  }
+  /* spiral binding along the top edge */
+  .rings { position: absolute; top: -9px; left: 40px; right: 40px; display: flex; justify-content: space-between; pointer-events: none; }
+  .rings i { width: 8px; height: 20px; border-radius: 8px; background: linear-gradient(90deg, #9b96a6, #e9e6ef 45%, #8c8797); box-shadow: 0 2px 3px rgba(var(--sh), .3); }
+
+  .top { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+  .top h1 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -.015em; }
+  .top p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .sum { margin-left: auto; display: flex; gap: 8px; }
+  .pill { display: inline-flex; align-items: baseline; gap: 4px; padding: 6px 11px; border-radius: 99px; background: color-mix(in srgb, var(--ink) 6%, transparent); font-size: 12.5px; color: var(--muted); }
+  .pill b { color: var(--ink); font-size: 15px; font-variant-numeric: tabular-nums; display: inline-block; transition: scale .35s var(--spring); }
+  .pill b.bump { scale: 1.3; }
+
+  /* ---------- Week grid ---------- */
+  .week { display: grid; grid-template-columns: 34px repeat(5, minmax(0, 1fr)); margin-top: 14px; overflow-x: clip; }
+  .dh { text-align: center; font-size: 11.5px; color: var(--muted); font-weight: 650; padding-bottom: 6px; text-transform: uppercase; letter-spacing: .05em; }
+  .dh b { display: block; font-size: 16px; color: var(--ink); letter-spacing: 0; }
+  .times { position: relative; height: calc(8 * var(--row)); }
+  .times span { position: absolute; right: 6px; font-size: 10.5px; color: var(--muted); translate: 0 -50%; font-variant-numeric: tabular-nums; }
+  .day {
+    position: relative; height: calc(8 * var(--row)); border-left: 1px solid var(--grid);
+    background-image: repeating-linear-gradient(to bottom, var(--grid) 0 1px, transparent 1px var(--row));
+    border-bottom: 1px solid var(--grid);
+  }
+  .day:last-child { border-right: 1px solid var(--grid); }
+
+  /* An event is a sticker: the body is clipped along the peel line, the flap is its mirrored back */
+  .ev {
+    position: absolute; left: 3px; right: 3px; top: calc(var(--s) * var(--row) + 2px); height: calc(var(--d) * var(--row) - 3px);
+    padding: 0; border: 0; background: none; cursor: pointer; text-align: left; font: inherit; color: var(--sticker-ink);
+    filter: drop-shadow(0 2px 2px rgba(var(--sh), .2)); transition: translate .3s var(--spring), scale .3s var(--spring);
+  }
+  .ev:hover { translate: 0 -1px; }
+  .ev[aria-pressed="true"] { z-index: 3; scale: 1.03; filter: drop-shadow(0 6px 8px rgba(var(--sh), .3)); }
+  .ev:focus-visible { outline: none; }
+  .ev:focus-visible .ev-body { outline: 3px solid var(--focus); outline-offset: 1px; }
+  .ev-body {
+    position: absolute; inset: 0; border-radius: 7px; background: var(--c); padding: 4px 6px; overflow: hidden;
+    background-image: linear-gradient(160deg, rgba(255, 255, 255, .5), transparent 45%);
+  }
+  .ev-body b { display: block; font-size: 11.5px; font-weight: 780; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .ev-body small { display: block; font-size: 10.5px; opacity: .72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .ev.short .ev-body { padding: 1px 6px; }
+  .ev.short .ev-body b { -webkit-line-clamp: 1; font-size: 10.5px; }
+  .ev.short small { display: none; }
+  .ev.one .ev-body b { -webkit-line-clamp: 1; }  /* one-hour stickers: one line of title, then the time */
+  .flapwrap { position: absolute; inset: -60px; pointer-events: none; filter: drop-shadow(-2px -3px 3px rgba(0, 0, 0, .22)); }
+  .flap { position: absolute; inset: 0; clip-path: polygon(0 0, 0 0, 0 0); }
+  .ev.falling { z-index: 60; pointer-events: none; transition: none; }
+  .ev.gone { display: none; }
+  .ev.stuck .ev-body::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .85) 50%, transparent 70%); background-size: 250% 100%; animation: shine .5s ease-out; }
+  @keyframes shine { from { background-position: 120% 0; } to { background-position: -60% 0; } }
+  .ev.stuck { animation: squish .5s var(--spring); }
+  @keyframes squish { 0% { scale: 1.08; } 40% { scale: .97; } 100% { scale: 1; } }
+  .ev.enter { animation: pop .55s var(--spring) both; animation-delay: var(--delay, 0ms); }
+  @keyframes pop { from { scale: .6; opacity: 0; rotate: -6deg; } }
+
+  /* sticky residue left behind while the event peels */
+  .residue {
+    position: absolute; left: 3px; right: 3px; top: calc(var(--s) * var(--row) + 2px); height: calc(var(--d) * var(--row) - 3px); border-radius: 7px;
+    border: 1.5px dashed color-mix(in srgb, var(--c) 80%, var(--ink) 20%); background: color-mix(in srgb, var(--c) 18%, transparent);
+    opacity: 0; transition: opacity .35s; pointer-events: none;
+  }
+  .residue.on { opacity: 1; }
+  .residue.fade { opacity: 0; transition: opacity 1.4s .4s; }
+
+  /* ---------- Details bar ---------- */
+  .details { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 10px 10px 10px 14px; border-radius: 16px; background: color-mix(in srgb, var(--ink) 5%, transparent); min-height: 62px; flex-wrap: wrap; }
+  .swatch { width: 12px; height: 34px; border-radius: 6px; background: var(--c, var(--grid-strong)); flex: none; transition: background-color .3s; }
+  .info { flex: 1; min-width: 150px; }
+  .info b { display: block; font-size: 15px; }
+  .info span { font-size: 12.5px; color: var(--muted); }
+  .chk { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+  .chk input { width: 17px; height: 17px; accent-color: var(--accent); margin: 0; }
+  .chk[hidden] { display: none; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 12px; padding: 10px 14px; font: inherit; font-size: 14px; font-weight: 720; cursor: pointer; white-space: nowrap;
+    transition: scale .25s var(--spring), opacity .2s, filter .2s;
+  }
+  .btn svg { width: 18px; height: 18px; }
+  .btn:active, .btn.pressed { scale: .93; }
+  .btn:disabled { opacity: .45; cursor: default; scale: 1; }
+  .danger { background: var(--danger); color: #fff; box-shadow: 0 10px 18px -12px var(--danger); }
+  .danger:hover:not(:disabled) { filter: brightness(1.08); }
+  .danger svg { transition: rotate .35s var(--spring), translate .35s var(--spring); }
+  .danger:hover:not(:disabled) svg { rotate: -18deg; translate: -1px -2px; }
+  .plain { background: transparent; color: var(--muted); padding: 6px 8px; font-size: 12.5px; font-weight: 650; }
+  .plain:hover:not(:disabled) { color: var(--ink); }
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+  /* undo toast with a draining bar */
+  .toast {
+    position: absolute; left: 50%; bottom: 16px; translate: -50% 20px; width: min(400px, calc(100% - 32px)); display: flex; align-items: center; gap: 10px;
+    background: var(--ink); color: var(--card); border-radius: 15px; padding: 9px 9px 9px 14px; overflow: hidden; z-index: 70;
+    box-shadow: 0 22px 36px -18px rgba(var(--sh), .8); opacity: 0; pointer-events: none; transition: opacity .25s, translate .45s var(--spring);
+  }
+  .toast.show { opacity: 1; translate: -50% 0; pointer-events: auto; }
+  .toast span { flex: 1; font-size: 13.5px; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toast .bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--c, var(--butter)); transform-origin: 0 50%; }
+  .toast.show .bar { animation: drain var(--undo, 6s) linear forwards; }
+  @keyframes drain { to { scale: 0 1; } }
+  .undo { border: 0; border-radius: 10px; padding: 7px 12px; background: color-mix(in srgb, var(--card) 15%, transparent); color: inherit; font: inherit; font-size: 13.5px; font-weight: 760; cursor: pointer; transition: scale .25s var(--spring); }
+  .undo:active, .undo.pressed { scale: .92; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  @media (max-width: 520px) {
+    :root { --row: 36px; }
+    .card { padding: 14px 12px 12px; }
+    .week { grid-template-columns: 28px repeat(5, minmax(0, 1fr)); }
+    .times span { font-size: 9.5px; right: 4px; }
+    .ev { left: 2px; right: 2px; }
+    .ev-body { padding: 3px 4px; }
+    .ev-body b { font-size: 10.5px; }
+    .ev-body small { font-size: 9.5px; }
+    .sum { margin-left: 0; }
+    .details .info { flex-basis: calc(100% - 28px); }
+    .details .btn { flex: 1; justify-content: center; }
+    .ev.one .ev-body b { -webkit-line-clamp: 2; }
+    .ev.one small { display: none; }
+  }
+  /* Calm mode: every step still happens, without the big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <main class="card" id="card" aria-labelledby="title">
+    <div class="rings" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <header class="top">
+      <div>
+        <h1 id="title">This week</h1>
+        <p>16 to 20 November · tap an event to remove it</p>
+      </div>
+      <div class="sum" aria-live="polite">
+        <span class="pill"><b id="nEv">8</b> events</span>
+        <span class="pill"><b id="nHr">9.5</b> h booked</span>
+      </div>
+    </header>
+
+    <div class="week" id="week">
+      <div></div>
+      <div class="dh">Mon<b>16</b></div><div class="dh">Tue<b>17</b></div><div class="dh">Wed<b>18</b></div><div class="dh">Thu<b>19</b></div><div class="dh">Fri<b>20</b></div>
+      <div class="times" aria-hidden="true">
+        <span style="top:0">9</span><span style="top:calc(1*var(--row))">10</span><span style="top:calc(2*var(--row))">11</span><span style="top:calc(3*var(--row))">12</span>
+        <span style="top:calc(4*var(--row))">1</span><span style="top:calc(5*var(--row))">2</span><span style="top:calc(6*var(--row))">3</span><span style="top:calc(7*var(--row))">4</span><span style="top:calc(8*var(--row))">5</span>
+      </div>
+      <div class="day" data-day="0" role="group" aria-label="Monday 16 November"></div>
+      <div class="day" data-day="1" role="group" aria-label="Tuesday 17 November"></div>
+      <div class="day" data-day="2" role="group" aria-label="Wednesday 18 November"></div>
+      <div class="day" data-day="3" role="group" aria-label="Thursday 19 November"></div>
+      <div class="day" data-day="4" role="group" aria-label="Friday 20 November"></div>
+    </div>
+
+    <section class="details" id="details" aria-label="Selected event">
+      <span class="swatch" id="swatch"></span>
+      <div class="info"><b id="dTitle">Pick an event</b><span id="dWhen">Tap any sticker in the week above</span></div>
+      <label class="chk" id="tellWrap" hidden><input type="checkbox" id="tell" checked> <span id="tellText">Tell 3 guests</span></label>
+      <button class="btn danger" id="removeBtn" type="button" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 12.5h9l1-12.5" /><path d="M10.5 11v5M13.5 11v5" /></svg>
+        Remove event
+      </button>
+    </section>
+    <div class="foot"><span>Ctrl + Z undoes the last removal</span><button class="btn plain" id="resetBtn" type="button" disabled>Reset week</button></div>
+
+    <div class="toast" id="toast">
+      <span id="toastText">Event removed</span>
+      <button class="undo" id="undoBtn" type="button" tabindex="-1">Undo</button>
+      <i class="bar" id="bar"></i>
+    </div>
+    <p class="sr" id="status" role="status" aria-live="polite"></p>
+  </main>
+</div>
+
+<script>
+  (() => {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const card = $("card"), cols = [...document.querySelectorAll(".day")];
+    const nEv = $("nEv"), nHr = $("nHr"), swatch = $("swatch"), dTitle = $("dTitle"), dWhen = $("dWhen");
+    const tellWrap = $("tellWrap"), tell = $("tell"), tellText = $("tellText"), removeBtn = $("removeBtn"), resetBtn = $("resetBtn");
+    const toast = $("toast"), toastText = $("toastText"), undoBtn = $("undoBtn"), status = $("status");
+    const calm = matchMedia("(prefers-reduced-motion: reduce)");
+    const UNDO_MS = 6000;
+
+    // ---------- Helpers ----------
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const pause = (ms) => wait(calm.matches ? Math.min(ms, 40) : ms);
+    const clamp = (v) => Math.min(1, Math.max(0, v));
+    const ease = {
+      inOut: (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+      out: (t) => 1 - Math.pow(1 - t, 3),
+      back: (t) => { const c = 1.5; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); },
+    };
+    function tween(ms, fn) {
+      return new Promise((done) => {
+        const d = calm.matches ? 1 : ms, t0 = performance.now();
+        const step = (now) => { const t = clamp((now - t0) / d); fn(t); if (t < 1) requestAnimationFrame(step); else done(); };
+        step(t0);
+      });
+    }
+    const say = (m) => { status.textContent = m; };
+    const press = (b) => { b.classList.add("pressed"); setTimeout(() => b.classList.remove("pressed"), 170); };
+    const DAYS = ["Mon 16 Nov", "Tue 17 Nov", "Wed 18 Nov", "Thu 19 Nov", "Fri 20 Nov"];
+    const clock = (h) => { const hh = Math.floor(h), mm = Math.round((h - hh) * 60), p = hh >= 12 ? "pm" : "am", h12 = ((hh + 11) % 12) + 1; return h12 + (mm ? ":" + String(mm).padStart(2, "0") : "") + " " + p; };
+    const span = (e) => clock(e.start) + " to " + clock(e.end);
+
+    // ---------- The week ----------
+    const WEEK = [
+      { day: 0, start: 9.5, end: 10, title: "Team stand-up", c: "--mint", guests: 6 },
+      { day: 0, start: 13, end: 14.5, title: "Design review", c: "--lav", guests: 4 },
+      { day: 1, start: 10, end: 11, title: "Payroll run", c: "--sky", guests: 2 },
+      { day: 1, start: 13, end: 14, title: "Lunch with Sana", c: "--butter", guests: 1 },
+      { day: 2, start: 11, end: 12, title: "Client call: Rehman Fabrics", c: "--sky", guests: 3 },
+      { day: 3, start: 10, end: 12, title: "Mehndi shopping", c: "--pink", guests: 2 },
+      { day: 3, start: 15, end: 16, title: "Dentist", c: "--coral", guests: 0 },
+      { day: 4, start: 15, end: 16.5, title: "Cricket nets", c: "--mint", guests: 10 },
+    ];
+    let evs = [];
+    const S = { sel: null, busy: false, pending: null, timer: 0 };
+
+    function build(animate) {
+      cols.forEach((c) => (c.textContent = ""));
+      evs = WEEK.map((w, i) => ({ ...w, id: i, removed: false }));
+      evs.forEach((e, i) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "ev" + (e.end - e.start <= .5 ? " short" : e.end - e.start <= 1 ? " one" : "") + (animate ? " enter" : "");
+        b.style.setProperty("--s", e.start - 9);
+        b.style.setProperty("--d", e.end - e.start);
+        b.style.setProperty("--c", `var(${e.c})`);
+        b.style.setProperty("--delay", i * 60 + "ms");
+        b.setAttribute("aria-pressed", "false");
+        b.setAttribute("aria-label", `${e.title}, ${DAYS[e.day]}, ${span(e)}`);
+        b.innerHTML = `<span class="ev-body"><b></b><small></small></span><span class="flapwrap" aria-hidden="true"><span class="flap"></span></span>`;
+        b.querySelector("b").textContent = e.title;
+        b.querySelector("small").textContent = span(e);
+        b.addEventListener("click", () => select(e));
+        b.addEventListener("animationend", () => b.classList.remove("enter", "stuck"));
+        cols[e.day].appendChild(b);
+        e.el = b; e.body = b.querySelector(".ev-body"); e.flap = b.querySelector(".flap");
+      });
+      summary();
+    }
+    function summary() {
+      const live = evs.filter((e) => !e.removed);
+      const hrs = live.reduce((s, e) => s + e.end - e.start, 0);
+      const set = (el, v) => { if (el.textContent !== String(v)) { el.textContent = v; el.classList.add("bump"); setTimeout(() => el.classList.remove("bump"), 300); } };
+      set(nEv, live.length); set(nHr, String(Math.round(hrs * 10) / 10));
+      resetBtn.disabled = S.busy || live.length === WEEK.length;
+    }
+    function details() {
+      const e = S.sel;
+      if (!e) {
+        swatch.style.removeProperty("--c"); dTitle.textContent = "Pick an event"; dWhen.textContent = "Tap any sticker in the week above";
+        tellWrap.hidden = true; removeBtn.disabled = true; return;
+      }
+      swatch.style.setProperty("--c", `var(${e.c})`);
+      dTitle.textContent = e.title; dWhen.textContent = `${DAYS[e.day]} · ${span(e)}`;
+      tellWrap.hidden = !e.guests; tellText.textContent = `Tell ${e.guests} guest${e.guests === 1 ? "" : "s"}`;
+      removeBtn.disabled = S.busy;
+    }
+    function select(e) {
+      if (S.busy || e.removed) return;
+      if (S.pending) finalize();
+      if (S.sel && S.sel !== e) { S.sel.el.setAttribute("aria-pressed", "false"); setPeel(S.sel, 1e4); }
+      S.sel = e; e.el.setAttribute("aria-pressed", "true");
+      details();
+    }
+
+    // ---------- Peel geometry ----------
+    // The fold line is x + y = c in the sticker's own pixels. The part beyond it is cut off the body and
+    // mirrored back over it as the flap (the paper-white back of the sticker).
+    function cut(poly, keepBelow, c) {
+      const out = [];
+      for (let i = 0; i < poly.length; i++) {
+        const a = poly[i], b = poly[(i + 1) % poly.length];
+        const fa = a[0] + a[1] - c, fb = b[0] + b[1] - c;
+        const ia = keepBelow ? fa <= 0 : fa > 0, ib = keepBelow ? fb <= 0 : fb > 0;
+        if (ia) out.push(a);
+        if (ia !== ib) { const t = fa / (fa - fb); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+      }
+      return out;
+    }
+    const poly = (pts, off) => (pts.length < 3 ? "polygon(0 0, 0 0, 0 0)" : "polygon(" + pts.map((p) => (p[0] + off).toFixed(1) + "px " + (p[1] + off).toFixed(1) + "px").join(", ") + ")");
+    const PAD = 60; // the flap box is the sticker box grown by 60 px on every side (see .flapwrap)
+    function setPeel(e, c) {
+      const w = e.el.offsetWidth, h = e.el.offsetHeight, rect = [[0, 0], [w, 0], [w, h], [0, h]];
+      if (c >= w + h) { e.body.style.clipPath = ""; e.flap.style.clipPath = "polygon(0 0, 0 0, 0 0)"; return; }
+      e.body.style.clipPath = poly(cut(rect, true, c), 0);
+      const flap = cut(rect, false, c).map((p) => [c - p[1], c - p[0]]);
+      e.flap.style.clipPath = poly(flap, PAD);
+      // shade the back: darker at the crease, bright towards the lifted tip
+      const g = (c + 2 * PAD) / Math.SQRT2;
+      e.flap.style.background = `linear-gradient(135deg, var(--back-2) 0px, var(--back) ${Math.max(0, g - 40)}px, #ffffff ${Math.max(0, g - 14)}px, var(--back-2) ${g}px)`;
+    }
+
+    // ---------- Remove: lift the corner, peel, let it fall ----------
+    async function removeSel() {
+      const e = S.sel;
+      if (!e || S.busy || e.removed) return;
+      S.busy = true; removeBtn.disabled = true; resetBtn.disabled = true;
+      const told = e.guests && tell.checked ? e.guests : 0;
+      say(`Peeling off ${e.title}.`);
+      const w = e.el.offsetWidth, h = e.el.offsetHeight, full = w + h;
+      // residue outline stays on the grid while the sticker comes away
+      const res = document.createElement("div");
+      res.className = "residue";
+      res.style.cssText = e.el.style.cssText;
+      cols[e.day].insertBefore(res, e.el);
+      // 1. anticipation: the corner lifts and the sticker wiggles
+      await tween(260, (t) => setPeel(e, full - 16 * ease.out(t)));
+      res.classList.add("on");
+      await pause(90);
+      // 2. the peel runs diagonally across
+      await tween(640, (t) => setPeel(e, full - 16 - (full * .56 - 16) * ease.inOut(t)));
+      // 3. it comes away and drifts down, curling more as it goes
+      const r = e.el.getBoundingClientRect(), cr = card.getBoundingClientRect();
+      const drop = cr.bottom - r.top + 90, side = (e.day < 2 ? 1 : -1) * (30 + w * .3);
+      e.el.classList.add("falling");
+      e.el.setAttribute("aria-pressed", "false");
+      await tween(1150, (t) => {
+        const up = Math.sin(Math.min(1, t * 2.2) * Math.PI) * -26; // a little hop up before gravity wins
+        const y = up + drop * t * t, x = side * t + Math.sin(t * Math.PI * 3) * 14;
+        e.el.style.transform = `translate(${x}px, ${y}px) rotate(${(side > 0 ? 1 : -1) * 38 * t}deg) scale(${1 - .25 * t})`;
+        e.el.style.opacity = String(1 - clamp((t - .7) / .3));
+        setPeel(e, full * .44 - full * .26 * ease.out(t));
+      });
+      e.el.classList.add("gone");
+      e.removed = true;
+      S.sel = null; details();
+      res.classList.add("fade");
+      setTimeout(() => res.remove(), 2000);
+      summary();
+      S.pending = e;
+      toast.style.setProperty("--c", `var(${e.c})`);
+      toastText.textContent = `${e.title} removed${told ? `, ${told} guest${told === 1 ? "" : "s"} told` : ""}`;
+      showToast();
+      say(`${e.title} removed${told ? ` and ${told} guest${told === 1 ? " was" : "s were"} told` : ""}. Undo within ${UNDO_MS / 1000} seconds.`);
+      S.busy = false; summary();
+      clearTimeout(S.timer); S.timer = setTimeout(finalize, UNDO_MS);
+    }
+    function showToast() {
+      toast.style.setProperty("--undo", UNDO_MS + "ms");
+      toast.classList.remove("show"); void toast.offsetWidth; toast.classList.add("show");
+      undoBtn.tabIndex = 0;
+    }
+    function hideToast() { toast.classList.remove("show"); undoBtn.tabIndex = -1; }
+    function finalize() {
+      clearTimeout(S.timer);
+      if (!S.pending) return;
+      S.pending.el.remove();
+      S.pending = null; hideToast();
+    }
+
+    // ---------- Undo: it floats back up, flattens and sticks with a shine ----------
+    async function undo() {
+      const e = S.pending;
+      if (!e || S.busy) return;
+      S.busy = true; clearTimeout(S.timer); hideToast(); S.pending = null;
+      resetBtn.disabled = true;
+      say(`Sticking ${e.title} back on.`);
+      const full = e.el.offsetWidth + e.el.offsetHeight || 200;
+      e.el.classList.remove("gone");
+      const w = e.el.offsetWidth, h = e.el.offsetHeight, f = w + h;
+      const r = e.el.getBoundingClientRect(), cr = card.getBoundingClientRect();
+      const drop = cr.bottom - r.top + 90, side = (e.day < 2 ? 1 : -1) * (30 + w * .3);
+      await tween(720, (t) => {
+        const k = 1 - ease.out(t);
+        e.el.style.transform = `translate(${side * k}px, ${drop * k * k}px) rotate(${(side > 0 ? 1 : -1) * 38 * k}deg) scale(${1 - .25 * k})`;
+        e.el.style.opacity = String(clamp(t * 3));
+        setPeel(e, f * .18 + f * .26 * ease.out(t));
+      });
+      e.el.style.transform = ""; e.el.style.opacity = "";
+      e.el.classList.remove("falling");
+      await tween(520, (t) => setPeel(e, f * .44 + (f * .56 + 2) * ease.out(t)));
+      setPeel(e, 1e4 + full);
+      e.removed = false;
+      e.el.classList.add("stuck");
+      summary();
+      S.busy = false;
+      select(e);
+      say(`${e.title} is back on ${DAYS[e.day]}.`);
+    }
+
+    removeBtn.addEventListener("click", () => { press(removeBtn); removeSel(); });
+    undoBtn.addEventListener("click", () => { press(undoBtn); undo(); });
+    resetBtn.addEventListener("click", () => {
+      if (S.busy) return;
+      finalize(); S.sel = null; build(true); details(); say("The week is back to how it started.");
+    });
+    document.addEventListener("keydown", (ev) => {
+      if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z" && S.pending && !S.busy) { ev.preventDefault(); undo(); }
+      if ((ev.key === "Delete" || ev.key === "Backspace") && S.sel && !S.busy && document.activeElement === S.sel.el) { ev.preventDefault(); removeSel(); }
+    });
+
+    // ---------- Idle: the picked sticker's corner breathes, hinting it can be peeled ----------
+    (function idle(now) {
+      const e = S.sel;
+      if (e && !S.busy && !e.removed && !calm.matches) setPeel(e, e.el.offsetWidth + e.el.offsetHeight - 6 - 4 * Math.sin(now / 420));
+      requestAnimationFrame(idle);
+    })(0);
+
+    // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+    const demo = { on: true, timer: 0, k: 0 };
+    const PICKS = [6, 4, 3]; // Dentist, client call, lunch
+    function stopDemo() { if (!demo.on) return; demo.on = false; clearTimeout(demo.timer); }
+    addEventListener("pointerdown", (ev) => { if (ev.isTrusted) stopDemo(); }, true);
+    addEventListener("keydown", (ev) => { if (ev.isTrusted) stopDemo(); }, true);
+    function schedule(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+    async function runDemo() {
+      if (!demo.on) return;
+      if (S.busy) return schedule(500);
+      if (S.pending) { press(undoBtn); await undo(); return schedule(3000); }
+      const e = evs[PICKS[demo.k++ % PICKS.length]];
+      if (!e || e.removed) return schedule(1000);
+      select(e);
+      await wait(700); if (!demo.on) return;
+      press(removeBtn); await wait(160); if (!demo.on) return;
+      await removeSel();
+      await wait(1500); if (!demo.on) return;
+      press(undoBtn); await wait(150);
+      await undo();
+      schedule(2800);
+    }
+
+    build(true); details();
+    schedule(500);
+  })();
+</script>
+</body>
+</html>

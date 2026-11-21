@@ -1,0 +1,516 @@
+<!doctype html>
+<!-- Chill & Craft · Crumple · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crumple · delete a draft invoice into the basket</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: grey desk, cream paper, blue ink, rattan basket ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #e9ebef;
+    --bg-2: #f5f2ec;
+    --card: #ffffff;
+    --desk: #f1f2f5;
+    --desk-dot: rgba(40, 50, 80, .09);
+    --line: #e1e3ea;
+    --ink: #1b2233;
+    --muted: #677089;
+    --blue: #2f5bd3;
+    --danger: #e0473a;
+    --rattan-1: #d9a066;
+    --rattan-2: #b77a3e;
+    --rattan-3: #8f5a28;
+    --sheet: #fbfaf6;
+    --sh: 30, 40, 70;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d0f14;
+    --bg-2: #14120f;
+    --card: #161922;
+    --desk: #12151c;
+    --desk-dot: rgba(200, 210, 255, .06);
+    --line: #262b38;
+    --ink: #eef1f8;
+    --muted: #9aa3ba;
+    --blue: #7aa2ff;
+    --danger: #ff6a5c;
+    --rattan-1: #b98450;
+    --rattan-2: #8e5d2d;
+    --rattan-3: #64401c;
+    --sheet: #e9e6dd;
+    --sh: 0, 0, 0;
+    --focus: #93c5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .frame {
+    position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 20px 16px;
+    overflow: hidden; overflow: clip;
+    background: radial-gradient(60% 50% at 50% 0%, color-mix(in srgb, var(--rattan-1) 20%, transparent), transparent 70%), linear-gradient(var(--bg-2), var(--bg));
+  }
+  .card { position: relative; width: min(560px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 26px; padding: 16px; box-shadow: 0 50px 90px -60px rgba(var(--sh), .8), 0 2px 8px -4px rgba(var(--sh), .15); }
+  .top { display: flex; align-items: center; gap: 10px; padding: 2px 4px 12px; }
+  .top h1 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+  .top p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .count { margin-left: auto; padding: 5px 11px; border-radius: 99px; background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue); font-size: 12.5px; font-weight: 750; white-space: nowrap; transition: scale .3s var(--spring); }
+  .count.bump { scale: 1.15; }
+
+  /* ---------- The desk: stacked sheets, the canvas with the live sheet, the basket ---------- */
+  .stage { position: relative; height: 330px; border-radius: 18px; overflow: hidden; background-color: var(--desk); background-image: radial-gradient(var(--desk-dot) 1.2px, transparent 1.4px); background-size: 18px 18px; box-shadow: inset 0 0 0 1px var(--line); }
+  .back-sheet { position: absolute; border-radius: 6px; background: var(--sheet); box-shadow: 0 8px 16px -10px rgba(var(--sh), .45), 0 0 0 1px rgba(var(--sh), .06); transition: rotate .5s var(--spring), translate .5s var(--spring), opacity .3s; }
+  .back-sheet::before { content: ""; position: absolute; inset: 16% 12% auto; height: 40%; background: repeating-linear-gradient(transparent 0 11px, rgba(var(--sh), .07) 11px 12px); }
+  .back-sheet.b1 { rotate: 3deg; translate: 8px 4px; z-index: 1; }
+  .back-sheet.b2 { rotate: -4deg; translate: -4px 8px; z-index: 0; }
+  .back-sheet[hidden] { display: none; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+
+  .basket { position: absolute; right: 16px; bottom: 14px; width: 110px; height: 100px; pointer-events: none; --bh: 100px; }
+  .basket > * { position: absolute; left: 0; right: 0; transform-origin: 50% var(--bh); }
+  .bk-back { top: 0; height: 24px; border-radius: 50%; background: radial-gradient(ellipse at 50% 70%, var(--rattan-3), color-mix(in srgb, var(--rattan-3) 70%, #000)); z-index: 2; }
+  .bk-balls { top: -16px; height: 40px; z-index: 4; }
+  .bk-front { top: 10px; bottom: 0; z-index: 5; clip-path: polygon(0 0, 100% 0, 88% 100%, 12% 100%);
+    background: repeating-linear-gradient(90deg, rgba(0, 0, 0, .14) 0 2px, transparent 2px 11px), repeating-linear-gradient(0deg, var(--rattan-1) 0 7px, var(--rattan-2) 7px 9px), var(--rattan-1);
+    border-radius: 0 0 14px 14px; }
+  .bk-front::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 8px; background: linear-gradient(var(--rattan-2), var(--rattan-3)); }
+  .bk-shadow { bottom: -6px; height: 14px; border-radius: 50%; background: rgba(var(--sh), .22); filter: blur(4px); z-index: 1; left: 8%; right: 8%; }
+  .basket.wobble > * { animation: wobble .6s var(--spring); }
+  @keyframes wobble { 30% { rotate: -6deg; } 60% { rotate: 3deg; } }
+  .ball { position: absolute; bottom: 4px; width: 34px; height: 34px; margin-left: -17px; border-radius: 50%; translate: 0 0;
+    background: conic-gradient(from 30deg, rgba(0, 0, 0, .14), transparent 12%, rgba(0, 0, 0, .1) 22%, transparent 30%, rgba(0, 0, 0, .16) 45%, transparent 55%, rgba(0, 0, 0, .08) 70%, transparent 82%, rgba(0, 0, 0, .14)), radial-gradient(circle at 35% 30%, #fff, var(--sheet) 60%, #d8d4c9);
+    animation: sit .5s var(--spring) both; }
+  @keyframes sit { from { translate: 0 -40px; } }
+  .ball.out { animation: popout .35s ease-in forwards; }
+  @keyframes popout { to { translate: 0 -30px; opacity: 0; } }
+
+  .empty { position: absolute; left: 0; top: 0; width: 62%; height: 100%; display: grid; place-items: center; align-content: center; gap: 6px; text-align: center; color: var(--muted); font-size: 13px; z-index: 2; }
+  .empty[hidden] { display: none; }
+  .empty b { color: var(--ink); font-size: 15.5px; }
+
+  /* ---------- Under the desk ---------- */
+  .info { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin: 12px 4px 0; font-size: 13px; color: var(--muted); min-height: 20px; }
+  .info > * { white-space: nowrap; }
+  .info > * + *::before { content: "·"; margin-right: 8px; color: var(--muted); font-weight: 400; }
+  .info b { color: var(--ink); }
+  .actions { display: flex; gap: 10px; margin-top: 12px; }
+  .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 14px; padding: 12px 14px; font: inherit; font-size: 14px; font-weight: 740; cursor: pointer; transition: scale .25s var(--spring), opacity .2s, filter .2s; white-space: nowrap; }
+  .btn svg { width: 19px; height: 19px; }
+  .btn:active, .btn.pressed { scale: .94; }
+  .btn:disabled { opacity: .42; cursor: default; scale: 1; }
+  .soft { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+  .danger { background: var(--danger); color: #fff; box-shadow: 0 12px 20px -14px var(--danger); }
+  .danger:hover:not(:disabled) { filter: brightness(1.07); }
+  .danger:hover:not(:disabled) svg { animation: scrunch .5s var(--spring); }
+  @keyframes scrunch { 40% { scale: .8 .85; rotate: -10deg; } }
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .toast { position: absolute; left: 50%; bottom: 16px; translate: -50% 18px; width: min(420px, calc(100% - 32px)); display: flex; align-items: center; gap: 10px; z-index: 20;
+    background: var(--ink); color: var(--card); border-radius: 15px; padding: 8px 8px 8px 14px; box-shadow: 0 22px 36px -18px rgba(var(--sh), .9); opacity: 0; pointer-events: none; transition: opacity .25s, translate .45s var(--spring); }
+  .toast.show { opacity: 1; translate: -50% 0; pointer-events: auto; }
+  .toast span { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .undo { display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 10px; padding: 7px 11px; background: color-mix(in srgb, var(--card) 15%, transparent); color: inherit; font: inherit; font-size: 13.5px; font-weight: 760; cursor: pointer; transition: scale .25s var(--spring); }
+  .undo:active, .undo.pressed { scale: .92; }
+  .num { min-width: 16px; text-align: center; font-variant-numeric: tabular-nums; opacity: .7; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  @media (max-width: 460px) {
+    .card { padding: 12px; }
+    .stage { height: 300px; }
+    .basket { width: 92px; height: 86px; --bh: 86px; right: 10px; }
+    .ball { width: 28px; height: 28px; margin-left: -14px; }
+    .info > * + *::before { content: none; }
+  }
+  /* Calm mode: every step still happens, without the big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <main class="card" id="card" aria-labelledby="title">
+    <header class="top">
+      <div>
+        <h1 id="title">Draft invoices</h1>
+        <p>Not sent yet. Delete the ones you do not need.</p>
+      </div>
+      <span class="count" id="count">3 drafts</span>
+    </header>
+
+    <div class="stage" id="stage">
+      <div class="back-sheet b2" id="b2"></div>
+      <div class="back-sheet b1" id="b1"></div>
+      <div class="empty" id="empty" hidden><b>Desk is clear</b><span>All drafts are in the basket.</span></div>
+      <canvas id="cv" role="img" aria-label="The top draft invoice"></canvas>
+      <div class="basket" id="basket" aria-hidden="true">
+        <div class="bk-shadow"></div>
+        <div class="bk-back"></div>
+        <div class="bk-balls" id="balls"></div>
+        <div class="bk-front"></div>
+      </div>
+    </div>
+
+    <p class="info" id="info"></p>
+    <div class="actions">
+      <button class="btn soft" id="restoreBtn" type="button" disabled>Take all out</button>
+      <button class="btn danger" id="delBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.5l4 2.5 3.5-2 3.5 3-1.5 4 2 3.5-3 4-4-1-3.5 2-3-3.5.5-4-2-3.5z" /><path d="M10 10l2.5 2-1 3M14.5 9.5L13 12" /></svg>
+        Delete draft
+      </button>
+    </div>
+
+    <div class="toast" id="toast">
+      <span id="toastText">Crumpled</span>
+      <button class="undo" id="undoBtn" type="button" tabindex="-1">Undo <span class="num" id="undoNum">6</span></button>
+    </div>
+    <p class="sr" id="status" role="status" aria-live="polite"></p>
+  </main>
+</div>
+
+<script>
+  (() => {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const stage = $("stage"), cv = $("cv"), ctx = cv.getContext("2d"), basket = $("basket"), ballsEl = $("balls");
+    const b1 = $("b1"), b2 = $("b2"), empty = $("empty"), info = $("info"), countEl = $("count");
+    const delBtn = $("delBtn"), restoreBtn = $("restoreBtn"), toast = $("toast"), toastText = $("toastText"), undoBtn = $("undoBtn"), undoNum = $("undoNum"), status = $("status");
+    const calm = matchMedia("(prefers-reduced-motion: reduce)");
+    const UNDO_S = 6;
+
+    // ---------- Helpers ----------
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const pause = (ms) => wait(calm.matches ? Math.min(ms, 40) : ms);
+    const clamp = (v) => Math.min(1, Math.max(0, v));
+    const ease = { inOut: (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2), out: (t) => 1 - Math.pow(1 - t, 3), in: (t) => t * t };
+    function tween(ms, fn) {
+      return new Promise((ok) => {
+        const d = calm.matches ? 1 : ms, t0 = performance.now();
+        const step = (now) => { const t = clamp((now - t0) / d); fn(t); if (t < 1) requestAnimationFrame(step); else ok(); };
+        step(t0);
+      });
+    }
+    const say = (m) => { status.textContent = m; };
+    const press = (b) => { b.classList.add("pressed"); setTimeout(() => b.classList.remove("pressed"), 170); };
+    const pkr = (n) => "PKR " + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+
+    // ---------- Invoices ----------
+    const DRAFTS = [
+      { no: "INV-2041", to: "Rehman Fabrics", city: "Faisalabad", date: "18 Nov 2026", items: [["Cotton lawn, 120 m", 54000], ["Embroidery work", 22500], ["Delivery", 9750]], c: "#2f5bd3" },
+      { no: "INV-2042", to: "Mehak Bakers", city: "Lahore", date: "17 Nov 2026", items: [["Wedding cake, 3 tier", 18000], ["Cupcakes x 60", 9000], ["Delivery", 1500]], c: "#d9477a" },
+      { no: "INV-2043", to: "Kamran Motors", city: "Rawalpindi", date: "15 Nov 2026", items: [["Oil change", 6500], ["Brake pads x 2", 8400], ["Labour", 3000]], c: "#0f9f6e" },
+    ];
+    const total = (d) => d.items.reduce((s, i) => s + i[1], 0);
+    let drafts = DRAFTS.slice();
+    const S = { busy: false, pending: null, timer: 0, tick: 0, mode: "flat", creases: 0 };
+
+    // ---------- Layout ----------
+    let DPR = 1, SW = 0, SH = 0, G = { x: 0, y: 0, w: 0, h: 0 }, tex = null;
+    function layout() {
+      DPR = Math.min(2, devicePixelRatio || 1);
+      SW = stage.clientWidth; SH = stage.clientHeight;
+      cv.width = Math.round(SW * DPR); cv.height = Math.round(SH * DPR);
+      const bw = basket.offsetWidth;
+      const w = Math.min(270, SW - bw - 44), h = Math.min(SH - 40, w * 1.14);
+      G = { x: Math.max(16, (SW - bw - 20 - w) / 2), y: (SH - h) / 2 - 4, w, h };
+      [b1, b2].forEach((b) => { b.style.left = G.x + "px"; b.style.top = G.y + "px"; b.style.width = w + "px"; b.style.height = h + "px"; });
+      empty.style.width = G.x * 2 + w + "px";
+      buildMesh();
+      if (drafts[0]) tex = paintTexture(drafts[0]);
+    }
+
+    // the invoice is painted once into an offscreen canvas, then drawn flat or through the crumple mesh
+    function paintTexture(d) {
+      const { w, h } = G, k = w / 270;
+      const c = document.createElement("canvas");
+      c.width = Math.round(w * DPR); c.height = Math.round(h * DPR);
+      const x = c.getContext("2d");
+      x.scale(DPR, DPR);
+      const dark = document.documentElement.dataset.theme === "dark";
+      x.fillStyle = dark ? "#e9e6dd" : "#fbfaf6";
+      x.beginPath(); x.roundRect ? x.roundRect(0, 0, w, h, 6) : x.rect(0, 0, w, h); x.fill();
+      const P = 18 * k, ink = "#1b2233", muted = "#6b7284", font = (s, wt = 600) => `${wt} ${s * k}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+      x.fillStyle = d.c; x.fillRect(0, 0, w, 5 * k);
+      x.fillStyle = d.c; x.beginPath(); x.arc(P + 9 * k, P + 12 * k, 9 * k, 0, Math.PI * 2); x.fill();
+      x.fillStyle = ink; x.font = font(15, 800); x.textBaseline = "alphabetic";
+      x.fillText("Invoice", P + 24 * k, P + 17 * k);
+      x.font = font(11, 650); x.fillStyle = muted; x.textAlign = "right";
+      x.fillText(d.no, w - P, P + 10 * k); x.fillText(d.date, w - P, P + 24 * k);
+      x.textAlign = "left";
+      x.font = font(9.5, 750); x.fillStyle = muted; x.fillText("BILL TO", P, P + 50 * k);
+      x.font = font(13, 750); x.fillStyle = ink; x.fillText(d.to, P, P + 66 * k);
+      x.font = font(11, 500); x.fillStyle = muted; x.fillText(d.city, P, P + 80 * k);
+      let y = P + 104 * k;
+      x.strokeStyle = "rgba(27,34,51,.12)"; x.lineWidth = 1;
+      d.items.forEach(([name, amt]) => {
+        x.font = font(11.5, 550); x.fillStyle = ink; x.fillText(name, P, y);
+        x.textAlign = "right"; x.fillText(pkr(amt), w - P, y); x.textAlign = "left";
+        x.beginPath(); x.moveTo(P, y + 8 * k); x.lineTo(w - P, y + 8 * k); x.stroke();
+        y += 24 * k;
+      });
+      x.font = font(11, 700); x.fillStyle = muted; x.fillText("TOTAL", P, y + 10 * k);
+      x.font = font(16, 850); x.fillStyle = ink; x.textAlign = "right"; x.fillText(pkr(total(d)), w - P, y + 12 * k); x.textAlign = "left";
+      // DRAFT stamp
+      x.save(); x.translate(P + 44 * k, h - P - 12 * k); x.rotate(-.18);
+      x.strokeStyle = "rgba(224,71,58,.75)"; x.lineWidth = 2 * k; x.strokeRect(-36 * k, -14 * k, 72 * k, 26 * k);
+      x.fillStyle = "rgba(224,71,58,.8)"; x.font = font(13, 900); x.textAlign = "center"; x.fillText("DRAFT", 0, 4 * k);
+      x.restore();
+      return c;
+    }
+
+    // ---------- The crumple mesh ----------
+    const NX = 7, NY = 9;
+    let V = [], T = [];
+    function buildMesh() {
+      seed = 11;
+      V = []; T = [];
+      const R = Math.min(G.w, G.h) * .14;
+      for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) {
+        const sx = (G.w * i) / NX, sy = (G.h * j) / NY, u = i / NX - .5, v = j / NY - .5;
+        const d = Math.max(Math.abs(u), Math.abs(v)) * 2;
+        const a = Math.atan2(v * G.h, u * G.w) + (rnd() - .5) * .9 + d * .7;
+        const r = R * (.25 + .75 * d) * (.8 + rnd() * .4);
+        V.push({ sx, sy, d, bx: Math.cos(a) * r, by: Math.sin(a) * r, wx: (rnd() - .5) * 36, wy: (rnd() - .5) * 36, x: 0, y: 0 });
+      }
+      for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+        const p = j * (NX + 1) + i, q = p + 1, r = p + NX + 1, s = r + 1;
+        const flip = (i + j) % 2;
+        [[p, q, flip ? s : r], flip ? [p, s, r] : [q, s, r]].forEach((tri) => {
+          const d = (V[tri[0]].d + V[tri[1]].d + V[tri[2]].d) / 3;
+          T.push({ v: tri, d, shade: rnd() * 2 - 1 });
+        });
+      }
+      T.sort((a, b) => a.d - b.d); // the middle first, the edges fold over it last
+    }
+    // place every vertex for crumple amount k (0 flat, 1 ball), ball centre (cx, cy), spin and size
+    // the edges start folding first, the middle follows; a random wrinkle peaks half-way
+    function pose(k, cx, cy, spin, sc) {
+      const cs = Math.cos(spin) * sc, sn = Math.sin(spin) * sc;
+      V.forEach((p) => {
+        const kk = ease.inOut(clamp((k - (1 - p.d) * .25) / .75)), wr = Math.sin(Math.PI * kk) * .6;
+        const fx = G.x + p.sx, fy = G.y + p.sy;
+        const tx = cx + p.bx * cs - p.by * sn, ty = cy + p.bx * sn + p.by * cs;
+        p.x = fx + (tx - fx) * kk + p.wx * wr;
+        p.y = fy + (ty - fy) * kk + p.wy * wr;
+      });
+    }
+    // draw one textured triangle: clip to the target triangle, map the texture with an affine transform
+    function tri(t, amount) {
+      const [A, B, C] = t.v.map((i) => V[i]);
+      const ux = B.sx - A.sx, uy = B.sy - A.sy, vx = C.sx - A.sx, vy = C.sy - A.sy;
+      const Ux = B.x - A.x, Uy = B.y - A.y, Vx = C.x - A.x, Vy = C.y - A.y;
+      const det = ux * vy - vx * uy;
+      if (!det) return;
+      const a = (Ux * vy - Vx * uy) / det, c = (Vx * ux - Ux * vx) / det, b = (Uy * vy - Vy * uy) / det, d = (Vy * ux - Uy * vx) / det;
+      const e = A.x - a * A.sx - c * A.sy, f = A.y - b * A.sx - d * A.sy;
+      // grow the clip a hair so no seams show between triangles
+      const mx = (A.x + B.x + C.x) / 3, my = (A.y + B.y + C.y) / 3, g = (p) => [p.x + (p.x - mx) * .04 + Math.sign(p.x - mx) * .5, p.y + (p.y - my) * .04 + Math.sign(p.y - my) * .5];
+      const [p0, p1, p2] = [g(A), g(B), g(C)];
+      ctx.save();
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.closePath(); ctx.clip();
+      ctx.setTransform(DPR * a, DPR * b, DPR * c, DPR * d, DPR * e, DPR * f);
+      ctx.drawImage(tex, 0, 0, G.w, G.h);
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      // fold shading: flipped pieces show the darker back, others get a random crease light or shadow
+      const flipped = Ux * Vy - Vx * Uy < 0;
+      const s = flipped ? -.42 * amount : t.shade * .26 * amount;
+      if (s) { ctx.fillStyle = s < 0 ? `rgba(40,30,20,${-s})` : `rgba(255,255,255,${s})`; ctx.fill(); }
+      ctx.restore();
+    }
+    function clear() { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); }
+    function shadow(x, y, rx, a) { ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = `rgba(20,25,40,${a})`; ctx.beginPath(); ctx.ellipse(x, y, rx, rx * .28, 0, 0, Math.PI * 2); ctx.fill(); }
+    function drawMesh(k, cx, cy, spin, ground, sc = 1) {
+      clear();
+      if (ground) { const R = Math.min(G.w, G.h) * .14 * sc; shadow(cx + 4, cy + R * 1.08, R * 1.1, .22 * k); } // soft shadow right under the ball
+      pose(k, cx, cy, spin, sc);
+      T.forEach((t) => tri(t, k));
+    }
+    function drawFlat(lift = 0, creases = 0) {
+      clear();
+      if (!tex || !drafts.length) return;
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.save();
+      ctx.shadowColor = "rgba(20,25,40,.22)"; ctx.shadowBlur = 16 + lift * 10; ctx.shadowOffsetY = 8 + lift * 8;
+      ctx.drawImage(tex, G.x, G.y - lift * 6, G.w, G.h);
+      ctx.restore();
+      if (creases > 0) { // fading crease lines after an undo
+        seed = 5;
+        for (let i = 0; i < 9; i++) {
+          const x0 = G.x + rnd() * G.w, y0 = G.y + rnd() * G.h, x1 = G.x + rnd() * G.w, y1 = G.y + rnd() * G.h;
+          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = `rgba(40,30,20,${.22 * creases})`; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+          ctx.strokeStyle = `rgba(255,255,255,${.5 * creases})`; ctx.beginPath(); ctx.moveTo(x0 + 1, y0 + 1); ctx.lineTo(x1 + 1, y1 + 1); ctx.stroke();
+        }
+      }
+    }
+
+    // ---------- Page state ----------
+    function sync() {
+      const n = drafts.length;
+      countEl.textContent = `${n} draft${n === 1 ? "" : "s"}`;
+      b1.hidden = n < 2; b2.hidden = n < 3;
+      empty.hidden = n > 0 || !!S.pending;
+      delBtn.disabled = S.busy || !n;
+      restoreBtn.disabled = S.busy || ballsEl.children.length === 0 || !!S.pending;
+      const d = drafts[0];
+      info.innerHTML = d ? `<b></b><span></span><b></b>` : "Nothing on the desk.";
+      if (d) { const [a, b, c] = info.children; a.textContent = d.no; b.textContent = d.to + ", " + d.city; c.textContent = pkr(total(d)); }
+      cv.setAttribute("aria-label", d ? `Draft invoice ${d.no} for ${d.to}, total ${pkr(total(d))}` : "Empty desk");
+    }
+    function addBall() {
+      const b = document.createElement("i");
+      b.className = "ball";
+      const n = ballsEl.children.length;
+      b.style.left = 30 + ((n * 23) % 50) + "%";
+      b.style.rotate = n * 67 + "deg";
+      ballsEl.appendChild(b);
+    }
+
+    // ---------- Delete: crumple, toss, bounce off the rim, drop in ----------
+    async function crumple() {
+      if (S.busy || S.pending || !drafts.length) return;
+      S.busy = true; S.mode = "anim"; sync();
+      const d = drafts[0];
+      say(`Crumpling ${d.no}.`);
+      const cx0 = G.x + G.w / 2, cy0 = G.y + G.h / 2;
+      // 1. anticipation: the sheet lifts off the desk
+      await tween(220, (t) => drawFlat(ease.out(t)));
+      // 2. crumple into a ball (the ball rises a little as it forms)
+      const ground = G.y + G.h + 6;
+      await tween(900, (t) => drawMesh(t, cx0, cy0 - 18 * ease.out(t), t * .9, ground));
+      // 3. a little squeeze before the throw
+      await tween(160, (t) => drawMesh(1, cx0 - 6 * Math.sin(Math.PI * t), cy0 - 18 + 4 * Math.sin(Math.PI * t), .9, ground));
+      // 4. toss: arc to the basket rim, bounce, drop in behind the front
+      const br = basket.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+      const rimX = br.left - sr.left + br.width * .22, rimY = br.top - sr.top + 2, inX = br.left - sr.left + br.width * .5, inY = br.top - sr.top + br.height * .55;
+      const sx = cx0, sy = cy0 - 18, peak = Math.min(sy, rimY) - 90;
+      await tween(640, (t) => {
+        const x = sx + (rimX - sx) * t, y = (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * peak + t * t * (rimY - 16);
+        drawMesh(1, x, y, .9 + t * 7, 0, 1 - .4 * t);
+      });
+      basket.classList.remove("wobble"); void basket.offsetWidth; basket.classList.add("wobble");
+      await tween(420, (t) => {
+        const x = rimX + (inX - rimX) * t, y = (1 - t) * (1 - t) * (rimY - 16) + 2 * (1 - t) * t * (rimY - 60) + t * t * inY;
+        drawMesh(1, x, y, 7.9 + t * 3, 0, .6 - .05 * t);
+      });
+      clear();
+      addBall();
+      drafts.shift();
+      S.pending = d;
+      if (drafts[0]) {
+        tex = paintTexture(drafts[0]);
+        await tween(420, (t) => drawFlat(1 - ease.out(t))); // the next sheet settles on top
+      }
+      S.mode = "flat";
+      toastText.textContent = `${d.no} is in the basket`;
+      showToast();
+      say(`${d.no} deleted. ${drafts.length} drafts left. Undo within ${UNDO_S} seconds.`);
+      S.busy = false; sync();
+    }
+    function showToast() {
+      toast.classList.add("show"); undoBtn.tabIndex = 0;
+      let left = UNDO_S;
+      undoNum.textContent = left;
+      clearInterval(S.tick); clearTimeout(S.timer);
+      S.tick = setInterval(() => { left--; undoNum.textContent = Math.max(0, left); }, 1000);
+      S.timer = setTimeout(finalize, UNDO_S * 1000);
+    }
+    function hideToast() { toast.classList.remove("show"); undoBtn.tabIndex = -1; clearInterval(S.tick); clearTimeout(S.timer); }
+    function finalize() { hideToast(); S.pending = null; sync(); }
+
+    // ---------- Undo: the ball hops out, flies back and smooths out ----------
+    async function undo() {
+      const d = S.pending;
+      if (!d || S.busy) return;
+      S.busy = true; hideToast(); S.pending = null; S.mode = "anim";
+      say(`Taking ${d.no} out of the basket.`);
+      const last = ballsEl.lastElementChild;
+      if (last) { last.classList.add("out"); setTimeout(() => last.remove(), 360); }
+      drafts.unshift(d);
+      tex = paintTexture(d);
+      sync(); delBtn.disabled = true;
+      const br = basket.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+      const inX = br.left - sr.left + br.width * .5, inY = br.top - sr.top + br.height * .3;
+      const cx0 = G.x + G.w / 2, cy0 = G.y + G.h / 2 - 18, peak = Math.min(cy0, inY) - 100;
+      await tween(700, (t) => {
+        const k = ease.out(t), x = inX + (cx0 - inX) * k, y = (1 - k) * (1 - k) * inY + 2 * (1 - k) * k * peak + k * k * cy0;
+        drawMesh(1, x, y, 10.9 - k * 10, 0, .55 + .45 * k);
+      });
+      const ground = G.y + G.h + 6;
+      await tween(900, (t) => drawMesh(1 - t, cx0, cy0 + 18 * ease.out(t), .9 * (1 - t), ground));
+      await tween(1300, (t) => drawFlat(0, 1 - t)); // the creases iron out
+      drawFlat();
+      S.mode = "flat"; S.busy = false; sync();
+      say(`${d.no} is back on the desk.`);
+    }
+    async function takeAllOut() {
+      if (S.busy || S.pending) return;
+      S.busy = true; sync();
+      [...ballsEl.children].forEach((b, i) => setTimeout(() => b.classList.add("out"), calm.matches ? 0 : i * 90));
+      await pause(500);
+      ballsEl.textContent = "";
+      drafts = DRAFTS.slice(); tex = paintTexture(drafts[0]);
+      await tween(500, (t) => drawFlat(1 - ease.out(t)));
+      S.busy = false; sync();
+      say("All three drafts are back on the desk.");
+    }
+
+    delBtn.addEventListener("click", () => { press(delBtn); crumple(); });
+    undoBtn.addEventListener("click", () => { press(undoBtn); undo(); });
+    restoreBtn.addEventListener("click", () => { press(restoreBtn); takeAllOut(); });
+    document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && S.pending && !S.busy) { e.preventDefault(); undo(); } });
+
+    // idle: the top sheet breathes on the desk; redraw on resize and theme change
+    let lastW = 0;
+    (function idle(now) {
+      if (stage.clientWidth !== lastW && !S.busy) { lastW = stage.clientWidth; layout(); }
+      if (S.mode === "flat" && !S.busy) drawFlat(calm.matches ? 0 : .5 + .5 * Math.sin(now / 900));
+      requestAnimationFrame(idle);
+    })(0);
+    matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (!S.busy && drafts[0]) tex = paintTexture(drafts[0]); });
+
+    // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+    const demo = { on: true, timer: 0 };
+    function stopDemo() { if (!demo.on) return; demo.on = false; clearTimeout(demo.timer); }
+    addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    function schedule(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+    async function runDemo() {
+      if (!demo.on) return;
+      if (S.busy) return schedule(500);
+      if (S.pending) { press(undoBtn); await undo(); return schedule(2600); }
+      if (!drafts.length) { await takeAllOut(); return schedule(2000); }
+      press(delBtn); await wait(160); if (!demo.on) return;
+      await crumple();
+      await wait(1400); if (!demo.on) return;
+      press(undoBtn); await wait(150);
+      await undo();
+      schedule(2400);
+    }
+
+    layout(); sync(); drawFlat();
+    schedule(650);
+  })();
+</script>
+</body>
+</html>

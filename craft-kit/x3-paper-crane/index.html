@@ -1,0 +1,594 @@
+<!doctype html>
+<!-- Chill & Craft · Paper Crane · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Crane · discard a draft with undo</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: indigo ink, cream paper, coral underside ---------- */
+  :root {
+    color-scheme: light;
+    --bg1: #e6ecfb;
+    --bg2: #f8f3e8;
+    --card: #ffffff;
+    --line: #e2e5f1;
+    --ink: #1d2142;
+    --muted: #61688a;
+    --accent: #3e4fd1;
+    --chip: #f1f3fb;
+    --danger: #df4f2c;
+    --danger-2: #f07a3c;
+    --paper: #fffaf0;
+    --paper-back: #f5a58b;
+    --paper-ink: #262a4c;
+    --rule: rgba(62, 79, 209, .13);
+    --crease: rgba(29, 33, 66, .24);
+    --tape: rgba(255, 196, 86, .6);
+    --sh: 40, 45, 90;
+    --focus: #2b59ff;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg1: #0b0e22;
+    --bg2: #1a1430;
+    --card: #141830;
+    --line: #272c4c;
+    --ink: #eef0ff;
+    --muted: #9ba1c8;
+    --accent: #95a3ff;
+    --chip: #1c2142;
+    --danger: #ff6a48;
+    --danger-2: #ff9a52;
+    --paper: #f4ebd6;
+    --paper-back: #e9876b;
+    --rule: rgba(62, 79, 209, .17);
+    --crease: rgba(29, 33, 66, .32);
+    --tape: rgba(255, 196, 86, .5);
+    --sh: 0, 0, 0;
+    --focus: #a8b8ff;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg2); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .frame {
+    position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center;
+    padding: 20px 16px; overflow: hidden; overflow: clip;
+    background: radial-gradient(80% 60% at 20% 0%, var(--bg1), transparent 70%), radial-gradient(70% 60% at 100% 100%, color-mix(in srgb, var(--paper-back) 22%, transparent), transparent 70%), var(--bg2);
+  }
+
+  /* Background: three tiny cranes drifting across the sky, very slowly */
+  .sky { position: absolute; inset: 0; pointer-events: none; }
+  .sky svg { position: absolute; width: 46px; height: 32px; color: var(--accent); opacity: .16; animation: drift 26s linear infinite; }
+  .sky svg:nth-child(2) { top: 18%; width: 30px; animation-duration: 34s; animation-delay: -12s; opacity: .12; }
+  .sky svg:nth-child(3) { top: 72%; width: 38px; animation-duration: 30s; animation-delay: -21s; }
+  .sky svg:nth-child(1) { top: 8%; }
+  @keyframes drift { from { left: -60px; translate: 0 0; } 50% { translate: 0 -18px; } to { left: calc(100% + 60px); translate: 0 0; } }
+
+  .desk {
+    position: relative; width: min(500px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 26px;
+    padding: 18px; box-shadow: 0 50px 90px -60px rgba(var(--sh), .7), 0 2px 8px -4px rgba(var(--sh), .16);
+  }
+  .top { display: flex; align-items: center; gap: 11px; }
+  .logo { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; background: var(--accent); color: #fff; flex: none; }
+  .logo svg { width: 24px; height: 24px; }
+  .top h1 { margin: 0; font-size: 17px; font-weight: 790; letter-spacing: -.01em; }
+  .top p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .count {
+    margin-left: auto; min-width: 30px; height: 30px; padding: 0 9px; border-radius: 99px; display: grid; place-items: center;
+    background: var(--chip); font-weight: 780; font-size: 14px; font-variant-numeric: tabular-nums; transition: scale .3s var(--spring);
+  }
+  .count.bump { scale: 1.25; }
+
+  /* Draft picker */
+  .tabs { display: flex; gap: 6px; margin: 14px 0 6px; flex-wrap: wrap; min-height: 32px; }
+  .tab {
+    max-width: 100%; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); border-radius: 99px; padding: 5px 12px;
+    font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: border-color .2s, background-color .2s, scale .25s var(--spring);
+  }
+  .tab[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
+  .tab:active { scale: .94; }
+
+  /* ---------- The stage: paper sheet, folding layer, empty state ---------- */
+  .stage { position: relative; display: grid; place-items: center; padding: 14px 0 10px; }
+  .paper {
+    position: relative; width: min(100%, 420px); aspect-ratio: 3 / 2; border-radius: 4px; background-color: var(--paper);
+    background-image: repeating-linear-gradient(to bottom, transparent 0 27px, var(--rule) 27px 28px);
+    background-position: 0 6px; color: var(--paper-ink); padding: 18px 18px 12px; display: flex; flex-direction: column; gap: 4px;
+    box-shadow: 0 18px 28px -20px rgba(var(--sh), .55), 0 1px 2px rgba(var(--sh), .12);
+    transition: translate .35s var(--spring), scale .35s var(--spring), box-shadow .35s, border-color .3s, background-color .3s;
+    animation: idle 6s ease-in-out infinite;
+  }
+  @keyframes idle { 50% { translate: 0 -3px; rotate: -.4deg; } }
+  .paper > * { transition: opacity .28s; }
+  .paper::before { /* washi tape holding the sheet */
+    content: ""; position: absolute; top: -9px; left: 50%; width: 86px; height: 20px; translate: -50% 0; rotate: -3deg;
+    background: var(--tape); border-radius: 2px; transition: opacity .25s;
+    mask: linear-gradient(90deg, transparent 0 2px, #000 2px calc(100% - 2px), transparent 0);
+  }
+  .paper.lift { translate: 0 -8px; scale: 1.02; box-shadow: 0 30px 40px -22px rgba(var(--sh), .6); animation: none; }
+  .paper.lift > *, .paper.lift::before { opacity: 0; }
+  .paper.gone { visibility: hidden; transition: none; animation: none; }
+  .paper.ghost { background: transparent; box-shadow: none; outline: 2px dashed var(--line); outline-offset: -2px; animation: none; }
+  .paper.ghost > *, .paper.ghost::before { opacity: 0; }
+  .paper.enter { animation: enter .7s var(--spring) both, idle 6s ease-in-out .7s infinite; }
+  @keyframes enter { from { translate: 0 46px; rotate: -5deg; scale: .94; opacity: 0; } }
+  .ghost-note { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted); font-size: 13px; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  .ghost-note b { display: block; color: var(--ink); font-size: 14.5px; }
+  .stage.is-ghost .ghost-note { opacity: 1; }
+
+  .row { display: flex; align-items: baseline; gap: 8px; font-size: 13px; min-width: 0; }
+  .lab { color: color-mix(in srgb, var(--paper-ink) 55%, transparent); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; width: 56px; flex: none; }
+  .to { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .saved { margin-left: auto; font-size: 11.5px; color: color-mix(in srgb, var(--paper-ink) 55%, transparent); white-space: nowrap; display: inline-flex; gap: 4px; align-items: center; }
+  .saved svg { width: 13px; height: 13px; color: #1f9d63; scale: 0; transition: scale .4s var(--spring); }
+  .saved.ok svg { scale: 1; }
+  .field { flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 750; font-size: 15px; padding: 2px 4px; border-radius: 6px; }
+  .body {
+    flex: 1; min-height: 0; resize: none; border: 0; background: transparent; color: inherit; font: inherit; font-size: 14px; line-height: 28px;
+    padding: 0 4px; border-radius: 6px; margin-top: 2px;
+  }
+  .field:focus-visible, .body:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+  /* The folding layer: polygons in a 300 x 200 box laid exactly over the paper */
+  .crane { position: absolute; width: min(100%, 420px); aspect-ratio: 3 / 2; left: 50%; top: 14px; translate: -50% 0; pointer-events: none; visibility: hidden; transform-origin: 50% 48%; }
+  .crane.on { visibility: visible; }
+  .crane svg { width: 100%; height: 100%; overflow: visible; display: block; filter: drop-shadow(0 10px 10px rgba(var(--sh), .22)); }
+  .crane polygon { stroke: var(--crease); stroke-width: 1.1; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+  .puff { position: absolute; width: 7px; height: 7px; margin: -3.5px; border-radius: 50%; background: var(--paper-back); pointer-events: none; animation: puff .9s ease-out forwards; }
+  .puff.alt { background: var(--accent); width: 5px; height: 5px; }
+  @keyframes puff { from { opacity: .9; scale: 1; } to { opacity: 0; scale: .2; translate: -14px 10px; } }
+  .spark { position: absolute; width: 6px; height: 6px; margin: -3px; border-radius: 2px; background: var(--accent); pointer-events: none; animation: spark .8s cubic-bezier(.2, .7, .3, 1) forwards; }
+  @keyframes spark { from { opacity: 1; translate: 0 0; rotate: 0deg; } to { opacity: 0; translate: var(--dx) var(--dy); rotate: 160deg; } }
+
+  /* Empty state */
+  .empty { position: absolute; inset: 14px 0 10px; display: grid; place-items: center; align-content: center; gap: 8px; text-align: center; }
+  .empty[hidden] { display: none; }
+  .empty svg { width: 88px; height: 60px; color: var(--accent); animation: bob 3.2s ease-in-out infinite; }
+  @keyframes bob { 50% { translate: 0 -6px; } }
+  .empty b { font-size: 16px; }
+  .empty p { margin: 0; color: var(--muted); font-size: 13px; }
+
+  /* ---------- Buttons ---------- */
+  .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 14px; padding: 11px 16px;
+    font: inherit; font-weight: 720; font-size: 14.5px; cursor: pointer; white-space: nowrap; transition: scale .25s var(--spring), filter .2s, opacity .2s, box-shadow .2s;
+  }
+  .btn svg { width: 19px; height: 19px; flex: none; }
+  .btn:active, .btn.pressed { scale: .93; }
+  .btn:disabled { opacity: .45; cursor: default; scale: 1; }
+  .ghost-btn { background: var(--chip); color: var(--ink); }
+  .danger { background: linear-gradient(135deg, var(--danger), var(--danger-2)); color: #fff; box-shadow: 0 12px 22px -14px var(--danger); }
+  .danger:hover:not(:disabled) { filter: brightness(1.06); }
+  .danger svg { transition: rotate .4s var(--spring); }
+  .danger:hover:not(:disabled) svg { rotate: -14deg; }
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* Undo toast with a countdown ring */
+  .toast {
+    position: absolute; left: 50%; bottom: 18px; translate: -50% 18px; width: calc(100% - 36px); max-width: 420px; display: flex; align-items: center; gap: 10px;
+    background: var(--ink); color: var(--card); border-radius: 16px; padding: 8px 8px 8px 14px; box-shadow: 0 20px 34px -18px rgba(var(--sh), .8);
+    opacity: 0; pointer-events: none; transition: opacity .25s, translate .45s var(--spring); z-index: 5;
+  }
+  .toast.show { opacity: 1; translate: -50% 0; pointer-events: auto; }
+  .toast span { flex: 1; font-size: 13.5px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .undo { display: inline-flex; align-items: center; gap: 7px; border: 0; background: color-mix(in srgb, var(--card) 14%, transparent); color: inherit; border-radius: 11px; padding: 7px 11px; font: inherit; font-weight: 760; font-size: 13.5px; cursor: pointer; transition: scale .25s var(--spring); }
+  .undo:active, .undo.pressed { scale: .92; }
+  .ring { width: 18px; height: 18px; rotate: -90deg; }
+  .ring circle { fill: none; stroke: currentColor; stroke-width: 3; stroke-dasharray: 44; stroke-dashoffset: 0; }
+  .ring .bg { opacity: .25; }
+  .toast.show .ring .fg { animation: ring var(--undo, 6s) linear forwards; }
+  @keyframes ring { to { stroke-dashoffset: 44; } }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  @media (max-width: 420px) {
+    .desk { padding: 14px; }
+    .paper { padding: 14px 12px 8px; }
+    .lab { width: 50px; }
+    .actions .btn { flex: 1; padding: 11px 10px; }
+  }
+  /* Calm mode: every step still happens, without the big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <div class="sky" aria-hidden="true">
+    <svg viewBox="0 0 46 32" fill="currentColor"><path d="M2 14l12 3 6-15 4 13 9-9-3 12 14-4-12 9-15 1-6 6 1-7z" /></svg>
+    <svg viewBox="0 0 46 32" fill="currentColor"><path d="M2 14l12 3 6-15 4 13 9-9-3 12 14-4-12 9-15 1-6 6 1-7z" /></svg>
+    <svg viewBox="0 0 46 32" fill="currentColor"><path d="M2 14l12 3 6-15 4 13 9-9-3 12 14-4-12 9-15 1-6 6 1-7z" /></svg>
+  </div>
+
+  <main class="desk" aria-labelledby="title">
+    <header class="top">
+      <span class="logo" aria-hidden="true"><svg viewBox="0 0 46 32" fill="currentColor"><path d="M2 14l12 3 6-15 4 13 9-9-3 12 14-4-12 9-15 1-6 6 1-7z" /></svg></span>
+      <div>
+        <h1 id="title">Drafts</h1>
+        <p id="sub">Unsent messages, saved on this device</p>
+      </div>
+      <span class="count" id="count" aria-label="Drafts left">3</span>
+    </header>
+
+    <div class="tabs" id="tabs" role="group" aria-label="Pick a draft"></div>
+
+    <div class="stage" id="stage">
+      <div class="paper" id="paper">
+        <div class="row"><span class="lab">To</span><span class="to" id="to"></span><span class="saved" id="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg><span id="savedText"></span></span></div>
+        <label class="row"><span class="lab">Subject</span><input class="field" id="subj" autocomplete="off"></label>
+        <label class="sr" for="body">Message</label>
+        <textarea class="body" id="body"></textarea>
+      </div>
+      <div class="ghost-note" aria-hidden="true"><div><b>Folded into a crane</b>Undo brings it back</div></div>
+      <div class="crane" id="crane" aria-hidden="true">
+        <svg viewBox="0 0 300 200"><g id="facets"><polygon /><polygon /><polygon /><polygon /><polygon /><polygon /></g></svg>
+      </div>
+      <div class="empty" id="empty" hidden>
+        <svg viewBox="0 0 46 32" fill="currentColor" aria-hidden="true"><path d="M2 14l12 3 6-15 4 13 9-9-3 12 14-4-12 9-15 1-6 6 1-7z" /></svg>
+        <b>No drafts left</b>
+        <p>Every crane has flown. Nice and tidy.</p>
+        <button class="btn ghost-btn" id="refill" type="button">Bring back the samples</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn ghost-btn" id="saveBtn" type="button">Save</button>
+      <button class="btn danger" id="discardBtn" type="button">
+        <svg viewBox="0 0 46 32" fill="currentColor" aria-hidden="true"><path d="M2 14l12 3 6-15 4 13 9-9-3 12 14-4-12 9-15 1-6 6 1-7z" /></svg>
+        <span>Discard draft</span>
+      </button>
+    </div>
+
+    <div class="toast" id="toast">
+      <span id="toastText">Draft discarded</span>
+      <button class="undo" id="undoBtn" type="button" tabindex="-1">
+        <svg class="ring" viewBox="0 0 18 18" aria-hidden="true"><circle class="bg" cx="9" cy="9" r="7" /><circle class="fg" cx="9" cy="9" r="7" /></svg>
+        Undo
+      </button>
+    </div>
+    <p class="sr" id="status" role="status" aria-live="polite"></p>
+  </main>
+</div>
+
+<script>
+  (() => {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const frame = $("frame"), stage = $("stage"), paper = $("paper"), crane = $("crane"), facetsG = $("facets");
+    const polys = [...facetsG.querySelectorAll("polygon")];
+    const tabs = $("tabs"), countEl = $("count"), toEl = $("to"), subj = $("subj"), body = $("body"), savedEl = $("saved"), savedText = $("savedText");
+    const saveBtn = $("saveBtn"), discardBtn = $("discardBtn"), undoBtn = $("undoBtn"), toast = $("toast"), toastText = $("toastText");
+    const empty = $("empty"), refill = $("refill"), status = $("status");
+    const calm = matchMedia("(prefers-reduced-motion: reduce)");
+    const UNDO_MS = 6000;
+
+    // ---------- Small helpers ----------
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const pause = (ms) => wait(calm.matches ? Math.min(ms, 40) : ms); // waits inside an animation shrink in calm mode
+    const clamp = (v) => Math.min(1, Math.max(0, v));
+    const ease = {
+      inOut: (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+      out: (t) => 1 - Math.pow(1 - t, 3),
+      in: (t) => t * t * t,
+      sine: (t) => -(Math.cos(Math.PI * t) - 1) / 2,
+      back: (t) => { const c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); },
+    };
+    // runs fn(t) with t from 0 to 1 on every frame; resolves at the end
+    function tween(ms, fn) {
+      return new Promise((done) => {
+        const d = calm.matches ? 1 : ms, t0 = performance.now();
+        const step = (now) => { const t = clamp((now - t0) / d); fn(t); if (t < 1) requestAnimationFrame(step); else done(); };
+        step(t0);
+      });
+    }
+    const say = (m) => { status.textContent = m; };
+    const press = (b) => { b.classList.add("pressed"); setTimeout(() => b.classList.remove("pressed"), 170); };
+
+    // ---------- Geometry: 6 paper facets, each a 6-point polygon in a 300 x 200 box ----------
+    const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    function six(p) {
+      if (p.length === 3) return [p[0], mid(p[0], p[1]), p[1], mid(p[1], p[2]), p[2], mid(p[2], p[0])];
+      if (p.length === 4) return [p[0], mid(p[0], p[1]), p[1], p[2], mid(p[2], p[3]), p[3]];
+      return p;
+    }
+    // signed area: positive = front of the paper faces us, negative = the coral back shows (a fold flipped it)
+    const area = (p) => p.reduce((s, a, i) => { const b = p[(i + 1) % p.length]; return s + a[0] * b[1] - b[0] * a[1]; }, 0) / 2;
+    const orient = (p, sign) => (Math.sign(area(p)) === sign ? p : p.slice().reverse());
+    const mapAll = (K, fn) => K.map((pts, i) => pts.map((p) => fn(p, i)));
+
+    // K0: the flat sheet cut into a 3 x 2 grid (F0 F1 F2 on top, F3 F4 F5 below)
+    const K0 = [];
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) K0.push(six([[c * 100, r * 100], [c * 100 + 100, r * 100], [c * 100 + 100, r * 100 + 100], [c * 100, r * 100 + 100]]));
+    // KA: the outer columns fold over the middle one
+    const KA = mapAll(K0, (p, i) => (i % 3 === 0 ? [200 - p[0], p[1]] : i % 3 === 2 ? [400 - p[0], p[1]] : p));
+    // KB: the bottom half folds up over the top
+    const KB = mapAll(KA, (p, i) => (i >= 3 ? [p[0], 200 - p[1]] : p));
+    // KC: the little square turns into a tall diamond (the bird base)
+    const KC = mapAll(KB, (p) => {
+      const x = p[0] - 150, y = p[1] - 50, c = Math.SQRT1_2;
+      return [150 + (x * c - y * c) * .74, 104 + (x * c + y * c) * 1.08];
+    });
+    // KD: the crane (neck, front wing, tail, lower body, body, back wing)
+    const Y = 18;
+    const up = (pts) => pts.map((p) => [p[0], p[1] + Y]);
+    const WING_F = { a: [130, 114 + Y], b: [176, 112 + Y], up: [146, 20 + Y], down: [160, 190 + Y] };
+    const WING_B = { a: [122, 112 + Y], b: [166, 110 + Y], up: [190, 34 + Y], down: [178, 184 + Y] };
+    const wing = (w, f) => six([w.a, [w.up[0] + (w.down[0] - w.up[0]) * f, w.up[1] + (w.down[1] - w.up[1]) * f], w.b]);
+    const KD = [
+      orient(up([[98, 124], [112, 117], [84, 54], [76, 42], [56, 58], [76, 58]]), 1), // F0 neck and head
+      orient(wing(WING_F, 0), 1), // F1 front wing
+      orient(six(up([[188, 116], [205, 123], [246, 40]])), 1), // F2 tail
+      orient(six(up([[98, 124], [204, 123], [150, 142]])), -1), // F3 lower body (coral side)
+      orient(up([[96, 124], [123, 116], [150, 108], [204, 123], [177, 133], [150, 142]]), 1), // F4 body
+      orient(wing(WING_B, 0), -1), // F5 back wing (coral side)
+    ];
+    // the crane with its wings part-way through a flap (0 = up, 1 = down)
+    function craneAt(f) {
+      const K = KD.slice();
+      const fw = wing(WING_F, f), bw = wing(WING_B, f);
+      K[1] = Math.sign(area(KD[1])) === Math.sign(area(wing(WING_F, 0))) ? fw : fw.slice().reverse();
+      K[5] = Math.sign(area(KD[5])) === Math.sign(area(wing(WING_B, 0))) ? bw : bw.slice().reverse();
+      return K;
+    }
+
+    // drawing order per stage (later = on top)
+    const ORDER_FLAT = [1, 4, 0, 3, 2, 5], ORDER_HALF = [1, 0, 2, 4, 3, 5], ORDER_CRANE = [5, 2, 0, 4, 3, 1];
+    const reorder = (o) => o.forEach((i) => facetsG.appendChild(polys[i]));
+    function draw(K) {
+      K.forEach((pts, i) => {
+        polys[i].setAttribute("points", pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" "));
+        polys[i].style.fill = area(pts) >= 0 ? "var(--paper)" : "var(--paper-back)";
+      });
+    }
+    // morph between two keyframes; win = per-facet [start, end] slice of the timeline, bulge = fake perspective while flipping
+    function morph(A, B, ms, o = {}) {
+      const ez = o.ease || ease.inOut;
+      return tween(ms, (t) => {
+        draw(A.map((pts, i) => {
+          const w = (o.win && o.win[i]) || [0, 1];
+          const k = ez(clamp((t - w[0]) / (w[1] - w[0])));
+          return pts.map((p, j) => {
+            const q = B[i][j];
+            let x = p[0] + (q[0] - p[0]) * k, y = p[1] + (q[1] - p[1]) * k;
+            if (o.bulge && Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) > 1) [x, y] = o.bulge(x, y, k);
+            return [x, y];
+          });
+        }));
+      });
+    }
+    const bulgeY = (x, y, k) => [x, 100 + (y - 100) * (1 + .16 * Math.sin(Math.PI * k))];
+    const bulgeX = (x, y, k) => [150 + (x - 150) * (1 + .16 * Math.sin(Math.PI * k)), y];
+    const WIN_A = [[0, .62], [0, 1], [.34, 1], [0, .62], [0, 1], [.34, 1]];
+    const WIN_B = [[0, 1], [0, 1], [0, 1], [0, .8], [.1, .9], [.2, 1]];
+    const WIN_D = [[.25, 1], [.1, .85], [.25, 1], [0, .7], [0, .7], [.15, .9]];
+
+    // ---------- Flight: a curved path out past the top-right corner of the frame ----------
+    const bez = (a, b, c, d, t) => { const u = 1 - t; return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d; };
+    function puff(x, y, alt) {
+      const p = document.createElement("i");
+      p.className = "puff" + (alt ? " alt" : "");
+      p.style.left = x + "px"; p.style.top = y + "px";
+      stage.appendChild(p);
+      p.addEventListener("animationend", () => p.remove());
+      setTimeout(() => p.remove(), 1400);
+    }
+    async function fly(out) {
+      crane.style.transform = "";
+      const r = crane.getBoundingClientRect(), fr = frame.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+      const ex = fr.right - r.left + 40, ey = fr.top - r.bottom - 60;
+      const PX = [0, -r.width * .12, ex * .45, ex], PY = [0, -r.height * .4, -r.height * .7, ey];
+      const ms = out ? 1500 : 1400;
+      let n = 0;
+      await tween(ms, (t) => {
+        const k = out ? ease.sine(t) * (.4 + .6 * t) : 1 - ease.out(t); // progress along the path, 0 = on the desk
+        const x = bez(PX[0], PX[1], PX[2], PX[3], k), y = bez(PY[0], PY[1], PY[2], PY[3], k);
+        const s = 1 - .68 * k, rot = -11 * Math.sin(Math.PI * Math.min(1, k * 1.5));
+        crane.style.transform = `translate(${x}px, ${y}px) rotate(${rot}deg) scale(${s})`;
+        const amp = out ? Math.min(1, t * 6) : Math.min(1, (1 - t) * 2.2); // wings speed up on take-off, settle on landing
+        draw(craneAt(((1 - Math.cos(t * ms / 1000 * 2 * Math.PI * 4.4)) / 2) * amp));
+        if (++n % 3 === 0 && k > .04 && k < .92) puff(r.left - sr.left + r.width / 2 + x, r.top - sr.top + r.height * .48 + y, n % 2);
+      });
+      draw(KD);
+    }
+    function sparkle() {
+      const sr = stage.getBoundingClientRect(), r = paper.getBoundingClientRect();
+      const cx = r.left - sr.left + r.width / 2, cy = r.top - sr.top + r.height / 2;
+      for (let i = 0; i < 14; i++) {
+        const s = document.createElement("i"), a = (i / 14) * Math.PI * 2, d = 70 + Math.random() * 70;
+        s.className = "spark";
+        s.style.left = cx + "px"; s.style.top = cy + "px";
+        s.style.setProperty("--dx", Math.cos(a) * d * 1.4 + "px");
+        s.style.setProperty("--dy", Math.sin(a) * d + "px");
+        if (i % 2) s.style.background = "var(--paper-back)";
+        stage.appendChild(s);
+        s.addEventListener("animationend", () => s.remove());
+        setTimeout(() => s.remove(), 1200);
+      }
+    }
+
+    // ---------- Data and state ----------
+    const SAMPLES = [
+      { to: "Ayesha Khan", subj: "Dinner on Friday?", body: "Hi Ayesha, are you free on Friday night? There is a new barbecue place near Liberty Market. Let me know and I will book a table for four." },
+      { to: "Bilal Traders, Lahore", subj: "Quote for 40 chairs", body: "Dear Mr Bilal, as discussed: 40 dining chairs at PKR 4,800 each, delivery to Gulberg included. Please confirm by Monday." },
+      { to: "Hira and Usman", subj: "Hunza trip plan", body: "We leave on 12 May. Two nights in Karimabad, one in Passu, then back via Naran. Pack warm jackets and a power bank!" },
+    ];
+    let drafts = SAMPLES.map((d) => ({ ...d, saved: "Saved 2 min ago" }));
+    const S = { i: 0, busy: false, pending: null, timer: 0 };
+
+    function renderTabs() {
+      tabs.textContent = "";
+      drafts.forEach((d, i) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "tab"; b.textContent = d.subj.trim() || "(no subject)";
+        b.setAttribute("aria-pressed", String(i === S.i));
+        b.addEventListener("click", () => pick(i));
+        tabs.appendChild(b);
+      });
+      countEl.textContent = drafts.length;
+      countEl.classList.add("bump"); setTimeout(() => countEl.classList.remove("bump"), 260);
+    }
+    function load() {
+      const d = drafts[S.i];
+      if (!d) return;
+      toEl.textContent = d.to; subj.value = d.subj; body.value = d.body; savedText.textContent = d.saved; savedEl.classList.remove("ok");
+    }
+    function syncButtons() {
+      const lock = S.busy || !!S.pending || !drafts.length;
+      discardBtn.disabled = lock; saveBtn.disabled = lock;
+      subj.disabled = body.disabled = S.busy || !!S.pending;
+    }
+    function pick(i) {
+      if (S.busy) return;
+      if (S.pending) finalize();
+      if (!drafts[i]) return;
+      S.i = i; renderTabs(); load();
+      paper.classList.remove("enter"); void paper.offsetWidth; paper.classList.add("enter");
+    }
+
+    // typing keeps the draft (and its tab) up to date
+    subj.addEventListener("input", () => { const d = drafts[S.i]; if (!d) return; d.subj = subj.value; d.saved = "Edited, not saved"; savedText.textContent = d.saved; savedEl.classList.remove("ok"); const t = tabs.children[S.i]; if (t) t.textContent = subj.value.trim() || "(no subject)"; });
+    body.addEventListener("input", () => { const d = drafts[S.i]; if (!d) return; d.body = body.value; d.saved = "Edited, not saved"; savedText.textContent = d.saved; savedEl.classList.remove("ok"); });
+    saveBtn.addEventListener("click", () => {
+      const d = drafts[S.i];
+      if (!d || S.busy || S.pending) return;
+      d.saved = "Saved just now"; savedText.textContent = d.saved;
+      savedEl.classList.remove("ok"); void savedEl.offsetWidth; savedEl.classList.add("ok");
+      say("Draft saved.");
+    });
+
+    // ---------- Discard: lift, fold three times, become a crane, fly away ----------
+    async function discard() {
+      if (S.busy || S.pending || !drafts[S.i]) return;
+      S.busy = true; syncButtons();
+      const d = drafts[S.i], idx = S.i;
+      say(`Folding "${d.subj || "draft"}" into a paper crane.`);
+      paper.classList.remove("enter");
+      paper.classList.add("lift");
+      await pause(340);
+      // swap the real sheet for the folding layer
+      crane.style.transform = "";
+      reorder(ORDER_FLAT); draw(K0);
+      crane.classList.add("on"); paper.classList.remove("lift"); paper.classList.add("gone");
+      await morph(K0, KA, 600, { win: WIN_A, bulge: bulgeY });
+      reorder(ORDER_HALF);
+      await morph(KA, KB, 500, { win: WIN_B, bulge: bulgeX });
+      await morph(KB, KC, 420, { ease: ease.inOut });
+      reorder(ORDER_CRANE);
+      await morph(KC, KD, 680, { win: WIN_D, ease: ease.back });
+      await pause(160);
+      await fly(true);
+      crane.classList.remove("on"); crane.style.transform = "";
+      // keep it for undo, take it off the list
+      drafts.splice(idx, 1);
+      S.pending = { d, idx };
+      S.i = Math.min(idx, Math.max(0, drafts.length - 1));
+      renderTabs();
+      paper.classList.remove("gone"); paper.classList.add("ghost"); stage.classList.add("is-ghost");
+      toastText.textContent = `"${d.subj || "Draft"}" flew away`;
+      showToast();
+      say(`Draft discarded. ${drafts.length} left. Undo within ${UNDO_MS / 1000} seconds.`);
+      S.busy = false; syncButtons();
+      clearTimeout(S.timer); S.timer = setTimeout(finalize, UNDO_MS);
+    }
+    function showToast() {
+      toast.style.setProperty("--undo", UNDO_MS + "ms");
+      toast.classList.remove("show"); void toast.offsetWidth; toast.classList.add("show");
+      undoBtn.tabIndex = 0;
+    }
+    function hideToast() { toast.classList.remove("show"); undoBtn.tabIndex = -1; }
+    // the undo time ran out (or another draft was picked): bring in the next sheet
+    function finalize() {
+      clearTimeout(S.timer);
+      if (!S.pending) return;
+      S.pending = null; hideToast();
+      stage.classList.remove("is-ghost"); paper.classList.remove("ghost");
+      if (drafts.length) { load(); renderTabs(); paper.classList.remove("enter"); void paper.offsetWidth; paper.classList.add("enter"); }
+      else { paper.classList.add("gone"); empty.hidden = false; say("No drafts left."); }
+      syncButtons();
+    }
+
+    // ---------- Undo: the crane flies back, lands and unfolds ----------
+    async function undo() {
+      if (!S.pending || S.busy) return;
+      S.busy = true; clearTimeout(S.timer); hideToast();
+      const { d, idx } = S.pending;
+      S.pending = null; syncButtons();
+      drafts.splice(idx, 0, d); S.i = idx; renderTabs(); load();
+      empty.hidden = true; stage.classList.remove("is-ghost");
+      paper.classList.remove("ghost", "enter"); paper.classList.add("gone");
+      say("Calling the crane back.");
+      reorder(ORDER_CRANE); draw(KD); crane.classList.add("on");
+      await fly(false);
+      await pause(120);
+      await morph(KD, KC, 560, { win: WIN_D.map((w) => [1 - w[1], 1 - w[0]]) });
+      reorder(ORDER_HALF);
+      await morph(KC, KB, 400);
+      await morph(KB, KA, 460, { win: WIN_B, bulge: bulgeX });
+      reorder(ORDER_FLAT);
+      await morph(KA, K0, 560, { win: WIN_A, bulge: bulgeY });
+      paper.classList.add("lift"); paper.classList.remove("gone"); crane.classList.remove("on");
+      await pause(40);
+      paper.classList.remove("lift");
+      sparkle();
+      say(`"${d.subj || "Draft"}" is back in your drafts.`);
+      S.busy = false; syncButtons();
+    }
+
+    discardBtn.addEventListener("click", () => { press(discardBtn); discard(); });
+    undoBtn.addEventListener("click", () => { press(undoBtn); undo(); });
+    refill.addEventListener("click", () => {
+      if (S.busy) return;
+      drafts = SAMPLES.map((x) => ({ ...x, saved: "Saved 2 min ago" }));
+      S.i = 0; empty.hidden = true; paper.classList.remove("gone", "ghost"); stage.classList.remove("is-ghost");
+      renderTabs(); load(); paper.classList.remove("enter"); void paper.offsetWidth; paper.classList.add("enter");
+      syncButtons(); say("Three sample drafts are back.");
+      discardBtn.focus();
+    });
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && S.pending && !S.busy) { e.preventDefault(); undo(); }
+    });
+
+    // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+    const demo = { on: true, timer: 0 };
+    function stopDemo() { if (!demo.on) return; demo.on = false; clearTimeout(demo.timer); }
+    addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    function schedule(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+    async function runDemo() {
+      if (!demo.on) return;
+      if (S.busy) return schedule(500);
+      if (S.pending) { press(undoBtn); await undo(); return schedule(3400); }
+      if (!drafts.length) return schedule(3000);
+      press(discardBtn);
+      await wait(170); if (!demo.on) return;
+      await discard();
+      await wait(1500); if (!demo.on) return;
+      press(undoBtn); await wait(150);
+      await undo();
+      schedule(3600);
+    }
+
+    renderTabs(); load(); syncButtons(); draw(K0);
+    schedule(600);
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,546 @@
+<!doctype html>
+<!-- Chill & Craft · Saucer · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saucer · hold to beam a file away, with undo</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: dawn sky by day, deep space by night, mint tractor beam ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #f3ecf7;
+    --card: #ffffff;
+    --line: #ebe3f1;
+    --ink: #1f1a33;
+    --muted: #6c6584;
+    --sky-1: #c9c4ff;
+    --sky-2: #ffd8c6;
+    --ground: #b9e3c9;
+    --ground-2: #97d1ad;
+    --hull-1: #eef0ff;
+    --hull-2: #8e96c9;
+    --beam: 108, 255, 208;
+    --accent: #6b5cff;
+    --danger: #e2445c;
+    --file: #ffffff;
+    --sh: 50, 40, 90;
+    --focus: #5b21b6;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #07081a;
+    --card: #12132a;
+    --line: #252746;
+    --ink: #eeeefe;
+    --muted: #9b9cc4;
+    --sky-1: #0b0f2e;
+    --sky-2: #231651;
+    --ground: #26405a;
+    --ground-2: #182a3c;
+    --hull-1: #d9dcf5;
+    --hull-2: #5d64a0;
+    --accent: #a598ff;
+    --danger: #ff6b82;
+    --file: #1d1f3d;
+    --sh: 0, 0, 0;
+    --focus: #c4b5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .frame {
+    position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 20px 16px;
+    overflow: hidden; overflow: clip;
+    background: radial-gradient(60% 50% at 50% 0%, color-mix(in srgb, var(--sky-1) 70%, transparent), transparent 70%), radial-gradient(50% 40% at 50% 100%, color-mix(in srgb, var(--sky-2) 50%, transparent), transparent 70%), var(--bg);
+  }
+  .card { position: relative; width: min(560px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 26px; padding: 14px; box-shadow: 0 50px 90px -60px rgba(var(--sh), .85), 0 2px 8px -4px rgba(var(--sh), .15); }
+
+  /* ---------- The sky ---------- */
+  .sky { position: relative; height: 270px; border-radius: 18px; overflow: hidden; background: linear-gradient(var(--sky-1), var(--sky-2)); }
+  .stars { position: absolute; inset: 0 0 30% 0; opacity: .25; }
+  :root[data-theme="dark"] .stars { opacity: 1; }
+  .stars i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; animation: twinkle 3s ease-in-out infinite; }
+  @keyframes twinkle { 50% { opacity: .2; scale: .6; } }
+  .moon { position: absolute; right: 26px; top: 22px; width: 34px; height: 34px; border-radius: 50%; background: #fff6d8; box-shadow: 0 0 24px 6px rgba(255, 246, 216, .5); opacity: .9; }
+  .moon::after { content: ""; position: absolute; inset: 0 0 0 9px; border-radius: 50%; background: var(--sky-1); opacity: .0; }
+  :root[data-theme="dark"] .moon::after { opacity: .9; inset: -2px -4px 4px 10px; background: #12164a; }
+  .ground { position: absolute; left: -10%; right: -10%; bottom: -40px; height: 150px; border-radius: 50% 50% 0 0 / 30% 30% 0 0; background: linear-gradient(var(--ground), var(--ground-2)); }
+
+  .files { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; justify-content: center; align-items: flex-end; }
+  .slot { flex: 1 1 0; max-width: 132px; min-width: 0; padding: 0 5px; transition: flex-grow .55s var(--spring), max-width .55s var(--spring), padding .55s; }
+  .slot.gone { flex-grow: 0; max-width: 0; padding: 0; }
+  .file {
+    position: relative; width: 100%; display: grid; justify-items: center; gap: 4px; padding: 10px 6px 8px; border: 0; border-radius: 14px; background: var(--file); color: var(--ink);
+    font: inherit; cursor: pointer; box-shadow: 0 10px 16px -12px rgba(var(--sh), .6), 0 0 0 1px rgba(var(--sh), .08); transition: box-shadow .25s, translate .3s var(--spring);
+  }
+  .file:hover { translate: 0 -3px; }
+  .file[aria-pressed="true"] { box-shadow: 0 10px 16px -12px rgba(var(--sh), .6), 0 0 0 2.5px var(--accent); }
+  .file.wobble { animation: wob .18s ease-in-out 3 alternate; }
+  @keyframes wob { from { rotate: -3deg; } to { rotate: 3deg; } }
+  .file .ic { width: 34px; height: 40px; border-radius: 6px 12px 6px 6px; background: var(--k); color: #fff; display: grid; place-items: end center; padding-bottom: 5px; font-size: 9px; font-weight: 900; }
+  .file b { max-width: 100%; font-size: 11.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file small { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .file .shadow { position: absolute; left: 15%; right: 15%; bottom: -7px; height: 8px; border-radius: 50%; background: rgba(var(--sh), .25); filter: blur(2px); z-index: -1; }
+  .reticle { position: absolute; width: 46px; height: 46px; margin-left: -23px; bottom: 132px; border-radius: 50%; border: 2px dashed rgba(var(--beam), .9); pointer-events: none; animation: spin 6s linear infinite; transition: left .45s var(--spring), opacity .3s; opacity: .8; }
+  .reticle::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgb(var(--beam)); }
+  .reticle.charge { animation-duration: .8s; border-style: solid; }
+  .reticle.hide { opacity: 0; }
+  @keyframes spin { to { rotate: 360deg; } }
+
+  /* the saucer and its beam */
+  .ufo { position: absolute; left: 0; top: 0; width: 120px; height: 70px; z-index: 5; will-change: transform; pointer-events: none; }
+  .ufo svg { width: 100%; height: 100%; overflow: visible; display: block; filter: drop-shadow(0 8px 10px rgba(var(--sh), .35)); }
+  .ufo .light { animation: blinkl 1.2s steps(1) infinite; }
+  .ufo .light:nth-of-type(2) { animation-delay: -.24s; } .ufo .light:nth-of-type(3) { animation-delay: -.48s; } .ufo .light:nth-of-type(4) { animation-delay: -.72s; } .ufo .light:nth-of-type(5) { animation-delay: -.96s; }
+  .ufo.fast .light { animation-duration: .3s; }
+  @keyframes blinkl { 0% { fill: #fff6a8; } 50% { fill: #ff9de2; } }
+  .ufo .hatch { fill: rgba(var(--beam), .25); transition: fill .3s; }
+  .ufo.open .hatch { fill: rgb(var(--beam)); }
+  .ufo.flash svg { filter: drop-shadow(0 0 16px rgb(var(--beam))) drop-shadow(0 8px 10px rgba(var(--sh), .35)); }
+  .beam { position: absolute; top: 0; left: 0; width: 120px; z-index: 4; transform-origin: 50% 0; scale: 1 0; pointer-events: none; clip-path: polygon(36% 0, 64% 0, 100% 100%, 0 100%);
+    background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, .22) 0 2px, transparent 2px 12px), linear-gradient(rgba(var(--beam), .85), rgba(var(--beam), .15));
+    animation: scan .6s linear infinite; }
+  @keyframes scan { to { background-position: 0 12px, 0 0; } }
+  .trail { position: absolute; height: 3px; border-radius: 3px; background: linear-gradient(90deg, transparent, rgba(var(--beam), .9)); transform-origin: 100% 50%; pointer-events: none; z-index: 3; animation: trail .6s ease-out forwards; }
+  @keyframes trail { to { opacity: 0; scale: .2 1; } }
+  .glint { position: absolute; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 8px rgb(var(--beam)); pointer-events: none; z-index: 4; animation: glint .9s ease-out forwards; }
+  @keyframes glint { to { translate: var(--dx) var(--dy); opacity: 0; scale: .3; } }
+  .dust { position: absolute; width: 10px; height: 10px; margin: -5px; border-radius: 50%; background: rgba(255, 255, 255, .7); pointer-events: none; z-index: 2; animation: dust .7s ease-out forwards; }
+  @keyframes dust { to { translate: var(--dx) -10px; scale: 2.2; opacity: 0; } }
+
+  /* ---------- Details and the hold button ---------- */
+  .bar { display: flex; align-items: center; gap: 12px; margin: 14px 4px 0; }
+  .sel { flex: 1; min-width: 0; }
+  .sel small { display: block; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .sel b { display: block; font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sel span { font-size: 12.5px; color: var(--muted); }
+  .hold {
+    position: relative; display: inline-flex; align-items: center; gap: 10px; border: 0; border-radius: 16px; padding: 10px 16px 10px 10px; cursor: pointer; font: inherit; font-size: 14px; font-weight: 750;
+    background: var(--ink); color: var(--card); touch-action: none; user-select: none; -webkit-user-select: none; transition: scale .25s var(--spring), opacity .2s; white-space: nowrap;
+  }
+  .hold:active, .hold.pressed { scale: .96; }
+  .hold:disabled { opacity: .45; cursor: default; scale: 1; }
+  .hold.nudge { animation: nudge .4s ease-in-out; }
+  @keyframes nudge { 20%, 60% { translate: -4px 0; } 40%, 80% { translate: 4px 0; } }
+  .ring { width: 30px; height: 30px; rotate: -90deg; flex: none; }
+  .ring circle { fill: none; stroke-width: 3.5; }
+  .ring .bg { stroke: color-mix(in srgb, var(--card) 22%, transparent); }
+  .ring .fg { stroke: rgb(var(--beam)); stroke-linecap: round; stroke-dasharray: 69.1; stroke-dashoffset: 69.1; }
+  .meter { display: flex; align-items: center; gap: 8px; margin: 12px 4px 2px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .meter .track { flex: 1; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 8%, transparent); overflow: hidden; }
+  .meter .track i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), rgb(var(--beam))); transition: width .8s var(--spring); }
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .toast { position: absolute; left: 50%; bottom: 14px; translate: -50% 18px; width: min(420px, calc(100% - 28px)); display: flex; align-items: center; gap: 10px; z-index: 20;
+    background: var(--ink); color: var(--card); border-radius: 15px; padding: 8px 8px 8px 14px; box-shadow: 0 22px 36px -18px rgba(var(--sh), .9); opacity: 0; pointer-events: none; transition: opacity .25s, translate .45s var(--spring); }
+  .toast.show { opacity: 1; translate: -50% 0; pointer-events: auto; }
+  .toast span { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .undo { position: relative; overflow: hidden; border: 0; border-radius: 10px; padding: 7px 12px; background: color-mix(in srgb, var(--card) 15%, transparent); color: inherit; font: inherit; font-size: 13.5px; font-weight: 760; cursor: pointer; transition: scale .25s var(--spring); }
+  .undo::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: rgb(var(--beam)); transform-origin: 0 50%; }
+  .toast.show .undo::after { animation: drain var(--undo, 6s) linear forwards; }
+  @keyframes drain { to { scale: 0 1; } }
+  .undo:active, .undo.pressed { scale: .92; }
+  .empty { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; font-size: 13px; color: var(--ink); opacity: 0; transition: opacity .4s; pointer-events: none; }
+  .empty.on { opacity: 1; pointer-events: auto; }
+  .empty button { margin-top: 6px; border: 0; border-radius: 12px; padding: 8px 14px; background: var(--card); color: var(--ink); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 6px 12px -8px rgba(var(--sh), .6); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  @media (max-width: 460px) {
+    .card { padding: 12px; }
+    .sky { height: 250px; }
+    .slot { padding: 0 3px; }
+    .file { padding: 8px 3px 6px; border-radius: 12px; }
+    .file .ic { width: 28px; height: 34px; font-size: 8px; }
+    .file b { font-size: 10.5px; }
+    .ufo, .beam { width: 96px; }
+    .ufo { height: 56px; }
+    .bar { flex-wrap: wrap; }
+    .sel { flex-basis: 100%; }
+    .hold { flex: 1; justify-content: center; }
+  }
+  /* Calm mode: every step still happens, without the big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <main class="card" id="card" aria-labelledby="title">
+    <h1 class="sr" id="title">Cloud files</h1>
+    <div class="sky" id="sky">
+      <div class="stars" id="stars" aria-hidden="true"></div>
+      <i class="moon" aria-hidden="true"></i>
+      <i class="ground" aria-hidden="true"></i>
+      <div class="reticle" id="reticle" aria-hidden="true"></div>
+      <div class="beam" id="beam" aria-hidden="true"></div>
+      <div class="ufo" id="ufo" aria-hidden="true">
+        <svg viewBox="0 0 120 70">
+          <defs>
+            <linearGradient id="sc-glass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8fff7" /><stop offset="1" stop-color="rgb(108,255,208)" stop-opacity=".55" /></linearGradient>
+            <linearGradient id="sc-hull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--hull-1)" /><stop offset="1" style="stop-color: var(--hull-2)" /></linearGradient>
+          </defs>
+          <ellipse cx="60" cy="31" rx="24" ry="21" fill="url(#sc-glass)" />
+          <circle cx="60" cy="30" r="8.5" fill="#7be0a6" /><circle cx="56.5" cy="29" r="2" fill="#1f1a33" /><circle cx="63.5" cy="29" r="2" fill="#1f1a33" />
+          <path d="M55 21 l-3 -6 M65 21 l3 -6" stroke="#7be0a6" stroke-width="2" stroke-linecap="round" /><circle cx="52" cy="15" r="2" fill="#7be0a6" /><circle cx="68" cy="15" r="2" fill="#7be0a6" />
+          <ellipse cx="54" cy="22" rx="8" ry="4" fill="#fff" opacity=".55" />
+          <ellipse cx="60" cy="44" rx="57" ry="15" fill="url(#sc-hull)" />
+          <ellipse cx="60" cy="40" rx="50" ry="5" fill="#fff" opacity=".35" />
+          <circle class="light" cx="17" cy="46" r="4" fill="#fff6a8" /><circle class="light" cx="38" cy="50" r="4" fill="#fff6a8" /><circle class="light" cx="60" cy="52" r="4" fill="#fff6a8" />
+          <circle class="light" cx="82" cy="50" r="4" fill="#fff6a8" /><circle class="light" cx="103" cy="46" r="4" fill="#fff6a8" />
+          <ellipse class="hatch" cx="60" cy="58" rx="16" ry="4.5" />
+        </svg>
+      </div>
+      <div class="files" id="files" role="group" aria-label="Files, pick one"></div>
+      <div class="empty" id="empty">Nothing left on the ground.<br><button type="button" id="refill">Bring the files back</button></div>
+    </div>
+
+    <div class="bar">
+      <div class="sel"><small>Selected</small><b id="selName">Quetta trip.mp4</b><span id="selMeta">182 MB · uploaded 12 Nov</span></div>
+      <button class="hold" id="holdBtn" type="button" aria-describedby="holdHint">
+        <svg class="ring" viewBox="0 0 28 28" aria-hidden="true"><circle class="bg" cx="14" cy="14" r="11" /><circle class="fg" id="ringFg" cx="14" cy="14" r="11" /></svg>
+        <span id="holdText">Hold to beam away</span>
+      </button>
+    </div>
+    <p class="sr" id="holdHint">Press and hold for one second to delete the selected file. You can undo for six seconds.</p>
+    <div class="meter"><span id="used">3.90 GB</span><div class="track"><i id="usedBar"></i></div><span>15 GB</span></div>
+
+    <div class="toast" id="toast">
+      <span id="toastText">Beamed away</span>
+      <button class="undo" id="undoBtn" type="button" tabindex="-1">Undo</button>
+    </div>
+    <p class="sr" id="status" role="status" aria-live="polite"></p>
+  </main>
+</div>
+
+<script>
+  (() => {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const sky = $("sky"), ufo = $("ufo"), beam = $("beam"), reticle = $("reticle"), filesEl = $("files"), emptyEl = $("empty"), refill = $("refill");
+    const selName = $("selName"), selMeta = $("selMeta"), holdBtn = $("holdBtn"), holdText = $("holdText"), ringFg = $("ringFg");
+    const usedEl = $("used"), usedBar = $("usedBar"), toast = $("toast"), toastText = $("toastText"), undoBtn = $("undoBtn"), status = $("status");
+    const calm = matchMedia("(prefers-reduced-motion: reduce)");
+    const UNDO_MS = 6000, HOLD_MS = 950, BASE_GB = 1.32, CAP_GB = 15;
+
+    // ---------- Helpers ----------
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const pause = (ms) => wait(calm.matches ? Math.min(ms, 40) : ms);
+    const clamp = (v) => Math.min(1, Math.max(0, v));
+    const ease = { inOut: (t) => (t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2), out: (t) => 1 - Math.pow(1 - t, 3), in: (t) => t * t * t, back: (t) => { const c = 1.6; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); } };
+    function tween(ms, fn) {
+      return new Promise((ok) => {
+        const d = calm.matches ? 1 : ms, t0 = performance.now();
+        const step = (now) => { const t = clamp((now - t0) / d); fn(t); if (t < 1) requestAnimationFrame(step); else ok(); };
+        step(t0);
+      });
+    }
+    const say = (m) => { status.textContent = m; };
+    const press = (b) => { b.classList.add("pressed"); setTimeout(() => b.classList.remove("pressed"), 170); };
+
+    // stars
+    for (let i = 0; i < 26; i++) { const s = document.createElement("i"); s.style.left = ((i * 37) % 100) + "%"; s.style.top = ((i * 53) % 100) + "%"; s.style.animationDelay = -((i * .41) % 3) + "s"; $("stars").appendChild(s); }
+
+    // ---------- Files ----------
+    const FILES = [
+      { name: "Quetta trip.mp4", ext: "MP4", size: "182 MB", gb: .182, when: "12 Nov", k: "#f97316" },
+      { name: "Rent receipt.pdf", ext: "PDF", size: "240 KB", gb: .00024, when: "3 Nov", k: "#ef4444" },
+      { name: "Old logo.png", ext: "PNG", size: "1.2 MB", gb: .0012, when: "28 Oct", k: "#8b5cf6" },
+      { name: "Backup 2024.zip", ext: "ZIP", size: "2.4 GB", gb: 2.4, when: "2 Jan", k: "#0ea5e9" },
+    ];
+    let files = [];
+    const S = { sel: null, busy: false, pending: null, timer: 0, shownGb: 0 };
+    const live = () => files.filter((f) => !f.gone);
+
+    function build(animate) {
+      filesEl.textContent = "";
+      files = FILES.map((f, i) => ({ ...f, id: i, gone: false }));
+      files.forEach((f) => {
+        const slot = document.createElement("div");
+        slot.className = "slot";
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "file"; b.style.setProperty("--k", f.k);
+        b.setAttribute("aria-pressed", "false");
+        b.setAttribute("aria-label", `${f.name}, ${f.size}`);
+        b.innerHTML = `<span class="ic" aria-hidden="true"></span><b></b><small></small><i class="shadow" aria-hidden="true"></i>`;
+        b.querySelector(".ic").textContent = f.ext; b.querySelector("b").textContent = f.name; b.querySelector("small").textContent = f.size;
+        b.addEventListener("click", () => select(f));
+        slot.appendChild(b); filesEl.appendChild(slot);
+        f.el = b; f.slot = slot;
+        if (animate) b.animate([{ transform: "translateY(-120px) scale(.4)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: calm.matches ? 1 : 700, delay: calm.matches ? 0 : f.id * 90, easing: "cubic-bezier(.34,1.56,.64,1)", fill: "backwards" });
+      });
+      emptyEl.classList.remove("on");
+      select(files[0], true);
+      storage(false);
+    }
+    function select(f, quiet) {
+      if (!f || f.gone) { S.sel = null; paint(); return; }
+      if (S.busy && !quiet) return;
+      if (S.pending && !quiet) finalize();
+      S.sel = f;
+      files.forEach((x) => x.el.setAttribute("aria-pressed", String(x === f)));
+      paint();
+      requestAnimationFrame(aim);
+    }
+    function paint() {
+      const f = S.sel;
+      selName.textContent = f ? f.name : "Nothing selected";
+      selMeta.textContent = f ? `${f.size} · uploaded ${f.when}` : "Pick a file on the ground";
+      holdBtn.disabled = S.busy || !f;
+      files.forEach((x) => (x.el.disabled = S.busy || x.gone));
+    }
+    // the dashed target circle floats above the selected file
+    function aim() {
+      if (!S.sel) { reticle.classList.add("hide"); return; }
+      const sr = sky.getBoundingClientRect(), r = S.sel.el.getBoundingClientRect();
+      reticle.style.left = r.left - sr.left + r.width / 2 + "px";
+      reticle.classList.remove("hide");
+    }
+    function storage(animate) {
+      const gb = BASE_GB + live().reduce((s, f) => s + f.gb, 0), from = S.shownGb || gb;
+      S.shownGb = gb;
+      usedBar.style.width = (gb / CAP_GB) * 100 + "%";
+      if (!animate) { usedEl.textContent = gb.toFixed(2) + " GB used"; return; }
+      tween(800, (t) => { usedEl.textContent = (from + (gb - from) * ease.out(t)).toFixed(2) + " GB used"; });
+    }
+
+    // ---------- The saucer: position + idle hover ----------
+    const U = { x: 18, y: 18, tilt: 0, sx: 1, sy: 1, hover: 1 };
+    const park = () => ({ x: 18, y: 18 });
+    (function hoverLoop(now) {
+      const bob = calm.matches ? 0 : Math.sin(now / 520) * 4 * U.hover, sway = calm.matches ? 0 : Math.sin(now / 1300) * 3 * U.hover;
+      ufo.style.transform = `translate(${U.x + sway}px, ${U.y + bob}px) rotate(${U.tilt + sway * .6}deg) scale(${U.sx}, ${U.sy})`;
+      if (beam.dataset.on) placeBeam(bob);
+      requestAnimationFrame(hoverLoop);
+    })(0);
+    async function flyTo(x, y, ms) {
+      const x0 = U.x, y0 = U.y;
+      await tween(ms, (t) => {
+        const k = ease.inOut(t);
+        U.x = x0 + (x - x0) * k; U.y = y0 + (y - y0) * k - Math.sin(Math.PI * t) * 26;
+        U.tilt = Math.sin(Math.PI * t) * Math.sign(x - x0) * 12; // leans into the turn
+      });
+      U.tilt = 0;
+    }
+    // aim the saucer so its middle sits above the file
+    function overFile(f) {
+      const sr = sky.getBoundingClientRect(), r = f.el.getBoundingClientRect();
+      return { x: r.left - sr.left + r.width / 2 - ufo.offsetWidth / 2, y: 26, top: r.top - sr.top };
+    }
+    function placeBeam(bob = 0) {
+      const top = U.y + bob + ufo.offsetHeight * .8, bottom = +beam.dataset.ground || top + 100;
+      beam.style.transform = `translate(${U.x}px, ${top}px)`;
+      beam.style.height = Math.max(0, bottom - top) + "px";
+    }
+    async function beamOn(ground) {
+      beam.dataset.on = "1"; beam.dataset.ground = ground; placeBeam();
+      ufo.classList.add("open");
+      await tween(340, (t) => { beam.style.scale = `1 ${ease.out(t)}`; });
+    }
+    async function beamOff() {
+      await tween(260, (t) => { beam.style.scale = `1 ${1 - ease.in(t)}`; });
+      delete beam.dataset.on; ufo.classList.remove("open");
+    }
+    function glints(cx, top, bottom, n) {
+      for (let i = 0; i < n; i++) {
+        const g = document.createElement("i");
+        g.className = "glint";
+        g.style.left = cx + (Math.random() - .5) * 60 + "px"; g.style.top = bottom - Math.random() * (bottom - top) * .6 + "px";
+        g.style.setProperty("--dx", (Math.random() - .5) * 10 + "px"); g.style.setProperty("--dy", -40 - Math.random() * 50 + "px");
+        g.style.animationDelay = (calm.matches ? 0 : i * 60) + "ms";
+        sky.appendChild(g);
+        setTimeout(() => g.remove(), 1600);
+      }
+    }
+    function trail() {
+      const t = document.createElement("i");
+      t.className = "trail";
+      t.style.left = U.x - 70 + "px"; t.style.top = U.y + ufo.offsetHeight * .6 + "px"; t.style.width = "120px";
+      sky.appendChild(t);
+      setTimeout(() => t.remove(), 700);
+    }
+
+    // ---------- Hold to confirm ----------
+    const H = { t0: 0, raf: 0, on: false };
+    const RING = 69.1;
+    function holdStart() {
+      if (S.busy || !S.sel || H.on) return;
+      if (S.pending) finalize();
+      H.on = true; H.t0 = performance.now();
+      ufo.classList.add("fast"); reticle.classList.add("charge");
+      holdText.textContent = "Keep holding";
+      const step = (now) => {
+        if (!H.on) return;
+        const p = clamp((now - H.t0) / (calm.matches ? 400 : HOLD_MS));
+        ringFg.style.strokeDashoffset = String(RING * (1 - p));
+        if (p >= 1) { H.on = false; resetRing(true); abduct(); return; }
+        H.raf = requestAnimationFrame(step);
+      };
+      H.raf = requestAnimationFrame(step);
+    }
+    function holdEnd() {
+      if (!H.on) return;
+      H.on = false; cancelAnimationFrame(H.raf);
+      resetRing(false);
+      holdBtn.classList.remove("nudge"); void holdBtn.offsetWidth; holdBtn.classList.add("nudge");
+      say("Hold the button a little longer to beam the file away.");
+    }
+    function resetRing(done) {
+      ufo.classList.remove("fast"); reticle.classList.remove("charge");
+      holdText.textContent = "Hold to beam away";
+      const from = parseFloat(ringFg.style.strokeDashoffset || RING);
+      tween(done ? 1 : 350, (t) => { ringFg.style.strokeDashoffset = String(from + (RING - from) * ease.out(t)); });
+    }
+    holdBtn.addEventListener("pointerdown", (e) => { if (e.button === 0) { holdBtn.setPointerCapture?.(e.pointerId); holdStart(); } });
+    holdBtn.addEventListener("pointerup", holdEnd);
+    holdBtn.addEventListener("pointercancel", holdEnd);
+    holdBtn.addEventListener("lostpointercapture", holdEnd);
+    holdBtn.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); holdStart(); } });
+    holdBtn.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") holdEnd(); });
+    holdBtn.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    // ---------- Abduct: fly over, beam on, the file floats up, beam off, zoom away ----------
+    async function abduct() {
+      const f = S.sel;
+      if (!f || S.busy || f.gone) return;
+      S.busy = true; paint();
+      say(`Beaming ${f.name} up.`);
+      reticle.classList.add("hide");
+      const o = overFile(f), sr = sky.getBoundingClientRect(), r = f.el.getBoundingClientRect();
+      await flyTo(o.x, o.y, 900);
+      U.hover = .4; await pause(200);
+      await beamOn(o.top + r.height * .9);
+      f.el.classList.add("wobble"); await pause(380); f.el.classList.remove("wobble");
+      const rise = r.top - sr.top - (U.y + ufo.offsetHeight * .55);
+      glints(r.left - sr.left + r.width / 2, U.y + ufo.offsetHeight, r.bottom - sr.top, 10);
+      await tween(1050, (t) => {
+        const k = ease.inOut(t);
+        f.el.style.transform = `translateY(${-rise * k}px) rotate(${Math.sin(t * 9) * 6 * (1 - t)}deg) scale(${1 - .85 * k})`;
+        f.el.style.opacity = String(1 - clamp((t - .75) / .25));
+      });
+      f.gone = true; f.slot.classList.add("gone");
+      await beamOff();
+      ufo.classList.add("flash"); await pause(260); ufo.classList.remove("flash");
+      // squash, then stretch and zip off to the top right
+      await tween(160, (t) => { U.sx = 1 + .12 * t; U.sy = 1 - .12 * t; });
+      const sw = sky.clientWidth;
+      const x0 = U.x, y0 = U.y;
+      trail();
+      await tween(420, (t) => { const k = ease.in(t); U.x = x0 + (sw + 160 - x0) * k; U.y = y0 - 120 * k; U.sx = 1.12 + .5 * k; U.sy = .88 - .3 * k; if (t > .3 && t < .35) trail(); });
+      U.sx = U.sy = 1; U.hover = 1;
+      storage(true);
+      const left = live();
+      S.pending = f;
+      S.sel = null;
+      if (left.length) select(left[0], true); else { paint(); emptyEl.classList.add("on"); }
+      toastText.textContent = `${f.name} beamed away`;
+      showToast();
+      say(`${f.name} deleted. Undo within ${UNDO_MS / 1000} seconds.`);
+      // the saucer drifts back in from the left to its parking spot
+      U.x = -160; U.y = 10;
+      await flyTo(park().x, park().y, 900);
+      S.busy = false; paint(); aim();
+    }
+    function showToast() {
+      toast.style.setProperty("--undo", UNDO_MS + "ms");
+      toast.classList.remove("show"); void toast.offsetWidth; toast.classList.add("show"); undoBtn.tabIndex = 0;
+      clearTimeout(S.timer); S.timer = setTimeout(finalize, UNDO_MS);
+    }
+    function hideToast() { toast.classList.remove("show"); undoBtn.tabIndex = -1; clearTimeout(S.timer); }
+    function finalize() { hideToast(); if (!S.pending) return; S.pending.slot.remove(); S.pending = null; }
+
+    // ---------- Undo: back over the gap, the file comes down the beam and lands ----------
+    async function undo() {
+      const f = S.pending;
+      if (!f || S.busy) return;
+      S.busy = true; hideToast(); S.pending = null; paint();
+      emptyEl.classList.remove("on");
+      say(`Bringing ${f.name} back down.`);
+      reticle.classList.add("hide");
+      f.slot.classList.remove("gone");
+      await pause(560); // the gap opens again
+      f.gone = false;
+      f.el.style.transform = "translateY(-140px) scale(.15)"; f.el.style.opacity = "0";
+      const o = overFile(f), sr = sky.getBoundingClientRect();
+      await flyTo(o.x, o.y, 800);
+      U.hover = .4;
+      const r = f.slot.getBoundingClientRect();
+      await beamOn(r.top - sr.top + r.height * .9);
+      const rise = r.top - sr.top - (U.y + ufo.offsetHeight * .55);
+      await tween(900, (t) => {
+        const k = ease.inOut(t);
+        f.el.style.transform = `translateY(${-rise * (1 - k)}px) scale(${.15 + .85 * k})`;
+        f.el.style.opacity = String(clamp(t * 3));
+      });
+      // touch down with a bounce and a puff of dust
+      await tween(420, (t) => { f.el.style.transform = `scale(${1 + Math.sin(Math.PI * t) * .06}, ${1 - Math.sin(Math.PI * t) * .08})`; });
+      f.el.style.transform = ""; f.el.style.opacity = "";
+      for (let i = 0; i < 6; i++) {
+        const d = document.createElement("i");
+        d.className = "dust"; d.style.left = r.left - sr.left + r.width / 2 + (i - 2.5) * 10 + "px"; d.style.top = r.bottom - sr.top - 4 + "px";
+        d.style.setProperty("--dx", (i - 2.5) * 12 + "px"); sky.appendChild(d); setTimeout(() => d.remove(), 800);
+      }
+      await beamOff();
+      U.hover = 1;
+      storage(true);
+      S.busy = false;
+      select(f, true);
+      flyTo(park().x, park().y, 900);
+      say(`${f.name} is back.`);
+    }
+
+    undoBtn.addEventListener("click", () => { press(undoBtn); undo(); });
+    refill.addEventListener("click", () => { if (S.busy) return; finalize(); build(true); say("All four files are back."); });
+    document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && S.pending && !S.busy) { e.preventDefault(); undo(); } });
+    addEventListener("resize", () => { if (!S.busy) aim(); });
+
+    // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+    const demo = { on: true, timer: 0, k: 0 };
+    function stopDemo() { if (!demo.on) return; demo.on = false; clearTimeout(demo.timer); }
+    addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    function schedule(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+    async function runDemo() {
+      if (!demo.on) return;
+      if (S.busy || H.on) return schedule(500);
+      if (S.pending) { press(undoBtn); await undo(); return schedule(3000); }
+      const l = live();
+      if (!l.length) return schedule(3000);
+      const f = l[[0, 2, 1][demo.k++ % 3] % l.length];
+      select(f);
+      await wait(600); if (!demo.on) return;
+      // a pretend press-and-hold on the button
+      holdBtn.classList.add("pressed");
+      holdStart();
+      await wait(HOLD_MS + 120);
+      holdBtn.classList.remove("pressed");
+      if (!demo.on) return;
+      while (S.busy) { await wait(200); }
+      await wait(1300); if (!demo.on) return;
+      press(undoBtn); await wait(150);
+      await undo();
+      schedule(2600);
+    }
+
+    build(false);
+    requestAnimationFrame(aim);
+    schedule(700);
+  })();
+</script>
+</body>
+</html>

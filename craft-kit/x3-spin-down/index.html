@@ -1,0 +1,577 @@
+<!doctype html>
+<!-- Chill & Craft · Spin Down · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spin Down · remove a track from a turntable playlist</title>
+<script>
+  // Theme: ?theme=light|dark wins, otherwise follow the system setting (and its changes)
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search).get("theme"), m = matchMedia("(prefers-color-scheme: dark)");
+    function set() { d.dataset.theme = q === "light" || q === "dark" ? q : m.matches ? "dark" : "light"; }
+    set();
+    if (m.addEventListener) m.addEventListener("change", set);
+  })();
+</script>
+<style>
+  /* ---------- Colour tokens: walnut, brushed steel and warm amber ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #efe6da;
+    --bg-2: #f7efe3;
+    --card: #fffaf3;
+    --line: #eadfce;
+    --ink: #2b2118;
+    --muted: #806f5f;
+    --wood-1: #b27a4b;
+    --wood-2: #7b4a2a;
+    --steel-1: #f1f1f1;
+    --steel-2: #a9a9a9;
+    --amber: #f59e0b;
+    --amber-ink: #7a4a00;
+    --danger: #dc3d43;
+    --row-hover: rgba(122, 74, 0, .06);
+    --sh: 70, 45, 20;
+    --focus: #2563eb;
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d0a08;
+    --bg-2: #18110c;
+    --card: #19130f;
+    --line: #2d231b;
+    --ink: #f6ede3;
+    --muted: #b3a08c;
+    --wood-1: #7a4c2c;
+    --wood-2: #3e2414;
+    --steel-1: #d9d9d9;
+    --steel-2: #6f6f6f;
+    --amber: #fbbf24;
+    --amber-ink: #fbbf24;
+    --danger: #ff5c61;
+    --row-hover: rgba(251, 191, 36, .07);
+    --sh: 0, 0, 0;
+    --focus: #93c5fd;
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1); }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .frame {
+    position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 20px 16px;
+    overflow: hidden; overflow: clip;
+    background: radial-gradient(60% 55% at 50% 20%, color-mix(in srgb, var(--amber) 18%, transparent), transparent 70%), linear-gradient(var(--bg-2), var(--bg));
+  }
+  .card {
+    position: relative; width: min(520px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 26px; padding: 16px;
+    box-shadow: 0 50px 90px -60px rgba(var(--sh), .8), 0 2px 8px -4px rgba(var(--sh), .15);
+  }
+
+  /* ---------- The deck ---------- */
+  .plinth {
+    position: relative; height: 204px; border-radius: 18px;
+    background: repeating-linear-gradient(100deg, rgba(255, 255, 255, .05) 0 3px, transparent 3px 9px), linear-gradient(160deg, var(--wood-1), var(--wood-2));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), inset 0 -10px 20px rgba(0, 0, 0, .25), 0 18px 26px -18px rgba(var(--sh), .7);
+  }
+  .platter {
+    position: absolute; left: 14px; top: 14px; width: 176px; height: 176px; border-radius: 50%;
+    background: radial-gradient(circle, #2a2a2a 0 30%, #3a3a3a 31% 62%, #222 63%), conic-gradient(from 0deg, var(--steel-2), var(--steel-1), var(--steel-2), var(--steel-1), var(--steel-2));
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--steel-1) 70%, var(--steel-2)), 0 8px 14px rgba(0, 0, 0, .35);
+  }
+  .platter::after { content: ""; position: absolute; left: 50%; top: 50%; width: 9px; height: 9px; margin: -4.5px; border-radius: 50%; background: linear-gradient(#fff, #999); z-index: 4; }
+  /* the record: .disc moves, .grooves spins, .sheen stays put like a real reflection */
+  .disc { position: absolute; left: 22px; top: 22px; width: 160px; height: 160px; border-radius: 50%; z-index: 3; will-change: transform; filter: drop-shadow(0 4px 5px rgba(0, 0, 0, .45)); }
+  .disc.lifted { filter: drop-shadow(0 14px 12px rgba(0, 0, 0, .5)); }
+  .disc[hidden] { display: none; }
+  .grooves {
+    position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle, transparent 0 34%, rgba(255, 255, 255, .06) 34.5% 35%, transparent 35.5% 60%, rgba(255, 255, 255, .07) 60.5% 61%, transparent 61.5%),
+                repeating-radial-gradient(circle, #121212 0 1px, #1d1d1d 1px 2.6px);
+  }
+  .label { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px; border-radius: 50%; background: var(--lc, var(--amber)); display: grid; place-items: center; color: rgba(255, 255, 255, .95); font-weight: 850; font-size: 13px; letter-spacing: .04em; box-shadow: inset 0 0 0 3px rgba(0, 0, 0, .12); }
+  .label::before { content: ""; position: absolute; top: 7px; left: 50%; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: rgba(255, 255, 255, .8); }
+  .label::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; border: 1px dashed rgba(255, 255, 255, .45); }
+  .sheen { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 20deg, transparent 0 8%, rgba(255, 255, 255, .16) 12%, transparent 17% 52%, rgba(255, 255, 255, .12) 60%, transparent 66%); pointer-events: none; }
+
+  .arm { position: absolute; left: 226px; top: 20px; width: 0; height: 0; z-index: 5; }
+  .arm .base { position: absolute; left: -20px; top: -14px; width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, var(--steel-1), var(--steel-2)); box-shadow: 0 4px 8px rgba(0, 0, 0, .35); }
+  .arm .rod {
+    position: absolute; left: -3px; top: -4px; width: 6px; height: 152px; transform-origin: 3px 4px; rotate: -4deg; border-radius: 3px;
+    background: linear-gradient(90deg, var(--steel-2), var(--steel-1), var(--steel-2)); transition: rotate .8s var(--spring), translate .3s;
+    box-shadow: 3px 6px 6px rgba(0, 0, 0, .28);
+  }
+  .arm .rod::before { /* counterweight behind the pivot */ content: ""; position: absolute; left: -7px; top: -22px; width: 20px; height: 22px; border-radius: 5px; background: linear-gradient(90deg, #555, #999, #555); }
+  .arm .rod::after { /* headshell */ content: ""; position: absolute; left: -6px; bottom: -14px; width: 16px; height: 24px; border-radius: 3px 3px 5px 5px; rotate: 18deg; background: linear-gradient(90deg, #3a3a3a, #777); }
+  .arm.on .rod { rotate: 30deg; }
+  .arm.lift .rod { translate: 0 -3px; box-shadow: 8px 14px 10px rgba(0, 0, 0, .22); }
+  .arm .pin { position: absolute; left: -6px; top: -6px; width: 12px; height: 12px; border-radius: 50%; background: #333; z-index: 2; }
+
+  .side { position: absolute; right: 14px; top: 16px; bottom: 16px; display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; }
+  .rpm { display: flex; gap: 6px; }
+  .rpm button { width: 38px; height: 26px; border-radius: 8px; border: 0; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; color: #3a2a1c; background: linear-gradient(var(--steel-1), var(--steel-2)); box-shadow: 0 3px 0 rgba(0, 0, 0, .3); transition: translate .15s, box-shadow .15s; }
+  .rpm button[aria-pressed="true"] { translate: 0 2px; box-shadow: 0 1px 0 rgba(0, 0, 0, .3), 0 0 0 2px var(--amber); }
+  .vu { display: flex; gap: 3px; align-items: flex-end; height: 44px; }
+  .vu i { width: 6px; height: 100%; border-radius: 3px; background: linear-gradient(to top, #22c55e 0 55%, var(--amber) 55% 80%, #ef4444 80%); transform-origin: bottom; scale: 1 .12; transition: scale .12s; opacity: .9; }
+  .led { width: 9px; height: 9px; border-radius: 50%; background: #5a3b22; box-shadow: inset 0 1px 1px rgba(0, 0, 0, .5); transition: background-color .3s, box-shadow .3s; }
+  .led.on { background: #ff6b3d; box-shadow: 0 0 10px #ff6b3d; }
+  /* engraved name plate and a pitch fader on the free wood (desktop only) */
+  .plate { position: absolute; left: 262px; top: 24px; display: grid; gap: 2px; color: rgba(255, 236, 214, .55); text-shadow: 0 -1px 0 rgba(0, 0, 0, .35); }
+  .plate b { font-size: 11px; letter-spacing: .32em; font-weight: 850; }
+  .plate span { font-size: 9.5px; letter-spacing: .18em; text-transform: uppercase; }
+  .pitch { position: absolute; left: 2px; top: 44px; width: 6px; height: 74px; border-radius: 3px; background: rgba(0, 0, 0, .35); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5); }
+  .pitch i { position: absolute; left: -7px; top: 30px; width: 20px; height: 10px; border-radius: 3px; background: linear-gradient(var(--steel-1), var(--steel-2)); box-shadow: 0 2px 3px rgba(0, 0, 0, .4); transition: top .5s var(--spring); }
+
+  /* ---------- Now playing ---------- */
+  .now { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; margin: 14px 2px 4px; }
+  .now .t { min-width: 0; }
+  .now small { display: block; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--amber-ink); }
+  .now b { display: block; font-size: 17px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .now span { font-size: 13px; color: var(--muted); }
+  .ctl { display: flex; gap: 8px; }
+  .round { width: 44px; height: 44px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; background: var(--ink); color: var(--card); transition: scale .25s var(--spring), opacity .2s; }
+  .round svg { width: 18px; height: 18px; }
+  .round.del { background: color-mix(in srgb, var(--danger) 14%, var(--card)); color: var(--danger); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--danger) 40%, transparent); }
+  .round:active, .round.pressed { scale: .9; }
+  .round:disabled { opacity: .4; cursor: default; scale: 1; }
+  .bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .track { flex: 1; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .track i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--amber), #f97316); border-radius: 3px; }
+
+  /* ---------- Playlist ---------- */
+  .listhead { display: flex; justify-content: space-between; align-items: baseline; margin: 12px 2px 4px; font-size: 12.5px; color: var(--muted); }
+  .listhead b { color: var(--ink); font-size: 14px; }
+  /* the list keeps room for five rows, so the card does not jump when one is removed */
+  .list { list-style: none; margin: 0; padding: 0; overflow-x: clip; min-height: 250px; }
+  .list:empty { min-height: 0; }
+  .trk { position: relative; overflow: hidden; transition: height .38s cubic-bezier(.4, 0, .2, 1); }
+  .trk .in { display: grid; grid-template-columns: 22px 34px minmax(0, 1fr) auto 34px; align-items: center; gap: 10px; padding: 7px 4px; border-radius: 12px; transition: translate .4s cubic-bezier(.5, 0, .75, 0), opacity .35s, background-color .2s; }
+  .trk:hover .in { background: var(--row-hover); }
+  .trk.cur .in { background: color-mix(in srgb, var(--amber) 13%, transparent); }
+  .trk.leaving .in { translate: 70px 0; opacity: 0; }
+  .num { font-size: 12px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+  .eq { display: none; gap: 2px; height: 13px; align-items: flex-end; justify-content: center; }
+  .eq i { width: 3px; height: 100%; background: var(--amber); border-radius: 2px; transform-origin: bottom; animation: eq .9s ease-in-out infinite; }
+  .eq i:nth-child(2) { animation-delay: -.3s; } .eq i:nth-child(3) { animation-delay: -.6s; }
+  @keyframes eq { 0%, 100% { scale: 1 .3; } 50% { scale: 1 1; } }
+  .trk.cur.playing .num { display: none; }
+  .trk.cur.playing .eq { display: flex; }
+  /* the sleeve face is a pseudo-element on top, so the little record can sit behind it and peek out */
+  .sleeve { position: relative; width: 34px; height: 34px; isolation: isolate; }
+  .sleeve::before { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: 6px; background: linear-gradient(135deg, var(--lc), color-mix(in srgb, var(--lc) 60%, #000)); box-shadow: 0 3px 6px -3px rgba(0, 0, 0, .5); }
+  .mini { position: absolute; left: 8px; top: 3px; width: 28px; height: 28px; border-radius: 50%; background: radial-gradient(circle, var(--lc) 0 22%, #111 23% 30%, #222 31%); z-index: 0; transition: left .3s var(--spring); }
+  .trk:hover .mini { left: 14px; }
+  .pick { display: block; min-width: 0; border: 0; background: none; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; border-radius: 6px; }
+  .pick b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pick span { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dur { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .x { width: 32px; height: 32px; border-radius: 10px; border: 0; background: transparent; color: var(--muted); display: grid; place-items: center; cursor: pointer; transition: background-color .2s, color .2s, scale .25s var(--spring); }
+  .x svg { width: 16px; height: 16px; }
+  .x:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+  .x:active { scale: .88; }
+  .x:disabled { opacity: .35; cursor: default; }
+  .emptybox { text-align: center; padding: 18px 8px 8px; color: var(--muted); font-size: 13.5px; }
+  .emptybox[hidden] { display: none; }
+  .plain { margin-top: 8px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); border-radius: 12px; padding: 8px 14px; font: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* undo toast */
+  .toast {
+    position: absolute; left: 50%; bottom: 14px; translate: -50% 18px; width: min(420px, calc(100% - 28px)); display: flex; align-items: center; gap: 10px; z-index: 20;
+    background: var(--ink); color: var(--card); border-radius: 15px; padding: 8px 8px 8px 12px; box-shadow: 0 22px 36px -18px rgba(var(--sh), .9);
+    opacity: 0; pointer-events: none; transition: opacity .25s, translate .45s var(--spring);
+  }
+  .toast.show { opacity: 1; translate: -50% 0; pointer-events: auto; }
+  .toast .vin { width: 26px; height: 26px; border-radius: 50%; flex: none; background: radial-gradient(circle, var(--lc, var(--amber)) 0 26%, #111 27% 32%, #2a2a2a 33%); animation: spin 1.8s linear infinite; }
+  @keyframes spin { to { rotate: 360deg; } }
+  .toast span { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .undo { position: relative; border: 0; border-radius: 10px; padding: 7px 12px; background: color-mix(in srgb, var(--card) 15%, transparent); color: inherit; font: inherit; font-size: 13.5px; font-weight: 760; cursor: pointer; overflow: hidden; transition: scale .25s var(--spring); }
+  .undo::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--amber); transform-origin: 0 50%; }
+  .toast.show .undo::after { animation: drain var(--undo, 6s) linear forwards; }
+  @keyframes drain { to { scale: 0 1; } }
+  .undo:active, .undo.pressed { scale: .92; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  @media (max-width: 440px) {
+    .card { padding: 12px; }
+    .plinth { height: 184px; }
+    .platter { width: 156px; height: 156px; left: 12px; top: 14px; }
+    .disc { left: 20px; top: 22px; width: 140px; height: 140px; }
+    .label { width: 50px; height: 50px; margin: -25px; font-size: 12px; }
+    .arm { left: 196px; top: 18px; }
+    .arm .rod { height: 136px; }
+    .vu { height: 34px; }
+    .plate { display: none; }
+    .trk .in { grid-template-columns: 18px 32px minmax(0, 1fr) auto 32px; gap: 8px; }
+  }
+  /* Calm mode: every step still happens, without the big motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <main class="card" id="card" aria-labelledby="title">
+    <div class="plinth" id="plinth">
+      <div class="platter" aria-hidden="true"></div>
+      <div class="disc" id="disc" aria-hidden="true">
+        <div class="grooves" id="grooves"><div class="label" id="label">ML</div></div>
+        <div class="sheen"></div>
+      </div>
+      <div class="arm" id="arm" aria-hidden="true"><div class="rod"></div><div class="base"></div><div class="pin"></div></div>
+      <div class="plate" aria-hidden="true"><b>SPIN DOWN</b><span>Direct drive</span><i class="pitch"><i id="pitchKnob"></i></i></div>
+      <div class="side">
+        <span class="led" id="led" aria-hidden="true"></span>
+        <div class="vu" id="vu" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <div class="rpm" role="group" aria-label="Speed">
+          <button type="button" id="r33" aria-pressed="true">33</button>
+          <button type="button" id="r45" aria-pressed="false">45</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="now">
+      <div class="t">
+        <small id="title">Now playing</small>
+        <b id="nowTitle">Monsoon Letters</b>
+        <span id="nowArtist">The Ravi Quartet</span>
+      </div>
+      <div class="ctl">
+        <button class="round" id="playBtn" type="button" aria-label="Pause">
+          <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2" /><rect x="14" y="5" width="4" height="14" rx="1.2" /></svg>
+        </button>
+        <button class="round del" id="delBtn" type="button" aria-label="Remove this track from the playlist">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg>
+        </button>
+      </div>
+      <div class="bar"><span id="elapsed">0:00</span><div class="track"><i id="prog"></i></div><span id="length">3:42</span></div>
+    </div>
+
+    <div class="listhead"><b>Late Night Chai</b><span id="totals" aria-live="polite">5 tracks · 18:40</span></div>
+    <ul class="list" id="list" aria-label="Playlist"></ul>
+    <div class="emptybox" id="emptyBox" hidden>The crate is empty.<br><button class="plain" id="refill" type="button">Put the records back</button></div>
+
+    <div class="toast" id="toast">
+      <i class="vin" id="toastVin"></i>
+      <span id="toastText">Removed</span>
+      <button class="undo" id="undoBtn" type="button" tabindex="-1">Undo</button>
+    </div>
+    <p class="sr" id="status" role="status" aria-live="polite"></p>
+  </main>
+</div>
+
+<script>
+  (() => {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const frame = $("frame"), disc = $("disc"), grooves = $("grooves"), label = $("label"), arm = $("arm"), led = $("led");
+    const vuBars = [...$("vu").children], r33 = $("r33"), r45 = $("r45");
+    const nowTitle = $("nowTitle"), nowArtist = $("nowArtist"), playBtn = $("playBtn"), playIcon = $("playIcon"), delBtn = $("delBtn");
+    const elapsedEl = $("elapsed"), lengthEl = $("length"), prog = $("prog"), totals = $("totals"), list = $("list");
+    const emptyBox = $("emptyBox"), refill = $("refill"), toast = $("toast"), toastVin = $("toastVin"), toastText = $("toastText"), undoBtn = $("undoBtn"), status = $("status");
+    const calm = matchMedia("(prefers-reduced-motion: reduce)");
+    const UNDO_MS = 6000;
+    const ICON_PAUSE = '<rect x="6" y="5" width="4" height="14" rx="1.2" /><rect x="14" y="5" width="4" height="14" rx="1.2" />';
+    const ICON_PLAY = '<path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.2-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" />';
+    const X_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>';
+
+    // ---------- Helpers ----------
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const pause = (ms) => wait(calm.matches ? Math.min(ms, 40) : ms);
+    const clamp = (v) => Math.min(1, Math.max(0, v));
+    const ease = { in: (t) => t * t, out: (t) => 1 - Math.pow(1 - t, 3), inOut: (t) => (t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2), back: (t) => { const c = 1.6; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); } };
+    function tween(ms, fn) {
+      return new Promise((done) => {
+        const d = calm.matches ? 1 : ms, t0 = performance.now();
+        const step = (now) => { const t = clamp((now - t0) / d); fn(t); if (t < 1) requestAnimationFrame(step); else done(); };
+        step(t0);
+      });
+    }
+    const say = (m) => { status.textContent = m; };
+    const press = (b) => { b.classList.add("pressed"); setTimeout(() => b.classList.remove("pressed"), 170); };
+    const mmss = (s) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+
+    // ---------- Playlist data ----------
+    const CRATE = [
+      { id: 1, title: "Monsoon Letters", artist: "The Ravi Quartet", len: 222, c: "#f97316", tag: "ML" },
+      { id: 2, title: "Rooftop in Karachi", artist: "Sana and the Tides", len: 245, c: "#0891b2", tag: "RK" },
+      { id: 3, title: "Slow Rickshaw", artist: "Lantern Club", len: 178, c: "#9333ea", tag: "SR" },
+      { id: 4, title: "Clifton at Dusk", artist: "Noor Ahmed", len: 260, c: "#16a34a", tag: "CD" },
+      { id: 5, title: "Chai After Midnight", artist: "Moth Radio", len: 215, c: "#ca8a04", tag: "CM" },
+    ];
+    let tracks = CRATE.map((t) => ({ ...t }));
+    const S = { cur: 1, playing: true, rpm: 33, busy: false, pending: null, timer: 0, pos: 64, offDeck: false };
+    const curTrack = () => tracks.find((t) => t.id === S.cur);
+
+    function rowFor(t) {
+      const li = document.createElement("li");
+      li.className = "trk"; li.dataset.id = t.id; li.style.setProperty("--lc", t.c);
+      li.innerHTML = `<div class="in"><span class="num"></span><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span class="sleeve" aria-hidden="true"><i class="mini"></i></span>
+        <button class="pick" type="button"><b></b><span></span></button><span class="dur"></span><button class="x" type="button">${X_ICON}</button></div>`;
+      li.querySelector(".pick b").textContent = t.title;
+      li.querySelector(".pick span").textContent = t.artist;
+      li.querySelector(".pick").setAttribute("aria-label", `Play ${t.title} by ${t.artist}`);
+      li.querySelector(".dur").textContent = mmss(t.len);
+      li.querySelector(".x").setAttribute("aria-label", `Remove ${t.title} from the playlist`);
+      li.querySelector(".pick").addEventListener("click", () => playTrack(t.id));
+      li.querySelector(".x").addEventListener("click", (e) => { press(e.currentTarget); removeTrack(t.id); });
+      return li;
+    }
+    function renderList() {
+      list.textContent = "";
+      tracks.forEach((t) => list.appendChild(rowFor(t)));
+      paint();
+    }
+    function paint() {
+      [...list.children].forEach((li, i) => {
+        li.querySelector(".num").textContent = i + 1;
+        li.classList.toggle("cur", +li.dataset.id === S.cur);
+        li.classList.toggle("playing", S.playing);
+        li.querySelectorAll("button").forEach((b) => (b.disabled = S.busy));
+      });
+      const t = curTrack();
+      if (t) {
+        nowTitle.textContent = t.title; nowArtist.textContent = t.artist; lengthEl.textContent = mmss(t.len);
+        label.textContent = t.tag; label.style.setProperty("--lc", t.c);
+      } else { nowTitle.textContent = "Nothing on the deck"; nowArtist.textContent = "Add a record to play"; lengthEl.textContent = "0:00"; }
+      playBtn.disabled = delBtn.disabled = S.busy || !t;
+      playIcon.innerHTML = S.playing ? ICON_PAUSE : ICON_PLAY;
+      playBtn.setAttribute("aria-label", S.playing ? "Pause" : "Play");
+      arm.classList.toggle("on", S.playing && !!t && !S.offDeck);
+      led.classList.toggle("on", S.playing && !!t);
+      emptyBox.hidden = tracks.length > 0 || !!S.pending;
+    }
+    function total(n, secs) { totals.textContent = `${n} track${n === 1 ? "" : "s"} · ${mmss(secs)}`; }
+    // the total time counts down (or up) to the new value
+    function retotal() {
+      const to = tracks.reduce((s, t) => s + t.len, 0), from = S.shownTotal ?? to, n = tracks.length;
+      S.shownTotal = to;
+      tween(600, (t) => total(n, Math.round(from + (to - from) * ease.out(t))));
+    }
+
+    // ---------- Turntable motion: spin, VU meter, progress ----------
+    let ang = 0, vel = 198, last = performance.now();
+    function loop(now) {
+      const dt = Math.min(.05, (now - last) / 1000);
+      last = now;
+      const target = S.playing && !S.offDeck && curTrack() && !calm.matches ? (S.rpm === 45 ? 270 : 198) : 0;
+      vel += (target - vel) * Math.min(1, dt * (target > vel ? 1.8 : 2.6));
+      if (Math.abs(vel) < .5 && !target) vel = 0;
+      ang = (ang + vel * dt) % 360;
+      grooves.style.transform = `rotate(${ang}deg)`;
+      const live = S.playing && !S.offDeck && curTrack();
+      vuBars.forEach((b, i) => { b.style.scale = live ? `1 ${(.25 + .7 * Math.abs(Math.sin(now / (170 + i * 53) + i))).toFixed(2)}` : "1 .12"; });
+      const t = curTrack();
+      if (t) {
+        if (live) S.pos = (S.pos + dt * (S.rpm === 45 ? 1.36 : 1)) % t.len;
+        elapsedEl.textContent = mmss(S.pos);
+        prog.style.width = (S.pos / t.len) * 100 + "%";
+      } else { elapsedEl.textContent = "0:00"; prog.style.width = "0"; }
+      requestAnimationFrame(loop);
+    }
+
+    // the record lifts, rolls to one side and out of the frame (dir 1 = right, -1 = left); back = roll in instead
+    async function roll(dir, back, ms) {
+      disc.style.transform = "";
+      const r = disc.getBoundingClientRect(), fr = frame.getBoundingClientRect(), rad = r.width / 2;
+      const dist = dir > 0 ? fr.right - r.left + 30 : -(r.right - fr.left + 30);
+      const a0 = ang;
+      disc.classList.add("lifted");
+      await tween(ms, (t) => {
+        const k = back ? 1 - ease.out(t) : ease.in(t);
+        const x = dist * k, drop = Math.min(1, Math.abs(x) / (rad * 1.3)) * 14;
+        ang = a0 + (x / rad) * 57.3; // rolling without slipping: turn = distance / radius
+        disc.style.transform = `translate(${x}px, ${drop}px) scale(${1.05 - .05 * clamp(Math.abs(x) / rad)})`;
+      });
+      if (back) {
+        disc.style.transform = "translateY(-6px) scale(1.06)";
+        await pause(60);
+        await tween(380, (t) => { disc.style.transform = `translateY(${-6 + 6 * ease.back(t)}px) scale(${1.06 - .06 * ease.back(t)})`; });
+        disc.style.transform = ""; disc.classList.remove("lifted");
+      }
+    }
+    async function armOff() { arm.classList.add("lift"); arm.classList.remove("on"); await pause(520); }
+    async function armOn() { arm.classList.add("on"); await pause(600); arm.classList.remove("lift"); }
+
+    // ---------- Actions ----------
+    async function playTrack(id) {
+      if (S.busy || id === S.cur) { if (id === S.cur && !S.busy) togglePlay(); return; }
+      if (S.pending) finalize();
+      S.busy = true; paint();
+      const t = tracks.find((x) => x.id === id);
+      say(`Swapping to ${t.title}.`);
+      S.offDeck = true; await armOff(); await pause(200);
+      await roll(-1, false, 700);
+      S.cur = id; S.pos = 0; S.playing = true; paint();
+      await roll(-1, true, 760);
+      S.offDeck = false; await armOn();
+      S.busy = false; paint(); say(`Now playing ${t.title}.`);
+    }
+    function togglePlay() {
+      if (S.busy || !curTrack()) return;
+      S.playing = !S.playing; paint();
+      if (!S.playing) arm.classList.add("lift"); else setTimeout(() => arm.classList.remove("lift"), 500);
+      say(S.playing ? "Playing." : "Paused. The platter spins down.");
+    }
+
+    async function collapse(li) {
+      li.style.height = li.offsetHeight + "px";
+      li.classList.add("leaving");
+      await pause(330);
+      li.style.height = "0px";
+      await pause(400);
+      li.remove();
+    }
+    async function expand(li, at) {
+      const before = list.children[at] || null;
+      list.insertBefore(li, before);
+      const h = li.scrollHeight;
+      li.style.height = "0px"; li.classList.add("leaving");
+      void li.offsetHeight;
+      li.style.height = h + "px";
+      await pause(300);
+      li.classList.remove("leaving");
+      await pause(420);
+      li.style.height = "";
+    }
+
+    async function removeTrack(id) {
+      if (S.busy) return;
+      if (S.pending) finalize();
+      const i = tracks.findIndex((t) => t.id === id);
+      if (i < 0) return;
+      const t = tracks[i], wasCur = id === S.cur, li = list.querySelector(`[data-id="${id}"]`);
+      S.busy = true; paint();
+      say(`Removing ${t.title}.`);
+      if (wasCur) {
+        // 1. needle up, 2. platter spins down, 3. the record rolls off the deck
+        S.offDeck = true; await armOff();
+        await pause(560);
+        vel = 0;
+        const rolling = roll(1, false, 1100);
+        await pause(260);
+        tracks.splice(i, 1);
+        await Promise.all([rolling, collapse(li)]);
+        retotal();
+        const next = tracks[i] || tracks[0];
+        S.pending = { t, i, wasCur, prevPlaying: S.playing };
+        if (next) {
+          S.cur = next.id; S.pos = 0; paint();
+          await roll(-1, true, 820); // the next record rolls in from the left
+          S.offDeck = false; S.playing = true; paint(); await armOn();
+        } else { S.cur = 0; disc.hidden = true; paint(); }
+      } else {
+        // the little record slides out of its sleeve and the row slips away
+        const mini = li.querySelector(".mini");
+        mini.style.transition = "left .5s cubic-bezier(.5,0,.75,0), rotate .5s";
+        mini.style.left = "60px"; mini.style.rotate = "200deg";
+        await pause(220);
+        tracks.splice(i, 1);
+        await collapse(li);
+        retotal();
+        S.pending = { t, i, wasCur };
+      }
+      toastVin.style.setProperty("--lc", t.c);
+      toastText.textContent = `Removed "${t.title}"`;
+      showToast();
+      say(`${t.title} removed. ${tracks.length} tracks left. Undo within ${UNDO_MS / 1000} seconds.`);
+      S.busy = false; paint();
+      clearTimeout(S.timer); S.timer = setTimeout(finalize, UNDO_MS);
+    }
+    function showToast() {
+      toast.style.setProperty("--undo", UNDO_MS + "ms");
+      toast.classList.remove("show"); void toast.offsetWidth; toast.classList.add("show");
+      undoBtn.tabIndex = 0;
+    }
+    function hideToast() { toast.classList.remove("show"); undoBtn.tabIndex = -1; }
+    function finalize() { clearTimeout(S.timer); if (!S.pending) return; S.pending = null; hideToast(); paint(); }
+
+    async function undo() {
+      const p = S.pending;
+      if (!p || S.busy) return;
+      S.busy = true; clearTimeout(S.timer); hideToast(); S.pending = null; paint();
+      say(`Bringing back ${p.t.title}.`);
+      tracks.splice(p.i, 0, p.t);
+      const li = rowFor(p.t);
+      if (p.wasCur) {
+        if (curTrack() && !disc.hidden) { S.offDeck = true; await armOff(); await pause(300); vel = 0; await roll(-1, false, 700); }
+        disc.hidden = false;
+        S.cur = p.t.id; S.pos = 0; paint();
+        const growing = expand(li, p.i);
+        await roll(1, true, 900); // it rolls back in from the right
+        await growing;
+        S.offDeck = false; S.playing = true; paint(); await armOn();
+      } else {
+        await expand(li, p.i);
+      }
+      retotal();
+      S.busy = false; paint();
+      say(`${p.t.title} is back in the playlist.`);
+    }
+
+    playBtn.addEventListener("click", () => { press(playBtn); togglePlay(); });
+    delBtn.addEventListener("click", () => { press(delBtn); if (curTrack()) removeTrack(S.cur); });
+    undoBtn.addEventListener("click", () => { press(undoBtn); undo(); });
+    const pitchKnob = $("pitchKnob");
+    const setRpm = (v) => {
+      S.rpm = v; r33.setAttribute("aria-pressed", String(v === 33)); r45.setAttribute("aria-pressed", String(v === 45));
+      pitchKnob.style.top = v === 45 ? "10px" : "30px"; // the fader slides with the speed
+      say(`Speed ${v} RPM.`);
+    };
+    r33.addEventListener("click", () => setRpm(33));
+    r45.addEventListener("click", () => setRpm(45));
+    refill.addEventListener("click", async () => {
+      if (S.busy) return;
+      tracks = CRATE.map((t) => ({ ...t })); S.cur = 1; S.pos = 0; S.playing = true; S.offDeck = true;
+      renderList(); retotal();
+      disc.hidden = false;
+      S.busy = true; paint();
+      await roll(-1, true, 800);
+      S.offDeck = false; S.busy = false; paint(); await armOn();
+      say("All five records are back.");
+    });
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && S.pending && !S.busy) { e.preventDefault(); undo(); }
+    });
+
+    // ---------- Auto-demo: plays on load and every few seconds until someone touches it ----------
+    const demo = { on: true, timer: 0, k: 0 };
+    function stopDemo() { if (!demo.on) return; demo.on = false; clearTimeout(demo.timer); }
+    addEventListener("pointerdown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    addEventListener("keydown", (e) => { if (e.isTrusted) stopDemo(); }, true);
+    function schedule(ms) { clearTimeout(demo.timer); if (demo.on) demo.timer = setTimeout(runDemo, ms); }
+    async function runDemo() {
+      if (!demo.on) return;
+      if (S.busy) return schedule(500);
+      if (S.pending) { press(undoBtn); await undo(); return schedule(3000); }
+      if (!tracks.length) return schedule(3000);
+      const round = demo.k++ % 2;
+      if (round === 0) { press(delBtn); await wait(160); if (!demo.on) return; await removeTrack(S.cur); }
+      else {
+        const other = tracks.find((t) => t.id !== S.cur && t.id === 3) || tracks.find((t) => t.id !== S.cur);
+        if (!other) return schedule(2000);
+        const x = list.querySelector(`[data-id="${other.id}"] .x`);
+        if (x) press(x);
+        await wait(160); if (!demo.on) return;
+        await removeTrack(other.id);
+      }
+      await wait(1400); if (!demo.on) return;
+      press(undoBtn); await wait(150);
+      await undo();
+      schedule(2600);
+    }
+
+    renderList();
+    S.shownTotal = tracks.reduce((s, t) => s + t.len, 0);
+    total(tracks.length, S.shownTotal);
+    requestAnimationFrame(loop);
+    schedule(700);
+  })();
+</script>
+</body>
+</html>

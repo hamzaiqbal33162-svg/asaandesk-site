@@ -1,0 +1,574 @@
+<!doctype html>
+<!-- Chill & Craft · Sky Clock · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sky Clock · weather card whose sky follows the time of day</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() { document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light"; }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: the card chrome is calm blue-grey; the sky itself is painted by the clock ---------- */
+  :root {
+    --bg: #dfe8f3; --bg-2: #f6f9fd; --card: #ffffff; --edge: rgba(18, 34, 58, 0.09); --ink: #12223a; --muted: #5e6d84; --soft: #eef3f9; --soft-2: #dde6f1;
+    --accent: #2f6fe4; --on-accent: #fff; --shadow: rgba(20, 40, 80, 0.3); --focus: #2f6fe4;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #060a14; --bg-2: #111a2c; --card: #0e1524; --edge: rgba(255, 255, 255, 0.08); --ink: #e8f0ff; --muted: #93a3bf; --soft: #172135; --soft-2: #222e46;
+    --accent: #80b4ff; --on-accent: #08142c; --shadow: rgba(0, 0, 0, 0.7); --focus: #80b4ff;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2.5px solid var(--focus); outline-offset: 3px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  .stage { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; overflow: hidden; overflow: clip;
+    background: radial-gradient(70% 60% at 50% 0%, var(--bg-2), transparent 70%), var(--bg); }
+  /* the page behind the card picks up a whisper of the current sky colour */
+  .stage::before { content: ""; position: absolute; inset: 0; background: radial-gradient(55% 45% at 50% 40%, var(--tint, transparent), transparent 75%); opacity: 0.35; transition: background 0.6s; pointer-events: none; }
+
+  .card { position: relative; width: min(860px, 100%); border-radius: 30px; background: var(--card); border: 1px solid var(--edge); padding: 12px; overflow: hidden;
+    box-shadow: 0 50px 90px -50px var(--shadow), 0 12px 26px -20px var(--shadow); animation: rise 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards; }
+  @keyframes rise { from { opacity: 0; transform: translateY(46px) scale(0.96); } }
+
+  /* ---------- City tabs with a sliding pill ---------- */
+  .top { display: flex; align-items: center; gap: 10px; padding: 2px 2px 12px; }
+  .tabs { position: relative; display: flex; flex: 1; min-width: 0; padding: 4px; border-radius: 16px; background: var(--soft); }
+  .tabs .pill { position: absolute; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: 12px; background: var(--card); box-shadow: 0 6px 14px -8px var(--shadow), 0 0 0 1px var(--edge); transition: transform 0.55s cubic-bezier(0.3, 1.45, 0.5, 1), width 0.55s cubic-bezier(0.3, 1.45, 0.5, 1); }
+  .tab { position: relative; flex: 1; min-width: 0; border: 0; background: none; padding: 9px 6px; border-radius: 12px; font-size: 13.5px; font-weight: 750; color: var(--muted); transition: color 0.25s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tab[aria-pressed="true"] { color: var(--ink); }
+  .now { flex: none; display: flex; align-items: center; gap: 7px; border: 1px solid var(--edge); background: var(--card); border-radius: 14px; padding: 9px 12px; font-size: 13px; font-weight: 750; transition: transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .now:active { transform: scale(0.93); }
+  .now i { width: 8px; height: 8px; border-radius: 50%; background: #e5484d; box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.5); animation: live 1.8s ease-out infinite; }
+  .now.off i { background: var(--muted); animation: none; }
+  @keyframes live { 70% { box-shadow: 0 0 0 7px rgba(229, 72, 77, 0); } 100% { box-shadow: 0 0 0 0 rgba(229, 72, 77, 0); } }
+
+  /* ---------- The scene ---------- */
+  .scene { position: relative; height: 330px; border-radius: 22px; overflow: hidden; isolation: isolate; }
+  .scene > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .flash { position: absolute; inset: 0; background: #eef3ff; opacity: 0; pointer-events: none; mix-blend-mode: screen; }
+  .flash.on { animation: flash 0.9s ease-out; }
+  @keyframes flash { 0%, 20% { opacity: 0.7; } 10% { opacity: 0.15; } 100% { opacity: 0; } }
+  .bolt { fill: none; stroke: #fff; stroke-width: 3; stroke-linejoin: round; opacity: 0; filter: drop-shadow(0 0 6px #cfe0ff); }
+  .bolt.on { animation: bolt 0.5s ease-out; }
+  @keyframes bolt { 0%, 30% { opacity: 1; } 15% { opacity: 0.3; } 100% { opacity: 0; } }
+  .stars circle { fill: #fff; animation: twinkle 3s ease-in-out infinite; animation-delay: var(--d); }
+  @keyframes twinkle { 50% { opacity: 0.25; } }
+  .clouds { animation: drift linear infinite; }
+  .clouds.c1 { animation-duration: 140s; } .clouds.c2 { animation-duration: 90s; } .clouds.c3 { animation-duration: 58s; }
+  .fast .clouds { animation-duration: 30s !important; }
+  @keyframes drift { to { transform: translateX(-800px); } }
+  .city { transition: opacity 0.6s, transform 0.8s cubic-bezier(0.3, 1.35, 0.5, 1); }
+  .city.off { opacity: 0; transform: translateY(40px); }
+  .city .far { fill: var(--sil2); }
+  .city .near { fill: var(--sil); }
+  .city .hill { fill: var(--hill); }
+  .win { fill: #ffd27a; opacity: clamp(0, calc((var(--night) - var(--th)) * 14), 1); transition: opacity 0.4s; }
+  .sea-line { stroke: rgba(255, 255, 255, 0.55); stroke-width: 1.4; stroke-linecap: round; stroke-dasharray: 10 24; animation: sea 4s linear infinite; }
+  @keyframes sea { to { stroke-dashoffset: -68; } }
+  .birds path { fill: none; stroke: var(--sil); stroke-width: 1.6; stroke-linecap: round; }
+  .birds { animation: birds 26s linear infinite; }
+  @keyframes birds { from { transform: translateX(-120px); } to { transform: translateX(920px); } }
+  .birds path { animation: flap 0.6s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+  #birds { transition: opacity 0.6s; }
+  @keyframes flap { to { transform: scaleY(0.5); } }
+  .sunwrap { transition: none; }
+  .glide .sunwrap, .glide .moonwrap { transition: transform 0.06s linear; }
+
+  /* text on the sky: a soft shade keeps it readable at every hour */
+  .shade { position: absolute; inset: 0; background: radial-gradient(80% 90% at 0% 0%, rgba(4, 10, 30, 0.38), transparent 60%); pointer-events: none; }
+  .readout { position: absolute; left: 22px; top: 18px; color: #fff; text-shadow: 0 2px 14px rgba(0, 10, 40, 0.35); }
+  .place { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 760; }
+  .place svg { width: 15px; height: 15px; fill: #fff; }
+  .temp { display: flex; align-items: flex-start; font-size: 84px; line-height: 1; font-weight: 300; letter-spacing: -0.04em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .temp sup { font-size: 26px; font-weight: 500; margin: 8px 0 0 4px; letter-spacing: 0; }
+  .odo { display: inline-flex; height: 1.1em; overflow: hidden; }
+  .odo .sign { display: inline-block; width: 0; overflow: hidden; transition: width 0.4s; }
+  .odo .sign.on { width: 0.45em; }
+  .odo .col { display: inline-flex; flex-direction: column; transition: transform 0.9s cubic-bezier(0.3, 1.32, 0.5, 1); transition-delay: var(--dl, 0s); }
+  .odo .col span { height: 1.1em; line-height: 1.1em; display: block; text-align: center; width: 0.6em; }
+  .cond { font-size: 16px; font-weight: 700; margin-top: 2px; }
+  .cond.in { animation: condin 0.6s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  @keyframes condin { from { opacity: 0; transform: translateY(8px); filter: blur(3px); } }
+  .hl { font-size: 13px; font-weight: 650; opacity: 0.85; margin-top: 3px; }
+  .swapping .readout { animation: rout 0.75s cubic-bezier(0.4, 0, 0.3, 1); }
+  @keyframes rout { 35% { opacity: 0; transform: translateY(-10px); filter: blur(5px); } 36% { transform: translateY(12px); } }
+  .clock { position: absolute; right: 20px; top: 18px; text-align: right; color: #fff; text-shadow: 0 2px 12px rgba(0, 10, 40, 0.35); font-size: 22px; font-weight: 750; font-variant-numeric: tabular-nums; }
+  .clock small { display: block; font-size: 12px; font-weight: 650; opacity: 0.85; }
+
+  /* ---------- Stats under the sky ---------- */
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0 4px; }
+  .stat { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 14px; background: var(--soft); min-width: 0; animation: statin 0.6s cubic-bezier(0.3, 1.5, 0.5, 1) backwards; animation-delay: calc(var(--k) * 70ms + 0.5s); }
+  @keyframes statin { from { opacity: 0; transform: translateY(12px); } }
+  .stat svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .stat small { display: block; font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+  .stat b { display: block; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---------- Time scrubber: the track is painted with the day's sky ---------- */
+  .scrub { position: relative; padding: 22px 10px 20px; }
+  .scrub label { position: absolute; left: 10px; top: 2px; font-size: 12px; font-weight: 750; color: var(--muted); }
+  .marks { position: absolute; left: 25px; right: 25px; top: 58px; height: 16px; pointer-events: none; }
+  .marks span { position: absolute; transform: translateX(-50%); display: flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 750; color: var(--muted); white-space: nowrap; }
+  .marks svg { width: 13px; height: 13px; fill: none; stroke: #f0a020; stroke-width: 2; stroke-linecap: round; }
+  .range { position: relative; height: 34px; }
+  .range input { position: absolute; inset: 0; width: 100%; height: 34px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+  .range input::-webkit-slider-runnable-track { height: 12px; border-radius: 99px; background: var(--track); }
+  .range input::-moz-range-track { height: 12px; border-radius: 99px; background: var(--track); }
+  .range input::-webkit-slider-thumb { -webkit-appearance: none; width: 30px; height: 30px; margin-top: -9px; border-radius: 50%; background: transparent; border: 0; }
+  .range input::-moz-range-thumb { width: 30px; height: 30px; border-radius: 50%; background: transparent; border: 0; }
+  .range input:focus-visible { outline: none; }
+  .knob { position: absolute; top: 2px; left: calc(15px + var(--f, 0.5) * (100% - 30px)); width: 30px; height: 30px; margin-left: -15px; border-radius: 50%; background: var(--card); box-shadow: 0 6px 14px -6px var(--shadow), 0 0 0 1px var(--edge); display: grid; place-items: center; pointer-events: none; transition: transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .range input:active + .knob, .range.hold .knob { transform: scale(1.18); }
+  .range input:focus-visible + .knob { outline: 2.5px solid var(--focus); outline-offset: 3px; }
+  .knob svg { width: 20px; height: 20px; }
+
+  /* ---------- Hourly chips ---------- */
+  .hours { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; padding: 8px 2px 2px; }
+  .hr { display: grid; justify-items: center; gap: 3px; padding: 9px 2px 8px; border-radius: 14px; border: 1px solid transparent; background: none; transition: background 0.25s, border-color 0.25s, transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1); animation: statin 0.6s cubic-bezier(0.3, 1.5, 0.5, 1) backwards; animation-delay: calc(var(--k) * 35ms); }
+  .hours.first .hr { animation-delay: calc(var(--k) * 45ms + 0.7s); }
+  .hr:hover { background: var(--soft); }
+  .hr:active { transform: scale(0.92); }
+  .hr.on { background: var(--soft); border-color: var(--edge); }
+  .hr small { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+  .hr b { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .hr svg { width: 26px; height: 26px; }
+  .hr.on svg { animation: hop 0.6s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes hop { 40% { transform: translateY(-5px) scale(1.12); } }
+
+  /* demo cursor */
+  .ghost { position: fixed; left: 0; top: 0; z-index: 40; width: 26px; height: 26px; pointer-events: none; opacity: 0; transform: translate(var(--gx, 70vw), var(--gy, 105vh)); transition: transform 0.8s cubic-bezier(0.55, 0, 0.25, 1), opacity 0.35s; }
+  .ghost.show { opacity: 1; }
+  .ghost.drag { transition: opacity 0.35s; }
+  .ghost svg { width: 100%; height: 100%; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35)); transition: transform 0.15s; }
+  .ghost.tap svg, .ghost.drag svg { transform: scale(0.82); }
+  .ghost::after { content: ""; position: absolute; left: -10px; top: -11px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--accent); opacity: 0; }
+  .ghost.tap::after { animation: tapring 0.5s ease-out; }
+  @keyframes tapring { from { transform: scale(0.4); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+
+  @media (max-width: 720px) {
+    .card { max-width: 460px; padding: 10px; border-radius: 26px; }
+    .scene { height: 250px; border-radius: 18px; }
+    .temp { font-size: 64px; }
+    .temp sup { font-size: 20px; margin-top: 6px; }
+    .readout { left: 16px; top: 14px; }
+    .clock { right: 14px; top: 14px; font-size: 17px; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+    .stat { padding: 7px 9px; }
+    .hours { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 2px; }
+    .hr { padding: 7px 0; }
+    .hr small { font-size: 10px; }
+    .hr b { font-size: 12.5px; }
+    .hr svg { width: 22px; height: 22px; }
+    .top { gap: 6px; }
+    .tab { flex: 1 1 auto; font-size: 11.5px; padding: 8px 5px; letter-spacing: -0.01em; }
+    .now { padding: 8px 9px; gap: 5px; font-size: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage" id="stage">
+  <article class="card" id="card" aria-labelledby="cityName">
+    <div class="top">
+      <div class="tabs" id="tabs" role="group" aria-label="City">
+        <span class="pill" id="pill"></span>
+        <button class="tab" type="button" data-c="0" aria-pressed="true">Lahore</button>
+        <button class="tab" type="button" data-c="1" aria-pressed="false">Karachi</button>
+        <button class="tab" type="button" data-c="2" aria-pressed="false">Islamabad</button>
+        <button class="tab" type="button" data-c="3" aria-pressed="false">Skardu</button>
+      </div>
+      <button class="now" id="nowBtn" type="button" aria-label="Back to the current time"><i></i><span id="nowLbl">Now</span></button>
+    </div>
+
+    <div class="scene" id="scene">
+      <svg viewBox="0 0 800 340" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop id="skyTop" offset="0"/><stop id="skyHor" offset="0.86"/></linearGradient>
+          <radialGradient id="sunGlow"><stop offset="0" stop-color="#fff6c8" stop-opacity="0.95"/><stop offset="0.25" stop-color="#ffd27a" stop-opacity="0.55"/><stop offset="1" stop-color="#ffb35c" stop-opacity="0"/></radialGradient>
+          <radialGradient id="moonGlow"><stop offset="0" stop-color="#e8eeff" stop-opacity="0.5"/><stop offset="1" stop-color="#e8eeff" stop-opacity="0"/></radialGradient>
+          <linearGradient id="seaG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--seaTop, #4a7fb8)"/><stop offset="1" style="stop-color: var(--sil, #22324d)"/></linearGradient>
+          <g id="cloud"><ellipse cx="0" cy="0" rx="46" ry="16"/><ellipse cx="-22" cy="-8" rx="22" ry="16"/><ellipse cx="12" cy="-14" rx="26" ry="20"/><ellipse cx="34" cy="-4" rx="18" ry="12"/></g>
+        </defs>
+        <rect width="800" height="340" fill="url(#sky)"/>
+        <g class="stars" id="stars"></g>
+        <g class="moonwrap" id="moon"><circle r="44" fill="url(#moonGlow)"/><circle r="14" fill="#eef2ff"/><circle cx="6" cy="-4" r="12" style="fill: var(--skyTopC, #0b1230)" opacity="0.9"/></g>
+        <g class="sunwrap" id="sun"><circle r="80" fill="url(#sunGlow)"/><circle id="sunDisc" r="17" fill="#fff1b8"/></g>
+        <g id="cloudLayers" style="fill: var(--cloud, #fff)"></g>
+        <g class="birds" id="birds"><g transform="translate(0 120)"><path d="M0 0 q6 -6 12 0 q6 -6 12 0"/></g><g transform="translate(34 104) scale(0.8)"><path style="animation-delay:-0.2s" d="M0 0 q6 -6 12 0 q6 -6 12 0"/></g><g transform="translate(60 128) scale(0.65)"><path style="animation-delay:-0.4s" d="M0 0 q6 -6 12 0 q6 -6 12 0"/></g></g>
+        <path class="bolt" id="bolt" d="M520 40 L500 110 L522 108 L496 190 L540 98 L516 100 L536 40"/>
+        <g id="cities"></g>
+        <rect id="haze" width="800" height="340" fill="#e4cfa2" opacity="0"/>
+      </svg>
+      <canvas id="fx"></canvas>
+      <div class="flash" id="flash"></div>
+      <div class="shade"></div>
+      <div class="readout">
+        <div class="place"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg><span id="cityName">Lahore</span></div>
+        <div class="temp" aria-hidden="true"><span class="odo" id="odo"></span><sup>°C</sup></div>
+        <div class="sr-only" id="tempSr" aria-live="polite"></div>
+        <div class="cond" id="cond">Hazy sunshine</div>
+        <div class="hl" id="hl">H 27° · L 14°</div>
+      </div>
+      <div class="clock" aria-hidden="true"><span id="clock">4:30 pm</span><small id="date">Friday</small></div>
+    </div>
+
+    <div class="stats">
+      <div class="stat" style="--k:0"><svg viewBox="0 0 24 24"><path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0z"/></svg><div><small>Feels like</small><b id="feels">29°</b></div></div>
+      <div class="stat" style="--k:1"><svg viewBox="0 0 24 24"><path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z"/></svg><div><small>Humidity</small><b id="hum">48%</b></div></div>
+      <div class="stat" style="--k:2"><svg viewBox="0 0 24 24"><path d="M3 9h11a3 3 0 1 0-3-3M3 15h15a3 3 0 1 1-3 3M3 12h8"/></svg><div><small>Wind</small><b id="wind">9 km/h</b></div></div>
+      <div class="stat" style="--k:3"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg><div><small>UV index</small><b id="uv">3 Moderate</b></div></div>
+    </div>
+
+    <div class="scrub">
+      <label for="time">Drag through the day</label>
+      <div class="marks" id="marks"></div>
+      <div class="range" id="rangeBox">
+        <input id="time" type="range" min="0" max="1439" step="5" value="990" aria-valuetext="4:30 pm" />
+        <span class="knob" id="knob"></span>
+      </div>
+    </div>
+
+    <div class="hours first" id="hours" role="group" aria-label="Hourly forecast, tap to jump"></div>
+  </article>
+</main>
+<div class="ghost" id="ghost" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 2.5v17l4.6-4.3 3 6.6 3.1-1.4-3-6.4 6.3-.4z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    var $ = function (s, r) { return (r || document).querySelector(s); };
+    var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+    var scene = $("#scene"), range = $("#time"), GROUND = 300;
+
+    /* ---------- Cities: sunrise and sunset in minutes, the day's low and high, and the weather by hour ---------- */
+    var CITIES = [
+      { name: "Lahore", sr: 400, ss: 1025, lo: 14, hi: 27, hum: 55, wind: 7,
+        cond: function (m) { return m < 400 || m > 1080 ? ["Clear, smoky night", "clear"] : m < 690 ? ["Smoggy morning", "haze"] : ["Hazy sunshine", "haze"]; } },
+      { name: "Karachi", sr: 415, ss: 1070, lo: 21, hi: 31, hum: 68, wind: 19,
+        cond: function (m) { return m < 415 || m > 1110 ? ["Humid night", "clear"] : m < 720 ? ["Sunny and warm", "clear"] : ["Sea breeze", "cloud"]; } },
+      { name: "Islamabad", sr: 405, ss: 1020, lo: 10, hi: 22, hum: 74, wind: 12,
+        cond: function (m) { return m >= 780 && m < 1290 ? ["Thunder showers", "rain"] : m >= 660 && m < 780 ? ["Clouds building", "cloud"] : m < 405 || m > 1060 ? ["Cloudy night", "cloud"] : ["Bright, cool morning", "clear"]; } },
+      { name: "Skardu", sr: 410, ss: 1005, lo: -3, hi: 9, hum: 40, wind: 6,
+        cond: function (m) { return m >= 600 && m < 900 ? ["Bright and cold", "clear"] : ["Light snow", "snow"]; } }
+    ];
+    var S = { c: 0, m: 990, shown: null };
+    function C() { return CITIES[S.c]; }
+    function pkNow() { var d = new Date(); return (d.getUTCHours() * 60 + d.getUTCMinutes() + 300) % 1440; } // Pakistan time, UTC+5
+    function fmt(m) { m = ((Math.round(m) % 1440) + 1440) % 1440; var h = Math.floor(m / 60), mm = m % 60, ap = h < 12 ? "am" : "pm"; h = h % 12 || 12; return h + ":" + (mm < 10 ? "0" : "") + mm + " " + ap; }
+    function hlabel(h) { return h === 0 ? "12a" : h < 12 ? h + "a" : h === 12 ? "12p" : h - 12 + "p"; }
+    function temp(c, m) { var f = 0.5 + 0.5 * Math.cos((2 * Math.PI * (m - 870)) / 1440); var k = c.cond(m)[1]; return c.lo + (c.hi - c.lo) * f - (k === "rain" ? 3 : 0); }
+
+    /* ---------- Colour helpers ---------- */
+    function hex(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
+    function mix(a, b, k) { return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]; }
+    function rgb(c) { return "rgb(" + c.map(Math.round).join(",") + ")"; }
+    // sky key colours (top, horizon) through a clear day, placed around sunrise (sr) and sunset (ss)
+    function keys(c) {
+      return [[0, "#060a22", "#151c48"], [c.sr - 70, "#0b1233", "#2a2a5c"], [c.sr - 25, "#25316c", "#b0687c"], [c.sr + 10, "#4b6ec2", "#ffb27a"], [c.sr + 100, "#5aa4ea", "#cde9ff"],
+        [780, "#3a8fe6", "#a9d8ff"], [c.ss - 80, "#5b8fd8", "#ffd39a"], [c.ss, "#3c3f86", "#ff8a5c"], [c.ss + 45, "#1a1e52", "#6b3f72"], [c.ss + 110, "#080c28", "#1b2150"], [1440, "#060a22", "#151c48"]];
+    }
+    function skyAt(c, m) {
+      var K = keys(c), i = 0; while (i < K.length - 2 && m > K[i + 1][0]) i++;
+      var a = K[i], b = K[i + 1], k = Math.max(0, Math.min(1, (m - a[0]) / (b[0] - a[0] || 1)));
+      var top = mix(hex(a[1]), hex(b[1]), k), hor = mix(hex(a[2]), hex(b[2]), k), kind = c.cond(m)[1], day = 1 - nightAt(c, m);
+      if (kind === "rain") { top = mix(top, [70, 80, 96], 0.55 * day + 0.2); hor = mix(hor, [110, 120, 134], 0.6 * day + 0.2); }
+      if (kind === "cloud") { top = mix(top, [120, 136, 160], 0.3 * day); hor = mix(hor, [190, 200, 214], 0.3 * day); }
+      if (kind === "snow") { top = mix(top, [176, 188, 206], 0.45 * day + 0.1); hor = mix(hor, [222, 228, 236], 0.5 * day + 0.1); }
+      if (kind === "haze") hor = mix(hor, [226, 205, 160], 0.4 * day);
+      return { top: top, hor: hor };
+    }
+    function nightAt(c, m) {
+      if (m < c.sr - 40 || m > c.ss + 50) return 1;
+      if (m > c.sr + 30 && m < c.ss - 30) return 0;
+      return m < 720 ? 1 - (m - (c.sr - 40)) / 70 : (m - (c.ss - 30)) / 80;
+    }
+
+    /* ---------- Build the scene: stars, clouds and four skylines (our own drawings) ---------- */
+    function rng(seed) { return function () { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+    (function () {
+      var r = rng(7), s = "";
+      for (var i = 0; i < 70; i++) s += '<circle cx="' + (r() * 800).toFixed(0) + '" cy="' + (r() * 210).toFixed(0) + '" r="' + (0.6 + r() * 1.3).toFixed(1) + '" style="--d:' + (-r() * 3).toFixed(2) + 's"/>';
+      $("#stars").innerHTML = s;
+      // three cloud layers, each two screens wide so it loops seamlessly
+      var L = [[0.55, 60, 0.6], [0.8, 95, 0.85], [1, 135, 1.1]], c = "";
+      L.forEach(function (l, n) {
+        var g = "";
+        for (var copy = 0; copy < 2; copy++) for (var j = 0; j < 3; j++) g += '<use href="#cloud" transform="translate(' + (copy * 800 + 80 + j * 270 + n * 60) + " " + (l[1] + (j % 2) * 26) + ") scale(" + l[2] + ')"/>';
+        c += '<g class="clouds c' + (n + 1) + '" style="opacity:calc(var(--cloudA, .5) * ' + l[0] + ')">' + g + "</g>";
+      });
+      $("#cloudLayers").innerHTML = c;
+
+      function blocks(r, x0, x1, hmin, hmax, wmin, wmax, odds) {
+        var b = "", w = "", x = x0;
+        while (x < x1) {
+          var bw = wmin + r() * (wmax - wmin), bh = hmin + r() * (hmax - hmin), y = GROUND - bh;
+          b += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + (bw + 0.8).toFixed(1) + '" height="' + (bh + 40).toFixed(1) + '"/>';
+          for (var wy = y + 7; wy < GROUND - 6; wy += 10) for (var wx = x + 4; wx < x + bw - 5; wx += 8) if (r() < odds) w += '<rect class="win" style="--th:' + (r() * 0.9).toFixed(2) + '" x="' + wx.toFixed(1) + '" y="' + wy.toFixed(1) + '" width="3.4" height="4.6"/>';
+          x += bw + (r() < 0.25 ? 3 + r() * 8 : 0);
+        }
+        return [b, w];
+      }
+      var html = "";
+      // Lahore: low old-city roofs, a domed hall with minarets, and a far row of houses
+      var r1 = rng(11), far = blocks(r1, -10, 820, 18, 42, 26, 50, 0), near = blocks(r1, -10, 260, 26, 70, 22, 44, 0.32), near2 = blocks(r1, 560, 820, 24, 76, 20, 40, 0.32);
+      var dome = '<path d="M300 300 V246 H330 Q336 200 380 186 Q424 200 430 246 H460 V300 Z"/><rect x="376" y="168" width="8" height="20"/>' +
+        [286, 312, 448, 474].map(function (x) { return '<rect x="' + (x - 4) + '" y="196" width="8" height="104"/><path d="M' + (x - 7) + " 198 Q" + x + " 180 " + (x + 7) + ' 198 Z"/>'; }).join("") +
+        '<path d="M330 246 Q336 224 346 216 Q352 226 354 246 Z M406 246 Q408 226 414 216 Q424 224 430 246 Z"/>';
+      html += '<g class="city" data-c="0"><rect class="near" x="-10" y="296" width="820" height="50"/><g class="far">' + far[0] + '</g><g class="near">' + near[0] + near2[0] + dome + "</g>" + near[1] + near2[1] + "</g>";
+      // Karachi: sea at the horizon, tall towers and a harbour crane
+      var r2 = rng(23), kt = blocks(r2, 40, 330, 50, 150, 20, 38, 0.42), kt2 = blocks(r2, 470, 760, 40, 125, 22, 40, 0.42);
+      var crane = '<path d="M380 300 V170 H386 V300 Z M360 172 H460 V178 H360 Z M452 178 V214 H448 V178 Z M372 160 L386 172 H380 Z"/><rect x="440" y="214" width="20" height="10"/>';
+      html += '<g class="city off" data-c="1"><rect class="near" x="-10" y="296" width="820" height="50"/><rect x="0" y="272" width="800" height="70" fill="url(#seaG)"/><path class="sea-line" d="M0 282 H800 M30 290 H800 M0 297 H800"/><g class="near">' + kt[0] + kt2[0] + crane + "</g>" + kt[1] + kt2[1] + "</g>";
+      // Islamabad: hills behind, low houses and pines in front
+      var r3 = rng(37), houses = blocks(r3, -10, 820, 14, 34, 24, 46, 0.25), pines = "";
+      for (var p = 0; p < 18; p++) { var px = r3() * 800, ph = 26 + r3() * 30; pines += '<path d="M' + px.toFixed(0) + " " + (GROUND - ph).toFixed(0) + " l" + (ph * 0.28).toFixed(0) + " " + ph.toFixed(0) + " h-" + (ph * 0.56).toFixed(0) + ' Z"/>'; }
+      html += '<g class="city off" data-c="2"><rect class="near" x="-10" y="296" width="820" height="50"/><path class="far" d="M-10 300 L-10 190 Q60 150 140 176 T300 160 Q380 120 470 168 T640 150 Q720 130 810 180 V300 Z"/><path class="hill" d="M-10 300 V236 Q120 210 240 232 T500 224 T810 230 V300 Z"/><g class="near">' + houses[0] + pines + "</g>" + houses[1] + "</g>";
+      // Skardu: snow-capped peaks and a still lake
+      html += '<g class="city off" data-c="3"><rect class="near" x="-10" y="296" width="820" height="50"/><path class="far" d="M-10 300 V200 L70 120 L120 160 L200 70 L270 150 L330 110 L420 190 L500 90 L580 160 L640 120 L720 180 L810 140 V300 Z"/>' +
+        '<path fill="#f3f7ff" opacity="0.92" d="M200 70 L226 99 L212 96 L200 106 L186 96 L176 98 Z M500 90 L524 118 L508 114 L498 124 L486 114 L478 116 Z M70 120 L90 140 L76 138 L66 146 L56 136 Z M640 120 L660 138 L646 136 L638 142 L628 134 Z"/>' +
+        '<path class="near" d="M-10 300 V250 Q100 226 220 246 T460 240 T810 252 V300 Z"/><rect x="0" y="282" width="800" height="60" fill="url(#seaG)" opacity="0.85"/><path class="sea-line" d="M60 290 H300 M420 294 H760"/></g>';
+      $("#cities").innerHTML = html;
+    })();
+
+    /* ---------- Paint the sky for the current city and minute ---------- */
+    var SUN_X0 = 60, SUN_X1 = 740, HOR = 292, knobNight = null, sayT = 0;
+    // screen readers hear the reading once the sky settles, not on every frame
+    function announce(text) { clearTimeout(sayT); sayT = setTimeout(function () { $("#tempSr").textContent = text; }, 700); }
+    function paint() {
+      var c = C(), m = S.m, sky = skyAt(c, m), n = nightAt(c, m), kind = c.cond(m)[1];
+      $("#skyTop").setAttribute("stop-color", rgb(sky.top)); $("#skyHor").setAttribute("stop-color", rgb(sky.hor));
+      scene.style.setProperty("--skyTopC", rgb(sky.top));
+      $("#stage").style.setProperty("--tint", rgb(mix(sky.top, sky.hor, 0.5)));
+      $("#stars").style.opacity = (n * (kind === "rain" || kind === "snow" ? 0.15 : kind === "cloud" ? 0.45 : 1)).toFixed(2);
+      // sun on its arc between sunrise and sunset
+      var sun = $("#sun"), p = (m - c.sr) / (c.ss - c.sr);
+      if (p > -0.08 && p < 1.08) {
+        var sx = SUN_X0 + p * (SUN_X1 - SUN_X0), sy = HOR - Math.sin(Math.max(0, Math.min(1, p)) * Math.PI) * 200 + (p < 0 || p > 1 ? 30 : 0);
+        sun.setAttribute("transform", "translate(" + sx.toFixed(1) + " " + sy.toFixed(1) + ")"); sun.style.opacity = kind === "rain" ? 0.25 : kind === "snow" ? 0.6 : 1;
+        var low = 1 - Math.sin(Math.max(0, Math.min(1, p)) * Math.PI); $("#sunDisc").setAttribute("fill", rgb(mix([255, 246, 200], [255, 150, 80], Math.pow(low, 2))));
+      } else sun.style.opacity = 0;
+      // moon on the night arc (sunset to the next sunrise)
+      var nm = m < c.sr ? m + 1440 : m, q = (nm - c.ss) / (c.sr + 1440 - c.ss), moon = $("#moon");
+      if (q > 0 && q < 1) { moon.setAttribute("transform", "translate(" + (SUN_X0 + q * (SUN_X1 - SUN_X0)).toFixed(1) + " " + (HOR - 30 - Math.sin(q * Math.PI) * 170).toFixed(1) + ")"); moon.style.opacity = Math.min(1, n * 1.4) * (kind === "rain" ? 0.3 : 1); }
+      else moon.style.opacity = 0;
+      // clouds, haze, skyline tone and the lit windows (CSS reads --night)
+      var cloudA = { clear: 0.35, haze: 0.45, cloud: 0.85, rain: 1, snow: 0.95 }[kind];
+      var cloudC = mix(mix([255, 255, 255], sky.hor, 0.35), [40, 48, 72], n * 0.75);
+      if (kind === "rain") cloudC = mix(cloudC, [70, 78, 92], 0.6);
+      scene.style.setProperty("--cloudA", cloudA); scene.style.setProperty("--cloud", rgb(cloudC));
+      scene.style.setProperty("--night", n.toFixed(3));
+      scene.style.setProperty("--sil", rgb(mix([46, 58, 86], [10, 14, 32], n)));
+      scene.style.setProperty("--sil2", rgb(mix(mix([46, 58, 86], sky.hor, 0.45), [20, 26, 52], n)));
+      scene.style.setProperty("--hill", rgb(mix(mix([46, 58, 86], sky.hor, 0.22), [15, 20, 42], n)));
+      scene.style.setProperty("--seaTop", rgb(mix(sky.hor, [40, 90, 150], 0.4)));
+      $("#haze").setAttribute("opacity", kind === "haze" ? (0.24 * (1 - n) + 0.08).toFixed(2) : 0);
+      $("#birds").style.opacity = S.c === 1 && n < 0.4 ? 1 : 0;
+      scene.classList.toggle("fast", S.c === 1 || kind === "rain");
+      setWeather(kind);
+      // text
+      var t = Math.round(temp(c, m)), cond = c.cond(m)[0];
+      odo(t); announce(C().name + ", " + fmt(m) + ": " + t + " degrees Celsius, " + cond);
+      if (S.shown !== cond) { S.shown = cond; var ce = $("#cond"); ce.textContent = cond; ce.classList.remove("in"); void ce.offsetWidth; ce.classList.add("in"); }
+      $("#clock").textContent = fmt(m);
+      $("#feels").textContent = Math.round(t + (kind === "rain" ? -2 : c.hum > 60 ? 2 : -1) - c.wind / 10) + "°";
+      $("#hum").textContent = Math.round(Math.min(98, c.hum + n * 14 + (kind === "rain" ? 20 : 0))) + "%";
+      $("#wind").textContent = Math.round(c.wind * (0.7 + 0.6 * (1 - n)) + (kind === "rain" ? 9 : 0)) + " km/h";
+      var uv = n > 0.5 || kind === "rain" ? 0 : Math.round(Math.max(0, Math.sin(Math.max(0, Math.min(1, p)) * Math.PI)) * (S.c === 3 ? 4 : 6) * (kind === "haze" ? 0.7 : 1));
+      $("#uv").textContent = uv + (uv < 3 ? " Low" : uv < 6 ? " Moderate" : " High");
+      // scrubber
+      range.value = Math.round(m / 5) * 5; range.setAttribute("aria-valuetext", fmt(m) + ", " + t + " degrees, " + cond);
+      $("#rangeBox").style.setProperty("--f", (m / 1439).toFixed(4));
+      if (knobNight !== n > 0.5) knobNight = n > 0.5, $("#knob").innerHTML = knobNight ? '<svg viewBox="0 0 24 24"><path d="M15.5 3.5a8.5 8.5 0 1 0 5 13.3A7 7 0 0 1 15.5 3.5z" fill="#6f7fd6"/></svg>' : '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.5" fill="#f5a524"/><g stroke="#f5a524" stroke-width="2" stroke-linecap="round"><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></g></svg>';
+      var now = pkNow(), atNow = Math.abs(m - now) < 6;
+      $("#nowBtn").classList.toggle("off", !atNow); $("#nowLbl").textContent = atNow || innerWidth < 720 ? "Now" : "Back to now";
+      $$(".hr").forEach(function (b) { var h = +b.dataset.h * 60; var on = m >= h - 90 && m < h + 90 || (h === 0 && m >= 1350); if (on !== b.classList.contains("on")) b.classList.toggle("on", on); });
+    }
+
+    /* Rolling temperature digits */
+    var odoEl = $("#odo");
+    function odo(v) {
+      var digits = String(Math.abs(v)).split("");
+      var cols = $$(".col", odoEl);
+      if (!$(".sign", odoEl)) odoEl.innerHTML = '<span class="sign">−</span>';
+      $(".sign", odoEl).classList.toggle("on", v < 0);
+      if (cols.length !== digits.length) {
+        cols.forEach(function (c) { c.remove(); });
+        digits.forEach(function (d, i) { var c = document.createElement("span"); c.className = "col"; c.style.setProperty("--dl", i * 0.06 + "s"); c.innerHTML = "<span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span>"; odoEl.appendChild(c); });
+        cols = $$(".col", odoEl); void odoEl.offsetWidth;
+      }
+      cols.forEach(function (c, i) { c.style.transform = "translateY(" + -digits[i] * 1.1 + "em)"; });
+    }
+
+    /* ---------- Rain, snow and haze motes on a canvas ---------- */
+    var cv = $("#fx"), ctx = cv.getContext("2d"), drops = [], kindNow = "", W = 0, H = 0, fxRaf = 0, boltT = 0;
+    function sizeFx() { var d = Math.min(2, devicePixelRatio || 1), r = scene.getBoundingClientRect(); W = r.width; H = r.height; cv.width = W * d; cv.height = H * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+    function setWeather(kind) {
+      if (kind === kindNow) return; kindNow = kind; drops = [];
+      var n = kind === "rain" ? 140 : kind === "snow" ? 90 : kind === "haze" ? 40 : 0;
+      for (var i = 0; i < n; i++) drops.push(newDrop(true));
+      if (!fxRaf && n) fxRaf = requestAnimationFrame(fxStep);
+      if (!n) ctx.clearRect(0, 0, W, H);
+      clearTimeout(boltT); if (kind === "rain") thunder();
+    }
+    function newDrop(any) {
+      return { x: Math.random() * (W + 80) - 40, y: any ? Math.random() * H : -10, v: kindNow === "rain" ? 9 + Math.random() * 6 : kindNow === "snow" ? 0.6 + Math.random() * 1.1 : 0.15 + Math.random() * 0.2,
+        s: kindNow === "snow" ? 1.2 + Math.random() * 2.4 : 1 + Math.random(), ph: Math.random() * 6.28 };
+    }
+    function fxStep() {
+      ctx.clearRect(0, 0, W, H);
+      if (!drops.length) { fxRaf = 0; return; }
+      var k = kindNow;
+      ctx.strokeStyle = "rgba(220,232,255,0.55)"; ctx.lineWidth = 1.2; ctx.fillStyle = k === "snow" ? "rgba(255,255,255,0.92)" : "rgba(255,240,210,0.35)";
+      if (k === "rain") ctx.beginPath();
+      drops.forEach(function (d, i) {
+        if (reduce.matches) { d.v = k === "rain" ? 0 : d.v * 0; }
+        d.ph += 0.03; d.y += d.v;
+        if (k === "rain") { d.x -= d.v * 0.25; ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + 3, d.y - 12); }
+        else if (k === "snow") { d.x += Math.sin(d.ph) * 0.6; ctx.beginPath(); ctx.arc(d.x, d.y, d.s, 0, 6.29); ctx.fill(); }
+        else { d.x += Math.sin(d.ph) * 0.3; ctx.beginPath(); ctx.arc(d.x, d.y, d.s, 0, 6.29); ctx.fill(); }
+        if (d.y > H + 14 || d.x < -50 || d.x > W + 50) drops[i] = newDrop(false); // off the scene: start again at the top
+      });
+      if (k === "rain") ctx.stroke();
+      fxRaf = requestAnimationFrame(fxStep);
+    }
+    function thunder() {
+      boltT = setTimeout(function () {
+        if (kindNow !== "rain") return;
+        if (!reduce.matches) { ["#flash", "#bolt"].forEach(function (s) { var el = $(s); el.classList.remove("on"); void el.getBoundingClientRect(); el.classList.add("on"); }); }
+        thunder();
+      }, 2600 + Math.random() * 4200);
+    }
+
+    /* ---------- Hourly chips and the sunrise / sunset marks ---------- */
+    function icon(kind, night) {
+      var sun = '<circle cx="12" cy="12" r="5" fill="#f5a524"/><g stroke="#f5a524" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v1.6M12 19.4V21M3 12h1.6M19.4 12H21M5.6 5.6l1.1 1.1M17.3 17.3l1.1 1.1M5.6 18.4l1.1-1.1M17.3 6.7l1.1-1.1"/></g>';
+      var moon = '<path d="M15 4a8 8 0 1 0 5 12.6A6.6 6.6 0 0 1 15 4z" fill="#7d8be0"/>';
+      var cloud = '<path d="M7 18h10a4 4 0 0 0 .4-8 5.5 5.5 0 0 0-10.6 1.6A3.3 3.3 0 0 0 7 18z" fill="#a9b6c9"/>';
+      var body = kind === "rain" ? cloud + '<g stroke="#4b8ef0" stroke-width="1.8" stroke-linecap="round"><path d="M9 20l-1 2.5M13 20l-1 2.5M17 20l-1 2.5"/></g>'
+        : kind === "snow" ? cloud + '<g fill="#8fb4ff"><circle cx="9" cy="21" r="1.2"/><circle cx="13" cy="22.4" r="1.2"/><circle cx="17" cy="21" r="1.2"/></g>'
+        : kind === "cloud" ? (night ? moon : sun).replace('cx="12" cy="12"', 'cx="9" cy="9"') + cloud
+        : kind === "haze" ? (night ? moon : sun) + '<g stroke="#c9a46a" stroke-width="1.8" stroke-linecap="round"><path d="M3 17h13M7 20.5h14"/></g>'
+        : night ? moon : sun;
+      return '<svg viewBox="0 0 24 24" aria-hidden="true">' + body + "</svg>";
+    }
+    function buildHours() {
+      var c = C(), h = "";
+      for (var i = 0; i < 8; i++) {
+        var hr = i * 3, m = hr * 60, k = c.cond(m)[1], t = Math.round(temp(c, m));
+        h += '<button type="button" class="hr" style="--k:' + i + '" data-h="' + hr + '" aria-label="' + fmt(m) + ", " + t + " degrees, " + c.cond(m)[0] + '"><small>' + hlabel(hr) + "</small>" + icon(k, nightAt(c, m) > 0.5) + "<b>" + t + "°</b></button>";
+      }
+      $("#hours").innerHTML = h;
+      $$(".hr").forEach(function (b) { b.addEventListener("click", function () { glideTo(+b.dataset.h * 60); }); });
+      // the scrubber track: the day's sky from midnight to midnight
+      var stops = []; for (var j = 0; j <= 24; j++) { var s = skyAt(c, Math.min(1439, j * 60)); stops.push(rgb(mix(s.top, s.hor, 0.55)) + " " + ((j / 24) * 100).toFixed(1) + "%"); }
+      $("#rangeBox").style.setProperty("--track", "linear-gradient(90deg," + stops.join(",") + ")");
+      var up = '<svg viewBox="0 0 24 24"><path d="M5 18h14M8 15a4 4 0 0 1 8 0M12 4v5M9.5 6.5L12 4l2.5 2.5"/></svg>', down = '<svg viewBox="0 0 24 24"><path d="M5 18h14M8 15a4 4 0 0 1 8 0M12 4v5M9.5 6.5L12 9l2.5-2.5"/></svg>';
+      $("#marks").innerHTML = '<span style="left:' + (c.sr / 14.39).toFixed(2) + '%">' + up + fmt(c.sr).replace(" am", "") + '</span><span style="left:' + (c.ss / 14.39).toFixed(2) + '%">' + down + fmt(c.ss).replace(" pm", "") + "</span>";
+      $("#hl").textContent = "H " + c.hi + "° · L " + c.lo + "°";
+    }
+
+    /* ---------- Moving through time ---------- */
+    var glideRaf = 0;
+    function setM(m) { S.m = Math.max(0, Math.min(1439, m)); paint(); }
+    function glideTo(m, ms) {
+      cancelAnimationFrame(glideRaf);
+      if (reduce.matches) { setM(m); return; }
+      var from = S.m, t0 = performance.now(), dur = ms || 1100;
+      (function step(now) {
+        var k = Math.min(1, (now - t0) / dur), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        setM(from + (m - from) * e);
+        if (k < 1) glideRaf = requestAnimationFrame(step);
+      })(t0);
+    }
+    range.addEventListener("input", function () { cancelAnimationFrame(glideRaf); setM(+range.value); });
+    range.addEventListener("pointerdown", function () { $("#rangeBox").classList.add("hold"); });
+    addEventListener("pointerup", function () { $("#rangeBox").classList.remove("hold"); });
+    $("#nowBtn").addEventListener("click", function () { glideTo(pkNow()); });
+
+    /* ---------- Switching city: text blurs out, the old skyline sinks, the new one springs up ---------- */
+    var swapT = 0;
+    function setCity(i, first) {
+      if (i === S.c && !first) return;
+      S.c = i; S.shown = null;
+      $$(".tab").forEach(function (b) { b.setAttribute("aria-pressed", String(+b.dataset.c === i)); });
+      movePill();
+      $$(".city").forEach(function (g) { g.classList.toggle("off", +g.dataset.c !== i); });
+      if (!first) { scene.classList.remove("swapping"); void scene.offsetWidth; scene.classList.add("swapping"); clearTimeout(swapT); swapT = setTimeout(function () { scene.classList.remove("swapping"); }, 800); }
+      setTimeout(function () { $("#cityName").textContent = C().name; }, first || reduce.matches ? 0 : 260);
+      buildHours(); paint();
+    }
+    function movePill() {
+      var b = $('.tab[aria-pressed="true"]'), pill = $("#pill");
+      pill.style.width = b.offsetWidth + "px"; pill.style.transform = "translateX(" + b.offsetLeft + "px)";
+    }
+    $$(".tab").forEach(function (b) { b.addEventListener("click", function () { setCity(+b.dataset.c); }); });
+
+    $("#date").textContent = new Date(Date.now() + 5 * 3600000).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" });
+
+    /* ---------- Auto-demo: plays on load and every few seconds; any real input stops it ---------- */
+    var ghost = $("#ghost"), demoOn = !reduce.matches, timers = [];
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+    function aim(x, y) { ghost.style.setProperty("--gx", Math.min(innerWidth - 30, x) + "px"); ghost.style.setProperty("--gy", y + "px"); }
+    function ghostTo(el, then) {
+      var r = el.getBoundingClientRect(); ghost.classList.add("show"); aim(r.left + r.width * 0.55, r.top + r.height * 0.6);
+      later(function () { ghost.classList.add("tap"); later(function () { ghost.classList.remove("tap"); if (demoOn && then) then(); }, 170); }, 820);
+    }
+    function ghostSlide(toM, ms) {
+      var r = range.getBoundingClientRect(), y = r.top + r.height / 2, x = function (m) { return r.left + 15 + (m / 1439) * (r.width - 30); };
+      ghost.classList.add("show"); aim(x(S.m), y);
+      later(function () {
+        ghost.classList.add("drag"); $("#rangeBox").classList.add("hold");
+        var from = S.m, t0 = performance.now();
+        (function step(now) {
+          if (!demoOn) return;
+          var k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, m = from + (toM - from) * e;
+          aim(x(m), y); setM(m);
+          if (k < 1) requestAnimationFrame(step); else later(function () { ghost.classList.remove("drag"); $("#rangeBox").classList.remove("hold"); }, 200);
+        })(t0);
+      }, 850);
+    }
+    function stopDemo() { if (!demoOn) return; demoOn = false; timers.forEach(clearTimeout); ghost.classList.remove("show", "tap", "drag"); $("#rangeBox").classList.remove("hold"); }
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (t) { addEventListener(t, function (e) { if (e.isTrusted) stopDemo(); }, { capture: true, passive: true }); });
+    function demo() {
+      if (!demoOn) return;
+      later(function () { ghostSlide(1170, 2600); }, 100);                       // dusk falls, windows light up
+      later(function () { ghostTo($('.tab[data-c="2"]'), function () { setCity(2); }); }, 4000); // rain and thunder
+      later(function () { ghostTo($('.hr[data-h="9"]'), function () { glideTo(540); }); }, 6300);
+      later(function () { ghostTo($('.tab[data-c="3"]'), function () { setCity(3); }); }, 8600);  // snow on the peaks
+      later(function () { ghostTo($('.tab[data-c="1"]'), function () { setCity(1); }); }, 11000); // sea breeze
+      later(function () { ghostTo($('.hr[data-h="18"]'), function () { glideTo(1080); }); }, 13200);
+      later(function () { ghostTo($('.tab[data-c="0"]'), function () { setCity(0); }); }, 15600);
+      later(function () { ghostTo($("#nowBtn"), function () { glideTo(pkNow()); }); }, 17600);
+      later(function () { ghost.classList.remove("show"); }, 19000);
+      later(demo, 21500);
+    }
+
+    /* ---------- Start: the sky opens at the real Pakistan time ---------- */
+    sizeFx();
+    S.m = pkNow();
+    setCity(0, true);
+    // intro: sweep in from the small hours to now so the first second shows the sky moving
+    if (!reduce.matches) { var target = S.m; S.m = (target + 1440 - 150) % 1440; if (S.m > target) S.m = 0; paint(); setTimeout(function () { glideTo(target, 1500); }, 250); }
+    addEventListener("resize", function () { sizeFx(); movePill(); });
+    if (demoOn) later(demo, 2600);
+    setTimeout(function () { $("#hours").classList.remove("first"); }, 2600); // later rebuilds of the hourly chips come in quickly
+  })();
+</script>
+</body>
+</html>
