@@ -1,0 +1,773 @@
+<!doctype html>
+<!-- Chill & Craft · Pod Bubble · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pod Bubble · a story player that docks into a floating bubble</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: paper, ink and tomato. Light first, dark below ---------- */
+  :root {
+    --bg-a: #f1e6d3; --bg-b: #fbdfcf; --glow: rgba(255, 75, 58, 0.2); --dot: rgba(60, 30, 10, 0.07);
+    --screen: #f6efe2; --card: #fffaf1; --edge: #e6dac6; --ink: #1d1a17; --muted: #776c5f;
+    --tomato: #ff4b3a; --tomato-ink: #c8321f; --accent: #ff4b3a; --focus: #d63a28;
+    --bezel: #191512; --bezel-edge: #3a302a; --shadow: rgba(70, 35, 15, 0.3); --bub-shadow: rgba(80, 25, 10, 0.45);
+    --ghost-b: rgba(255, 255, 255, 0.95); --ghost-f: rgba(255, 255, 255, 0.3);
+    --serif: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #0b0806; --bg-b: #1d110c; --glow: rgba(255, 97, 80, 0.14); --dot: rgba(255, 230, 210, 0.05);
+    --screen: #15110e; --card: #211a16; --edge: #31271f; --ink: #f3ebe0; --muted: #a69a8b;
+    --tomato: #ff6150; --tomato-ink: #ff8b7c; --accent: #ff6150; --focus: #ff8b7c;
+    --bezel: #050403; --bezel-edge: #2a221c; --shadow: rgba(0, 0, 0, 0.7); --bub-shadow: rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg-a); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+
+  /* ---------- Stage ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; overflow: hidden; overflow: clip; display: flex; align-items: center; justify-content: center; gap: 72px; padding: 22px 16px; background: radial-gradient(var(--dot) 1px, transparent 1.4px) 0 0 / 20px 20px, linear-gradient(160deg, var(--bg-a), var(--bg-b)); }
+  .glow { position: absolute; width: 64vmax; height: 64vmax; left: 50%; top: 50%; margin: -32vmax 0 0 -32vmax; border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 62%); pointer-events: none; animation: wander 17s ease-in-out infinite alternate; }
+  @keyframes wander { to { transform: translate(-7vmax, 6vmax) scale(1.12); } }
+  .caption { display: none; position: relative; z-index: 1; max-width: 300px; }
+  .eyebrow { margin: 0 0 12px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow i { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; background: var(--tomato); }
+  .caption h2 { margin: 0 0 14px; font-family: var(--serif); font-size: 50px; line-height: 1; letter-spacing: -0.03em; }
+  .caption p { margin: 0 0 22px; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .caption ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .caption li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .caption kbd { font: inherit; font-size: 12px; font-weight: 750; min-width: 70px; text-align: center; padding: 4px 10px; border-radius: 9px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 2px 0 var(--edge); }
+  @media (min-width: 900px) { .caption { display: block; } }
+
+  /* ---------- Phone ---------- */
+  .phone {
+    position: relative; z-index: 1; width: min(390px, 100%);
+    height: clamp(540px, calc(100vh - 44px), 760px); height: clamp(540px, calc(100dvh - 44px), 760px);
+    background: var(--screen); border-radius: 46px; overflow: hidden; overflow: clip; isolation: isolate;
+    box-shadow: 0 0 0 10px var(--bezel), 0 0 0 11px var(--bezel-edge), 0 50px 90px -30px var(--shadow);
+  }
+  .status { position: absolute; left: 0; right: 0; top: 0; z-index: 30; height: 46px; padding: 8px 30px 0 34px; display: flex; align-items: center; justify-content: space-between; font-size: 14.5px; font-weight: 700; pointer-events: none; }
+  .status svg { width: 62px; height: 13px; fill: currentColor; }
+  .home-bar { position: absolute; left: 50%; bottom: 6px; z-index: 31; width: 130px; height: 5px; margin-left: -65px; border-radius: 3px; background: var(--ink); opacity: 0.35; pointer-events: none; }
+  @media (max-width: 480px) {
+    .stage { padding: 0; }
+    .phone { width: 100%; height: 100vh; height: 100dvh; border-radius: 0; box-shadow: none; }
+    .status { padding: 6px 20px 0 22px; }
+  }
+
+  /* ---------- Article pane (the part that scrolls) ---------- */
+  .pane { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 120px 22px 120px; scrollbar-width: none; }
+  .pane::-webkit-scrollbar { display: none; }
+  .story { --fs: 16.5px; font-family: var(--serif); font-size: var(--fs); line-height: 1.62; transition: font-size 0.25s; }
+  .kicker { margin: 0; font: 800 11px/1 system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: var(--tomato-ink); }
+  .story h1 { margin: 10px 0 12px; font-size: 31px; line-height: 1.08; letter-spacing: -0.02em; font-weight: 700; }
+  .byline { display: flex; align-items: center; gap: 8px; margin: 0; font: 650 12.5px/1.2 system-ui, sans-serif; color: var(--muted); }
+  .av { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--screen); font-size: 10.5px; font-weight: 800; letter-spacing: 0.02em; }
+  .story p { margin: 0 0 16px; }
+  .story .first::first-letter { float: left; font-size: 3.3em; line-height: 0.82; padding: 6px 8px 0 0; color: var(--tomato); font-weight: 700; }
+  .pull { margin: 26px 0; padding: 2px 0 2px 16px; border-left: 3px solid var(--tomato); font-size: 21px; line-height: 1.3; font-style: italic; }
+  .hero { margin: 0 -22px 22px; }
+  .hero svg { display: block; width: 100%; height: auto; }
+  .hero figcaption { padding: 8px 22px 0; font: 600 11.5px/1.3 system-ui, sans-serif; color: var(--muted); }
+  .end { font: 700 13px/1.4 system-ui, sans-serif; color: var(--muted); text-align: center; padding-top: 8px; }
+  .lan { transform-box: fill-box; transform-origin: 50% 0; animation: swing 3.2s ease-in-out infinite alternate; }
+  .lan:nth-of-type(2n) { animation-delay: -1.1s; animation-duration: 2.7s; }
+  .lan:nth-of-type(3n) { animation-delay: -2s; }
+  @keyframes swing { from { transform: rotate(-7deg); } to { transform: rotate(7deg); } }
+  .tw { animation: tw 2.2s ease-in-out infinite alternate; }
+  .tw:nth-child(2n) { animation-delay: -0.8s; } .tw:nth-child(3n) { animation-delay: -1.5s; }
+  @keyframes tw { to { opacity: 0.25; } }
+  .smk { animation: smk 3.6s linear infinite; }
+  .smk:nth-of-type(2) { animation-delay: -1.8s; }
+  @keyframes smk { from { transform: translateY(6px); opacity: 0; } 30% { opacity: 0.7; } to { transform: translateY(-22px); opacity: 0; } }
+
+  /* ---------- Player card (the bubble's home) ---------- */
+  .player { margin: 18px 0 24px; padding: 14px 14px 10px; border-radius: 22px; background: var(--card); box-shadow: 0 1px 0 var(--edge), 0 18px 36px -26px var(--shadow); display: grid; grid-template-columns: 56px 1fr 52px; grid-template-areas: "cv info play" "wave wave wave" "row row row"; gap: 10px 12px; align-items: center; font-family: system-ui, sans-serif; animation: cardIn 0.8s cubic-bezier(0.3, 1.4, 0.5, 1) backwards 0.1s; }
+  @keyframes cardIn { from { transform: translateY(24px) scale(0.96); opacity: 0; } }
+  .cv-slot { grid-area: cv; position: relative; width: 56px; height: 56px; border-radius: 16px; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--tomato) 12%, transparent) 0 4px, transparent 4px 8px); }
+  .cover { position: absolute; inset: 0; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 16px -8px var(--bub-shadow); transition: transform 0.35s cubic-bezier(0.3, 1.5, 0.5, 1), opacity 0.22s; }
+  .cover svg, .bc svg { display: block; width: 100%; height: 100%; }
+  .cover.away { opacity: 0; transform: scale(0.6); }
+  .cover.back { animation: coverBack 0.55s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  @keyframes coverBack { from { transform: scale(0.75); } 50% { transform: scale(1.1); } }
+  .pl-info { grid-area: info; min-width: 0; }
+  .pl-info small { display: block; font-size: 10.5px; font-weight: 850; letter-spacing: 0.13em; text-transform: uppercase; color: var(--tomato-ink); }
+  .pl-info b { display: block; margin-top: 3px; font-size: 14px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .play { grid-area: play; position: relative; width: 52px; height: 52px; border: 0; border-radius: 50%; background: var(--tomato); color: #fff; box-shadow: 0 12px 22px -10px var(--tomato); transition: transform 0.3s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .play:active { transform: scale(0.9); }
+  .play::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--tomato); opacity: 0; }
+  .playing .play::before { animation: halo 2s ease-out infinite; }
+  .pp { position: relative; display: block; width: 22px; height: 22px; margin: auto; }
+  .pp svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: currentColor; transition: transform 0.4s cubic-bezier(0.3, 1.7, 0.5, 1), opacity 0.2s; }
+  .pp .i-pause { transform: scale(0.3) rotate(-90deg); opacity: 0; }
+  .playing .pp .i-pause { transform: none; opacity: 1; }
+  .playing .pp .i-play { transform: scale(0.3) rotate(90deg); opacity: 0; }
+  .wave { grid-area: wave; height: 38px; display: flex; align-items: center; gap: 2.5px; cursor: pointer; touch-action: none; border-radius: 6px; }
+  .wave i { flex: 1; height: calc(var(--h) * 100%); min-height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 18%, transparent); transition: background 0.25s; transform-origin: center; }
+  .wave i.on { background: var(--tomato); }
+  .playing .wave i.hot { animation: hop 0.42s ease-in-out infinite alternate; }
+  .wave i.hot:nth-child(2n) { animation-delay: -0.2s; }
+  @keyframes hop { to { transform: scaleY(1.45); } }
+  .pl-row { grid-area: row; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .speed { border: 1px solid var(--edge); background: none; border-radius: 99px; padding: 3px 11px; font-size: 12px; font-weight: 800; color: var(--ink); }
+
+  /* ---------- App bar (over the pane) ---------- */
+  .appbar { position: absolute; top: 0; left: 0; right: 0; z-index: 20; height: 96px; padding: 46px 12px 0 22px; display: flex; align-items: center; justify-content: space-between; background: var(--screen); border-bottom: 1px solid color-mix(in srgb, var(--edge) 80%, transparent); }
+  /* a soft shadow under the bar once content scrolls beneath it (a paper fade turned muddy over the night picture) */
+  .appbar::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 10px; background: linear-gradient(color-mix(in srgb, var(--ink) 9%, transparent), transparent); pointer-events: none; }
+  .brand { font-family: var(--serif); font-size: 20px; font-weight: 800; font-style: italic; letter-spacing: -0.01em; }
+  .brand i { font-style: normal; color: var(--tomato); }
+  .ab { display: flex; gap: 2px; }
+  .ab button { width: 40px; height: 40px; border: 0; border-radius: 12px; background: none; display: grid; place-items: center; font-family: var(--serif); font-size: 16px; font-weight: 800; }
+  .ab button:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+  .ab svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; transition: fill 0.2s, transform 0.4s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .ab button[aria-pressed="true"] svg { fill: var(--tomato); stroke: var(--tomato); transform: scale(1.12); }
+  .prog { position: absolute; left: 0; bottom: -1px; width: 100%; height: 2.5px; background: var(--tomato); transform-origin: 0 50%; transform: scaleX(0); }
+
+  /* ---------- Floating bubble, its control pill and the close target ---------- */
+  .bubble { position: absolute; left: 0; top: 0; z-index: 24; width: 62px; height: 62px; padding: 0; border: 0; border-radius: 50%; background: none; touch-action: none; cursor: grab; visibility: hidden; will-change: transform; }
+  .bubble.on { visibility: visible; }
+  .bub-in { position: absolute; inset: 0; border-radius: 50%; transition: transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .bubble.held .bub-in { transform: scale(1.1); }
+  .bub-in.sq { animation: squash 0.55s cubic-bezier(0.3, 1.4, 0.5, 1); }
+  @keyframes squash { 25% { transform: scale(0.8, 1.16); } 55% { transform: scale(1.07, 0.94); } 100% { transform: scale(1); } }
+  .bub-in::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; border: 2px solid var(--tomato); opacity: 0; pointer-events: none; }
+  .playing .bub-in::after { animation: halo 2.1s ease-out infinite; }
+  @keyframes halo { from { transform: scale(1); opacity: 0.6; } to { transform: scale(1.5); opacity: 0; } }
+  .bc { position: absolute; inset: 5px; border-radius: 50%; overflow: hidden; box-shadow: 0 14px 26px -8px var(--bub-shadow), 0 0 0 2px var(--card); }
+  .bring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+  .bring .bg { fill: none; stroke: color-mix(in srgb, var(--ink) 16%, transparent); stroke-width: 3; }
+  .bring .fg { fill: none; stroke: var(--tomato); stroke-width: 3.4; stroke-linecap: round; }
+  .badge { position: absolute; right: -3px; bottom: -3px; width: 23px; height: 23px; border-radius: 50%; background: var(--ink); color: var(--screen); display: grid; place-items: center; box-shadow: 0 0 0 2.5px var(--screen); }
+  .eq { display: flex; align-items: flex-end; gap: 1.6px; height: 10px; }
+  .eq b { width: 2.4px; height: 40%; border-radius: 1px; background: currentColor; }
+  .playing .eq b { animation: eq 0.8s ease-in-out infinite alternate; }
+  .eq b:nth-child(2) { animation-delay: -0.3s; animation-duration: 0.6s; } .eq b:nth-child(3) { animation-delay: -0.55s; animation-duration: 0.95s; }
+  @keyframes eq { from { height: 25%; } to { height: 100%; } }
+
+  .pill { position: absolute; left: 0; top: 0; z-index: 23; height: 60px; display: flex; align-items: center; gap: 4px; padding: 0 12px; border-radius: 30px; background: var(--ink); color: var(--screen); box-shadow: 0 20px 36px -14px rgba(0, 0, 0, 0.55); visibility: hidden; opacity: 0; transform: scaleX(0.3); transition: transform 0.5s cubic-bezier(0.3, 1.35, 0.5, 1), opacity 0.2s, visibility 0s linear 0.5s; }
+  .pill.r { padding-right: 72px; transform-origin: calc(100% - 31px) 50%; }
+  .pill.l { padding-left: 72px; transform-origin: 31px 50%; }
+  .pill.open { visibility: visible; opacity: 1; transform: none; transition-delay: 0s; }
+  .pill button { --d: 0ms; width: 42px; height: 42px; border: 0; border-radius: 50%; background: transparent; display: grid; place-items: center; opacity: 0; transform: scale(0.5); transition: transform 0.42s cubic-bezier(0.3, 1.7, 0.5, 1) var(--d), opacity 0.2s var(--d), background 0.2s; }
+  .pill.open button { opacity: 1; transform: none; }
+  .pill button:hover { background: color-mix(in srgb, var(--screen) 16%, transparent); }
+  .pill button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+  .pill .pbig { background: var(--tomato); color: #fff; }
+  .pill .pbig:hover { background: var(--tomato); filter: brightness(1.08); }
+  .pill .pbig .pp { width: 19px; height: 19px; }
+  .pill .pbig .pp svg { fill: currentColor; stroke: none; }
+  .pt { min-width: 40px; text-align: center; font-size: 12.5px; font-weight: 750; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity 0.2s 0.15s; }
+  .pill.open .pt { opacity: 0.8; }
+
+  .shade { position: absolute; left: 0; right: 0; bottom: 0; z-index: 21; height: 230px; background: linear-gradient(transparent, color-mix(in srgb, var(--ink) 30%, transparent)); opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .shade.on { opacity: 1; }
+  .dismiss { position: absolute; left: 50%; bottom: 48px; z-index: 22; width: 64px; height: 64px; margin-left: -32px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--ink) 78%, transparent); color: var(--screen); transform: translateY(150px) scale(0.6); opacity: 0; transition: transform 0.5s cubic-bezier(0.3, 1.5, 0.5, 1), opacity 0.25s, background 0.2s, color 0.2s; pointer-events: none; }
+  .dismiss.on { transform: none; opacity: 1; }
+  .dismiss.hot { transform: scale(1.24); background: var(--tomato); color: #fff; }
+  .dismiss.gulp { animation: gulp 0.42s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  @keyframes gulp { 40% { transform: scale(0.82); } }
+  .dismiss svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.8; stroke-linecap: round; }
+  .dismiss span { position: absolute; top: 72px; left: 50%; width: 140px; margin-left: -70px; text-align: center; font-size: 11.5px; font-weight: 750; color: #fff; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5); }
+
+  .fx { position: absolute; inset: 0; z-index: 26; pointer-events: none; }
+  .pf { position: absolute; left: 0; top: 0; border-radius: 50%; }
+
+  /* ---------- Ghost finger for the auto demo ---------- */
+  .ghost { position: absolute; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; z-index: 40; pointer-events: none; background: var(--ghost-f); border: 2px solid var(--ghost-b); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); opacity: 0; transition: opacity 0.3s; }
+  .ghost::after { content: ""; position: absolute; inset: 11px; border-radius: 50%; background: var(--ghost-b); opacity: 0.5; transform: scale(0.45); transition: transform 0.18s; }
+  .ghost.on { opacity: 1; }
+  .ghost.press::after { transform: scale(1); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="glow" aria-hidden="true"></div>
+  <section class="caption" aria-hidden="true">
+    <p class="eyebrow"><i></i>Mobile interactions</p>
+    <h2>Pod Bubble</h2>
+    <p>Start the audio version of a story, then keep reading. As the player scrolls away it folds into a floating bubble you can throw to either edge, open for controls, or drop in the bin.</p>
+    <ul>
+      <li><kbd>Scroll</kbd> the player becomes a bubble</li>
+      <li><kbd>Throw</kbd> it to either side</li>
+      <li><kbd>Tap</kbd> it for play, skip and close</li>
+      <li><kbd>Drag down</kbd> onto the X to close</li>
+    </ul>
+  </section>
+
+  <div class="phone" id="phone">
+    <div class="status" aria-hidden="true">
+      <span>12:48</span>
+      <svg viewBox="0 0 62 13"><rect x="0" y="8" width="3" height="5" rx="1"/><rect x="5" y="5.5" width="3" height="7.5" rx="1"/><rect x="10" y="3" width="3" height="10" rx="1"/><rect x="15" y="0.5" width="3" height="12.5" rx="1"/><rect x="36" y="1" width="22" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="38" y="3" width="10" height="7" rx="1.5"/><rect x="59" y="4.5" width="2" height="4" rx="1"/></svg>
+    </div>
+
+    <div class="pane" id="pane">
+      <article class="story" id="story">
+        <p class="kicker">Food · Lahore</p>
+        <h1>Midnight on the Food Street</h1>
+        <p class="byline"><span class="av" aria-hidden="true">SI</span>Sana Iqbal · 21 Nov · 9 min read</p>
+
+        <section class="player" id="player" aria-label="Listen to this story">
+          <div class="cv-slot" id="cvSlot"><span class="cover" id="cardCover"></span></div>
+          <div class="pl-info"><small>Listen to this story</small><b>12 min · read by Ali Raza</b></div>
+          <button class="play" type="button" id="play" aria-label="Play story" aria-pressed="false"><span class="pp"><svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h4.2v15H6zM13.8 4.5H18v15h-4.2z"/></svg></span></button>
+          <div class="wave" id="wave" role="slider" tabindex="0" aria-label="Story position" aria-valuemin="0" aria-valuemax="724" aria-valuenow="0" aria-valuetext="0:00 of 12:04"></div>
+          <div class="pl-row"><span id="tNow">0:00</span><button class="speed" type="button" id="speed" aria-label="Playback speed 1 times">1×</button><span id="tLeft">-12:04</span></div>
+        </section>
+
+        <figure class="hero">
+          <svg viewBox="0 0 360 210" role="img" aria-label="Drawing of a night food street below old fort walls">
+            <defs><linearGradient id="pbSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b1526"/><stop offset="0.65" stop-color="#46202e"/><stop offset="1" stop-color="#8f3524"/></linearGradient></defs>
+            <rect width="360" height="210" fill="url(#pbSky)"/>
+            <g fill="#ffe9c9"><circle class="tw" cx="30" cy="22" r="1.3"/><circle class="tw" cx="74" cy="40" r="1"/><circle class="tw" cx="120" cy="16" r="1.4"/><circle class="tw" cx="168" cy="34" r="1"/><circle class="tw" cx="214" cy="14" r="1.2"/><circle class="tw" cx="250" cy="52" r="0.9"/><circle class="tw" cx="334" cy="24" r="1.2"/><circle class="tw" cx="346" cy="64" r="1"/></g>
+            <circle cx="292" cy="44" r="16" fill="#ffe9c9"/><circle cx="300" cy="38" r="14.5" fill="#1d1627"/>
+            <path d="M0 130V98h14v-9h10v9h14v-9h10v9h14v-9h10v9h14v-9h10v9h10V130z" fill="#2c1a22"/>
+            <path d="M118 130V84h8v-6h48v6h8v46z" fill="#2c1a22"/><path d="M126 80a24 22 0 0 1 48 0z" fill="#33202a"/><path d="M148 58h4v-8l-2-4-2 4z" fill="#33202a"/>
+            <path d="M200 130V64l4-6v-8l3-6 3 6v8l4 6v66z" fill="#2c1a22"/><path d="M236 130V70l3-5v-7l3-5 3 5v7l3 5v60z" fill="#2c1a22"/>
+            <path d="M250 130V100h14v-8h10v8h14v-8h10v8h14v-8h10v8h14v-8h10v8h14V130z" fill="#2c1a22"/>
+            <path d="M0 108Q90 140 180 116T360 108" stroke="#120b10" stroke-width="1.2" fill="none"/>
+            <g fill="#ffcf6b"><rect class="lan" x="30" y="117" width="7" height="10" rx="2"/><rect class="lan" x="70" y="125" width="7" height="10" rx="2" fill="#ff6a4d"/><rect class="lan" x="112" y="126" width="7" height="10" rx="2"/><rect class="lan" x="152" y="120" width="7" height="10" rx="2" fill="#ff6a4d"/><rect class="lan" x="196" y="112" width="7" height="10" rx="2"/><rect class="lan" x="240" y="104" width="7" height="10" rx="2" fill="#ff6a4d"/><rect class="lan" x="284" y="104" width="7" height="10" rx="2"/><rect class="lan" x="326" y="106" width="7" height="10" rx="2" fill="#ff6a4d"/></g>
+            <g>
+              <path d="M10 150h104l-10 16H20z" fill="#ff4b3a"/><path d="M28 150h14l-3 16h-12zM60 150h14l-1 16H62zM92 150h14l2 16H95z" fill="#ffe9c9" opacity="0.9"/>
+              <rect x="20" y="166" width="84" height="34" fill="#24130f"/><rect x="28" y="172" width="68" height="16" rx="3" fill="#ffb347" opacity="0.85"/>
+              <path d="M134 156h92l-8 14h-76z" fill="#ffe9c9"/><path d="M150 156h12l-2 14h-10zM178 156h12l0 14h-12zM206 156h12l2 14h-10z" fill="#ff4b3a"/>
+              <rect x="142" y="170" width="76" height="30" fill="#24130f"/><ellipse cx="180" cy="178" rx="22" ry="5" fill="#ffcf6b"/><ellipse cx="180" cy="178" rx="14" ry="3" fill="#fff1c4"/>
+              <path class="smk" d="M172 168c-4-6 4-8 0-14" stroke="#ffe9c9" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6"/><path class="smk" d="M188 168c-4-6 4-8 0-14" stroke="#ffe9c9" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6"/>
+              <path d="M246 150h104l-10 16h-84z" fill="#ff4b3a"/><path d="M264 150h14l-3 16h-12zM296 150h14l-1 16h-12zM328 150h14l2 16h-11z" fill="#ffe9c9" opacity="0.9"/>
+              <rect x="256" y="166" width="84" height="34" fill="#24130f"/><rect x="264" y="172" width="68" height="16" rx="3" fill="#ffb347" opacity="0.85"/>
+            </g>
+            <g fill="#120b0c"><circle cx="122" cy="180" r="5"/><path d="M114 200c0-10 4-14 8-14s8 4 8 14z"/><circle cx="236" cy="182" r="4.5"/><path d="M229 200c0-9 3-13 7-13s7 4 7 13z"/></g>
+            <rect y="198" width="360" height="12" fill="#150d0d"/>
+          </svg>
+          <figcaption>The lane below the fort walls, an hour past midnight.</figcaption>
+        </figure>
+
+        <p class="first">The old city does not sleep so much as change its clothes. By eleven the cloth sellers have pulled their shutters down, and the lane outside the fort walls fills with charcoal smoke, folding chairs and the slow traffic of families who came for dinner and stayed for the second one.</p>
+        <p>Rafiq has run the same tea stall for twenty-six years. He pours from shoulder height so the chai comes down in one amber ribbon, then hands it over without looking, already reaching for the next glass. The trick, he says, is the cardamom. Then he admits the real trick is never letting the pot go quiet.</p>
+        <p>Two stalls down, the griddle men work in pairs. One chops, one stirs, and the iron plate rings like a bell every time their spatulas meet. Chicken, liver and a fistful of green chillies hit the metal, and the smell reaches the end of the street before the order is even written down.</p>
+        <p class="pull">Nobody comes here for one dish. You come for the street, and the street feeds you in courses.</p>
+        <p>At half past twelve a boy wheels in a kulfi cart, its brass lid fogged with cold. Children who were asleep on their fathers' shoulders wake up as if someone had called their names.</p>
+        <p>The best seats are not seats at all but the steps of an old haveli, where you can watch the whole lane at once: the lanterns swinging on their wires, the waiters running trays above their heads, the cats who know exactly which stall drops the most bones.</p>
+        <p>Around one, the music changes. Someone's phone plays an old film song, a second phone joins a beat late, and for a minute the whole street hums the chorus while naan keeps coming out of the tandoor in soft, blistered sheets.</p>
+        <p>Ayesha and her sisters drive in from Model Town every Thursday. They order the same four plates in the same order and argue about the same thing every week: whether the fried fish was better last year. It was not, they agree at two in the morning, and order a second plate to be sure.</p>
+        <p>When the call to prayer drifts over the rooftops before dawn, the stalls start packing up. Chairs fold, the charcoal hisses under a bucket of water and Rafiq rinses his last glass. The walls turn pink, then gold, and the street becomes a road again, as if none of it happened.</p>
+        <p class="end">Listen to the full story from the top, or keep it playing while you read.</p>
+      </article>
+    </div>
+
+    <header class="appbar">
+      <span class="brand">Night Notes<i>.</i></span>
+      <div class="ab">
+        <button type="button" id="textSize" aria-label="Text size: medium">Aa</button>
+        <button type="button" id="save" aria-label="Save story for later" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg></button>
+      </div>
+      <i class="prog" id="prog" aria-hidden="true"></i>
+    </header>
+
+    <div class="shade" id="shade" aria-hidden="true"></div>
+    <div class="dismiss" id="dismiss" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg><span>Drop here to close</span></div>
+    <div class="pill" id="pill" role="group" aria-label="Story player controls">
+      <button type="button" id="pBack" style="--d: 40ms" aria-label="Back 15 seconds"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 3.5v4h4"/><path d="M10 10.5v4.5M13 10.5h2.6l-.6 1.8c1.5.2 1.9 2.7-.4 2.7H13"/></svg></button>
+      <button type="button" id="pPlay" class="pbig" style="--d: 80ms" aria-label="Play"><span class="pp"><svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h4.2v15H6zM13.8 4.5H18v15h-4.2z"/></svg></span></button>
+      <button type="button" id="pFwd" style="--d: 120ms" aria-label="Forward 15 seconds"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M20 3.5v4h-4"/><path d="M9 10.5v4.5M12 10.5h2.6l-.6 1.8c1.5.2 1.9 2.7-.4 2.7H12"/></svg></button>
+      <span class="pt" id="pTime" aria-hidden="true">0:00</span>
+      <button type="button" id="pClose" style="--d: 160ms" aria-label="Close player"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+    </div>
+    <button class="bubble" type="button" id="bubble" aria-label="Story player. Open controls" aria-expanded="false" aria-controls="pill">
+      <span class="bub-in" id="bubIn">
+        <span class="bc" id="bubCover"></span>
+        <svg class="bring" viewBox="0 0 62 62" aria-hidden="true"><circle class="bg" cx="31" cy="31" r="29"/><circle class="fg" id="ringFg" cx="31" cy="31" r="29" stroke-dasharray="182.2" stroke-dashoffset="182.2"/></svg>
+        <span class="badge" aria-hidden="true"><span class="eq"><b></b><b></b><b></b></span></span>
+      </span>
+    </button>
+
+    <div class="fx" id="fx" aria-hidden="true"></div>
+    <div class="home-bar" aria-hidden="true"></div>
+    <div class="ghost" id="ghost" aria-hidden="true"></div>
+    <p class="sr-only" id="live" aria-live="polite"></p>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var phone = $("phone"), live = $("live"), pane = $("pane"), player = $("player"), playBtn = $("play"), wave = $("wave");
+  var cardCover = $("cardCover"), cvSlot = $("cvSlot"), bubble = $("bubble"), bubIn = $("bubIn"), pill = $("pill");
+  var dismissEl = $("dismiss"), shade = $("shade"), fx = $("fx"), ringFg = $("ringFg");
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function announce(msg) { live.textContent = ""; setTimeout(function () { live.textContent = msg; }, 30); }
+  function say(msg) { if (!Demo.on) announce(msg); }
+  function buzz(ms) {
+    try { if (!Demo.on && navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(ms); } catch (e) {}
+  }
+  function mmss(s) { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+
+  // A small spring: s.to(target[, velocity]); frame(x, v) paints. Reduced motion jumps straight to the target.
+  function Spring(x, k, c, frame) {
+    var s = { x: x, v: 0, t: x, k: k || 170, c: c || 18, raf: 0, frame: frame }, last = 0;
+    function tick(now) {
+      var dt = Math.min(0.05, (now - last) / 1000); last = now;
+      for (var i = 0; i < 4; i++) { var h = dt / 4, a = -s.k * (s.x - s.t) - s.c * s.v; s.v += a * h; s.x += s.v * h; }
+      if (Math.abs(s.v) < 0.02 && Math.abs(s.x - s.t) < 0.05) { s.x = s.t; s.v = 0; s.raf = 0; s.frame(s.x, 0); return; }
+      s.frame(s.x, s.v); s.raf = requestAnimationFrame(tick);
+    }
+    s.to = function (t, v) {
+      s.t = t; if (v !== undefined) s.v = v;
+      if (reduce) { cancelAnimationFrame(s.raf); s.raf = 0; s.x = t; s.v = 0; s.frame(t, 0); return; }
+      if (!s.raf) { last = performance.now(); s.raf = requestAnimationFrame(tick); }
+    };
+    s.set = function (x) { cancelAnimationFrame(s.raf); s.raf = 0; s.x = s.t = x; s.v = 0; s.frame(x, 0); };
+    return s;
+  }
+  function tween(ms, step, done, ease) {
+    if (reduce) { step(1); if (done) done(); return; }
+    var t0 = performance.now();
+    requestAnimationFrame(function f(now) {
+      var k = Math.min(1, (now - t0) / ms);
+      step(ease ? ease(k) : k);
+      if (k < 1) requestAnimationFrame(f); else if (done) done();
+    });
+  }
+  var easeInOut = function (k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; };
+  var easeIn = function (k) { return k * k * k; };
+  function rectIn(el) {
+    var r = el.getBoundingClientRect(), p = phone.getBoundingClientRect();
+    return { x: r.left - p.left + r.width / 2, y: r.top - p.top + r.height / 2, w: r.width, h: r.height, top: r.top - p.top, bottom: r.bottom - p.top };
+  }
+  function toPhone(cx, cy) { var p = phone.getBoundingClientRect(); return { x: cx - p.left, y: cy - p.top }; }
+
+  // ---------- Auto demo: a ghost finger drives the same functions a real finger does ----------
+  var Demo = (function () {
+    var d = { on: !reduce, timers: [], raf: 0, stops: [], shown: false }, ghost = $("ghost"), gx = 0, gy = 0;
+    d.pt = function (el, fx2, fy) {
+      var r = el.getBoundingClientRect(), p = phone.getBoundingClientRect();
+      return { x: r.left - p.left + r.width * (fx2 == null ? 0.5 : fx2), y: r.top - p.top + r.height * (fy == null ? 0.5 : fy) };
+    };
+    d.later = function (ms, fn) { d.timers.push(setTimeout(function () { if (d.on) fn(); }, ms)); };
+    d.at = function (x, y) { gx = x; gy = y; ghost.style.transform = "translate(" + x + "px," + y + "px)"; ghost.classList.add("on"); d.shown = true; };
+    d.press = function (v) { ghost.classList.toggle("press", !!v); };
+    d.hide = function () { ghost.classList.remove("on", "press"); d.shown = false; };
+    d.glide = function (x, y, ms, step, done) {
+      if (!d.shown) d.at(x + 24, y + 60);
+      var x0 = gx, y0 = gy, t0 = performance.now();
+      cancelAnimationFrame(d.raf);
+      d.raf = requestAnimationFrame(function f(now) {
+        if (!d.on) return;
+        var k = Math.min(1, (now - t0) / ms), e = easeInOut(k);
+        d.at(x0 + (x - x0) * e, y0 + (y - y0) * e);
+        if (step) step(e, gx, gy);
+        if (k < 1) d.raf = requestAnimationFrame(f); else if (done) done();
+      });
+    };
+    d.onStop = function (fn) { d.stops.push(fn); };
+    d.stop = function () {
+      if (!d.on) return;
+      d.on = false; d.timers.forEach(clearTimeout); d.timers = []; cancelAnimationFrame(d.raf); d.hide();
+      d.stops.forEach(function (fn) { fn(); });
+    };
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (ty) {
+      addEventListener(ty, function (e) { if (e.isTrusted) d.stop(); }, { capture: true, passive: true });
+    });
+    return d;
+  })();
+
+  // ---------- Cover art (flat, so it can be used several times on the page) ----------
+  var COVER = '<svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" fill="#ff4b3a"/><circle cx="46" cy="15" r="7.5" fill="#ffe9c9"/><circle cx="49.5" cy="12.5" r="6.5" fill="#ff4b3a"/><path d="M4 21q28 14 56 0" stroke="#2a1410" stroke-width="1.1" fill="none"/><g fill="#ffd166"><rect x="12" y="25" width="5" height="7" rx="1.5"/><rect x="29.5" y="28.5" width="5" height="7" rx="1.5" fill="#fff1c4"/><rect x="47" y="25" width="5" height="7" rx="1.5"/></g><path d="M0 47h64v17H0z" fill="#2a1410"/><ellipse cx="32" cy="47" rx="19" ry="4.5" fill="#ffcf6b"/><ellipse cx="32" cy="47" rx="12" ry="2.6" fill="#fff1c4"/><g stroke="#ffe9c9" stroke-width="2" fill="none" stroke-linecap="round" opacity=".85"><path d="M26 41c-3-4 3-6 0-10"/><path d="M33 40c-3-4 3-6 0-10"/><path d="M40 41c-3-4 3-6 0-10"/></g><path d="M8 58h48" stroke="#ff4b3a" stroke-width="2" stroke-linecap="round" opacity=".7"/></svg>';
+  cardCover.innerHTML = COVER; $("bubCover").innerHTML = COVER;
+
+  // ---------- Waveform: 48 bars, heights from a fixed pattern ----------
+  var BARS = 48, bars = [];
+  for (var i = 0; i < BARS; i++) {
+    var h = 0.22 + 0.78 * Math.abs(Math.sin(i * 0.57 + 0.4) * Math.cos(i * 0.21 + 1.1)) * (0.75 + 0.25 * Math.sin(i * 1.7));
+    var b = document.createElement("i"); b.style.setProperty("--h", Math.max(0.16, h).toFixed(2)); wave.appendChild(b); bars.push(b);
+  }
+
+  // ---------- Playback (simulated with a real clock) ----------
+  var DUR = 724, pos = 0, playing = false, rate = 1, active = false, praf = 0, lastT = 0, lastSec = -1, lastOn = -1, RC = 182.2;
+  function paintTime() {
+    var on = Math.round(pos / DUR * BARS);
+    if (on !== lastOn) {
+      lastOn = on;
+      bars.forEach(function (b, i) { b.classList.toggle("on", i < on); b.classList.toggle("hot", i >= on - 2 && i <= on + 1); });
+    }
+    var sec = Math.floor(pos);
+    if (sec !== lastSec) {
+      lastSec = sec;
+      $("tNow").textContent = mmss(sec); $("tLeft").textContent = "-" + mmss(DUR - sec); $("pTime").textContent = mmss(sec);
+      wave.setAttribute("aria-valuenow", sec); wave.setAttribute("aria-valuetext", mmss(sec) + " of " + mmss(DUR));
+    }
+    ringFg.setAttribute("stroke-dashoffset", (RC * (1 - pos / DUR)).toFixed(2));
+  }
+  function tick(now) {
+    var dt = Math.min(0.25, (now - lastT) / 1000); lastT = now;
+    pos = Math.min(DUR, pos + dt * rate);
+    paintTime();
+    if (pos >= DUR) { setPlaying(false); say("Story finished"); return; }
+    praf = requestAnimationFrame(tick);
+  }
+  function setPlaying(v) {
+    if (v && pos >= DUR) pos = 0;
+    playing = v; if (v) active = true;
+    phone.classList.toggle("playing", v);
+    playBtn.setAttribute("aria-label", v ? "Pause story" : "Play story"); playBtn.setAttribute("aria-pressed", v ? "true" : "false");
+    $("pPlay").setAttribute("aria-label", v ? "Pause" : "Play");
+    bubble.setAttribute("aria-label", "Story player, " + (v ? "playing" : "paused") + ". Open controls");
+    cancelAnimationFrame(praf);
+    if (v) { lastT = performance.now(); praf = requestAnimationFrame(tick); }
+    lastOn = -1; paintTime();
+  }
+  function skip(sec) { pos = clamp(pos + sec, 0, DUR); active = true; lastOn = -1; paintTime(); say((sec > 0 ? "Forward " : "Back ") + Math.abs(sec) + " seconds, " + mmss(pos)); }
+  playBtn.addEventListener("click", function () { setPlaying(!playing); buzz(10); say(playing ? "Playing" : "Paused"); });
+  $("pPlay").addEventListener("click", function () { setPlaying(!playing); buzz(10); });
+  $("pBack").addEventListener("click", function () { skip(-15); });
+  $("pFwd").addEventListener("click", function () { skip(15); });
+  var RATES = [1, 1.5, 2], ri = 0;
+  $("speed").addEventListener("click", function () {
+    const btn = this;
+    ri = (ri + 1) % RATES.length; rate = RATES[ri];
+    btn.textContent = rate + "×"; btn.setAttribute("aria-label", "Playback speed " + rate + " times");
+  });
+
+  // Seek by dragging or tapping the waveform; arrow keys skip 15 s
+  var seeking = null;
+  function seekAt(cx) { var r = wave.getBoundingClientRect(); pos = clamp((cx - r.left) / r.width, 0, 1) * DUR; active = true; lastOn = -1; paintTime(); }
+  wave.addEventListener("pointerdown", function (e) { if (e.button > 0) return; seeking = e.pointerId; try { wave.setPointerCapture(e.pointerId); } catch (_) {} seekAt(e.clientX); });
+  wave.addEventListener("pointermove", function (e) { if (seeking === e.pointerId) seekAt(e.clientX); });
+  wave.addEventListener("pointerup", function () { if (seeking != null) { seeking = null; say("At " + mmss(pos)); } });
+  wave.addEventListener("pointercancel", function () { seeking = null; });
+  wave.addEventListener("keydown", function (e) {
+    var map = { ArrowRight: 15, ArrowUp: 15, ArrowLeft: -15, ArrowDown: -15 };
+    if (map[e.key]) { e.preventDefault(); skip(map[e.key]); }
+    else if (e.key === "Home" || e.key === "End") { e.preventDefault(); pos = e.key === "Home" ? 0 : DUR - 1; active = true; lastOn = -1; paintTime(); }
+  });
+
+  // ---------- App bar: text size and save ----------
+  var SIZES = [["small", "15px"], ["medium", "16.5px"], ["large", "18.5px"]], si = 1;
+  $("textSize").addEventListener("click", function () {
+    const btn = this;
+    si = (si + 1) % 3; $("story").style.setProperty("--fs", SIZES[si][1]);
+    btn.setAttribute("aria-label", "Text size: " + SIZES[si][0]); say("Text size " + SIZES[si][0]);
+  });
+  $("save").addEventListener("click", function () {
+    const btn = this, on = btn.getAttribute("aria-pressed") !== "true";
+    btn.setAttribute("aria-pressed", on ? "true" : "false"); buzz(8); say(on ? "Saved for later" : "Removed from saved");
+  });
+
+  // ---------- Bubble geometry ----------
+  var W = 390, H = 760, BAR = 96, R = 31, side = "right", bx = -100, by = -100, bs = 1, lastY = 0;
+  function measure() { W = phone.clientWidth; H = phone.clientHeight; }
+  function yMin() { return BAR + 40; }
+  function yMax() { return H - 150; }
+  function sideX(s) { return s === "left" ? 12 + R : W - 12 - R; }
+  function paintB() { bubble.style.transform = "translate(" + (bx - R).toFixed(1) + "px," + (by - R).toFixed(1) + "px) scale(" + bs.toFixed(3) + ")"; }
+  var squashArmed = false;
+  var BX = Spring(0, 200, 19, function (x) {
+    var prev = bx; bx = x;
+    if (squashArmed && (prev - BX.t) * (x - BX.t) <= 0 && prev !== x) { squashArmed = false; squash(); }
+    paintB();
+  });
+  var BY = Spring(0, 180, 21, function (y) { by = y; paintB(); });
+  function squash() {
+    if (reduce) return;
+    bubIn.style.transformOrigin = side === "right" ? "100% 50%" : "0% 50%";
+    bubIn.classList.remove("sq"); void bubIn.offsetWidth; bubIn.classList.add("sq");
+  }
+
+  // The shared-element morph between the card's cover and the bubble
+  var docked = false, morphing = false, morphTok = 0, dismissing = false;
+  // `target` is {x, y} or a function returning one (so the bubble can chase a card that is still scrolling)
+  function morph(target, ts, ms, hop, done) {
+    var tok = ++morphTok; morphing = true;
+    BX.set(bx); BY.set(by);
+    var get = typeof target === "function" ? target : function () { return target; }, t0 = get();
+    var x0 = bx, y0 = by, s0 = bs, cx = (x0 + t0.x) / 2, cy = Math.min(y0, t0.y) - hop;
+    tween(ms, function (k) {
+      if (tok !== morphTok) return;
+      var u = 1 - k, t = get();
+      bx = u * u * x0 + 2 * u * k * cx + k * k * t.x; by = u * u * y0 + 2 * u * k * cy + k * k * t.y; bs = s0 + (ts - s0) * k;
+      paintB();
+    }, function () { if (tok !== morphTok) return; morphing = false; if (done) done(); }, easeInOut);
+  }
+  function dock() {
+    docked = true; closePill();
+    var c = rectIn(cvSlot);
+    if (!bubble.classList.contains("on")) { bx = c.x; by = Math.max(c.y, 40); bs = c.w / (2 * R); paintB(); }
+    cardCover.classList.add("away"); cardCover.classList.remove("back");
+    bubble.classList.add("on");
+    var ty = clamp(lastY || H * 0.34, yMin(), yMax());
+    morph({ x: sideX(side), y: ty }, 1, 520, 46, function () { BX.set(bx); BY.set(by); lastY = by; squash(); });
+    say("The player is now a bubble. Drag it anywhere, or tap it for controls.");
+  }
+  function undock() {
+    docked = false; closePill();
+    var c = rectIn(cvSlot);
+    morph(function () { return rectIn(cvSlot); }, c.w / (2 * R), 420, 30, function () {
+      bubble.classList.remove("on");
+      cardCover.classList.remove("away"); void cardCover.offsetWidth; cardCover.classList.add("back");
+    });
+  }
+  // Dock when the card has scrolled under the app bar; undock when it comes back (with some slack)
+  function checkDock() {
+    if (bd || dismissing) return;
+    var r = rectIn(player);
+    if (!docked && active && r.bottom < BAR - 6) dock();
+    else if (docked && r.bottom > BAR + 60) undock();
+  }
+  pane.addEventListener("scroll", function () {
+    var m = pane.scrollHeight - pane.clientHeight;
+    $("prog").style.transform = "scaleX(" + (m > 0 ? pane.scrollTop / m : 0).toFixed(3) + ")";
+    if (pillOpen) closePill();
+    checkDock();
+  }, { passive: true });
+
+  // ---------- Control pill ----------
+  var pillOpen = false;
+  function openPill(kb) {
+    if (!docked || morphing) return;
+    pillOpen = true;
+    pill.classList.toggle("r", side === "right"); pill.classList.toggle("l", side === "left");
+    var w = pill.offsetWidth;
+    pill.style.left = (side === "right" ? W - 12 - w : 12) + "px";
+    pill.style.top = (by - 30) + "px";
+    pill.classList.add("open"); bubble.setAttribute("aria-expanded", "true");
+    if (kb) setTimeout(function () { $("pBack").focus({ preventScroll: true }); }, 60);
+    buzz(6);
+  }
+  function closePill(kb) {
+    if (!pillOpen) return;
+    pillOpen = false; pill.classList.remove("open"); bubble.setAttribute("aria-expanded", "false");
+    if (kb) bubble.focus({ preventScroll: true });
+  }
+  document.addEventListener("pointerdown", function (e) {
+    if (pillOpen && !pill.contains(e.target) && !bubble.contains(e.target)) closePill();
+  }, true);
+  pill.addEventListener("keydown", function (e) { if (e.key === "Escape") closePill(true); });
+  $("pClose").addEventListener("click", function () { dismissBubble(); });
+
+  // ---------- Dragging the bubble: throw, edge snap, magnetic close target ----------
+  var bd = null, suppressClick = false, followRaf = 0;
+  function tx0() { return W / 2; }
+  function ty0() { return H - 80; }
+  function velocity(sm) {
+    if (sm.length < 2) return { x: 0, y: 0 };
+    var a = sm[0], b = sm[sm.length - 1], dt = b.t - a.t;
+    return dt < 8 ? { x: 0, y: 0 } : { x: (b.x - a.x) / dt, y: (b.y - a.y) / dt };
+  }
+  function bDragStart(x, y, demo) {
+    closePill();
+    BX.set(bx); BY.set(by);
+    bd = { ox: bx - x, oy: by - y, fx: bx, fy: by, gx: bx, gy: by, locked: false, samples: [], demo: !!demo };
+    bubble.classList.add("held"); dismissEl.classList.add("on"); shade.classList.add("on");
+    cancelAnimationFrame(followRaf);
+    // the bubble follows the finger with a little weight; near the X it is pulled in
+    followRaf = requestAnimationFrame(function f() {
+      if (!bd) return;
+      var k = bd.locked || bd.pull ? 0.32 : 0.6;
+      bx += (bd.gx - bx) * k; by += (bd.gy - by) * k; paintB();
+      followRaf = requestAnimationFrame(f);
+    });
+  }
+  function bDragMove(x, y) {
+    if (!bd) return;
+    var now = performance.now();
+    bd.samples.push({ x: x, y: y, t: now });
+    while (bd.samples.length > 2 && now - bd.samples[0].t > 90) bd.samples.shift();
+    var fx2 = x + bd.ox, fy = y + bd.oy, tx = tx0(), ty = ty0(), D = Math.hypot(fx2 - tx, fy - ty);
+    var locked = D < 66;
+    if (locked !== bd.locked) { bd.locked = locked; dismissEl.classList.toggle("hot", locked); if (locked) buzz(16); }
+    var pull = locked ? 1 : D < 140 ? (1 - (D - 66) / 74) * 0.42 : 0;
+    bd.pull = pull > 0;
+    bd.gx = fx2 + (tx - fx2) * pull; bd.gy = fy + (ty - fy) * pull;
+    if (reduce) { bx = bd.gx; by = bd.gy; paintB(); }
+  }
+  function bDragEnd(force) {
+    if (!bd) return;
+    var D = bd; bd = null; cancelAnimationFrame(followRaf);
+    bubble.classList.remove("held"); shade.classList.remove("on");
+    if (D.locked) { dismissBubble(); return; }
+    dismissEl.classList.remove("on", "hot");
+    var v = force || velocity(D.samples);
+    var px = bx + v.x * 220;
+    side = px < W / 2 ? "left" : "right";
+    var ty = clamp(by + v.y * 140, yMin(), yMax());
+    lastY = ty; squashArmed = true;
+    BX.to(sideX(side), v.x * 1000); BY.to(ty, v.y * 1000);
+    say("Bubble on the " + side);
+    setTimeout(checkDock, 450);
+  }
+  var bp = null;
+  bubble.addEventListener("pointerdown", function (e) {
+    if (e.button > 0 || !docked || morphing || dismissing) return;
+    var p = toPhone(e.clientX, e.clientY);
+    bp = { id: e.pointerId, x0: p.x, y0: p.y, moved: false };
+    try { bubble.setPointerCapture(e.pointerId); } catch (_) {}
+    bubble.classList.add("held");
+  });
+  bubble.addEventListener("pointermove", function (e) {
+    if (!bp || e.pointerId !== bp.id) return;
+    var p = toPhone(e.clientX, e.clientY);
+    if (!bp.moved) { if (Math.hypot(p.x - bp.x0, p.y - bp.y0) < 6) return; bp.moved = true; bDragStart(bp.x0, bp.y0); }
+    bDragMove(p.x, p.y);
+  });
+  function bUp(e) {
+    if (!bp || e.pointerId !== bp.id) return;
+    var moved = bp.moved; bp = null;
+    bubble.classList.remove("held");
+    if (moved) { suppressClick = true; setTimeout(function () { suppressClick = false; }, 0); bDragEnd(); }
+  }
+  bubble.addEventListener("pointerup", bUp);
+  bubble.addEventListener("pointercancel", bUp);
+  bubble.addEventListener("click", function (e) {
+    if (suppressClick || !docked || morphing) return;
+    if (pillOpen) closePill(); else openPill(e.detail === 0);
+  });
+  bubble.addEventListener("keydown", function (e) {
+    if (!docked || morphing) return;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault(); closePill(); side = e.key === "ArrowLeft" ? "left" : "right"; squashArmed = true; BX.to(sideX(side)); say("Bubble on the " + side);
+    } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault(); closePill(); lastY = clamp(by + (e.key === "ArrowUp" ? -56 : 56), yMin(), yMax()); BY.to(lastY);
+    } else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); dismissBubble(); }
+    else if (e.key === "Escape") closePill(true);
+  });
+
+  // ---------- Closing: the bubble is swallowed by the X with a burst ----------
+  function particle(x, y, size, color, kf, ms) {
+    if (reduce) return;
+    var p = document.createElement("i");
+    p.className = "pf";
+    p.style.cssText = "width:" + size + "px;height:" + size + "px;margin:" + (-size / 2) + "px 0 0 " + (-size / 2) + "px;background:" + color;
+    fx.appendChild(p);
+    var an = p.animate(kf, { duration: ms, easing: "cubic-bezier(.2,.7,.3,1)", fill: "forwards" });
+    an.onfinish = function () { p.remove(); };
+  }
+  function burst(x, y) {
+    for (var i = 0; i < 12; i++) {
+      var a = i / 12 * Math.PI * 2, d1 = 34 + (i % 3) * 9;
+      particle(x, y, i % 2 ? 7 : 5, i % 3 ? "var(--tomato)" : "var(--ink)", [
+        { transform: "translate(" + x + "px," + y + "px) scale(1)", opacity: 1 },
+        { transform: "translate(" + (x + Math.cos(a) * d1) + "px," + (y + Math.sin(a) * d1) + "px) scale(.2)", opacity: 0 }
+      ], 520);
+    }
+    particle(x, y, 70, "transparent", [
+      { transform: "translate(" + x + "px," + y + "px) scale(.6)", opacity: 0.9, boxShadow: "inset 0 0 0 3px var(--tomato)" },
+      { transform: "translate(" + x + "px," + y + "px) scale(1.7)", opacity: 0, boxShadow: "inset 0 0 0 1px var(--tomato)" }
+    ], 560);
+  }
+  function dismissBubble() {
+    if (!docked || dismissing) return;
+    dismissing = true; closePill(); BX.set(bx); BY.set(by); morphTok++;
+    dismissEl.classList.add("on", "hot");
+    var x0 = bx, y0 = by, tx = tx0(), ty = ty0();
+    tween(320, function (k) { bx = x0 + (tx - x0) * k; by = y0 + (ty - y0) * k; bs = 1 - 0.95 * k; paintB(); }, function () {
+      bubble.classList.remove("on"); bs = 1; paintB();
+      burst(tx, ty); buzz(22);
+      dismissEl.classList.remove("gulp"); void dismissEl.offsetWidth; dismissEl.classList.add("gulp");
+      setTimeout(function () { dismissEl.classList.remove("on", "hot", "gulp"); }, 460);
+      setPlaying(false); pos = 0; active = false; lastOn = -1; paintTime();
+      docked = false; dismissing = false; morphing = false;
+      cardCover.classList.remove("away"); cardCover.classList.add("back");
+      if (document.activeElement === bubble || pill.contains(document.activeElement)) playBtn.focus({ preventScroll: true });
+      say("Player closed");
+    }, easeIn);
+  }
+
+  // ---------- Auto demo ----------
+  var loopN = 0;
+  Demo.onStop(function () { if (bd && bd.demo) bDragEnd({ x: 0, y: 0 }); });
+  function gTo(p, ms, done) { Demo.glide(p.x, p.y, ms, null, done); }
+  function dTap(getEl, at, fn) {
+    Demo.later(at, function () {
+      var el = getEl(); if (!el) return;
+      gTo(Demo.pt(el), 440, function () { Demo.press(true); Demo.later(150, function () { Demo.press(false); fn(); }); });
+    });
+    return at + 680;
+  }
+  // drag the article like a finger: the ghost moves one way, the text the other
+  function dScroll(target, at, ms) {
+    Demo.later(at, function () {
+      var down = target > pane.scrollTop, p = { x: W * 0.6, y: down ? H * 0.76 : H * 0.34 };
+      gTo(p, 420, function () {
+        Demo.press(true);
+        var s0 = pane.scrollTop;
+        Demo.glide(p.x, p.y + (down ? -H * 0.38 : H * 0.38), ms, function (e) { pane.scrollTop = s0 + (target - s0) * e; }, function () { Demo.press(false); });
+      });
+    });
+    return at + 420 + ms + 220;
+  }
+  function dDrag(getTo, at, ms, force) {
+    Demo.later(at, function () {
+      if (!docked) return;
+      gTo({ x: bx, y: by }, 420, function () {
+        if (!docked || morphing) return;
+        Demo.press(true); bubble.classList.add("held");
+        var to = getTo(); bDragStart(bx, by, true);
+        Demo.glide(to.x, to.y, ms, function (e, x, y) { bDragMove(x, y); }, function () {
+          Demo.later(force ? 20 : 260, function () { Demo.press(false); bDragEnd(force); });
+        });
+      });
+    });
+    return at + 420 + ms + 300;
+  }
+  function demoLoop() {
+    if (!Demo.on) return;
+    loopN++;
+    var t = 0, deep = Math.min(600, pane.scrollHeight - pane.clientHeight);
+    if (pane.scrollTop > 4) t = dScroll(0, t, 600) + 300;
+    if (!playing) t = dTap(function () { return playBtn; }, t, function () { setPlaying(true); }) - 60;
+    t = dScroll(deep, t, 720);
+    t += 600;
+    t = dDrag(function () { return { x: W * 0.32, y: H * 0.55 }; }, t, 520, { x: -1.4, y: 0.25 });
+    t += 600;
+    t = dTap(function () { return docked && !morphing ? bubble : null; }, t, function () { openPill(false); });
+    t = dTap(function () { return pillOpen ? $("pFwd") : null; }, t + 250, function () { skip(15); });
+    t = dTap(function () { return pillOpen ? $("pFwd") : null; }, t, function () { skip(15); });
+    t = dTap(function () { return pillOpen ? bubble : null; }, t + 300, function () { closePill(); });
+    if (loopN % 2) {
+      t = dDrag(function () { return { x: tx0(), y: ty0() }; }, t + 300, 900, null);
+      t = dScroll(0, t + 700, 700);
+    } else {
+      t = dScroll(0, t + 300, 760);
+      t += 500;
+      t = dTap(function () { return playBtn; }, t, function () { setPlaying(false); });
+    }
+    Demo.later(t + 200, Demo.hide);
+    Demo.later(t + 2400, demoLoop);
+  }
+
+  // ---------- Start ----------
+  measure(); paintTime();
+  addEventListener("resize", function () {
+    measure();
+    if (docked && !morphing) { BX.set(sideX(side)); BY.set(clamp(by, yMin(), yMax())); closePill(); }
+  });
+  Demo.later(160, demoLoop);
+})();
+</script>
+</body>
+</html>

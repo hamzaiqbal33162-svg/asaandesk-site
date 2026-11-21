@@ -1,0 +1,900 @@
+<!doctype html>
+<!-- Chill & Craft · Park Dial · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Park Dial · a parking timer you set by turning a dial</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: concrete grey with hazard yellow in light, asphalt charcoal in dark; mint = active ---------- */
+  :root {
+    --bg-a: #e4e2dc; --bg-b: #f2f0ea; --glow: rgba(255, 196, 30, 0.28); --dot: rgba(30, 30, 30, 0.07);
+    --screen: #eeece6; --card: #ffffff; --edge: #dcd8cf; --ink: #1b1c1e; --muted: #6c6a64;
+    --accent: #ffcf26; --accent-ink: #1b1c1e; --mint: #12a36b; --mint-ink: #ffffff; --amber: #ff9a1a; --focus: #1b1c1e;
+    --asphalt: #2b2d31; --kerb: #b7b4ab; --kerb-edge: #8f8c84; --face: #222428; --face-2: #2d3035; --face-ink: #f6f3ea; --face-muted: #a19e96;
+    --lap1: #e7ae0b; --lap2: #ffd23a; --lap3: #ffe680; --lap4: #fff5c8; --tick: rgba(255, 255, 255, 0.2);
+    --paper: #fffdf5; --paper-ink: #24211c; --paper-muted: #8a857a;
+    --bezel: #141516; --bezel-edge: #34363a; --shadow: rgba(30, 30, 30, 0.32);
+    --ghost-b: rgba(255, 255, 255, 0.95); --ghost-f: rgba(255, 255, 255, 0.3);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #0d0e0f; --bg-b: #1b1c1f; --glow: rgba(255, 210, 58, 0.12); --dot: rgba(255, 255, 240, 0.05);
+    --screen: #141517; --card: #1f2125; --edge: #2c2e33; --ink: #f2f0ea; --muted: #9a978f;
+    --accent: #ffd23a; --accent-ink: #17181a; --mint: #3ee0a1; --mint-ink: #052b1c; --amber: #ffa53a; --focus: #ffd23a;
+    --asphalt: #232528; --kerb: #46474b; --kerb-edge: #303134; --face: #1a1b1e; --face-2: #24262a; --face-ink: #f6f3ea; --face-muted: #9a978f;
+    --paper: #f7f3e8; --paper-ink: #24211c; --paper-muted: #857f73;
+    --bezel: #030304; --bezel-edge: #2a2c30; --shadow: rgba(0, 0, 0, 0.7);
+    --ghost-b: rgba(255, 255, 255, 0.9); --ghost-f: rgba(255, 255, 255, 0.2);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg-a); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+
+  /* ---------- Stage ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; overflow: hidden; overflow: clip; display: flex; align-items: center; justify-content: center; gap: 72px; padding: 22px 16px; background: radial-gradient(var(--dot) 1px, transparent 1.4px) 0 0 / 20px 20px, linear-gradient(150deg, var(--bg-a), var(--bg-b)); }
+  .glow { position: absolute; width: 64vmax; height: 64vmax; left: 50%; top: 50%; margin: -32vmax 0 0 -32vmax; border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 62%); pointer-events: none; animation: wander 17s ease-in-out infinite alternate; }
+  @keyframes wander { to { transform: translate(-7vmax, 6vmax) scale(1.12); } }
+  .caption { display: none; position: relative; z-index: 1; max-width: 300px; }
+  .eyebrow { margin: 0 0 12px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow i { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 3px; background: repeating-linear-gradient(135deg, var(--accent) 0 3px, #1b1c1e 3px 6px); }
+  .caption h2 { margin: 0 0 14px; font-size: 48px; line-height: 1; letter-spacing: -0.035em; }
+  .caption p { margin: 0 0 22px; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .caption ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .caption li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .caption kbd { font: inherit; font-size: 12px; font-weight: 750; min-width: 70px; text-align: center; padding: 4px 10px; border-radius: 9px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 2px 0 var(--edge); }
+  @media (min-width: 900px) { .caption { display: block; } }
+
+  /* ---------- Phone ---------- */
+  .phone {
+    position: relative; z-index: 1; width: min(390px, 100%);
+    height: clamp(540px, calc(100vh - 44px), 760px); height: clamp(540px, calc(100dvh - 44px), 760px);
+    background: var(--screen); border-radius: 46px; overflow: hidden; isolation: isolate;
+    box-shadow: 0 0 0 10px var(--bezel), 0 0 0 11px var(--bezel-edge), 0 50px 90px -30px var(--shadow);
+  }
+  .status { position: absolute; left: 0; right: 0; top: 0; z-index: 30; height: 46px; padding: 8px 30px 0 34px; display: flex; align-items: center; justify-content: space-between; font-size: 14.5px; font-weight: 700; color: var(--ink); pointer-events: none; }
+  .status svg { width: 62px; height: 13px; fill: currentColor; }
+  .home-bar { position: absolute; left: 50%; bottom: 6px; z-index: 31; width: 130px; height: 5px; margin-left: -65px; border-radius: 3px; background: var(--ink); opacity: 0.35; pointer-events: none; }
+  /* tall phones: the lot scene takes some of the spare height */
+  @media (max-width: 480px) and (min-height: 800px) { .phone .lot { height: 150px; } }
+  @media (max-width: 480px) {
+    .stage { padding: 0; }
+    .phone { width: 100%; height: 100vh; height: 100dvh; border-radius: 0; box-shadow: none; }
+    .status { padding: 6px 20px 0 22px; }
+  }
+
+  /* ---------- App ---------- */
+  .app { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px; padding: 50px 18px 24px; }
+  .top { flex: none; display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+  .top small { display: block; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+  .top h1 { margin: 2px 0 0; font-size: 24px; font-weight: 850; letter-spacing: -0.035em; }
+  .plate { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px 5px 6px; border-radius: 7px; background: #fff; color: #111; border: 2px solid #111; font-size: 13px; font-weight: 850; letter-spacing: 0.06em; box-shadow: 0 4px 10px -6px var(--shadow); }
+  .plate i { width: 8px; height: 16px; border-radius: 2px; background: linear-gradient(#0f8a4f 50%, #fff 50%); border: 1px solid #0f8a4f; }
+
+  /* Parking lot scene */
+  .lot { position: relative; flex: none; height: clamp(96px, 15vh, 138px); border-radius: 22px; overflow: hidden; background: var(--asphalt); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), 0 14px 26px -20px var(--shadow); animation: rise 0.7s 0.04s cubic-bezier(0.3, 1.3, 0.5, 1) both; }
+  .lot svg { display: block; width: 100%; height: 100%; }
+  .s-asphalt { fill: var(--asphalt); }
+  .s-kerb { fill: var(--kerb); } .s-kerb-edge { fill: var(--kerb-edge); }
+  .s-line { fill: var(--lap2); }
+  .s-no { fill: var(--lap2); font: 800 15px system-ui, sans-serif; opacity: 0.8; }
+  .shade { fill: rgba(0, 0, 0, 0.32); animation: drift 14s ease-in-out infinite alternate; }
+  @keyframes drift { to { transform: translate(46px, 6px); } }
+  .car { transform-box: fill-box; transform-origin: 50% 50%; }
+  .car.settle { animation: settle 0.75s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  @keyframes settle { 25% { transform: scale(1.04, 1.03); } 55% { transform: scale(0.985); } }
+  .haz { fill: #ffb21a; opacity: 0; }
+  .car.hz .haz { animation: hz 0.5s linear 4; }
+  @keyframes hz { 0%, 45% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  .under { fill: var(--mint); opacity: 0; transition: opacity 0.6s; }
+  .app[data-mode="run"] .under, .app[data-mode="ext"] .under { opacity: 0.55; animation: breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: 0.25; } }
+  .glint { fill: rgba(255, 255, 255, 0.28); animation: glint 5.5s ease-in-out infinite; }
+  @keyframes glint { 0%, 55% { transform: translateX(-110px) skewX(-20deg); } 100% { transform: translateX(110px) skewX(-20deg); } }
+  .lotchip { position: absolute; left: 10px; bottom: 9px; display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px 5px 8px; border-radius: 99px; background: rgba(10, 11, 12, 0.62); color: #f4f1e8; font-size: 11.5px; font-weight: 760; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  .led { width: 8px; height: 8px; border-radius: 50%; background: #6f716f; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08); }
+  .app[data-mode="run"] .led, .app[data-mode="ext"] .led { background: var(--mint); box-shadow: 0 0 8px var(--mint); animation: blink 1.6s steps(1) infinite; }
+  .app.low .led { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  @keyframes blink { 50% { opacity: 0.35; } }
+
+  /* Dial */
+  .dialbox { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; animation: rise 0.8s 0.12s cubic-bezier(0.3, 1.3, 0.5, 1) both; }
+  .dial { position: relative; width: 260px; height: 260px; border-radius: 50%; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+  .dial.held { cursor: grabbing; }
+  .dial:focus-visible { outline: 3px solid var(--focus); outline-offset: 6px; }
+  .dial[aria-disabled="true"] { cursor: default; }
+  .dial svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .d-bezel { fill: var(--face-2); }
+  .fg1 { stop-color: var(--face-2); } .fg2 { stop-color: var(--face); }
+  .s-led { fill: #5c5f5c; }
+  .app[data-mode="run"] .s-led, .app[data-mode="ext"] .s-led { fill: var(--mint); }
+  .app.low .s-led { fill: var(--amber); }
+  .d-face { fill: url(#faceGrad); }
+  .d-inner { fill: var(--face); stroke: rgba(255, 255, 255, 0.06); stroke-width: 1; }
+  .track { fill: none; stroke: rgba(255, 255, 255, 0.07); stroke-width: 22; transition: stroke-width 0.6s cubic-bezier(0.3, 1.4, 0.5, 1); }
+  .lap { fill: none; stroke-width: 22; stroke-linecap: round; transition: stroke-width 0.6s cubic-bezier(0.3, 1.4, 0.5, 1), stroke 0.4s; }
+  .lap.l1 { stroke: var(--lap1); } .lap.l2 { stroke: var(--lap2); } .lap.l3 { stroke: var(--lap3); } .lap.l4 { stroke: var(--lap4); }
+  .lap.l2, .lap.l3, .lap.l4 { filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.6)); }
+  .dial.run .lap, .dial.run .track { stroke-width: 12; }
+  .app.low .dial .lap { stroke: var(--amber); animation: lowPulse 1s ease-in-out infinite; }
+  @keyframes lowPulse { 50% { opacity: 0.55; } }
+  .ext-ring { fill: none; stroke: var(--mint); stroke-width: 5; stroke-linecap: round; opacity: 0; transition: opacity 0.3s; }
+  .dial.ext .ext-ring { opacity: 1; }
+  .tk { stroke: var(--tick); stroke-width: 3; stroke-linecap: round; transform-box: fill-box; transform-origin: 50% 50%; transition: stroke 0.25s; }
+  .tk-m { stroke: rgba(255, 255, 255, 0.1); stroke-width: 1.2; }
+  .tk.click { animation: tclick 0.32s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes tclick { from { transform: scale(1.9); stroke: #fff; } }
+  .kn-halo { fill: var(--lap2); opacity: 0; transition: r 0.3s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.3s; }
+  .dial.held .kn-halo { opacity: 0.22; r: 27px; }
+  .kn { fill: #fbfaf6; stroke: var(--lap2); stroke-width: 3; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.5)); transition: r 0.45s cubic-bezier(0.3, 1.6, 0.5, 1), fill 0.3s, stroke 0.3s; }
+  .kn-grip { fill: none; stroke: #8b8676; stroke-width: 2; stroke-linecap: round; transition: opacity 0.2s; }
+  .dial.run .kn { r: 7px; fill: var(--mint); stroke: #fff; }
+  .dial.run .kn-grip { opacity: 0; }
+  .dial.ext .kn { stroke: var(--mint); }
+  .app.low .dial .kn { fill: var(--amber); }
+  .center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: var(--face-ink); pointer-events: none; font-size: 14px; }
+  .center small { font-size: 0.78em; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--face-muted); }
+  .center b { display: block; margin: 0.18em 0 0.12em; font-size: 1.62em; font-weight: 860; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dial.run .center b { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; letter-spacing: -0.04em; font-size: 1.72em; }
+  .center .sub { font-size: 0.86em; color: var(--face-muted); white-space: nowrap; }
+  .center .cprice { display: inline-flex; align-items: baseline; justify-content: center; gap: 0.3em; margin-top: 0.45em; font-size: 1.05em; font-weight: 850; color: var(--lap2); }
+  .dial.ext .center .cprice, .dial.ext .center b { color: var(--mint); }
+  .cprice em { font-style: normal; font-size: 0.78em; letter-spacing: 0.06em; opacity: 0.85; }
+  .odo { display: inline-flex; height: 1em; line-height: 1; font-variant-numeric: tabular-nums; }
+  /* each price digit rolls in a drum window with soft top and bottom fades */
+  .dg { display: block; width: 0.62em; height: 1.4em; margin: -0.2em 0; overflow: hidden; transition: width 0.3s, opacity 0.3s; -webkit-mask-image: linear-gradient(transparent, #000 24%, #000 76%, transparent); mask-image: linear-gradient(transparent, #000 24%, #000 76%, transparent); }
+  .dg.lead { width: 0; opacity: 0; }
+  .col { display: block; transition: transform 0.55s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  .col i { display: block; height: 1.4em; line-height: 1.4em; font-style: normal; }
+
+  .rate { flex: none; margin: 0; text-align: center; font-size: 12.5px; font-weight: 650; color: var(--muted); min-height: 1.3em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.3s; }
+  .rate.say { color: var(--ink); }
+
+  /* Info chips under the dial: change with the mode */
+  .info { flex: none; display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 8px; animation: rise 0.8s 0.16s cubic-bezier(0.3, 1.3, 0.5, 1) both; transition: opacity 0.3s; }
+  .info div { min-width: 0; padding: 8px 11px; border-radius: 14px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 8px 16px -14px var(--shadow); }
+  .info small { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.11em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+  .info b { display: block; margin-top: 2px; font-size: 13.5px; font-weight: 800; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .info div:nth-child(2) b { color: var(--mint); }
+  .app[data-mode="set"] .info div:nth-child(2) b { color: inherit; }
+  .app[data-mode="rcpt"] .info, .app[data-mode="rcpt"] .rate { opacity: 0; }
+  .dialbox { transition: opacity 0.4s, filter 0.4s; }
+  .app[data-mode="rcpt"] .dialbox { opacity: 0.3; filter: blur(2px); }
+
+  /* Buttons: which ones show depends on the mode */
+  .actions { flex: none; display: flex; gap: 10px; animation: rise 0.8s 0.2s cubic-bezier(0.3, 1.3, 0.5, 1) both; }
+  .act { display: none; flex: 1; align-items: center; justify-content: center; gap: 8px; height: 50px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--edge); background: var(--card); font-size: 14.5px; font-weight: 790; letter-spacing: -0.01em; white-space: nowrap; transition: transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1), background 0.25s, opacity 0.25s; }
+  .act:active { transform: scale(0.95); }
+  .act svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .act.go { flex: 1; border-color: transparent; background: var(--accent); color: var(--accent-ink); box-shadow: 0 12px 22px -14px rgba(190, 140, 0, 0.9); }
+  .act.go em { font-style: normal; padding: 3px 8px; border-radius: 99px; background: rgba(0, 0, 0, 0.12); font-size: 12.5px; }
+  .act.go[aria-disabled="true"] { opacity: 0.55; }
+  .act.mint { flex: 1.7; border-color: transparent; background: var(--mint); color: var(--mint-ink); }
+  .act.mint[aria-disabled="true"] { opacity: 0.55; }
+  .act[aria-pressed="true"] { background: var(--ink); color: var(--screen); border-color: transparent; }
+  .act[aria-pressed="true"] svg { animation: ffwd 0.6s linear infinite; }
+  @keyframes ffwd { 50% { transform: translateX(2px); } }
+  .app[data-mode="set"] .act[data-m~="set"], .app[data-mode="run"] .act[data-m~="run"], .app[data-mode="ext"] .act[data-m~="ext"] { display: inline-flex; }
+  .app[data-mode="rcpt"] .actions { visibility: hidden; }
+
+  /* Ticket slot and printed receipt */
+  .slot { position: absolute; left: 22px; right: 22px; top: 220px; z-index: 21; height: 10px; border-radius: 6px; background: linear-gradient(#0b0b0c, #2a2b2e); box-shadow: 0 2px 0 rgba(255, 255, 255, 0.08), 0 6px 12px -4px rgba(0, 0, 0, 0.6); transform: scaleX(0); transition: transform 0.4s cubic-bezier(0.3, 1.5, 0.5, 1); }
+  .app[data-mode="rcpt"] .slot { transform: none; }
+  .receipt { position: absolute; left: 32px; right: 32px; top: 226px; z-index: 20; overflow: hidden; padding: 0 0 14px; }
+  .receipt[hidden] { display: none; }
+  .paper { position: relative; padding: 16px 18px 14px; background: var(--paper); color: var(--paper-ink); box-shadow: 0 18px 30px -14px rgba(0, 0, 0, 0.55); transform: translateY(-102%); }
+  .paper::after { content: ""; position: absolute; left: 0; right: 0; bottom: -10px; height: 10px; background: linear-gradient(45deg, transparent 33.33%, var(--paper) 33.33%, var(--paper) 66.66%, transparent 66.66%), linear-gradient(-45deg, transparent 33.33%, var(--paper) 33.33%, var(--paper) 66.66%, transparent 66.66%); background-size: 16px 20px; background-position: 0 -10px; }
+  .receipt.print .paper { animation: print 1.5s cubic-bezier(0.3, 0.7, 0.4, 1) forwards; }
+  @keyframes print { 0% { transform: translateY(-102%); } 22% { transform: translateY(-74%); } 30% { transform: translateY(-72%); } 52% { transform: translateY(-40%); } 60% { transform: translateY(-38%); } 100% { transform: translateY(0); } }
+  .receipt.out .paper { animation: tearOff 0.5s cubic-bezier(0.5, 0, 0.8, 0.4) forwards; transform: none; }
+  @keyframes tearOff { to { transform: translateY(40px) rotate(5deg); opacity: 0; } }
+  .r-brand { margin: 0; display: flex; justify-content: space-between; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; color: var(--paper-muted); }
+  .paper h2 { margin: 6px 0 10px; font-size: 21px; letter-spacing: -0.03em; }
+  .paper dl { margin: 0; display: grid; gap: 5px; font-size: 13px; }
+  .paper dl div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dashed rgba(0, 0, 0, 0.12); padding-bottom: 4px; }
+  .paper dt { color: var(--paper-muted); }
+  .paper dd { margin: 0; font-weight: 700; }
+  .r-total { display: flex; justify-content: space-between; align-items: baseline; margin: 10px 0 8px; font-size: 14px; font-weight: 800; }
+  .r-total b { font-size: 22px; letter-spacing: -0.02em; }
+  .barcode { display: block; width: 100%; height: 30px; }
+  .barcode rect { fill: var(--paper-ink); }
+  .stamp { position: absolute; right: 16px; top: 46px; padding: 3px 10px; border: 3px solid #1d9a62; border-radius: 8px; color: #1d9a62; font-size: 18px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; transform: rotate(-12deg); opacity: 0; mix-blend-mode: multiply; }
+  .receipt.print .stamp { animation: stamp 0.45s 1.5s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+  @keyframes stamp { from { opacity: 0; transform: rotate(-12deg) scale(2.3); } to { opacity: 0.9; transform: rotate(-12deg) scale(1); } }
+  .done { display: flex; width: 100%; height: 42px; margin-top: 10px; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: var(--paper-ink); color: var(--paper); font-weight: 800; font-size: 14px; }
+  .done:focus-visible { outline: 3px solid var(--mint); outline-offset: 2px; }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(0.97); } }
+
+  @media (max-height: 720px) {
+    .app { gap: 8px; padding-top: 48px; }
+    .top h1 { font-size: 21px; }
+    .lot { height: 92px; }
+    .act { height: 46px; }
+    .info div { padding: 6px 9px; border-radius: 12px; }
+    .info small { font-size: 9.5px; }
+    .info b { font-size: 12.5px; }
+    .paper { padding: 12px 16px 12px; }
+    .paper h2 { margin: 4px 0 7px; font-size: 19px; }
+    .paper dl { gap: 3px; font-size: 12.5px; }
+    .r-total { margin: 7px 0 5px; }
+    .barcode { height: 22px; }
+    .done { height: 38px; margin-top: 8px; }
+  }
+
+  /* ---------- Ghost finger (auto demo) ---------- */
+  .ghost { position: absolute; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; z-index: 40; pointer-events: none; background: var(--ghost-f); border: 2px solid var(--ghost-b); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); opacity: 0; transition: opacity 0.3s; }
+  .ghost::after { content: ""; position: absolute; inset: 11px; border-radius: 50%; background: var(--ghost-b); opacity: 0.5; transform: scale(0.45); transition: transform 0.18s; }
+  .ghost.on { opacity: 1; }
+  .ghost.press::after { transform: scale(1); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glow, .shade, .glint, .led, .under { animation: none !important; }
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="glow" aria-hidden="true"></div>
+  <section class="caption" aria-hidden="true">
+    <p class="eyebrow"><i></i>Mobile interactions</p>
+    <h2>Park Dial</h2>
+    <p>Set your parking time by turning a big dial: every lap is an hour, the price rolls as you go, and the dial becomes your countdown once you start.</p>
+    <ul>
+      <li><kbd>Drag</kbd> around the ring to set the time</li>
+      <li><kbd>Start</kbd> locks it and starts the countdown</li>
+      <li><kbd>Extend</kbd> turn again to add time</li>
+      <li><kbd>Arrows</kbd> 5 min, <kbd>Page</kbd> 30 min</li>
+    </ul>
+  </section>
+
+  <div class="phone" id="phone">
+    <div class="status" aria-hidden="true">
+      <span id="clock">9:41</span>
+      <svg viewBox="0 0 62 13"><rect x="0" y="8" width="3" height="5" rx="1"/><rect x="5" y="5.5" width="3" height="7.5" rx="1"/><rect x="10" y="3" width="3" height="10" rx="1"/><rect x="15" y="0.5" width="3" height="12.5" rx="1"/><rect x="36" y="1" width="22" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="38" y="3" width="16" height="7" rx="1.5"/><rect x="59" y="4.5" width="2" height="4" rx="1"/></svg>
+    </div>
+
+    <div class="app" id="app" data-mode="set">
+      <header class="top">
+        <div><small>Zone B · Bay 14 · Lahore</small><h1>Liberty Market</h1></div>
+        <span class="plate" aria-label="Car plate LEB 2741"><i aria-hidden="true"></i>LEB 2741</span>
+      </header>
+
+      <!-- Top-down parking bay, drawn -->
+      <section class="lot" id="lot" aria-hidden="true">
+        <svg viewBox="0 0 360 130" preserveAspectRatio="xMidYMid slice">
+          <defs>
+            <pattern id="grit" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.7" fill="#fff" opacity="0.06"/><circle cx="4.5" cy="4" r="0.6" fill="#000" opacity="0.3"/></pattern>
+            <linearGradient id="bodyG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0c8d5e"/><stop offset="0.5" stop-color="#3ee0a1"/><stop offset="1" stop-color="#0c8d5e"/></linearGradient>
+            <linearGradient id="roofG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7ff2c3"/><stop offset="1" stop-color="#22b982"/></linearGradient>
+            <linearGradient id="glassG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a3b45"/><stop offset="1" stop-color="#0b1317"/></linearGradient>
+            <filter id="blur6" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7"/></filter>
+            <filter id="blur3" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3.5"/></filter>
+            <clipPath id="carClip"><rect x="142" y="26" width="76" height="98" rx="20"/></clipPath>
+          </defs>
+          <rect class="s-asphalt" width="360" height="130"/>
+          <rect width="360" height="130" fill="url(#grit)"/>
+          <rect class="s-kerb" width="360" height="15"/>
+          <rect class="s-kerb-edge" y="15" width="360" height="3"/>
+          <g fill="rgba(0,0,0,.18)"><rect x="40" y="3" width="1.5" height="12"/><rect x="100" y="3" width="1.5" height="12"/><rect x="160" y="3" width="1.5" height="12"/><rect x="220" y="3" width="1.5" height="12"/><rect x="280" y="3" width="1.5" height="12"/><rect x="340" y="3" width="1.5" height="12"/></g>
+          <rect class="s-line" x="118" y="18" width="4" height="112"/>
+          <rect class="s-line" x="238" y="18" width="4" height="112"/>
+          <text class="s-no" x="180" y="126" text-anchor="middle">14</text>
+          <!-- neighbours -->
+          <g opacity="0.78">
+            <rect x="24" y="30" width="72" height="94" rx="18" fill="#3a56c4"/>
+            <path d="M32 58q28-9 56 0l-4-16q-24-6-48 0z" fill="url(#glassG)"/>
+            <rect x="34" y="60" width="52" height="34" rx="8" fill="#5370e0"/>
+            <path d="M36 106q24 6 48 0l-2-9q-22 4-44 0z" fill="url(#glassG)"/>
+            <rect x="264" y="34" width="70" height="92" rx="18" fill="#8e949c"/>
+            <path d="M272 62q27-9 54 0l-4-16q-23-6-46 0z" fill="url(#glassG)"/>
+            <rect x="274" y="64" width="50" height="32" rx="8" fill="#a6acb4"/>
+          </g>
+          <!-- meter post on the kerb -->
+          <g transform="translate(252 9)"><circle r="8" fill="#3a3c40" stroke="#1d1e20" stroke-width="2"/><rect x="-5" y="-3.5" width="10" height="6" rx="1.5" fill="#0f2a20"/><circle class="s-led" cy="0" r="1.6"/></g>
+          <!-- our car -->
+          <ellipse class="under" cx="180" cy="76" rx="46" ry="56" filter="url(#blur6)"/>
+          <g class="car" id="car">
+            <rect x="145" y="31" width="76" height="98" rx="20" fill="rgba(0,0,0,.45)" filter="url(#blur3)"/>
+            <ellipse cx="141" cy="58" rx="4" ry="6" fill="#0c8d5e"/><ellipse cx="219" cy="58" rx="4" ry="6" fill="#0c8d5e"/>
+            <rect x="142" y="26" width="76" height="98" rx="20" fill="url(#bodyG)"/>
+            <path d="M156 34q24-6 48 0" stroke="rgba(255,255,255,.35)" stroke-width="1.4" fill="none"/>
+            <path d="M150 62q30-9 60 0l-5-17q-25-6-50 0z" fill="url(#glassG)"/>
+            <rect x="152" y="63" width="56" height="35" rx="9" fill="url(#roofG)"/>
+            <path d="M153 110q27 6 54 0l-2-10q-25 4-50 0z" fill="url(#glassG)"/>
+            <rect x="148" y="27" width="13" height="5" rx="2.5" fill="#fff6c8"/><rect x="199" y="27" width="13" height="5" rx="2.5" fill="#fff6c8"/>
+            <rect x="148" y="118" width="12" height="4" rx="2" fill="#ff4d4d"/><rect x="200" y="118" width="12" height="4" rx="2" fill="#ff4d4d"/>
+            <g clip-path="url(#carClip)"><rect class="glint" x="160" y="20" width="18" height="110"/></g>
+            <circle class="haz" cx="146" cy="31" r="5"/><circle class="haz" cx="214" cy="31" r="5"/><circle class="haz" cx="146" cy="119" r="5"/><circle class="haz" cx="214" cy="119" r="5"/>
+          </g>
+          <ellipse class="shade" cx="60" cy="74" rx="70" ry="46" filter="url(#blur6)"/>
+        </svg>
+        <span class="lotchip"><i class="led"></i><span id="lotTxt">Bay 14 · ready</span></span>
+      </section>
+
+      <section class="dialbox" id="dialbox">
+        <div class="dial" id="dial" role="slider" tabindex="0" aria-label="Parking time" aria-valuemin="0" aria-valuemax="240" aria-valuenow="0" aria-valuetext="0 minutes">
+          <svg viewBox="0 0 300 300" aria-hidden="true">
+            <defs>
+              <radialGradient id="faceGrad" cx="0.4" cy="0.35" r="0.75"><stop class="fg1" offset="0"/><stop class="fg2" offset="1"/></radialGradient>
+            </defs>
+            <circle class="d-bezel" cx="150" cy="150" r="146"/>
+            <circle class="d-face" cx="150" cy="150" r="139"/>
+            <circle class="track" cx="150" cy="150" r="112"/>
+            <g id="ticks"></g>
+            <circle class="d-inner" cx="150" cy="150" r="80"/>
+            <g transform="rotate(-90 150 150)">
+              <circle class="lap l1" id="lap0" cx="150" cy="150" r="112"/>
+              <circle class="lap l2" id="lap1" cx="150" cy="150" r="112"/>
+              <circle class="lap l3" id="lap2" cx="150" cy="150" r="112"/>
+              <circle class="lap l4" id="lap3" cx="150" cy="150" r="112"/>
+            </g>
+            <circle class="ext-ring" id="extRing" cx="150" cy="150" r="133"/>
+            <g id="knob">
+              <circle class="kn-halo" cx="150" cy="38" r="16"/>
+              <circle class="kn" cx="150" cy="38" r="15"/>
+              <path class="kn-grip" d="M145 33v10M150 32v12M155 33v10"/>
+            </g>
+          </svg>
+          <div class="center" id="center" aria-hidden="true">
+            <small id="cLabel">Set your time</small>
+            <b id="cBig">0 min</b>
+            <span class="sub" id="cSub">until 4:00 pm</span>
+            <span class="cprice"><em id="cPre">PKR</em><span class="odo" id="odo"></span></span>
+          </div>
+        </div>
+      </section>
+
+      <div class="info" id="info">
+        <div><small id="i1l">Per 30 min</small><b id="i1">PKR 40</b></div>
+        <div><small id="i2l">Max stay</small><b id="i2">4 hours</b></div>
+        <div><small id="i3l">Bay</small><b id="i3">B-14</b></div>
+      </div>
+
+      <p class="rate" id="rate">Turn the dial · one lap is one hour</p>
+
+      <div class="actions" id="actions">
+        <button class="act go" id="startBtn" type="button" data-m="set" aria-disabled="true"><span>Start parking</span><em id="startPrice">PKR 0</em></button>
+        <button class="act" id="ffBtn" type="button" data-m="run" aria-pressed="false" aria-label="Fast-forward time, 4 minutes every second"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6l7 6-7 6zM13 6l7 6-7 6z"/></svg>Fast</button>
+        <button class="act" id="extendBtn" type="button" data-m="run"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Extend</button>
+        <button class="act" id="endBtn" type="button" data-m="run"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>End</button>
+        <button class="act" id="cancelBtn" type="button" data-m="ext">Cancel</button>
+        <button class="act mint" id="addBtn" type="button" data-m="ext" aria-disabled="true">Turn to add time</button>
+      </div>
+
+      <div class="slot" id="slot" aria-hidden="true"></div>
+      <section class="receipt" id="receipt" hidden aria-labelledby="rTitle">
+        <div class="paper">
+          <p class="r-brand"><span>PARK DIAL · ZONE B</span><span id="rNo">No. 48211</span></p>
+          <h2 id="rTitle">Parking ended</h2>
+          <dl>
+            <div><dt>Bay</dt><dd>14 · Liberty Market</dd></div>
+            <div><dt>Car</dt><dd>LEB 2741</dd></div>
+            <div><dt>Start</dt><dd id="rStart">--</dd></div>
+            <div><dt>End</dt><dd id="rEnd">--</dd></div>
+            <div><dt>Booked</dt><dd id="rBooked">--</dd></div>
+            <div><dt>Used</dt><dd id="rUsed">--</dd></div>
+          </dl>
+          <div class="r-total"><span>Total paid</span><b id="rTotal">PKR 0</b></div>
+          <svg class="barcode" id="barcode" viewBox="0 0 200 30" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <span class="stamp" aria-hidden="true">Paid</span>
+          <button class="done" id="doneBtn" type="button">Done</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="home-bar" aria-hidden="true"></div>
+    <div class="ghost" id="ghost" aria-hidden="true"></div>
+    <p class="sr-only" id="live" aria-live="polite"></p>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var phone = $("phone"), live = $("live");
+
+  // Screen-reader status line (quiet while the demo plays)
+  function announce(msg) { if (Demo.on) return; live.textContent = ""; setTimeout(function () { live.textContent = msg; }, 30); }
+
+  // Gentle buzz on phones, only after a real tap (never during the demo, so no browser warnings)
+  function buzz(ms) {
+    try { if (!Demo.on && navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(ms); } catch (e) {}
+  }
+
+  // A small spring: s.to(target[, velocity]); frame(x, v) paints. Reduced motion jumps straight to the target.
+  function Spring(x, k, c, frame) {
+    var s = { x: x, v: 0, t: x, k: k || 170, c: c || 18, raf: 0, frame: frame }, last = 0;
+    function tick(now) {
+      var dt = Math.min(0.05, (now - last) / 1000); last = now;
+      for (var i = 0; i < 4; i++) { var h = dt / 4, a = -s.k * (s.x - s.t) - s.c * s.v; s.v += a * h; s.x += s.v * h; }
+      if (Math.abs(s.v) < 0.01 && Math.abs(s.x - s.t) < 0.005) { s.x = s.t; s.v = 0; s.raf = 0; s.frame(s.x, 0); return; }
+      s.frame(s.x, s.v); s.raf = requestAnimationFrame(tick);
+    }
+    s.to = function (t, v) {
+      s.t = t; if (v !== undefined) s.v = v;
+      if (reduce) { cancelAnimationFrame(s.raf); s.raf = 0; s.x = t; s.v = 0; s.frame(t, 0); return; }
+      if (!s.raf) { last = performance.now(); s.raf = requestAnimationFrame(tick); }
+    };
+    s.set = function (x) { cancelAnimationFrame(s.raf); s.raf = 0; s.x = s.t = x; s.v = 0; s.frame(x, 0); };
+    return s;
+  }
+
+  // ---------- Auto demo: a ghost finger drives the same functions a real finger does ----------
+  var Demo = (function () {
+    var d = { on: !reduce, timers: [], raf: 0, stops: [] }, ghost = $("ghost"), gx = 0, gy = 0;
+    d.pt = function (el, fx, fy) {
+      var r = el.getBoundingClientRect(), p = phone.getBoundingClientRect();
+      return { x: r.left - p.left + r.width * (fx == null ? 0.5 : fx), y: r.top - p.top + r.height * (fy == null ? 0.5 : fy) };
+    };
+    d.later = function (ms, fn) { d.timers.push(setTimeout(function () { if (d.on) fn(); }, ms)); };
+    d.at = function (x, y) { gx = x; gy = y; ghost.style.transform = "translate(" + x + "px," + y + "px)"; ghost.classList.add("on"); };
+    d.press = function (v) { ghost.classList.toggle("press", !!v); };
+    d.hide = function () { ghost.classList.remove("on", "press"); };
+    d.visible = function () { return ghost.classList.contains("on"); };
+    d.glide = function (x, y, ms, step, done) {
+      var x0 = gx, y0 = gy, t0 = performance.now();
+      cancelAnimationFrame(d.raf);
+      d.raf = requestAnimationFrame(function f(now) {
+        if (!d.on) return;
+        var k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        d.at(x0 + (x - x0) * e, y0 + (y - y0) * e);
+        if (step) step(e, gx, gy);
+        if (k < 1) d.raf = requestAnimationFrame(f); else if (done) done();
+      });
+    };
+    d.onStop = function (fn) { d.stops.push(fn); };
+    d.stop = function () {
+      if (!d.on) return;
+      d.on = false; d.timers.forEach(clearTimeout); d.timers = []; cancelAnimationFrame(d.raf); d.hide();
+      d.stops.forEach(function (fn) { fn(); });
+    };
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (ty) {
+      addEventListener(ty, function (e) { if (e.isTrusted) d.stop(); }, { capture: true, passive: true });
+    });
+    return d;
+  })();
+
+  // =====================================================================
+  //  Park Dial
+  // =====================================================================
+  var MAX = 240, STEP = 5, RATE = 40, BLOCK = 30, FF = 240;   // minutes, PKR per started 30 min, fast-forward x240
+  var app = $("app"), dial = $("dial"), dialbox = $("dialbox"), knob = $("knob"), extRing = $("extRing"), car = $("car");
+  var laps = [$("lap0"), $("lap1"), $("lap2"), $("lap3")], center = $("center");
+  var startBtn = $("startBtn"), ffBtn = $("ffBtn"), extendBtn = $("extendBtn"), endBtn = $("endBtn"), cancelBtn = $("cancelBtn"), addBtn = $("addBtn"), doneBtn = $("doneBtn");
+  var receipt = $("receipt"), slot = $("slot"), rate = $("rate");
+  var C = 2 * Math.PI * 112, C2 = 2 * Math.PI * 133;
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function fmtDur(m) { m = Math.round(m); var h = Math.floor(m / 60), mm = m % 60; return h ? h + " h" + (mm ? " " + pad(mm) + " min" : "") : mm + " min"; }
+  function sayDur(m) { m = Math.round(m); var h = Math.floor(m / 60), mm = m % 60; return (h ? h + (h > 1 ? " hours " : " hour ") : "") + (mm || !h ? mm + " minutes" : "").trim(); }
+  function clockAt(ms) { return new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase(); }
+  function hms(sec) { sec = Math.max(0, Math.ceil(sec)); return Math.floor(sec / 3600) + ":" + pad(Math.floor((sec % 3600) / 60)) + ":" + pad(sec % 60); }
+  function price(m) { return m > 0 ? Math.ceil(m / BLOCK - 1e-9) * RATE : 0; }
+
+  // ---------- State ----------
+  var mode = "set";                   // set | run | ext | rcpt
+  var raw = 0, val = 0;               // dial minutes: raw follows the finger, val is snapped to 5 minutes
+  var booked = 0, paid = 0, remain = 0, elapsed = 0, startClock = 0, ff = false, sessions = 0, endShown = 0;
+  var base = 0, extra = 0;            // while extending: minutes left when Extend was tapped, and minutes added
+
+  // ---------- Ticks: 60 minute marks, 12 big ones that light up ----------
+  var tickEls = [];
+  (function buildTicks() {
+    var g = $("ticks"), NS = "http://www.w3.org/2000/svg";
+    for (var i = 0; i < 60; i++) {
+      var major = i % 5 === 0, a = i * 6 * Math.PI / 180, r1 = major ? 84 : 91, r2 = 96, l = document.createElementNS(NS, "line");
+      l.setAttribute("x1", (150 + Math.sin(a) * r1).toFixed(2)); l.setAttribute("y1", (150 - Math.cos(a) * r1).toFixed(2));
+      l.setAttribute("x2", (150 + Math.sin(a) * r2).toFixed(2)); l.setAttribute("y2", (150 - Math.cos(a) * r2).toFixed(2));
+      l.setAttribute("class", major ? "tk" : "tk-m");
+      g.appendChild(l);
+      if (major) tickEls.push(l);
+    }
+  })();
+  var lapColors = [];
+  function readColors() { var cs = getComputedStyle(document.documentElement); lapColors = ["--lap1", "--lap2", "--lap3", "--lap4"].map(function (n) { return cs.getPropertyValue(n).trim(); }); paint(); }
+  function clickTick(m) {
+    var el = tickEls[Math.round((m % 60) / 5) % 12];
+    if (!el || reduce) return;
+    el.classList.remove("click"); void el.getBoundingClientRect(); el.classList.add("click");
+    buzz(4);
+  }
+
+  // ---------- Price odometer ----------
+  var odo = $("odo"), ocols = [];
+  (function buildOdo() {
+    var h = "";
+    for (var i = 0; i < 3; i++) { var c = ""; for (var n = 0; n < 10; n++) c += "<i>" + n + "</i>"; h += '<span class="dg"><span class="col">' + c + "</span></span>"; }
+    odo.innerHTML = h;
+    ocols = [].slice.call(odo.querySelectorAll(".col"));
+  })();
+  var shownPrice = -1;
+  function setPrice(n) {
+    if (n === shownPrice) return;
+    shownPrice = n;
+    var s = ("000" + Math.min(999, n)).slice(-3), lead = true;
+    for (var i = 0; i < 3; i++) {
+      var d = +s[i];
+      if (d || i === 2) lead = false;
+      ocols[i].style.transform = "translateY(" + (-d * 1.4).toFixed(1) + "em)";
+      ocols[i].parentNode.classList.toggle("lead", lead);
+    }
+  }
+
+  // ---------- Painting the dial ----------
+  function shown() {
+    if (mode === "set") return raw;
+    if (mode === "ext") return remain / 60 + Math.max(0, raw - base);
+    if (mode === "run") return remain / 60;
+    return endShown;
+  }
+  function paint() {
+    var m = clamp(shown(), 0, MAX);
+    for (var i = 0; i < 4; i++) {
+      var part = clamp(m - i * 60, 0, 60) / 60;
+      laps[i].style.strokeDasharray = (part * C).toFixed(2) + " " + C.toFixed(2);
+      laps[i].style.opacity = part > 0.002 ? 1 : 0;
+    }
+    var cur = m % 60; if (m > 0.01 && cur < 0.01) cur = 60;
+    knob.setAttribute("transform", "rotate(" + (cur / 60 * 360).toFixed(2) + " 150 150)");
+    var lap = Math.min(3, Math.floor((m - 0.001) / 60));
+    for (var t = 0; t < 12; t++) {
+      var lit = m > 0.01 && t * 5 <= cur + 0.01;
+      tickEls[t].style.stroke = lit ? lapColors[Math.max(0, lap)] || "" : "";
+    }
+    if (mode === "ext") {
+      var ex = Math.max(0, raw - base), from = (remain / 60) % 60;
+      extRing.style.strokeDasharray = (Math.min(1, ex / 60) * C2).toFixed(2) + " " + C2.toFixed(2);
+      extRing.setAttribute("transform", "rotate(" + (from / 60 * 360 - 90).toFixed(2) + " 150 150)");
+    }
+  }
+
+  // ---------- Text in the middle, the button and the slider value ----------
+  function texts() {
+    var big, sub, label, pre, pr, vt, now = Date.now();
+    if (mode === "rcpt") {
+      var used = Math.max(1, Math.ceil(elapsed / 60 - 1e-6));
+      label = "Session ended"; big = fmtDur(used); sub = "used of " + fmtDur(booked); pre = "Paid PKR"; pr = paid;
+      vt = "Session ended. Used " + sayDur(used) + ". Paid PKR " + paid;
+    } else if (mode === "set") {
+      label = val ? "Park for" : "Turn to set time"; big = fmtDur(val); sub = "until " + clockAt(now + val * 60000); pre = "PKR"; pr = price(val);
+      vt = val ? sayDur(val) + ", until " + clockAt(now + val * 60000) + ", PKR " + price(val) : "No time set";
+      startBtn.setAttribute("aria-disabled", val ? "false" : "true");
+      $("startPrice").textContent = "PKR " + price(val);
+    } else if (mode === "run") {
+      label = ff ? "Time left · fast" : "Time left"; big = hms(remain); sub = "ends " + clockAt(startClock + booked * 60000); pre = "Paid PKR"; pr = paid;
+      vt = sayDur(Math.ceil(remain / 60)) + " left, ends " + clockAt(startClock + booked * 60000);
+    } else {
+      var cost = price(booked + extra) - paid;
+      label = "Extend by"; big = "+" + fmtDur(extra); sub = "new end " + clockAt(startClock + (booked + extra) * 60000); pre = "+ PKR"; pr = cost;
+      vt = "Add " + sayDur(extra) + ", plus PKR " + cost;
+      addBtn.setAttribute("aria-disabled", extra ? "false" : "true");
+      addBtn.textContent = extra ? "Add " + fmtDur(extra) + " · PKR " + cost : "Turn to add time";
+    }
+    $("cLabel").textContent = label; $("cBig").textContent = big; $("cSub").textContent = sub; $("cPre").textContent = pre;
+    setPrice(pr);
+    var now2 = mode === "run" || mode === "rcpt" ? Math.ceil(shown()) : mode === "ext" ? Math.round(base + extra) : val;
+    dial.setAttribute("aria-valuenow", String(clamp(now2, 0, MAX)));
+    dial.setAttribute("aria-valuetext", vt);
+    $("lotTxt").textContent = mode === "set" ? "Bay 14 · ready" : mode === "rcpt" ? "Bay 14 · paid" : "Bay 14 · " + hms(remain).slice(0, -3) + " left";
+    infoChips();
+  }
+  var chipVals = "";
+  function infoChips() {
+    var c;
+    if (mode === "run") c = ["Started", clockAt(startClock), "Booked", fmtDur(booked), "Speed", ff ? "240× fast" : "Real time"];
+    else if (mode === "ext") c = ["Booked", fmtDur(booked), "Adds", extra ? "+" + fmtDur(extra) : "Turn dial", "Max left", "4 hours"];
+    else if (mode === "rcpt") c = ["Started", clockAt(startClock), "Paid", "PKR " + paid, "Booked", fmtDur(booked)];
+    else c = ["Per 30 min", "PKR 40", "Max stay", "4 hours", "Bay", "B-14"];
+    var key = c.join("|");
+    if (key === chipVals) return;
+    chipVals = key;
+    $("i1l").textContent = c[0]; $("i1").textContent = c[1]; $("i2l").textContent = c[2]; $("i2").textContent = c[3]; $("i3l").textContent = c[4]; $("i3").textContent = c[5];
+  }
+
+  // Keep the snapped value in step with the raw one; a tick clicks on every change
+  function syncVal() {
+    if (mode === "ext") {
+      var ne = clamp(Math.round((raw - base) / STEP) * STEP, 0, Math.max(0, Math.floor((MAX - base) / STEP) * STEP));
+      if (ne !== extra) { extra = ne; clickTick(base + extra); }
+    } else if (mode === "set") {
+      var nv = clamp(Math.round(raw / STEP) * STEP, 0, MAX);
+      if (nv !== val) { val = nv; clickTick(val); }
+    }
+  }
+  var rawS = Spring(0, 170, 26, function (x) { raw = x; syncVal(); paint(); texts(); });
+
+  function setMode(m) {
+    var hadFocus = document.activeElement && $("actions").contains(document.activeElement);
+    mode = m;
+    app.dataset.mode = m;
+    dial.classList.toggle("run", m === "run" || m === "rcpt");
+    dial.classList.toggle("ext", m === "ext");
+    dial.setAttribute("aria-disabled", m === "set" || m === "ext" ? "false" : "true");
+    app.classList.toggle("low", (m === "run" || m === "ext") && remain < 600 && remain > 0);
+    if (!rate.classList.contains("say")) rateLine();
+    paint(); texts();
+    if (hadFocus && !Demo.on) {
+      var next = m === "run" ? extendBtn : m === "ext" ? dial : m === "set" ? startBtn : doneBtn;
+      setTimeout(function () { next.focus({ preventScroll: true }); }, 30);
+    }
+  }
+  var sayT = 0;
+  function say(msg) {
+    rate.textContent = msg; rate.classList.add("say");
+    clearTimeout(sayT);
+    sayT = setTimeout(function () { rate.classList.remove("say"); rateLine(); }, 1800);
+  }
+  function rateLine() {
+    rate.textContent = mode === "run" ? (ff ? "Fast-forward on · 4 minutes every second" : "Tap Extend to add time, End to finish")
+      : mode === "ext" ? "Turn clockwise to add time" : mode === "rcpt" ? "" : "Turn the dial · one lap is one hour";
+  }
+
+  // ---------- Dragging around the ring ----------
+  var drag = null;
+  function lo() { return mode === "ext" ? base : 0; }
+  function angleAt(x, y) {
+    var r = dial.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    return { a: Math.atan2(x - cx, cy - y), d: Math.hypot(x - cx, y - cy) / ((r.width || 300) / 300) };
+  }
+  function dragStart(x, y, isDemo, id) {
+    if (mode !== "set" && mode !== "ext") return false;
+    drag = { a: angleAt(x, y).a, demo: !!isDemo, id: id };
+    rawS.set(raw); dial.classList.add("held");
+    return true;
+  }
+  function dragMove(x, y) {
+    var p = angleAt(x, y);
+    if (p.d < 36) { drag.a = p.a; return; }          // too near the middle: angles jump there
+    var da = p.a - drag.a;
+    if (da > Math.PI) da -= 2 * Math.PI; else if (da < -Math.PI) da += 2 * Math.PI;
+    drag.a = p.a;
+    raw = clamp(raw + da / (2 * Math.PI) * 60, lo(), MAX);
+    rawS.set(raw);
+  }
+  function dragEnd() {
+    if (!drag) return;
+    drag = null; dial.classList.remove("held");
+    rawS.to(mode === "ext" ? base + extra : val);
+    if (mode === "set" && val) announce(sayDur(val) + ", PKR " + price(val) + ". Press Start parking.");
+    if (mode === "ext" && extra) announce("Add " + sayDur(extra) + " for PKR " + (price(booked + extra) - paid) + ".");
+  }
+  dial.addEventListener("pointerdown", function (e) {
+    if (e.button > 0) return;
+    if (!dragStart(e.clientX, e.clientY, false, e.pointerId)) { if (mode === "run") say("Tap Extend to add time"); return; }
+    try { dial.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  dial.addEventListener("pointermove", function (e) { if (drag && !drag.demo && drag.id === e.pointerId) dragMove(e.clientX, e.clientY); });
+  dial.addEventListener("pointerup", function (e) { if (drag && !drag.demo && drag.id === e.pointerId) dragEnd(); });
+  dial.addEventListener("pointercancel", function (e) { if (drag && !drag.demo && drag.id === e.pointerId) dragEnd(); });
+  dial.addEventListener("keydown", function (e) {
+    if (mode !== "set" && mode !== "ext") return;
+    var steps = { ArrowRight: 5, ArrowUp: 5, ArrowLeft: -5, ArrowDown: -5, PageUp: 30, PageDown: -30 }, d = steps[e.key];
+    var cur = Math.round(rawS.t / STEP) * STEP, target = null;
+    if (d) target = cur + d;
+    else if (e.key === "Home") target = lo();
+    else if (e.key === "End") target = MAX;
+    else if (e.key === "Enter") { e.preventDefault(); if (mode === "set") start(); else extendAdd(); return; }
+    if (target === null) return;
+    e.preventDefault();
+    if (mode === "ext") target = Math.max(base, base + Math.round((target - base) / STEP) * STEP);
+    rawS.to(clamp(target, lo(), MAX));
+  });
+
+  // ---------- Parking session ----------
+  var runRaf = 0, runLast = 0;
+  function runTick(now) {
+    runRaf = 0;
+    if (mode !== "run" && mode !== "ext") return;
+    var dt = Math.min(3600, Math.max(0, (now - runLast) / 1000)); runLast = now;
+    var adv = dt * (ff ? FF : 1);
+    adv = Math.min(adv, remain);
+    remain -= adv; elapsed += adv;
+    app.classList.toggle("low", remain < 600 && remain > 0);
+    paint(); texts();
+    if (remain <= 0) { endSession(true); return; }
+    runRaf = requestAnimationFrame(runTick);
+  }
+  function runGo() { cancelAnimationFrame(runRaf); runLast = performance.now(); runRaf = requestAnimationFrame(runTick); }
+  function carPulse(cls) { car.classList.remove(cls); void car.getBoundingClientRect(); car.classList.add(cls); }
+  function start() {
+    if (mode !== "set") return;
+    if (!val) { say("Turn the dial to set your time first"); dialWiggle(); return; }
+    rawS.set(val);
+    booked = val; paid = price(val); remain = val * 60; elapsed = 0; startClock = Date.now(); sessions++;
+    setFF(false);
+    setMode("run"); runGo();
+    carPulse("settle"); carPulse("hz");
+    buzz([15, 40, 15]);
+    announce("Parking started for " + sayDur(booked) + ". Paid PKR " + paid + ". Ends at " + clockAt(startClock + booked * 60000) + ".");
+  }
+  function dialWiggle() { if (reduce) return; rawS.set(raw); rawS.to(raw, 22); }
+  function setFF(on) {
+    ff = !!on;
+    ffBtn.setAttribute("aria-pressed", ff ? "true" : "false");
+    rateLine(); texts();
+  }
+  function extendOpen() {
+    if (mode !== "run") return;
+    base = remain / 60; extra = 0;
+    rawS.set(base);
+    setMode("ext");
+    say("Turn the dial clockwise to add time");
+    announce("Extending. Turn the dial to add time, then press Add.");
+  }
+  function extendAdd() {
+    if (mode !== "ext") return;
+    if (!extra) { say("Turn the dial to add time first"); return; }
+    var cost = price(booked + extra) - paid, added = extra;
+    booked += extra; paid += cost; remain += extra * 60; extra = 0;
+    setMode("run"); runGo();
+    carPulse("settle");
+    buzz([12, 30, 12]);
+    announce("Added " + sayDur(added) + " for PKR " + cost + ". Now ends at " + clockAt(startClock + booked * 60000) + ".");
+  }
+  function extendCancel() { if (mode !== "ext") return; extra = 0; setMode("run"); runGo(); }
+  function endSession(timeUp) {
+    if (mode !== "run" && mode !== "ext") return;
+    cancelAnimationFrame(runRaf); runRaf = 0;
+    endShown = remain / 60;
+    $("rTitle").textContent = timeUp ? "Time's up" : "Parking ended";
+    $("rNo").textContent = "No. " + (48210 + sessions);
+    $("rStart").textContent = clockAt(startClock);
+    $("rEnd").textContent = clockAt(startClock + elapsed * 1000);
+    $("rBooked").textContent = fmtDur(booked);
+    $("rUsed").textContent = fmtDur(Math.max(1, Math.ceil(elapsed / 60 - 1e-6)));
+    $("rTotal").textContent = "PKR " + paid;
+    barcode();
+    app.classList.remove("low");
+    setMode("rcpt");
+    placeReceipt();
+    receipt.hidden = false; receipt.classList.remove("out", "print"); void receipt.offsetWidth; receipt.classList.add("print");
+    carPulse("hz");
+    buzz([20, 50, 20]);
+    announce((timeUp ? "Time is up. " : "Parking ended. ") + "Used " + sayDur(Math.max(1, Math.ceil(elapsed / 60))) + ". Total paid PKR " + paid + ". Receipt ready.");
+  }
+  var hideT = 0;
+  function done() {
+    if (mode !== "rcpt") return;
+    receipt.classList.add("out");
+    clearTimeout(hideT);
+    hideT = setTimeout(function () { if (mode !== "rcpt") { receipt.hidden = true; receipt.classList.remove("out", "print"); } }, reduce ? 0 : 520);
+    val = 0; mode = "set"; rawS.set(endShown); setMode("set"); rawS.to(0);
+    announce("Ready for your next parking.");
+  }
+  function barcode() {
+    var h = "", x = 2;
+    while (x < 196) { var w = 1 + Math.floor(Math.random() * 3.2); h += '<rect x="' + x + '" y="0" width="' + w + '" height="30"/>'; x += w + 1 + Math.floor(Math.random() * 3); }
+    $("barcode").innerHTML = h;
+  }
+  function placeReceipt() {
+    var lot = $("lot"), top = lot.offsetTop + lot.offsetHeight + 8;
+    slot.style.top = top + "px"; receipt.style.top = top + 5 + "px";
+  }
+
+  startBtn.addEventListener("click", start);
+  ffBtn.addEventListener("click", function () { setFF(!ff); buzz(8); announce(ff ? "Fast-forward on: 4 minutes every second." : "Fast-forward off."); });
+  extendBtn.addEventListener("click", extendOpen);
+  endBtn.addEventListener("click", function () { endSession(false); });
+  cancelBtn.addEventListener("click", extendCancel);
+  addBtn.addEventListener("click", extendAdd);
+  doneBtn.addEventListener("click", done);
+  addEventListener("keydown", function (e) { if (e.key === "Escape") { if (mode === "ext") extendCancel(); else if (mode === "rcpt") done(); } });
+
+  // ---------- Size: the dial fills its box ----------
+  function fit() {
+    var w = dialbox.clientWidth, h = dialbox.clientHeight, s = Math.max(170, Math.min(w - 8, h - 2, 350));
+    dial.style.width = dial.style.height = s + "px";
+    center.style.fontSize = (s / 300 * 15.5).toFixed(2) + "px";
+    if (mode === "rcpt") placeReceipt();
+  }
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(dialbox); else addEventListener("resize", fit);
+  fit();
+  new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  readColors();
+  (function clock() {
+    $("clock").textContent = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(/\s?[AP]M$/i, "");
+    if (mode === "set") texts();
+    setTimeout(clock, 15000);
+  })();
+
+  // ---------- Demo choreography ----------
+  var ghostEl = $("ghost");
+  function client(q) { var r = phone.getBoundingClientRect(); return { x: r.left + q.x, y: r.top + q.y }; }
+  function ghostTo(q, ms, done2) {
+    if (!Demo.visible()) { Demo.at(q.x + 36, q.y + 70); ghostEl.getBoundingClientRect(); }
+    Demo.glide(q.x, q.y, ms, null, done2);
+  }
+  function ringPt(min) {
+    var r = dial.getBoundingClientRect(), p = phone.getBoundingClientRect(), k = r.width / 300, a = (min % 60) / 60 * Math.PI * 2;
+    return { x: r.left - p.left + r.width / 2 + Math.sin(a) * 112 * k, y: r.top - p.top + r.height / 2 - Math.cos(a) * 112 * k };
+  }
+  function tap(el, at, fn) {
+    Demo.later(at, function () {
+      ghostTo(Demo.pt(el), 520, function () { Demo.press(true); Demo.later(150, function () { Demo.press(false); fn(); }); });
+    });
+    return at + 720;
+  }
+  // drag along the ring from one minute value to another (from/to may be functions read at start)
+  function turn(from, to, at, glide, ms) {
+    Demo.later(at, function () {
+      var a = typeof from === "function" ? from() : from, b = typeof to === "function" ? to(a) : to, s = ringPt(a);
+      ghostTo(s, glide, function () {
+        Demo.press(true);
+        var c = client(s);
+        if (!dragStart(c.x, c.y, true)) { Demo.press(false); return; }
+        var t0 = performance.now();
+        Demo.raf = requestAnimationFrame(function f(now) {
+          if (!Demo.on || !drag) return;
+          var k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+          var q = ringPt(a + (b - a) * e), cq = client(q);
+          Demo.at(q.x, q.y); dragMove(cq.x, cq.y);
+          if (k < 1) Demo.raf = requestAnimationFrame(f); else { Demo.press(false); dragEnd(); }
+        });
+      });
+    });
+    return at + glide + ms + 160;
+  }
+  function tidy() {
+    // make sure every loop starts from the idle dial
+    if (mode === "run" || mode === "ext") endSession(false);
+    if (mode === "rcpt") { done(); receipt.hidden = true; receipt.classList.remove("out", "print"); }
+    if (raw) rawS.set(0);
+  }
+  Demo.onStop(function () { if (drag && drag.demo) dragEnd(); });
+  var loopN = 0;
+  function demoLoop() {
+    if (!Demo.on) return;
+    tidy();
+    var first = loopN === 0, t = 0;
+    if (loopN++ % 2 === 0) {
+      // set 1 h 25 min, start, speed up, extend by 30 min, end and take the receipt
+      t = turn(0, 85, 0, first ? 160 : 520, first ? 1250 : 1150);
+      t = tap(startBtn, t + 250, start);
+      t = tap(ffBtn, t + 600, function () { setFF(true); });
+      t = tap(extendBtn, t + 1500, extendOpen);
+      t = turn(function () { return raw; }, function (a) { return a + 30; }, t + 120, 420, 800);
+      t = tap(addBtn, t + 200, extendAdd);
+      t = tap(endBtn, t + 1400, function () { endSession(false); });
+      t = tap(doneBtn, t + 2700, done);
+    } else {
+      // a short 15 minutes on fast-forward: amber pulse, then time is up and the receipt prints itself
+      t = turn(0, 15, 0, 520, 700);
+      t = tap(startBtn, t + 250, start);
+      t = tap(ffBtn, t + 500, function () { setFF(true); });
+      Demo.later(t, Demo.hide);
+      t += 3900 + 2600;
+      t = tap(doneBtn, t, done);
+    }
+    Demo.later(t + 150, Demo.hide);
+    Demo.later(t + 1700, demoLoop);
+  }
+
+  setMode("set");
+  if (reduce) { rawS.set(85); }
+  Demo.later(140, demoLoop);
+})();
+</script>
+</body>
+</html>

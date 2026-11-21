@@ -1,0 +1,734 @@
+<!doctype html>
+<!-- Chill & Craft · Tone Wipe · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tone Wipe · a photo editor with a slide-to-compare divider</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: warm stone with olive-lime by day, graphite with lime by night ---------- */
+  :root {
+    --bg-a: #ece8e1; --bg-b: #d8d2c7; --glow: rgba(110, 140, 0, 0.16); --grid: rgba(40, 36, 28, 0.06);
+    --screen: #f4f1ec; --panel: #ffffff; --edge: #e1dcd3; --ink: #1d1c19; --muted: #78746b;
+    --accent: #5f7d00; --accent-ink: #ffffff; --soft: rgba(95, 125, 0, 0.12);
+    --focus: #5f7d00; --bezel: #161614; --bezel-edge: #34332e; --shadow: rgba(40, 34, 20, 0.32);
+    --ghost-b: rgba(255, 255, 255, 0.94); --ghost-f: rgba(255, 255, 255, 0.3);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #0c0c0e; --bg-b: #1b1c1f; --glow: rgba(198, 244, 50, 0.1); --grid: rgba(230, 240, 210, 0.04);
+    --screen: #141417; --panel: #1f1f23; --edge: #2c2c32; --ink: #f2f2ee; --muted: #9b9b93;
+    --accent: #c6f432; --accent-ink: #141417; --soft: rgba(198, 244, 50, 0.12);
+    --focus: #c6f432; --bezel: #050506; --bezel-edge: #2a2a30; --shadow: rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg-a); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button, input, output { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+  button { cursor: pointer; }
+  .defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+  /* ---------- Stage: an editor's cutting mat ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; overflow: hidden; overflow: clip; display: flex; align-items: center; justify-content: center; gap: 72px; padding: 22px 16px; background: linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 28px 28px, linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 28px 28px, linear-gradient(160deg, var(--bg-a), var(--bg-b)); }
+  .glow { position: absolute; width: 60vmax; height: 60vmax; left: 50%; top: 50%; margin: -30vmax 0 0 -30vmax; border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 62%); pointer-events: none; animation: wander 19s ease-in-out infinite alternate; }
+  @keyframes wander { to { transform: translate(-6vmax, 5vmax) scale(1.14); } }
+
+  .caption { display: none; position: relative; z-index: 1; max-width: 300px; }
+  .eyebrow { margin: 0 0 12px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow i { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; background: var(--accent); }
+  .caption h2 { margin: 0 0 14px; font-size: 48px; line-height: 1; letter-spacing: -0.035em; }
+  .caption p { margin: 0 0 22px; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .caption ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .caption li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .caption kbd { font: inherit; font-size: 12px; font-weight: 750; min-width: 82px; text-align: center; padding: 4px 10px; border-radius: 9px; background: var(--panel); border: 1px solid var(--edge); box-shadow: 0 2px 0 var(--edge); }
+  @media (min-width: 900px) { .caption { display: block; } }
+
+  /* ---------- Phone ---------- */
+  .phone {
+    position: relative; z-index: 1; width: min(390px, 100%);
+    height: clamp(540px, calc(100vh - 44px), 760px); height: clamp(540px, calc(100dvh - 44px), 760px);
+    background: var(--screen); border-radius: 46px; overflow: hidden; isolation: isolate;
+    box-shadow: 0 0 0 10px var(--bezel), 0 0 0 11px var(--bezel-edge), 0 50px 90px -30px var(--shadow);
+  }
+  .status { position: absolute; left: 0; right: 0; top: 0; z-index: 30; height: 46px; padding: 8px 30px 0 34px; display: flex; align-items: center; justify-content: space-between; font-size: 14.5px; font-weight: 700; color: var(--ink); pointer-events: none; }
+  .status svg { width: 62px; height: 13px; fill: currentColor; }
+  .home-bar { position: absolute; left: 50%; bottom: 6px; z-index: 31; width: 130px; height: 5px; margin-left: -65px; border-radius: 3px; background: var(--ink); opacity: 0.4; pointer-events: none; }
+  @media (max-width: 480px) {
+    .stage { padding: 0; }
+    .phone { width: 100%; height: 100vh; height: 100dvh; border-radius: 0; box-shadow: none; }
+    .status { padding: 6px 20px 0 22px; }
+  }
+
+  /* ---------- Editor ---------- */
+  .app { position: absolute; left: 0; right: 0; top: 46px; bottom: 0; display: flex; flex-direction: column; padding-bottom: 22px; }
+  .bar { flex: none; height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; }
+  .tb { height: 36px; padding: 0 12px; border: 0; border-radius: 11px; background: transparent; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 750; transition: background 0.2s, transform 0.25s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .tb:hover { background: var(--soft); }
+  .tb:active { transform: scale(0.94); }
+  .tb svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .ttl { text-align: center; line-height: 1.2; }
+  .ttl b { display: block; font-size: 15px; font-weight: 800; }
+  .ttl small { font-size: 11.5px; font-weight: 650; color: var(--muted); }
+  .save { padding: 0 16px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 18px -10px var(--accent); }
+  .save:hover { background: var(--accent); filter: brightness(1.06); }
+
+  /* The photo: original underneath, edited copy on top clipped by the divider */
+  .photo { position: relative; flex: 1 1 auto; min-height: 190px; margin: 2px 12px 0; border-radius: 20px; overflow: hidden; isolation: isolate; background: #1b2550; touch-action: none; user-select: none; -webkit-user-select: none; cursor: ew-resize; box-shadow: 0 18px 36px -22px var(--shadow), 0 0 0 1px rgba(0, 0, 0, 0.06); transition: transform 0.16s ease; }
+  .photo.press { transform: scale(0.97); }
+  .img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .editL { position: absolute; inset: 0; clip-path: inset(0 0 0 50%); transition: opacity 0.25s; }
+  .develop .img { animation: develop 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  @keyframes develop { from { filter: blur(9px) brightness(1.5) saturate(0.2); transform: scale(1.07); } }
+  .vig { position: absolute; inset: 0; background: radial-gradient(130% 100% at 50% 45%, transparent 55%, rgba(10, 8, 30, 0.38)); pointer-events: none; }
+  .leak { position: absolute; top: 0; bottom: 0; left: -40%; width: 180%; background: linear-gradient(100deg, transparent 25%, rgba(255, 170, 80, 0.55) 42%, rgba(255, 90, 150, 0.42) 52%, rgba(214, 255, 120, 0.34) 62%, transparent 78%); mix-blend-mode: screen; opacity: 0; pointer-events: none; }
+  .leak.go { animation: leak 0.95s cubic-bezier(0.4, 0, 0.2, 1); }
+  .leak.rev { animation: leakrev 0.95s cubic-bezier(0.4, 0, 0.2, 1); }
+  @keyframes leak { 0% { opacity: 1; transform: translateX(-70%); } 100% { opacity: 1; transform: translateX(70%); } }
+  @keyframes leakrev { 0% { opacity: 1; transform: translateX(70%); } 100% { opacity: 1; transform: translateX(-70%); } }
+  .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  .flash.go { animation: flash 0.55s ease-out; }
+  @keyframes flash { 0% { opacity: 0.95; } 100% { opacity: 0; } }
+  .badge { position: absolute; top: 12px; padding: 5px 10px; border-radius: 99px; background: rgba(12, 12, 16, 0.5); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); color: #fff; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; pointer-events: none; transition: opacity 0.2s; }
+  .bl { left: 12px; }
+  .br { right: 12px; }
+  .br::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #c6f432; vertical-align: 1px; }
+  .orig { left: 50%; transform: translate(-50%, -6px); opacity: 0; transition: opacity 0.2s, transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .peek .orig { opacity: 1; transform: translate(-50%, 0); }
+  .peek .editL, .peek .divider, .peek .br { opacity: 0 !important; }
+  .divider { position: absolute; top: 0; bottom: 0; left: 50%; width: 0; transition: opacity 0.25s; }
+  .divider::before { content: ""; position: absolute; top: 0; bottom: 0; left: -1px; width: 2px; background: rgba(255, 255, 255, 0.95); box-shadow: 0 0 14px rgba(0, 0, 0, 0.35); }
+  .handle { position: absolute; left: 0; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; display: grid; place-items: center; background: #fff; color: #1d1c19; box-shadow: 0 0 0 3px #c6f432, 0 10px 22px -6px rgba(0, 0, 0, 0.5); transition: transform 0.3s cubic-bezier(0.3, 1.7, 0.5, 1); cursor: grab; touch-action: none; }
+  .handle::after { content: ""; position: absolute; inset: -9px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.7); animation: breathe 2.6s ease-in-out infinite; pointer-events: none; }
+  @keyframes breathe { 0%, 100% { transform: scale(0.86); opacity: 0; } 50% { transform: scale(1); opacity: 1; } }
+  .handle svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .handle:focus-visible { outline: 3px solid #fff; outline-offset: 5px; }
+  .dragging .handle { transform: scale(1.12); cursor: grabbing; }
+  .dragging .handle::after { animation: none; opacity: 0; }
+  .handle.snap { animation: snap 0.32s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes snap { 40% { box-shadow: 0 0 0 9px rgba(198, 244, 50, 0.55), 0 10px 22px -6px rgba(0, 0, 0, 0.5); } }
+  .pct { position: absolute; left: 50%; bottom: calc(100% + 12px); padding: 4px 9px; border-radius: 99px; background: rgba(12, 12, 16, 0.72); color: #fff; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0; transform: translate(-50%, 6px); transition: opacity 0.2s, transform 0.3s cubic-bezier(0.3, 1.6, 0.5, 1); pointer-events: none; }
+  .dragging .pct { opacity: 1; transform: translate(-50%, 0); }
+  .eye { position: absolute; left: 12px; bottom: 12px; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: rgba(12, 12, 16, 0.5); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); color: #fff; transition: transform 0.25s cubic-bezier(0.3, 1.7, 0.5, 1), background 0.2s; }
+  .eye:active, .peek .eye { transform: scale(0.9); background: rgba(198, 244, 50, 0.85); color: #141417; }
+  .eye svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Tabs: Looks / Adjust */
+  .tabs { position: relative; flex: none; display: grid; grid-template-columns: 1fr 1fr; margin: 12px 12px 0; padding: 4px; border-radius: 14px; background: var(--panel); box-shadow: 0 0 0 1px var(--edge); }
+  .tabs button { position: relative; z-index: 1; height: 32px; border: 0; background: none; font-size: 13.5px; font-weight: 750; color: var(--muted); transition: color 0.25s; }
+  .tabs button[aria-selected="true"] { color: var(--ink); }
+  .tabs .ind { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 10px; background: var(--soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); transition: transform 0.45s cubic-bezier(0.3, 1.4, 0.5, 1); }
+  .tabs[data-k="1"] .ind { transform: translateX(100%); }
+  .panels { position: relative; flex: none; height: 112px; margin-top: 8px; overflow: hidden; }
+  .pane { position: absolute; inset: 0; transition: transform 0.5s cubic-bezier(0.3, 1.2, 0.4, 1), opacity 0.3s; }
+  .pane.adj { transform: translateX(100%); opacity: 0; }
+  .panels[data-k="1"] .looks { transform: translateX(-100%); opacity: 0; }
+  .panels[data-k="1"] .adj { transform: none; opacity: 1; }
+  .strip { position: relative; display: flex; gap: 10px; height: 100%; padding: 6px 14px 8px; scroll-padding: 0 14px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; scrollbar-width: none; }
+  .strip::-webkit-scrollbar { display: none; }
+  .pre { flex: none; width: 66px; padding: 0; border: 0; background: none; display: grid; justify-items: center; align-content: start; gap: 7px; scroll-snap-align: start; color: var(--muted); font-size: 11.5px; font-weight: 750; transition: color 0.25s; }
+  .pre svg { display: block; width: 66px; height: 66px; border-radius: 15px; box-shadow: 0 0 0 1px var(--edge); transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1), box-shadow 0.3s; }
+  .pre[aria-pressed="true"] { color: var(--ink); }
+  .pre[aria-pressed="true"] svg { box-shadow: 0 0 0 2px var(--screen), 0 0 0 4px var(--accent); transform: translateY(-3px); }
+  .pre.bump svg { animation: bump 0.45s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  @keyframes bump { 35% { transform: translateY(-3px) scale(0.9); } }
+  .adj { display: grid; align-content: center; gap: 2px; padding: 0 16px; }
+  .row { display: grid; grid-template-columns: 60px 1fr 36px; align-items: center; gap: 10px; height: 34px; }
+  .row label { font-size: 13px; font-weight: 750; }
+  .row output { text-align: right; font-size: 13px; font-weight: 750; color: var(--muted); font-variant-numeric: tabular-nums; }
+  input[type="range"] { --a: 50%; --b: 50%; -webkit-appearance: none; appearance: none; width: 100%; height: 28px; margin: 0; background: transparent; cursor: pointer; touch-action: none; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, transparent calc(50% - 1px), var(--muted) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)), linear-gradient(90deg, var(--edge) var(--a), var(--accent) var(--a) var(--b), var(--edge) var(--b)); }
+  input[type="range"]::-moz-range-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--edge) var(--a), var(--accent) var(--a) var(--b), var(--edge) var(--b)); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px var(--accent), 0 4px 10px rgba(0, 0, 0, 0.25); transition: transform 0.2s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px var(--accent), 0 4px 10px rgba(0, 0, 0, 0.25); }
+  input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
+
+  /* Recent edits */
+  .gal { flex: none; display: flex; align-items: center; gap: 12px; height: 52px; margin: 6px 12px 0; padding: 0 4px; }
+  .gal small { flex: none; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .thumbs { flex: 1; min-width: 0; display: flex; gap: 8px; overflow: hidden; padding: 4px 2px; }
+  .gth { flex: none; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 11px; overflow: hidden; box-shadow: 0 0 0 1px var(--edge), 0 6px 12px -8px var(--shadow); transition: transform 0.3s cubic-bezier(0.3, 1.7, 0.5, 1); }
+  .gth:active { transform: scale(0.9); }
+  .gth svg { display: block; width: 100%; height: 100%; }
+  .gth.new { animation: grow 0.6s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  @keyframes grow { from { width: 0; opacity: 0; transform: scale(0.3); } }
+  .fly { position: absolute; left: 0; top: 0; z-index: 35; overflow: hidden; pointer-events: none; box-shadow: 0 20px 40px -14px rgba(0, 0, 0, 0.6); }
+  .fly svg { display: block; width: 100%; height: 100%; }
+
+  .toast { position: absolute; left: 50%; top: 104px; z-index: 36; display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 99px; background: var(--ink); color: var(--screen); font-size: 13px; font-weight: 750; white-space: nowrap; box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5); opacity: 0; transform: translate(-50%, -16px) scale(0.92); transition: opacity 0.3s, transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1); pointer-events: none; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  .toast svg { width: 17px; height: 17px; fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------- Ghost finger for the auto demo ---------- */
+  .ghost { position: absolute; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; z-index: 40; pointer-events: none; background: var(--ghost-f); border: 2px solid var(--ghost-b); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); opacity: 0; transition: opacity 0.3s; }
+  .ghost::after { content: ""; position: absolute; inset: 11px; border-radius: 50%; background: var(--ghost-b); opacity: 0.5; transform: scale(0.45); transition: transform 0.18s; }
+  .ghost.on { opacity: 1; }
+  .ghost.press::after { transform: scale(1); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    .glow, .handle::after, .leak { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<!-- Shared drawing: the scene, drawn once and reused by every view -->
+<svg class="defs" aria-hidden="true" focusable="false">
+  <defs id="defs">
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25357a"/><stop offset=".42" stop-color="#8656a6"/><stop offset=".74" stop-color="#ff9a5a"/><stop offset="1" stop-color="#ffd7a3"/></linearGradient>
+    <radialGradient id="sunG"><stop offset="0" stop-color="#fff6d8"/><stop offset=".3" stop-color="#ffd27a" stop-opacity=".9"/><stop offset="1" stop-color="#ff9a5a" stop-opacity="0"/></radialGradient>
+    <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb675"/><stop offset=".35" stop-color="#b4669a"/><stop offset="1" stop-color="#1c2a60"/></linearGradient>
+    <linearGradient id="far" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a74bb"/><stop offset="1" stop-color="#4d4f93"/></linearGradient>
+    <linearGradient id="mid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f468a"/><stop offset="1" stop-color="#2a3164"/></linearGradient>
+    <linearGradient id="hill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5f8340"/><stop offset="1" stop-color="#2c4725"/></linearGradient>
+    <symbol id="land" viewBox="0 0 400 300">
+      <rect width="400" height="206" fill="url(#sky)"/>
+      <circle cx="282" cy="150" r="64" fill="url(#sunG)"/>
+      <circle cx="282" cy="152" r="17" fill="#fff1c9"/>
+      <path id="ridgeFar" d="M0 160L40 128L70 140L112 96L150 132L180 118L214 82L250 124L290 108L330 134L364 112L400 130V206H0Z" fill="url(#far)"/>
+      <path d="M112 96l-12 12 8-2 6 6 6-8 6 4zM214 82l-14 16 10-3 6 7 8-8 6 4zM364 112l-10 10 8-2 6 5 6-5z" fill="#f4ecff" opacity=".92"/>
+      <path d="M0 178L30 162L60 170L98 146L140 172L176 158L220 176L262 150L300 170L340 160L400 176V206H0Z" fill="url(#mid)"/>
+      <path d="M0 196C40 184 70 188 110 194S180 186 230 190 330 184 400 192V206H0Z" fill="#283058"/>
+      <rect y="206" width="400" height="94" fill="url(#lake)"/>
+      <g transform="matrix(1 0 0 -.55 0 319)" opacity=".36"><use href="#ridgeFar"/></g>
+      <path d="M268 212h28l-3 5h-22zM264 224h36l-4 5h-28zM260 238h44l-5 6h-34zM256 254h52l-6 7h-40z" fill="#ffe3a6" opacity=".55"/>
+      <path d="M0 230C40 222 82 226 124 236 104 252 60 262 0 268Z" fill="url(#hill)"/>
+      <g fill="#28432a"><ellipse cx="20" cy="200" rx="7" ry="34"/><ellipse cx="37" cy="190" rx="8.5" ry="44"/><ellipse cx="55" cy="204" rx="6.5" ry="30"/><ellipse cx="71" cy="212" rx="6" ry="23"/><ellipse cx="88" cy="218" rx="5" ry="17"/></g>
+      <g fill="#46703a" opacity=".85"><ellipse cx="17" cy="196" rx="3" ry="26"/><ellipse cx="34" cy="184" rx="3.5" ry="34"/><ellipse cx="53" cy="200" rx="2.6" ry="22"/></g>
+      <path d="M400 244C362 238 330 246 300 258 330 270 370 276 400 278Z" fill="#3a5a2c"/>
+      <path d="M0 300V282C60 272 122 284 172 300Z" fill="#1d321f"/>
+      <path d="M14 300c2-8 4-14 9-20M30 300c0-7 2-12 6-17M48 300c1-6 4-10 8-13" stroke="#3f6a33" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="life" viewBox="0 0 400 300">
+      <g fill="#ffe4ef">
+        <g opacity=".85"><ellipse cx="80" cy="60" rx="34" ry="8"/><ellipse cx="98" cy="54" rx="21" ry="9"/><ellipse cx="64" cy="56" rx="15" ry="6"/><animateTransform attributeName="transform" type="translate" values="0 0;28 0;0 0" dur="26s" repeatCount="indefinite"/></g>
+        <g opacity=".6"><ellipse cx="300" cy="44" rx="40" ry="7"/><ellipse cx="322" cy="39" rx="20" ry="7"/><animateTransform attributeName="transform" type="translate" values="0 0;-34 0;0 0" dur="32s" repeatCount="indefinite"/></g>
+        <g opacity=".5"><ellipse cx="190" cy="92" rx="28" ry="5"/><ellipse cx="204" cy="88" rx="13" ry="5"/><animateTransform attributeName="transform" type="translate" values="0 0;20 0;0 0" dur="20s" repeatCount="indefinite"/></g>
+      </g>
+      <g fill="none" stroke="#3a2f5a" stroke-width="1.5" stroke-linecap="round"><path d="M150 72q4-4 8 0q4-4 8 0"/><path d="M172 64q3-3 6 0q3-3 6 0"/><animateTransform attributeName="transform" type="translate" values="0 0;16 -6;34 -2" dur="14s" repeatCount="indefinite"/></g>
+      <g stroke="#fff3d6" stroke-width="1.3" stroke-linecap="round">
+        <path d="M150 272h30"><animate attributeName="opacity" values=".1;.8;.1" dur="3s" repeatCount="indefinite"/></path>
+        <path d="M320 262h22"><animate attributeName="opacity" values=".1;.7;.1" dur="3.6s" begin="-1.2s" repeatCount="indefinite"/></path>
+        <path d="M230 288h36"><animate attributeName="opacity" values=".1;.8;.1" dur="2.8s" begin="-2s" repeatCount="indefinite"/></path>
+        <path d="M120 250h18"><animate attributeName="opacity" values=".1;.6;.1" dur="3.3s" begin="-.6s" repeatCount="indefinite"/></path>
+      </g>
+      <g>
+        <path d="M200 247h28l-4 4h-20z" fill="#2a1d2e" opacity=".3"/>
+        <path d="M194 238h40l-6 8h-28z" fill="#2a1d2e"/><path d="M213 237v-23l15 21z" fill="#fff1dc"/><path d="M211.5 238v-18" stroke="#2a1d2e" stroke-width="1.4"/><circle cx="203" cy="233" r="3" fill="#2a1d2e"/>
+        <animateTransform attributeName="transform" type="translate" values="0 0;0 -1.8;0 0" dur="3.4s" repeatCount="indefinite"/>
+      </g>
+    </symbol>
+    <filter id="fLive" x="0" y="0" width="400" height="300" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feColorMatrix id="mLive" type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0"/></filter>
+  </defs>
+</svg>
+
+<main class="stage">
+  <div class="glow" aria-hidden="true"></div>
+  <section class="caption" aria-hidden="true">
+    <p class="eyebrow"><i></i>Mobile interactions</p>
+    <h2>Tone Wipe</h2>
+    <p>A phone photo editor with a divider you drag across the picture to compare before and after. Looks sweep in with a light leak and every slider works live.</p>
+    <ul>
+      <li><kbd>Drag</kbd> the divider; it clicks at 0, 50 and 100</li>
+      <li><kbd>Tap a look</kbd> to wipe it across the photo</li>
+      <li><kbd>Hold</kbd> the photo to peek at the original</li>
+      <li><kbd>Save</kbd> drops it into your recent edits</li>
+    </ul>
+  </section>
+
+  <div class="phone" id="phone">
+    <div class="status" aria-hidden="true">
+      <span>18:12</span>
+      <svg viewBox="0 0 62 13"><rect x="0" y="8" width="3" height="5" rx="1"/><rect x="5" y="5.5" width="3" height="7.5" rx="1"/><rect x="10" y="3" width="3" height="10" rx="1"/><rect x="15" y="0.5" width="3" height="12.5" rx="1"/><rect x="36" y="1" width="22" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="38" y="3" width="16" height="7" rx="1.5"/><rect x="59" y="4.5" width="2" height="4" rx="1"/></svg>
+    </div>
+
+    <div class="app">
+      <div class="bar">
+        <button class="tb" id="resetBtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a8 8 0 1 1 2.3 5.7M4 4v7h7"/></svg>Reset</button>
+        <div class="ttl"><b>Edit</b><small>Lake at dusk &middot; 6:12 pm</small></div>
+        <button class="tb save" id="saveBtn" type="button">Save</button>
+      </div>
+
+      <div class="photo develop" id="photo">
+        <svg class="img" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Photo: a mountain lake at sunset with poplar trees and a small boat"><use href="#land"/><use href="#life"/></svg>
+        <div class="editL" id="editL"><svg class="img" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g filter="url(#fLive)"><use href="#land"/><use href="#life"/></g></svg></div>
+        <i class="vig" aria-hidden="true"></i>
+        <i class="leak" id="leak" aria-hidden="true"></i>
+        <i class="flash" id="flash" aria-hidden="true"></i>
+        <span class="badge bl" id="bBefore" aria-hidden="true">Before</span>
+        <span class="badge br" id="bAfter" aria-hidden="true">After</span>
+        <span class="badge orig" aria-hidden="true">Original</span>
+        <div class="divider" id="divider">
+          <div class="handle" id="handle" role="slider" tabindex="0" aria-label="Compare before and after" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+            <svg viewBox="0 0 26 26" aria-hidden="true"><path d="M9 8l-5 5 5 5M17 8l5 5-5 5M13 6v14" /></svg>
+            <b class="pct" id="pct">50 &middot; 50</b>
+          </div>
+        </div>
+        <button class="eye" id="eye" type="button" aria-label="Hold to see the original"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      </div>
+
+      <div class="tabs" id="tabs" role="tablist" aria-label="Editing tools" data-k="0">
+        <i class="ind" aria-hidden="true"></i>
+        <button type="button" role="tab" id="tabLooks" aria-controls="paneLooks" aria-selected="true">Looks</button>
+        <button type="button" role="tab" id="tabAdj" aria-controls="paneAdj" aria-selected="false" tabindex="-1">Adjust</button>
+      </div>
+      <div class="panels" id="panels" data-k="0">
+        <div class="pane looks" id="paneLooks" role="tabpanel" aria-labelledby="tabLooks"><div class="strip" id="strip"></div></div>
+        <div class="pane adj" id="paneAdj" role="tabpanel" aria-labelledby="tabAdj" inert>
+          <div class="row"><label for="light">Light</label><input id="light" type="range" min="-100" max="100" step="1" value="0" /><output id="lightOut" for="light">0</output></div>
+          <div class="row"><label for="warm">Warmth</label><input id="warm" type="range" min="-100" max="100" step="1" value="0" /><output id="warmOut" for="warm">0</output></div>
+          <div class="row"><label for="pop">Pop</label><input id="pop" type="range" min="-100" max="100" step="1" value="0" /><output id="popOut" for="pop">0</output></div>
+        </div>
+      </div>
+
+      <div class="gal"><small>Recent</small><div class="thumbs" id="thumbs"></div></div>
+    </div>
+
+    <div class="toast" id="toast" aria-hidden="true"></div>
+    <div class="home-bar" aria-hidden="true"></div>
+    <div class="ghost" id="ghost" aria-hidden="true"></div>
+    <p class="sr-only" id="live" aria-live="polite"></p>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var phone = $("phone"), live = $("live"), NS = "http://www.w3.org/2000/svg";
+  var defs = $("defs"), mLive = $("mLive"), photo = $("photo"), editL = $("editL"), divider = $("divider"), handle = $("handle"), pct = $("pct");
+  var bBefore = $("bBefore"), bAfter = $("bAfter"), leakEl = $("leak"), flashEl = $("flash"), eye = $("eye");
+  var resetBtn = $("resetBtn"), saveBtn = $("saveBtn"), strip = $("strip"), tabsEl = $("tabs"), panels = $("panels"), thumbs = $("thumbs"), toastEl = $("toast");
+  var tabs = [$("tabLooks"), $("tabAdj")], panes = [$("paneLooks"), $("paneAdj")];
+
+  function announce(msg) { live.textContent = ""; setTimeout(function () { live.textContent = msg; }, 30); }
+  function buzz(ms) {
+    try { if (!Demo.on && navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(ms); } catch (e) {}
+  }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  // A small spring: s.to(target[, velocity]); frame(x, v) paints. Reduced motion jumps straight to the target.
+  function Spring(x, k, c, frame) {
+    var s = { x: x, v: 0, t: x, k: k || 170, c: c || 18, raf: 0, frame: frame }, last = 0;
+    function tick(now) {
+      var dt = Math.min(0.05, (now - last) / 1000); last = now;
+      for (var i = 0; i < 4; i++) { var h = dt / 4, a = -s.k * (s.x - s.t) - s.c * s.v; s.v += a * h; s.x += s.v * h; }
+      if (Math.abs(s.v) < 0.002 && Math.abs(s.x - s.t) < 0.0005) { s.x = s.t; s.v = 0; s.raf = 0; s.frame(s.x, 0); return; }
+      s.frame(s.x, s.v); s.raf = requestAnimationFrame(tick);
+    }
+    s.to = function (t, v) {
+      s.t = t; if (v !== undefined) s.v = v;
+      if (reduce) { cancelAnimationFrame(s.raf); s.raf = 0; s.x = t; s.v = 0; s.frame(t, 0); return; }
+      if (!s.raf) { last = performance.now(); s.raf = requestAnimationFrame(tick); }
+    };
+    s.set = function (x) { cancelAnimationFrame(s.raf); s.raf = 0; s.x = s.t = x; s.v = 0; s.frame(x, 0); };
+    return s;
+  }
+
+  // ---------- Auto demo: a ghost finger drives the same functions a real finger does ----------
+  var Demo = (function () {
+    var d = { on: !reduce, timers: [], raf: 0, stops: [] }, ghost = $("ghost"), gx = 0, gy = 0;
+    d.pt = function (el, fx, fy) {
+      var r = el.getBoundingClientRect(), p = phone.getBoundingClientRect();
+      return { x: r.left - p.left + r.width * (fx == null ? 0.5 : fx), y: r.top - p.top + r.height * (fy == null ? 0.5 : fy) };
+    };
+    d.later = function (ms, fn) { d.timers.push(setTimeout(function () { if (d.on) fn(); }, ms)); };
+    d.at = function (x, y) { gx = x; gy = y; ghost.style.transform = "translate(" + x + "px," + y + "px)"; ghost.classList.add("on"); };
+    d.press = function (v) { ghost.classList.toggle("press", !!v); };
+    d.hide = function () { ghost.classList.remove("on", "press"); };
+    d.glide = function (x, y, ms, step, done) {
+      var x0 = gx, y0 = gy, t0 = performance.now();
+      cancelAnimationFrame(d.raf);
+      d.raf = requestAnimationFrame(function f(now) {
+        if (!d.on) return;
+        var k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        d.at(x0 + (x - x0) * e, y0 + (y - y0) * e);
+        if (step) step(e, gx, gy);
+        if (k < 1) d.raf = requestAnimationFrame(f); else if (done) done();
+      });
+    };
+    d.onStop = function (fn) { d.stops.push(fn); };
+    d.stop = function () {
+      if (!d.on) return;
+      d.on = false; d.timers.forEach(clearTimeout); d.timers = []; cancelAnimationFrame(d.raf); d.hide();
+      d.stops.forEach(function (fn) { fn(); });
+    };
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (ty) {
+      addEventListener(ty, function (e) { if (e.isTrusted) d.stop(); }, { capture: true, passive: true });
+    });
+    return d;
+  })();
+
+  // ---------- Colour matrices (5 x 5, row by row) that feed the SVG feColorMatrix ----------
+  function I() { return [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1]; }
+  function mul(a, b) {
+    var r = [];
+    for (var i = 0; i < 5; i++) for (var j = 0; j < 5; j++) { var s = 0; for (var k = 0; k < 5; k++) s += a[i * 5 + k] * b[k * 5 + j]; r.push(s); }
+    return r;
+  }
+  function compose() { var m = I(); for (var i = 0; i < arguments.length; i++) m = mul(m, arguments[i]); return m; }
+  function scale(r, g, b) { return [r, 0, 0, 0, 0, 0, g, 0, 0, 0, 0, 0, b, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1]; }
+  function offset(r, g, b) { return [1, 0, 0, 0, r, 0, 1, 0, 0, g, 0, 0, 1, 0, b, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1]; }
+  function contrast(c) { var t = (1 - c) / 2; return [c, 0, 0, 0, t, 0, c, 0, 0, t, 0, 0, c, 0, t, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1]; }
+  function sat(s) {
+    var r = 0.2126 * (1 - s), g = 0.7152 * (1 - s), b = 0.0722 * (1 - s);
+    return [r + s, g, b, 0, 0, r, g + s, b, 0, 0, r, g, b + s, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1];
+  }
+  function hue(deg) {
+    var a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    return [0.213 + c * 0.787 - s * 0.213, 0.715 - c * 0.715 - s * 0.715, 0.072 - c * 0.072 + s * 0.928, 0, 0,
+      0.213 - c * 0.213 + s * 0.143, 0.715 + c * 0.285 + s * 0.14, 0.072 - c * 0.072 - s * 0.283, 0, 0,
+      0.213 - c * 0.213 - s * 0.787, 0.715 - c * 0.715 + s * 0.715, 0.072 + c * 0.928 + s * 0.072, 0, 0,
+      0, 0, 0, 1, 0, 0, 0, 0, 0, 1];
+  }
+  function mix(a, b, k) { return a.map(function (v, i) { return v + (b[i] - v) * k; }); }
+  function warmth(w) { return scale(1 + 0.13 * w, 1 + 0.015 * w, 1 - 0.16 * w); }
+  var SEPIA = [0.393, 0.769, 0.189, 0, 0, 0.349, 0.686, 0.168, 0, 0, 0.272, 0.534, 0.131, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1];
+  function str(m) { return m.slice(0, 20).map(function (v) { return v.toFixed(4); }).join(" "); }
+
+  // The looks (our own recipes)
+  var PRESETS = [
+    { name: "Original", m: I() },
+    { name: "Saffron", m: compose(contrast(1.06), sat(1.32), warmth(0.6), scale(1.05, 1.03, 1)) },
+    { name: "Monsoon", m: compose(contrast(1.14), offset(-0.02, 0.01, 0.03), scale(0.84, 1, 1.06), sat(0.66), scale(0.95, 0.95, 0.95)) },
+    { name: "Desert", m: compose(offset(0.05, 0.035, 0.015), contrast(0.9), mix(I(), SEPIA, 0.45), warmth(0.25)) },
+    { name: "Frost", m: compose(offset(0.02, 0.045, 0.08), scale(0.9, 1, 1.1), sat(0.7), scale(1.06, 1.06, 1.06)) },
+    { name: "Ink", m: compose(contrast(1.3), sat(0), scale(1.03, 1.03, 1.03)) },
+    { name: "Neon", m: compose(contrast(1.12), sat(1.75), hue(38)) }
+  ];
+
+  // Live adjustments (Light, Warmth, Pop are -1..1) sit on top of the chosen look
+  var state = { p: 1, L: 0, W: 0, Pp: 0 };
+  function adjust(s) {
+    var lift = 0.03 * Math.max(0, s.L), b = 1 + 0.3 * s.L;
+    return compose(contrast(1 + 0.18 * s.Pp), sat(1 + 0.75 * s.Pp), warmth(s.W), offset(lift, lift, lift), scale(b, b, b));
+  }
+  function composite(s) { return mul(adjust(s), PRESETS[s.p].m); }
+
+  // The edited layer eases from the old look to the new one
+  var shown = I(), tw = 0;
+  function setLive(m, animate) {
+    cancelAnimationFrame(tw);
+    if (!animate || reduce) { shown = m; mLive.setAttribute("values", str(m)); return; }
+    var from = shown.slice(), t0 = performance.now();
+    tw = requestAnimationFrame(function f(now) {
+      var k = Math.min(1, (now - t0) / 560), e = 1 - Math.pow(1 - k, 3);
+      shown = mix(from, m, e); mLive.setAttribute("values", str(shown));
+      if (k < 1) tw = requestAnimationFrame(f);
+    });
+  }
+
+  // Static filters for thumbnails and saved edits
+  var fid = 0;
+  function makeFilter(m) {
+    var f = document.createElementNS(NS, "filter"), c = document.createElementNS(NS, "feColorMatrix"), id = "fx" + fid++;
+    [["id", id], ["x", "0"], ["y", "0"], ["width", "400"], ["height", "300"], ["filterUnits", "userSpaceOnUse"], ["color-interpolation-filters", "sRGB"]].forEach(function (a) { f.setAttribute(a[0], a[1]); });
+    c.setAttribute("type", "matrix"); c.setAttribute("values", str(m));
+    f.appendChild(c); defs.appendChild(f);
+    return id;
+  }
+  function shot(id, life) {
+    return '<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g filter="url(#' + id + ')"><use href="#land"/>' + (life ? '<use href="#life"/>' : "") + "</g></svg>";
+  }
+
+  // ---------- Looks strip ----------
+  var preBtns = PRESETS.map(function (p, i) {
+    p.fid = makeFilter(p.m);
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "pre"; b.setAttribute("aria-pressed", "false"); b.setAttribute("aria-label", p.name + " look");
+    b.innerHTML = shot(p.fid) + '<span aria-hidden="true">' + p.name + "</span>";
+    b.addEventListener("click", function () { choose(i); });
+    strip.appendChild(b);
+    return b;
+  });
+
+  // ---------- Sliders ----------
+  var SL = [["L", "light"], ["W", "warm"], ["Pp", "pop"]].map(function (d) {
+    var input = $(d[1]), out = $(d[1] + "Out");
+    input.addEventListener("input", function () { state[d[0]] = input.value / 100; paintSlider(input, out); setLive(composite(state), false); });
+    input.addEventListener("change", function () { announce(input.labels[0].textContent + " " + out.textContent); });
+    return { key: d[0], input: input, out: out };
+  });
+  function paintSlider(input, out) {
+    var v = +input.value, p = (v + 100) / 2;
+    input.style.setProperty("--a", Math.min(50, p) + "%"); input.style.setProperty("--b", Math.max(50, p) + "%");
+    out.textContent = (v > 0 ? "+" : "") + v;
+  }
+  function syncUI() {
+    preBtns.forEach(function (b, i) { b.setAttribute("aria-pressed", String(i === state.p)); });
+    SL.forEach(function (s) { s.input.value = Math.round(state[s.key] * 100); paintSlider(s.input, s.out); });
+  }
+
+  // ---------- The divider ----------
+  var X = Spring(0.5, 260, 26, paintX), dragging = false, lastSnap = null, MAG = [0, 0.5, 1];
+  function paintX(x) {
+    var c = clamp(x, 0, 1), p = (c * 100).toFixed(2), b = Math.round(c * 100);
+    editL.style.clipPath = "inset(0 0 0 " + p + "%)";
+    divider.style.left = p + "%";
+    bBefore.style.opacity = clamp((c - 0.24) / 0.08, 0, 1).toFixed(2);   // labels hide as the line passes over them
+    bAfter.style.opacity = clamp((0.74 - c) / 0.08, 0, 1).toFixed(2);
+    pct.textContent = b + " · " + (100 - b);
+    handle.setAttribute("aria-valuenow", b);
+    handle.setAttribute("aria-valuetext", b + " percent before, " + (100 - b) + " percent after");
+  }
+  function frac(clientX) { var r = photo.getBoundingClientRect(); return r.width ? (clientX - r.left) / r.width : 0.5; }
+  function dragStart() { dragging = true; lastSnap = null; photo.classList.add("dragging"); }
+  function dragTo(f) {
+    if (!isFinite(f)) return;
+    f = clamp(f, 0, 1);
+    var snap = null;
+    MAG.forEach(function (m) { if (Math.abs(f - m) < 0.025) snap = m; });
+    if (snap !== null) f = snap;
+    if (snap !== lastSnap) {
+      if (snap !== null) { buzz(6); handle.classList.remove("snap"); void handle.offsetWidth; handle.classList.add("snap"); }
+      lastSnap = snap;
+    }
+    X.to(f);
+  }
+  function dragEnd() {
+    if (!dragging) return;
+    dragging = false; photo.classList.remove("dragging");
+    var f = X.t;
+    MAG.forEach(function (m) { if (Math.abs(f - m) < 0.06) f = m; });
+    X.to(f);
+  }
+
+  // Hold to peek at the original
+  var peeking = false;
+  function peek(on) {
+    if (on === peeking) return;
+    peeking = on; photo.classList.toggle("peek", on);
+    if (on) { buzz(5); announce("Showing the original"); }
+  }
+
+  // Pointer on the photo: drag moves the divider, a still hold peeks, a tap jumps the divider there
+  var pd = null;
+  photo.addEventListener("pointerdown", function (e) {
+    if (e.button !== 0 || e.target.closest(".eye")) return;
+    var onHandle = !!e.target.closest(".handle");
+    pd = { id: e.pointerId, x0: e.clientX, y0: e.clientY, drag: onHandle, hold: 0 };
+    try { photo.setPointerCapture(e.pointerId); } catch (err) {}
+    if (onHandle) dragStart();
+    else pd.hold = setTimeout(function () { if (pd && !pd.drag) peek(true); }, 380);
+  });
+  photo.addEventListener("pointermove", function (e) {
+    if (!pd || e.pointerId !== pd.id) return;
+    if (!pd.drag && !peeking && Math.hypot(e.clientX - pd.x0, e.clientY - pd.y0) > 6) { clearTimeout(pd.hold); pd.drag = true; dragStart(); }
+    if (pd.drag) dragTo(frac(e.clientX));
+  });
+  function photoUp(e) {
+    if (!pd || e.pointerId !== pd.id) return;
+    clearTimeout(pd.hold);
+    if (pd.drag) dragEnd();
+    else if (peeking) peek(false);
+    else if (e.type === "pointerup") { X.to(clamp(frac(e.clientX), 0, 1)); buzz(6); }
+    pd = null;
+  }
+  photo.addEventListener("pointerup", photoUp);
+  photo.addEventListener("pointercancel", photoUp);
+
+  handle.addEventListener("keydown", function (e) {
+    var v = X.t, step = e.shiftKey ? 0.1 : 0.02;
+    var map = { ArrowLeft: -step, ArrowDown: -step, ArrowRight: step, ArrowUp: step, PageDown: -0.1, PageUp: 0.1 };
+    if (e.key in map) v += map[e.key]; else if (e.key === "Home") v = 0; else if (e.key === "End") v = 1; else return;
+    e.preventDefault(); X.to(clamp(v, 0, 1));
+  });
+
+  eye.addEventListener("pointerdown", function (e) { try { eye.setPointerCapture(e.pointerId); } catch (err) {} peek(true); });
+  ["pointerup", "pointercancel", "lostpointercapture", "blur"].forEach(function (t) { eye.addEventListener(t, function () { peek(false); }); });
+  eye.addEventListener("keydown", function (e) { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); peek(true); } });
+  eye.addEventListener("keyup", function (e) { if (e.key === " " || e.key === "Enter") { e.preventDefault(); peek(false); } });
+
+  // ---------- Looks, reset, saved looks ----------
+  function sweep(dir) {
+    leakEl.classList.remove("go", "rev"); void leakEl.offsetWidth; leakEl.classList.add(dir < 0 ? "rev" : "go");
+    if (reduce || dragging) return;
+    X.k = 300; X.c = 24; X.to(dir < 0 ? 0.03 : 0.97);
+    clearTimeout(sweep.t); clearTimeout(sweep.u);
+    sweep.t = setTimeout(function () { X.k = 110; X.c = 14; if (!dragging) X.to(0.5); }, 280);
+    sweep.u = setTimeout(function () { X.k = 260; X.c = 26; }, 1300);
+  }
+  function scrollStripTo(b) {
+    var l = b.offsetLeft - (strip.clientWidth - b.offsetWidth) / 2;
+    try { strip.scrollTo({ left: l, behavior: reduce ? "auto" : "smooth" }); } catch (e) { strip.scrollLeft = l; }
+  }
+  function choose(i) {
+    var b = preBtns[i];
+    b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump");
+    if (i === state.p) { announce(PRESETS[i].name + " is already on"); return; }
+    state.p = i; syncUI(); setLive(composite(state), true); sweep(1); buzz(8); scrollStripTo(b);
+    announce(PRESETS[i].name + " look applied");
+  }
+  function reset() {
+    state = { p: 0, L: 0, W: 0, Pp: 0 };
+    syncUI(); setLive(composite(state), true); sweep(-1); scrollStripTo(preBtns[0]);
+    toast("Back to the original"); announce("Reset to the original photo");
+  }
+  function useLook(st) {
+    state = { p: st.p, L: st.L, W: st.W, Pp: st.Pp };
+    syncUI(); setLive(composite(state), true); sweep(1); scrollStripTo(preBtns[state.p]);
+    announce("Saved " + PRESETS[st.p].name + " look applied again");
+  }
+  function toast(msg) {
+    toastEl.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' + msg;
+    toastEl.classList.add("on");
+    clearTimeout(toast.t); toast.t = setTimeout(function () { toastEl.classList.remove("on"); }, 1800);
+  }
+
+  // ---------- Save: flash, the photo flies into Recent ----------
+  var saving = false;
+  function save() {
+    if (saving) return;
+    saving = true; photo.classList.add("press");
+    setTimeout(function () {
+      photo.classList.remove("press");
+      flashEl.classList.remove("go"); void flashEl.offsetWidth; flashEl.classList.add("go");
+      buzz(12); flyToRecent();
+    }, reduce ? 0 : 150);
+  }
+  function flyToRecent() {
+    var st = { p: state.p, L: state.L, W: state.W, Pp: state.Pp };
+    st.id = makeFilter(composite(st));
+    var pr = photo.getBoundingClientRect(), ph = phone.getBoundingClientRect(), tr = thumbs.getBoundingClientRect();
+    var a = { x: pr.left - ph.left, y: pr.top - ph.top, w: pr.width, h: pr.height };
+    var b = { x: tr.left - ph.left + 2, y: tr.top - ph.top + (tr.height - 44) / 2, w: 44, h: 44 };
+    var el = document.createElement("div"), done = false;
+    el.className = "fly"; el.innerHTML = shot(st.id, true);
+    var sp = Spring(0, 150, 18, function (k, v) {
+      var q = clamp(k, 0, 1.2), arc = Math.sin(clamp(k, 0, 1) * Math.PI) * -46;
+      el.style.transform = "translate(" + (a.x + (b.x - a.x) * q).toFixed(1) + "px," + (a.y + (b.y - a.y) * q + arc).toFixed(1) + "px)";
+      el.style.width = Math.max(12, a.w + (b.w - a.w) * q).toFixed(1) + "px";
+      el.style.height = Math.max(12, a.h + (b.h - a.h) * q).toFixed(1) + "px";
+      el.style.borderRadius = (20 - 9 * clamp(k, 0, 1)).toFixed(1) + "px";
+      if (!done && k === 1 && v === 0) {
+        done = true; el.remove(); addThumb(st, true); saving = false;
+        toast("Saved to Photos"); announce("Saved to Photos with the " + PRESETS[st.p].name + " look");
+      }
+    });
+    sp.set(0); phone.appendChild(el); sp.to(1);
+  }
+  function addThumb(st, isNew) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "gth" + (isNew ? " new" : "");
+    b.setAttribute("aria-label", "Use this saved look again: " + PRESETS[st.p].name);
+    b.innerHTML = shot(st.id);
+    b.addEventListener("click", function () { useLook(st); });
+    thumbs.insertBefore(b, thumbs.firstChild);
+    while (thumbs.children.length > 7) thumbs.removeChild(thumbs.lastChild);
+  }
+  [[3, 0, 0.3, -0.2], [6, 0, 0, 0], [5, 0.1, 0, 0.3], [4, 0, 0.2, 0]].forEach(function (d) {
+    var st = { p: d[0], L: d[1], W: d[2], Pp: d[3] }; st.id = makeFilter(composite(st)); addThumb(st, false);
+  });
+
+  // ---------- Tabs ----------
+  function setTab(k, focus) {
+    tabsEl.dataset.k = k; panels.dataset.k = k;
+    tabs.forEach(function (t, i) { t.setAttribute("aria-selected", String(i === k)); t.tabIndex = i === k ? 0 : -1; });
+    panes.forEach(function (p, i) { if (i === k) p.removeAttribute("inert"); else p.setAttribute("inert", ""); });
+    if (focus) tabs[k].focus();
+  }
+  tabs.forEach(function (t, i) {
+    t.addEventListener("click", function () { setTab(i); });
+    t.addEventListener("keydown", function (e) { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); setTab(1 - i, true); } });
+  });
+
+  resetBtn.addEventListener("click", reset);
+  saveBtn.addEventListener("click", save);
+
+  // ---------- Start: the photo develops in, the first look sweeps across ----------
+  if (reduce) document.querySelectorAll("svg").forEach(function (s) { if (s.pauseAnimations) s.pauseAnimations(); });
+  syncUI(); X.set(0.5); setLive(composite(state), false);
+  setTimeout(function () { photo.classList.remove("develop"); }, 1300);
+  if (!reduce) setTimeout(function () { leakEl.classList.add("go"); }, 220);
+
+  // ---------- Auto demo ----------
+  var gShown = false, loopN = 0, demoDrag = false, ORDER = [2, 6, 4, 1, 3, 5], TARGETS = [30, 55, 40, -40, 25, -35];
+  function gTo(p, ms, done) {
+    if (!gShown) { gShown = true; Demo.at(p.x, p.y); Demo.later(ms, done); return; }
+    Demo.glide(p.x, p.y, ms, null, done);
+  }
+  function hideG() { Demo.hide(); gShown = false; }
+  function photoBox() { var r = photo.getBoundingClientRect(), p = phone.getBoundingClientRect(); return { x: r.left - p.left, w: r.width }; }
+  function dTap(get, at, fn) {
+    Demo.later(at, function () {
+      var p = Demo.pt(get(), 0.5, 0.45);
+      gTo(p, 400, function () { Demo.press(true); Demo.later(150, function () { Demo.press(false); fn(); }); });
+    });
+    return at + 400 + 170;
+  }
+  function dHandle(stops, at) {
+    Demo.later(at, function () {
+      var p = Demo.pt(handle);
+      gTo(p, 380, function () {
+        Demo.press(true); demoDrag = true; dragStart();
+        var r = photoBox(), i = 0;
+        (function next() {
+          if (i >= stops.length) { Demo.press(false); demoDrag = false; dragEnd(); return; }
+          var ms = i ? 780 : 640, to = stops[i++];
+          Demo.glide(r.x + r.w * to, p.y, ms, function (k, x) { dragTo((x - r.x) / r.w); }, next);
+        })();
+      });
+    });
+    return at + 380 + 640 + 780 * (stops.length - 1) + 150;
+  }
+  function dSlide(s, to, at) {
+    Demo.later(at, function () {
+      var r = Demo.pt(s.input, 0, 0.5), w = s.input.getBoundingClientRect().width, from = +s.input.value;
+      var px = function (v) { return r.x + 11 + (w - 22) * (v + 100) / 200; };
+      gTo({ x: px(from), y: r.y }, 380, function () {
+        Demo.press(true);
+        Demo.glide(px(to), r.y, 720, function (k) { s.input.value = Math.round(from + (to - from) * k); s.input.dispatchEvent(new Event("input")); }, function () { Demo.press(false); });
+      });
+    });
+    return at + 380 + 720 + 140;
+  }
+  function dHold(fx, fy, ms, at) {
+    Demo.later(at, function () {
+      gTo(Demo.pt(photo, fx, fy), 380, function () {
+        Demo.press(true);
+        Demo.later(380, function () { peek(true); Demo.later(ms, function () { Demo.press(false); peek(false); }); });
+      });
+    });
+    return at + 380 + 380 + ms + 120;
+  }
+  function demoLoop() {
+    if (!Demo.on) return;
+    var n = loopN++, t = 0, pi = ORDER[n % ORDER.length];
+    if (tabsEl.dataset.k === "1") setTab(0);
+    if (state.p === 0) { t = dTap(function () { return preBtns[pi]; }, t, function () { choose(pi); }) + 1300; pi = ORDER[(n + 1) % ORDER.length]; }
+    t = dHandle(n % 2 ? [0.2, 0.8] : [0.84, 0.16], t);
+    t = dTap(function () { return preBtns[pi]; }, t + 300, function () { choose(pi); }) + 1250;
+    if (n % 2 === 0) {
+      var j = (n / 2) % 6, s = SL[j % 3];
+      t = dTap(function () { return tabs[1]; }, t, function () { setTab(1); });
+      t = dSlide(s, TARGETS[j], t + 450);
+      t = dTap(function () { return tabs[0]; }, t + 450, function () { setTab(0); });
+    }
+    t = dHold(0.32, 0.5, 900, t + 300);
+    if (n % 2 === 1) t = dTap(function () { return saveBtn; }, t + 200, save) + 1500;
+    if (n % 3 === 2) t = dTap(function () { return resetBtn; }, t + 200, reset) + 1300;
+    Demo.later(t + 100, hideG);
+    Demo.later(t + 2000, demoLoop);
+  }
+  Demo.onStop(function () { gShown = false; if (demoDrag) { demoDrag = false; dragEnd(); } peek(false); });
+  Demo.later(150, demoLoop);
+})();
+</script>
+</body>
+</html>

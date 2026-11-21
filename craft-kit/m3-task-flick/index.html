@@ -1,0 +1,774 @@
+<!doctype html>
+<!-- Chill & Craft · Task Flick · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Task Flick · a recent-apps switcher you swipe, flick and clear</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: ocean teal wallpaper with sunset coral ---------- */
+  :root {
+    --bg-a: #dcefec; --bg-b: #fde6dc; --glow: rgba(255, 122, 89, 0.24); --dot: rgba(10, 60, 70, 0.07);
+    --ink: #0f2a30; --muted: #557177; --card: #ffffff; --edge: #d2e5e2; --accent: #ff7a59; --focus: #ff6a45;
+    --w0: #093f4a; --w1: #0f6470; --w2: #1c9a9a; --w3: #ff8a5c; --w4: #ffd2a1;
+    --app-bg: #fffaf3; --app-ink: #2a2119; --app-mute: #8f8274; --app-line: #f0e6da;
+    --map-land: #e7ede1; --map-road: #ffffff; --map-sea: #a9d8f0; --map-park: #c3e5b8;
+    --bezel: #0b1a1d; --bezel-edge: #26424a; --shadow: rgba(10, 50, 60, 0.35);
+    --ghost-b: rgba(255, 255, 255, 0.92); --ghost-f: rgba(255, 255, 255, 0.28);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #041417; --bg-b: #190e0a; --glow: rgba(255, 110, 70, 0.16); --dot: rgba(190, 240, 235, 0.05);
+    --ink: #e7f6f3; --muted: #8fb0b3; --card: #0f2327; --edge: #1d3a3f; --accent: #ff8a66; --focus: #ffa184;
+    --w0: #021b20; --w1: #053a42; --w2: #0b5d62; --w3: #e0623c; --w4: #f6a86c;
+    --app-bg: #1b1713; --app-ink: #f5ebdf; --app-mute: #a39482; --app-line: #2c2620;
+    --map-land: #172120; --map-road: #2b3a37; --map-sea: #1c3c50; --map-park: #20402f;
+    --bezel: #010607; --bezel-edge: #1d3a3f; --shadow: rgba(0, 0, 0, 0.66);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg-a); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
+  /* ---------- Stage ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; overflow: hidden; overflow: clip; display: flex; align-items: center; justify-content: center; gap: 72px; padding: 22px 16px; background: radial-gradient(var(--dot) 1px, transparent 1.4px) 0 0 / 20px 20px, linear-gradient(150deg, var(--bg-a), var(--bg-b)); }
+  .glow { position: absolute; width: 64vmax; height: 64vmax; left: 50%; top: 50%; margin: -32vmax 0 0 -32vmax; border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 62%); pointer-events: none; animation: wander 17s ease-in-out infinite alternate; }
+  @keyframes wander { to { transform: translate(7vmax, -6vmax) scale(1.12); } }
+  .caption { display: none; position: relative; z-index: 1; max-width: 300px; }
+  .eyebrow { margin: 0 0 12px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow i { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 3px; background: linear-gradient(135deg, var(--w2), var(--accent)); }
+  .caption h2 { margin: 0 0 14px; font-size: 48px; line-height: 1; letter-spacing: -0.035em; }
+  .caption p { margin: 0 0 22px; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .caption ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .caption li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .caption kbd { font: inherit; font-size: 12px; font-weight: 750; min-width: 78px; text-align: center; padding: 4px 10px; border-radius: 9px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 2px 0 var(--edge); }
+  @media (min-width: 900px) { .caption { display: block; } }
+
+  /* ---------- Phone ---------- */
+  .phone {
+    --st: #fff; position: relative; z-index: 1; width: min(390px, 100%);
+    height: clamp(540px, calc(100vh - 44px), 760px); height: clamp(540px, calc(100dvh - 44px), 760px);
+    background: var(--w0); border-radius: 46px; overflow: hidden; overflow: clip; isolation: isolate;
+    box-shadow: 0 0 0 10px var(--bezel), 0 0 0 11px var(--bezel-edge), 0 50px 90px -30px var(--shadow);
+  }
+  .status { position: absolute; left: 0; right: 0; top: 0; z-index: 30; height: 46px; padding: 8px 30px 0 34px; display: flex; align-items: center; justify-content: space-between; font-size: 14.5px; font-weight: 700; color: var(--st); transition: color 0.3s; pointer-events: none; }
+  .status svg { width: 62px; height: 13px; fill: currentColor; }
+  @media (max-width: 480px) {
+    .stage { padding: 0; }
+    .phone { width: 100%; height: 100vh; height: 100dvh; border-radius: 0; box-shadow: none; }
+    .status { padding: 6px 20px 0 22px; }
+  }
+
+  /* system bar: Home, the drag strip and Recent apps */
+  .sysnav { position: absolute; left: 0; right: 0; bottom: 0; z-index: 36; height: 56px; pointer-events: none; }
+  .nb { position: absolute; bottom: 10px; width: 38px; height: 38px; border: 0; border-radius: 50%; display: grid; place-items: center; color: var(--st); background: color-mix(in srgb, var(--st) 16%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); pointer-events: auto; transition: transform 0.35s cubic-bezier(0.3, 1.7, 0.5, 1), color 0.3s; }
+  .nb:active { transform: scale(0.88); }
+  .nb svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .nb.hmb { left: 16px; } .nb.rec { right: 16px; }
+  .hbz { position: absolute; left: 66px; right: 66px; bottom: 0; height: 44px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; touch-action: none; cursor: grab; pointer-events: auto; }
+  .hbz i { width: 134px; max-width: 100%; height: 5px; border-radius: 3px; background: var(--st); opacity: 0.8; transition: background 0.3s; animation: hint 3s ease-in-out infinite; }
+  .dragging .hbz { cursor: grabbing; }
+  @keyframes hint { 50% { transform: translateY(-3px); } }
+
+  /* ---------- Wallpaper and home screen ---------- */
+  .wall { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(120% 70% at 85% 0%, var(--w2), transparent 62%), linear-gradient(172deg, var(--w1), var(--w0) 78%); }
+  .wall i { position: absolute; border-radius: 50%; filter: blur(34px); }
+  .wall .b1 { width: 74%; height: 38%; right: -18%; top: 16%; background: var(--w3); opacity: 0.55; animation: blobA 13s ease-in-out infinite alternate; }
+  .wall .b2 { width: 62%; height: 32%; left: -22%; bottom: 10%; background: var(--w4); opacity: 0.32; animation: blobB 17s ease-in-out infinite alternate; }
+  .wall svg { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 34%; }
+  .wall path { fill: #fff; }
+  @keyframes blobA { to { transform: translate(-16%, 12%) scale(1.15); } }
+  @keyframes blobB { to { transform: translate(18%, -10%) scale(1.2); } }
+  .home { position: absolute; inset: 0; z-index: 2; padding: 64px 0 90px; display: flex; flex-direction: column; color: #fff; transform-origin: 50% 46%; }
+  .clock { text-align: center; }
+  .clock b { display: block; font-size: 66px; font-weight: 300; letter-spacing: -0.04em; line-height: 1; }
+  .clock span { font-size: 14px; font-weight: 600; opacity: 0.85; }
+  .widgets { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 22px 18px 26px; }
+  .wg { padding: 12px 14px; border-radius: 22px; background: rgba(255, 255, 255, 0.16); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25); min-width: 0; }
+  .wg small { display: block; font-size: 11px; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }
+  .wg b { display: block; margin: 3px 0 2px; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wg span { font-size: 12px; opacity: 0.85; }
+  .icons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 6px; padding: 0 16px; }
+  .icon { position: relative; display: grid; justify-items: center; gap: 6px; padding: 0; border: 0; background: none; color: #fff; font-size: 11.5px; font-weight: 650; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); transition: transform 0.55s cubic-bezier(0.3, 1.6, 0.5, 1) calc(var(--i) * 40ms + 140ms), opacity 0.3s calc(var(--i) * 40ms + 140ms); }
+  .m-app .icon { transform: scale(0.5) translateY(30px); opacity: 0; transition-duration: 0.18s; transition-delay: 0s; }
+  .tile { position: relative; width: 60px; height: 60px; border-radius: 16px; display: grid; place-items: center; box-shadow: 0 10px 20px -10px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35); transition: transform 0.3s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.12s; }
+  .tile svg { width: 30px; height: 30px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .icon:active .tile { transform: scale(0.9); }
+  .icon.land .tile { opacity: 0; }
+  .icon.hit .tile { animation: hit 0.55s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  .wig .icon .tile { animation: wig 0.5s ease-in-out; }
+  @keyframes hit { 40% { transform: scale(1.14); } }
+  @keyframes wig { 25% { transform: rotate(-7deg); } 75% { transform: rotate(7deg); } }
+
+  /* ---------- Switcher ---------- */
+  .scrim { position: absolute; inset: 0; z-index: 4; background: rgba(3, 26, 31, 0.42); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); opacity: 0; pointer-events: none; }
+  .m-switch .scrim { pointer-events: auto; }
+  .deck { position: absolute; inset: 0; z-index: 5; perspective: 1300px; pointer-events: none; }
+  .card { position: absolute; inset: 0; transform-origin: 50% 50%; will-change: transform; pointer-events: auto; outline: none; touch-action: none; visibility: hidden; }
+  .m-switch .card { cursor: grab; }
+  .win { position: absolute; inset: 0; overflow: hidden; border-radius: 46px; background: var(--app-bg); box-shadow: 0 30px 70px -22px rgba(0, 0, 0, 0.55); }
+  .card:focus-visible .win { box-shadow: 0 0 0 5px var(--focus), 0 30px 70px -22px rgba(0, 0, 0, 0.55); }
+  .dimv, .tint { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+  .dimv { background: #021418; }
+  .lab { position: absolute; left: 4px; bottom: calc(100% + 18px); display: flex; align-items: center; gap: 12px; color: #fff; font-size: 25px; font-weight: 700; white-space: nowrap; opacity: 0; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); pointer-events: none; }
+  .lab .li { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; }
+  .lab svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .clear { position: absolute; left: 50%; bottom: 66px; z-index: 20; height: 38px; padding: 0 18px; border: 0; border-radius: 99px; color: #fff; font-size: 13.5px; font-weight: 750; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; visibility: hidden; transform: translate(-50%, 16px); transition: opacity 0.25s, transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1), visibility 0s 0.3s; }
+  .m-switch .clear { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition-delay: 0.2s, 0.2s, 0s; }
+  .clear:active { transform: translate(-50%, 0) scale(0.94); }
+  .toast { position: absolute; left: 50%; top: 54px; z-index: 34; padding: 9px 16px; border-radius: 99px; background: rgba(4, 30, 35, 0.82); color: #fff; font-size: 13px; font-weight: 700; white-space: nowrap; opacity: 0; transform: translate(-50%, -14px) scale(0.9); transition: transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.25s; pointer-events: none; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+
+  /* ---------- The six little apps ---------- */
+  .app { position: absolute; inset: 0; padding: 58px 22px 74px; overflow: hidden; background: var(--app-bg); color: var(--app-ink); }
+  .notes .ah { display: flex; justify-content: space-between; margin-bottom: 18px; color: #ff7a59; font-size: 15px; font-weight: 700; }
+  .notes h3 { margin: 0; font-size: 30px; letter-spacing: -0.03em; }
+  .notes .when { margin: 4px 0 18px; color: var(--app-mute); font-size: 13px; }
+  .chk { list-style: none; margin: 0 0 18px; padding: 0 0 16px; display: grid; gap: 13px; font-size: 16px; border-bottom: 1px solid var(--app-line); }
+  .chk li { display: flex; align-items: center; gap: 12px; }
+  .chk i { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid #ffb199; }
+  .chk .on { color: var(--app-mute); text-decoration: line-through; }
+  .chk .on i { border-color: #ff7a59; background: #ff7a59; box-shadow: inset 0 0 0 3px var(--app-bg); }
+  .typed { margin: 0; font-size: 16px; line-height: 1.5; }
+  .typed span { display: inline-block; max-width: 0; overflow: hidden; white-space: nowrap; vertical-align: bottom; animation: type 6s steps(34) infinite; }
+  .caret { display: inline-block; width: 2px; height: 19px; margin-left: 1px; vertical-align: -3px; background: #ff7a59; animation: blink 1s steps(2) infinite; }
+  .ntags { display: flex; gap: 8px; margin-top: 18px; }
+  .ntags span { padding: 5px 11px; border-radius: 99px; background: color-mix(in srgb, #ff7a59 14%, transparent); color: #e2613f; font-size: 12.5px; font-weight: 700; }
+  .att { margin: 18px 0 0; border-radius: 18px; overflow: hidden; background: var(--app-line); }
+  .att svg { display: block; width: 100%; height: 140px; }
+  .att figcaption { padding: 9px 12px; font-size: 13px; color: var(--app-mute); }
+  .flm ellipse { transform-box: fill-box; transform-origin: 50% 100%; animation: flick 0.6s ease-in-out infinite alternate; }
+  .flm ellipse:nth-child(2) { animation-delay: -0.3s; }
+  @keyframes flick { to { transform: scaleY(1.3) translateY(-1px); } }
+  @keyframes type { 0% { max-width: 0; } 55%, 100% { max-width: 100%; } }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .weather { background: linear-gradient(172deg, #55baf6, #1f6fd0 62%, #134a96); color: #fff; text-align: center; }
+  .weather .wc { margin: 14px 0 0; font-size: 21px; font-weight: 700; }
+  .weather .deg { margin: 0; font-size: 98px; font-weight: 250; line-height: 1; letter-spacing: -0.05em; }
+  .weather .cond { margin: 6px 0 16px; opacity: 0.88; font-size: 14.5px; }
+  .sunny { display: block; width: 84px; height: 84px; margin: 0 auto 18px; }
+  .rays { transform-origin: 50px 50px; animation: spin 16s linear infinite; }
+  .hours { display: flex; justify-content: space-between; padding: 14px 12px; border-radius: 20px; background: rgba(255, 255, 255, 0.16); font-size: 12.5px; }
+  .hours span { display: grid; gap: 7px; justify-items: center; }
+  .hours i { width: 14px; height: 14px; border-radius: 50%; background: #ffd35c; box-shadow: 0 0 10px #ffd35c; }
+  .days { margin-top: 12px; padding: 4px 14px; border-radius: 20px; background: rgba(255, 255, 255, 0.12); text-align: left; }
+  .days p { display: flex; align-items: center; gap: 10px; margin: 9px 0; font-size: 14px; }
+  .days b { width: 40px; } .days em { flex: 1; height: 5px; border-radius: 3px; background: linear-gradient(90deg, #9be7ff, #ffd35c, #ff8a5c); }
+
+  .maps { padding: 0; background: var(--map-land); }
+  .maps svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .maps .sea { fill: var(--map-sea); } .maps .park { fill: var(--map-park); }
+  .maps .roads, .maps .minor { fill: none; stroke: var(--map-road); stroke-linecap: round; }
+  .maps .roads { stroke-width: 14; } .maps .minor { stroke-width: 6; opacity: 0.8; }
+  .maps .route { fill: none; stroke: #ff7a59; stroke-width: 7; stroke-linecap: round; stroke-dasharray: 1 13; animation: march 1.2s linear infinite; }
+  .maps .dest { fill: #ff7a59; stroke: #fff; stroke-width: 3; }
+  .maps .me { fill: #2b8cff; stroke: #fff; stroke-width: 3; }
+  .maps .pulse { fill: #2b8cff; opacity: 0.25; transform-origin: 90px 470px; animation: pulse 2s ease-out infinite; }
+  .msearch { position: absolute; left: 18px; right: 18px; top: 56px; height: 46px; padding: 0 16px; border-radius: 16px; display: flex; align-items: center; background: var(--app-bg); color: var(--app-mute); font-size: 15px; box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.4); }
+  .msheet { position: absolute; left: 12px; right: 12px; bottom: 66px; padding: 16px 18px; border-radius: 22px; background: var(--app-bg); box-shadow: 0 -6px 30px -16px rgba(0, 0, 0, 0.4); }
+  .msheet b { display: block; font-size: 18px; } .msheet small { color: var(--app-mute); font-size: 13px; }
+  .msheet span { position: absolute; right: 16px; top: 50%; margin-top: -21px; width: 64px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: #13a18a; color: #fff; font-weight: 800; }
+  @keyframes march { to { stroke-dashoffset: -14; } }
+  @keyframes pulse { from { transform: scale(0.6); opacity: 0.5; } to { transform: scale(2.2); opacity: 0; } }
+
+  .music { background: linear-gradient(172deg, #4a2484, #1a0f33 70%); color: #fff; text-align: center; }
+  .music .mh { margin: 6px 0 22px; font-size: 12.5px; opacity: 0.75; }
+  .music .cover { width: 82%; aspect-ratio: 1; margin: 0 auto 22px; border-radius: 22px; overflow: hidden; box-shadow: 0 30px 50px -24px #000; }
+  .music .cover svg { display: block; width: 100%; height: 100%; }
+  .music .tt { display: block; font-size: 23px; letter-spacing: -0.02em; }
+  .music .ar { display: block; margin-top: 2px; opacity: 0.7; font-size: 15px; }
+  .pb { height: 5px; margin: 22px 0 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.2); overflow: hidden; }
+  .pb i { display: block; height: 100%; width: 40%; border-radius: 3px; background: #fff; animation: prog 24s linear infinite; }
+  .tm { display: flex; justify-content: space-between; font-size: 12px; opacity: 0.65; }
+  .ctl { display: flex; align-items: center; justify-content: center; gap: 34px; margin-top: 14px; }
+  .ctl svg { width: 30px; height: 30px; fill: #fff; }
+  .ctl .pp { width: 66px; height: 66px; border-radius: 50%; background: #fff; display: grid; place-items: center; }
+  .ctl .pp svg { fill: #2a1556; }
+  @keyframes prog { from { width: 40%; } to { width: 100%; } }
+
+  .calc { background: #0b0d0e; color: #fff; display: flex; flex-direction: column; justify-content: flex-end; }
+  .calc .expr { margin: 0; text-align: right; font-size: 22px; opacity: 0.55; }
+  .calc .res { margin: 0 0 18px; text-align: right; font-size: 68px; font-weight: 300; letter-spacing: -0.03em; }
+  .keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .keys span { aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; background: #2a2f31; font-size: 26px; }
+  .keys .f { background: #a8b0b2; color: #0b0d0e; font-size: 20px; }
+  .keys .o { background: #ff8a3d; }
+  .keys .z { grid-column: span 2; aspect-ratio: auto; border-radius: 99px; justify-content: start; padding-left: 26px; }
+
+  .wallet .wh { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .wallet .wh b { font-size: 30px; letter-spacing: -0.03em; }
+  .wallet .av { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: #13a18a; color: #fff; font-size: 13px; font-weight: 800; }
+  .wcard { position: relative; overflow: hidden; height: 170px; padding: 18px 20px; border-radius: 24px; color: #3b1d00; background: linear-gradient(135deg, #ffd36b, #ff8a3d); box-shadow: 0 24px 40px -22px #ff8a3d; }
+  .wcard::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent); animation: sheen 4.5s ease-in-out infinite; }
+  .wcard small { font-size: 13px; font-weight: 700; opacity: 0.75; }
+  .wcard b { display: block; margin-top: 6px; font-size: 32px; letter-spacing: -0.03em; }
+  .wcard span { position: absolute; left: 20px; bottom: 18px; font-size: 13px; font-weight: 700; opacity: 0.8; }
+  .acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 18px 0; text-align: center; font-size: 12px; font-weight: 650; }
+  .acts i { display: grid; place-items: center; width: 46px; height: 46px; margin: 0 auto 6px; border-radius: 16px; background: var(--app-line); font-style: normal; font-size: 18px; font-weight: 800; color: #e2613f; }
+  .wallet h4 { margin: 0 0 8px; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--app-mute); }
+  .tx { list-style: none; margin: 0; padding: 0; }
+  .tx li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--app-line); font-size: 14.5px; }
+  .tx li > i { flex: none; width: 36px; height: 36px; border-radius: 12px; }
+  .tx span { flex: 1; min-width: 0; } .tx small { display: block; font-size: 12px; color: var(--app-mute); }
+  .tx b { font-size: 14px; white-space: nowrap; } .tx .in { color: #13a18a; }
+  @keyframes sheen { 0%, 55% { transform: translateX(0); } 100% { transform: translateX(420%); } }
+  @keyframes spin { to { transform: rotate(1turn); } }
+
+  /* ---------- Ghost finger ---------- */
+  .ghost { position: absolute; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; z-index: 40; pointer-events: none; background: var(--ghost-f); border: 2px solid var(--ghost-b); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); opacity: 0; transition: opacity 0.3s; }
+  .ghost::after { content: ""; position: absolute; inset: 11px; border-radius: 50%; background: var(--ghost-b); opacity: 0.5; transform: scale(0.45); transition: transform 0.18s; }
+  .ghost.on { opacity: 1; }
+  .ghost.press::after { transform: scale(1); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glow, .wall i, .hbz i, .rays, .route, .pulse, .pb i, .wcard::after, .typed span, .caret { animation: none !important; }
+    .typed span { max-width: 100%; }
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; transition-delay: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="glow" aria-hidden="true"></div>
+  <section class="caption" aria-hidden="true">
+    <p class="eyebrow"><i></i>Mobile interactions</p>
+    <h2>Task Flick</h2>
+    <p>The recent-apps screen of a phone, built to be played with. Pull the open app down into a card, fan through the others and flick away the ones you are done with.</p>
+    <ul>
+      <li><kbd>Swipe up</kbd> and hold for recent apps</li>
+      <li><kbd>Flick up</kbd> quickly to go home</li>
+      <li><kbd>Drag</kbd> sideways, flick a card up to close</li>
+      <li><kbd>Arrows</kbd> move, <kbd>Delete</kbd> closes</li>
+    </ul>
+  </section>
+
+  <div class="phone m-app" id="phone">
+    <div class="status" aria-hidden="true">
+      <span>9:41</span>
+      <svg viewBox="0 0 62 13"><rect x="0" y="8" width="3" height="5" rx="1"/><rect x="5" y="5.5" width="3" height="7.5" rx="1"/><rect x="10" y="3" width="3" height="10" rx="1"/><rect x="15" y="0.5" width="3" height="12.5" rx="1"/><rect x="36" y="1" width="22" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="38" y="3" width="16" height="7" rx="1.5"/><rect x="59" y="4.5" width="2" height="4" rx="1"/></svg>
+    </div>
+    <nav class="sysnav" aria-label="Phone buttons">
+      <button type="button" class="nb hmb" id="homeBtn" aria-label="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-6.5 8 6.5M6.5 9.5V19h11V9.5"/></svg></button>
+      <div class="hbz" id="hbz" aria-hidden="true"><i></i></div>
+      <button type="button" class="nb rec" id="recBtn" aria-label="Recent apps"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="11" height="14" rx="2.5"/><path d="M3.5 7.5v9M20.5 7.5v9"/></svg></button>
+    </nav>
+
+    <div class="wall" aria-hidden="true"><i class="b1"></i><i class="b2"></i><svg viewBox="0 0 390 260" preserveAspectRatio="none"><path opacity=".06" d="M0 120C70 90 130 150 200 120S330 80 390 110V260H0Z"/><path opacity=".05" d="M0 170C80 140 160 200 240 170S350 140 390 160V260H0Z"/></svg></div>
+    <div class="home" id="home" style="visibility:hidden">
+      <div class="clock" aria-hidden="true"><b>9:41</b><span>Saturday, 21 November</span></div>
+      <div class="widgets" aria-hidden="true">
+        <div class="wg"><small>Karachi</small><b>31°</b><span>Sunny all day</span></div>
+        <div class="wg"><small>Up next</small><b>Chai with Sara</b><span>5:30 pm · Do Darya</span></div>
+      </div>
+      <div class="icons" id="icons" role="group" aria-label="Apps"></div>
+    </div>
+    <div class="scrim" id="scrim" aria-hidden="true"></div>
+    <div class="deck" id="deck"></div>
+    <button type="button" class="clear" id="clearAll">Clear all</button>
+    <div class="toast" id="toast" aria-hidden="true"></div>
+
+    <div class="ghost" id="ghost" aria-hidden="true"></div>
+    <p class="sr-only" id="live" aria-live="polite"></p>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var phone = $("phone"), live = $("live"), deck = $("deck"), home = $("home"), scrim = $("scrim"), hbz = $("hbz");
+
+  function announce(msg) { live.textContent = ""; setTimeout(function () { live.textContent = msg; }, 30); }
+  function buzz(ms) {
+    try { if (!Demo.on && navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(ms); } catch (e) {}
+  }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function lerp(a, b, k) { return a + (b - a) * k; }
+
+  // A small spring: s.to(target, velocity, done); frame(x, v) paints; s.finish() jumps to the end now.
+  function Spring(x, k, c, frame) {
+    var s = { x: x, v: 0, t: x, k: k, c: c, raf: 0, done: null, frame: frame }, last = 0;
+    function rest() { s.x = s.t; s.v = 0; s.raf = 0; s.frame(s.x, 0); var d = s.done; s.done = null; if (d) d(); }
+    function tick(now) {
+      var dt = Math.min(0.05, (now - last) / 1000); last = now;
+      for (var i = 0; i < 4; i++) { var h = dt / 4, a = -s.k * (s.x - s.t) - s.c * s.v; s.v += a * h; s.x += s.v * h; }
+      if (Math.abs(s.v) < 0.004 && Math.abs(s.x - s.t) < 0.001) return rest();
+      s.frame(s.x, s.v); s.raf = requestAnimationFrame(tick);
+    }
+    s.to = function (t, v, done) {
+      s.t = t; if (v != null) s.v = v; s.done = done || null;
+      if (reduce) { cancelAnimationFrame(s.raf); return rest(); }
+      if (!s.raf) { last = performance.now(); s.raf = requestAnimationFrame(tick); }
+    };
+    s.set = function (x) { cancelAnimationFrame(s.raf); s.raf = 0; s.done = null; s.x = s.t = x; s.v = 0; s.frame(x, 0); };
+    s.finish = function () { if (s.raf || s.done) { cancelAnimationFrame(s.raf); rest(); } };
+    return s;
+  }
+
+  // ---------- Auto demo: a ghost finger drives the same functions a real finger does ----------
+  var Demo = (function () {
+    var d = { on: !reduce, timers: [], raf: 0, stops: [] }, ghost = $("ghost"), gx = 0, gy = 0;
+    d.pt = function (el, fx, fy) {
+      var r = el.getBoundingClientRect(), p = phone.getBoundingClientRect();
+      return { x: r.left - p.left + r.width * (fx == null ? 0.5 : fx), y: r.top - p.top + r.height * (fy == null ? 0.5 : fy) };
+    };
+    d.later = function (ms, fn) { d.timers.push(setTimeout(function () { if (d.on) fn(); }, ms)); };
+    d.at = function (x, y) { gx = x; gy = y; ghost.style.transform = "translate(" + x + "px," + y + "px)"; ghost.classList.add("on"); };
+    d.press = function (v) { ghost.classList.toggle("press", !!v); };
+    d.hide = function () { ghost.classList.remove("on", "press"); };
+    d.glide = function (x, y, ms, step, done) {
+      var x0 = gx, y0 = gy, t0 = performance.now();
+      cancelAnimationFrame(d.raf);
+      d.raf = requestAnimationFrame(function f(now) {
+        if (!d.on) return;
+        var k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        d.at(x0 + (x - x0) * e, y0 + (y - y0) * e);
+        if (step) step(e, gx, gy);
+        if (k < 1) d.raf = requestAnimationFrame(f); else if (done) done();
+      });
+    };
+    d.onStop = function (fn) { d.stops.push(fn); };
+    d.stop = function () {
+      if (!d.on) return;
+      d.on = false; d.timers.forEach(clearTimeout); d.timers = []; cancelAnimationFrame(d.raf); d.hide();
+      d.stops.forEach(function (fn) { fn(); });
+    };
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (ty) {
+      addEventListener(ty, function (e) { if (e.isTrusted) d.stop(); }, { capture: true, passive: true });
+    });
+    return d;
+  })();
+
+  // ---------- Apps (each a tiny drawn screen) ----------
+  var APPS = {
+    notes: { n: "Notes", st: "auto", g: "linear-gradient(140deg,#ffb36b,#ff6a55)", glyph: '<path d="M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM8.5 9h7M8.5 12.5h7M8.5 16h4"/>',
+      html: '<div class="app notes"><div class="ah"><span>‹ Folders</span><span>Share</span></div><h3>Sunday list</h3><p class="when">21 November · 9:38 am</p>' +
+        '<ul class="chk"><li class="on"><i></i>Milk, 2 litres</li><li class="on"><i></i>Eggs and fresh mint</li><li><i></i>Basmati rice, 5 kg</li><li><i></i>Mangoes for Nani</li><li><i></i>Flowers for the table</li></ul>' +
+        '<p class="typed"><span>Pick up the cake from Clifton at 6</span><b class="caret"></b></p><div class="ntags"><span>Home</span><span>Weekend</span></div>' +
+        '<figure class="att"><svg viewBox="0 0 300 140" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="300" height="140" fill="#ffe3d3"/><circle cx="252" cy="28" r="44" fill="#ffd2bd"/><ellipse cx="150" cy="120" rx="98" ry="12" fill="#f1c0a8"/><rect x="92" y="70" width="116" height="46" rx="8" fill="#fff6ee"/><path d="M92 83c10 8 20-6 29 2s20-6 29 2 20-6 29 2 20-6 29 2" stroke="#ff8a6b" stroke-width="5" fill="none"/><rect x="108" y="46" width="84" height="28" rx="6" fill="#ffb199"/><rect x="132" y="29" width="4" height="18" fill="#7fc8ff"/><rect x="148" y="25" width="4" height="22" fill="#ffd35c"/><rect x="164" y="29" width="4" height="18" fill="#9be3c4"/><g class="flm" fill="#ff9f1c"><ellipse cx="134" cy="24" rx="3" ry="5"/><ellipse cx="150" cy="20" rx="3" ry="5"/><ellipse cx="166" cy="24" rx="3" ry="5"/></g></svg><figcaption>Cake idea from Sara · photo</figcaption></figure></div>' },
+    weather: { n: "Weather", st: "light", g: "linear-gradient(160deg,#5cc8ff,#1d6fd6)", glyph: '<circle cx="9" cy="9" r="3.5"/><path d="M9 2.5v1.6M3.2 9h1.6M4.6 4.6l1.1 1.1M13.4 4.6l-1.1 1.1M8 20h9a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.6 1.6A2.8 2.8 0 0 0 8 20z"/>',
+      html: '<div class="app weather"><p class="wc">Karachi</p><p class="deg">31°</p><p class="cond">Sunny · sea breeze 18 km/h</p>' +
+        '<svg class="sunny" viewBox="0 0 100 100" aria-hidden="true"><g class="rays" stroke="#ffd35c" stroke-width="5" stroke-linecap="round"><path d="M50 6v12M50 82v12M6 50h12M82 50h12M19 19l8 8M73 73l8 8M19 81l8-8M73 27l8-8"/></g><circle cx="50" cy="50" r="22" fill="#ffd35c"/></svg>' +
+        '<div class="hours"><span>Now<i></i>31°</span><span>1 pm<i></i>32°</span><span>2 pm<i></i>32°</span><span>3 pm<i></i>31°</span><span>4 pm<i></i>30°</span></div>' +
+        '<div class="days"><p><b>Sun</b>24°<em></em>30°</p><p><b>Mon</b>25°<em></em>31°</p><p><b>Tue</b>24°<em></em>29°</p></div></div>' },
+    maps: { n: "Maps", st: "auto", g: "linear-gradient(150deg,#7be0a6,#13a18a)", glyph: '<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/>',
+      html: '<div class="app maps"><svg viewBox="0 0 390 760" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path class="sea" d="M0 540C80 520 140 580 220 610S360 650 390 700V760H0Z"/><rect class="park" x="40" y="150" width="120" height="90" rx="18"/><rect class="park" x="250" y="370" width="100" height="70" rx="16"/>' +
+        '<path class="minor" d="M0 200H390M0 380H390M60 0V760M200 0V760M340 0V760"/><path class="roads" d="M0 300H390M0 450C120 440 260 480 390 430M120 0V760M280 0C270 200 300 400 260 760M0 120L390 220"/>' +
+        '<path class="route" d="M90 470C120 430 120 330 200 300S270 220 300 150"/><circle class="dest" cx="300" cy="150" r="9"/><circle class="pulse" cx="90" cy="470" r="16"/><circle class="me" cx="90" cy="470" r="8"/></svg>' +
+        '<div class="msearch">Search Karachi</div><div class="msheet"><b>Clifton to Saddar</b><small>18 min · 9.4 km · light traffic</small><span>Go</span></div></div>' },
+    music: { n: "Music", st: "light", g: "linear-gradient(150deg,#c779ff,#ff5f9e)", glyph: '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
+      html: '<div class="app music"><p class="mh">Playing from <b>Evening drive</b></p><div class="cover"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="cvg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb36b"/><stop offset=".6" stop-color="#ff5f9e"/><stop offset="1" stop-color="#6b3fd6"/></linearGradient></defs><rect width="100" height="100" fill="url(#cvg)"/><circle cx="50" cy="52" r="18" fill="#ffe7a8"/><rect y="60" width="100" height="40" fill="#3a1d78"/><path d="M8 68h30M50 74h36M20 82h44M60 90h26" stroke="#ffb36b" stroke-width="2.4" stroke-linecap="round" opacity=".8"/></svg></div>' +
+        '<b class="tt">Harbour Lights</b><small class="ar">Sana Qureshi</small><div class="pb"><i></i></div><div class="tm"><span>1:12</span><span>-2:31</span></div>' +
+        '<div class="ctl"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2.4v14H6zM20 5v14L9.5 12z"/></svg><span class="pp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h4.2v15H6zM13.8 4.5H18v15h-4.2z"/></svg></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.6 5H18v14h-2.4zM4 5v14l10.5-7z"/></svg></div></div>' },
+    wallet: { n: "Wallet", st: "auto", g: "linear-gradient(150deg,#ffd36b,#ff8a3d)", glyph: '<rect x="3.5" y="6" width="17" height="13" rx="2.5"/><path d="M3.5 10h17M15 14.5h2.5"/>',
+      html: '<div class="app wallet"><div class="wh"><b>Wallet</b><span class="av">AK</span></div><div class="wcard"><small>Balance</small><b>PKR 48,250</b><span>•••• 4821 · Ali Khan</span></div>' +
+        '<div class="acts"><span><i>↑</i>Send</span><span><i>↓</i>Request</span><span><i>+</i>Top up</span><span><i>≡</i>Bills</span></div><h4>Today</h4>' +
+        '<ul class="tx"><li><i style="background:#ffd9c9"></i><span>Bilal Ahmed<small>Sent · 9:12 am</small></span><b>− PKR 1,200</b></li><li><i style="background:#c9efe4"></i><span>Salary<small>Received · 8:00 am</small></span><b class="in">+ PKR 85,000</b></li><li><i style="background:#ffe7a8"></i><span>Electricity bill<small>Paid · yesterday</small></span><b>− PKR 6,430</b></li></ul></div>' },
+    calc: { n: "Calculator", st: "light", g: "linear-gradient(150deg,#4a5459,#15191b)", glyph: '<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M8.5 7.5h7M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"/>',
+      html: '<div class="app calc"><p class="expr">8,300 × 1.5</p><p class="res">12,450</p><div class="keys"><span class="f">AC</span><span class="f">±</span><span class="f">%</span><span class="o">÷</span><span>7</span><span>8</span><span>9</span><span class="o">×</span><span>4</span><span>5</span><span>6</span><span class="o">−</span><span>1</span><span>2</span><span>3</span><span class="o">+</span><span class="z">0</span><span>.</span><span class="o">=</span></div></div>' }
+  };
+  var ORDER = ["notes", "weather", "maps", "music", "wallet", "calc"];
+  function svgGlyph(id) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + APPS[id].glyph + "</svg>"; }
+
+  // ---------- Build cards and home icons ----------
+  var cards = {}, iconEls = {}, icons = {};
+  ORDER.forEach(function (id, i) {
+    var a = APPS[id], el = document.createElement("div");
+    el.className = "card"; el.dataset.id = id; el.tabIndex = -1;
+    el.setAttribute("aria-label", a.n + ". Enter opens it, Delete closes it");
+    el.innerHTML = '<div class="lab" aria-hidden="true"><span class="li" style="background:' + a.g + '">' + svgGlyph(id) + "</span>" + a.n + '</div><div class="win" aria-hidden="true">' + a.html + '<div class="dimv"></div><div class="tint" style="background:' + a.g + '"></div></div>';
+    deck.appendChild(el);
+    cards[id] = { id: id, el: el, win: el.querySelector(".win"), dimv: el.querySelector(".dimv"), tint: el.querySelector(".tint"), lab: el.querySelector(".lab"), spin: 1, frozen: null,
+      dyS: Spring(0, 170, 20, render), sh: Spring(0, 210, 24, render) };
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "icon"; b.dataset.app = id; b.style.setProperty("--i", i);
+    b.setAttribute("aria-label", "Open " + a.n);
+    b.innerHTML = '<span class="tile" style="background:' + a.g + '">' + svgGlyph(id) + '</span><span aria-hidden="true">' + a.n + "</span>";
+    $("icons").appendChild(b); iconEls[id] = b;
+  });
+
+  // ---------- State ----------
+  var W = 390, H = 760, R0 = 46;
+  var recents = ORDER.slice(), flying = [], mode = "app";
+  var S = { main: "notes", gx: 0, gy: 0, gs: 1, grz: 0, gp: 0 };
+  var F = Spring(0, 190, 24, render);   // carousel position (which card is centred)
+  var U = Spring(0, 190, 22, render);   // 0 = app full screen, 1 = switcher layout
+  var HM = Spring(0, 200, 25, render);  // 0 = app/switcher, 1 = main card tucked into its home icon
+  var G = Spring(0, 210, 26, render);   // 1 = the main card follows the finger
+  var gest = null, cg = null;
+
+  function offsetIn(el) { var x = 0, y = 0; while (el && el !== phone) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; } return { x: x, y: y }; }
+  function measure() {
+    W = phone.clientWidth || 390; H = phone.clientHeight || 760;
+    R0 = parseFloat(getComputedStyle(phone).borderTopLeftRadius) || 0;
+    ORDER.forEach(function (id) {
+      var t = iconEls[id].firstChild, o = offsetIn(t);
+      icons[id] = { x: o.x + t.offsetWidth / 2 - W / 2, y: o.y + t.offsetHeight / 2 - H / 2, s: t.offsetWidth || 60 };
+    });
+  }
+
+  // Where card i sits right now: app layout blended into the switcher (U), the home icon (HM) and the finger (G)
+  function layoutT(c, i) {
+    var u = U.x, hm = HM.x, g = G.x, main = c.id === S.main;
+    var r = F.x - i + c.sh.x, ar = Math.abs(r);
+    var xa = ar <= 1 ? r * W * 1.06 : (r < 0 ? -1 : 1) * (W * 1.06 + (ar - 1) * W * 0.24);
+    var xs = r >= 0 ? r * W * 0.6 : r * W * 0.36;
+    var ss = 0.62 - Math.min(0.07, ar * 0.024);
+    var st = main ? 0 : Math.min(ar, 3) * 0.1, ui = u;
+    if (!main) { ui = clamp((u - st) / (1 - st), 0, 1); ui = 1 - (1 - ui) * (1 - ui); }  // older cards arrive a beat later
+    var uc = clamp(ui, 0, 1);
+    var T = { x: lerp(xa, xs, ui), y: -20 * ui, sx: lerp(1, ss, ui), sy: 0, ry: clamp(-r * 7, -18, 18) * uc, rz: 0, rad: lerp(R0, 30, uc), op: 1,
+      dim: clamp(-r * 0.15, 0, 0.42) * uc, lab: clamp(uc * 1.5 - 0.5, 0, 1), tint: 0 };
+    T.sy = T.sx;
+    if (hm > 0.0005) {
+      if (main && icons[c.id]) {
+        var I = icons[c.id];
+        T.x = lerp(T.x, I.x, hm); T.y = lerp(T.y, I.y, hm); T.sx = lerp(T.sx, I.s / W, hm); T.sy = lerp(T.sy, I.s / H, hm);
+        T.ry *= 1 - hm; T.rad = lerp(T.rad, 15, hm); T.tint = clamp(hm * 1.7 - 0.35, 0, 1); T.lab *= 1 - hm; T.dim *= 1 - hm;
+        T.op = clamp((1 - hm) * 10, 0, 1);  // hand over to the real icon at the very end
+      } else { T.op *= 1 - hm; T.sx *= 1 - 0.1 * hm; T.sy = T.sx; }
+    }
+    if (g > 0.0005 && main) {
+      T.x = lerp(T.x, S.gx, g); T.y = lerp(T.y, S.gy, g); T.sx = lerp(T.sx, S.gs, g); T.sy = lerp(T.sy, S.gs, g);
+      T.rz = lerp(T.rz, S.grz, g); T.ry *= 1 - g; T.rad = lerp(T.rad, lerp(R0, 34, S.gp), g); T.lab *= 1 - g; T.dim *= 1 - g; T.tint *= 1 - g;
+      T.op = lerp(T.op, 1, g);
+    }
+    return T;
+  }
+  function applyT(c, T, z) {
+    var dy = c.dyS.x, lift = clamp(-dy / (H * 0.9), 0, 1), op = T.op * (1 - lift * 0.7);
+    c.el.style.transform = "translate3d(" + T.x.toFixed(2) + "px," + (T.y + dy).toFixed(2) + "px,0) rotateY(" + T.ry.toFixed(2) + "deg) rotateZ(" + (T.rz + c.spin * lift * 14).toFixed(2) + "deg) scale(" + T.sx.toFixed(4) + "," + T.sy.toFixed(4) + ")";
+    c.win.style.borderRadius = (T.rad / T.sx).toFixed(1) + "px / " + (T.rad / T.sy).toFixed(1) + "px";
+    c.el.style.opacity = op.toFixed(3);
+    c.el.style.visibility = op < 0.01 ? "hidden" : "visible";
+    c.el.style.zIndex = z;
+    c.dimv.style.opacity = T.dim.toFixed(3); c.tint.style.opacity = T.tint.toFixed(3); c.lab.style.opacity = T.lab.toFixed(3);
+  }
+  function statusFor(id) { return id && APPS[id] && APPS[id].st === "auto" ? "var(--app-ink)" : "#fff"; }
+  function render() {
+    var u = U.x, hm = HM.x, g = G.x, seen = {};
+    recents.forEach(function (id, i) {
+      var c = cards[id]; seen[id] = 1;
+      applyT(c, layoutT(c, i), 50 - i + (id === S.main && mode !== "switch" ? 60 : 0));
+    });
+    flying.forEach(function (c) { seen[c.id] = 1; applyT(c, c.frozen, 45); });
+    ORDER.forEach(function (id) { if (!seen[id]) cards[id].el.style.visibility = "hidden"; });
+    var sw = Math.max(clamp(u, 0, 1) * (1 - clamp(hm, 0, 1)), clamp(g * S.gp * 1.6, 0, 1));
+    scrim.style.opacity = sw.toFixed(3);
+    home.style.visibility = mode !== "app" || u > 0.002 || hm > 0.002 || g > 0.002 ? "visible" : "hidden";
+    // the home screen sits a little zoomed while an app is open, and settles back as you land on it
+    home.style.transform = "scale(" + ((1 - 0.05 * sw) * (1 + 0.08 * (1 - clamp(hm, 0, 1)) * (1 - clamp(u, 0, 1)))).toFixed(4) + ")";
+    ORDER.forEach(function (id) { iconEls[id].classList.toggle("land", id === S.main && hm > 0.001 && hm < 0.9); });
+    var light = mode === "home" || sw > 0.45 || hm > 0.5;
+    phone.style.setProperty("--st", light ? "#fff" : statusFor(S.main));
+  }
+
+  function setMode(m) {
+    mode = m;
+    phone.classList.remove("m-app", "m-switch", "m-home"); phone.classList.add("m-" + m);
+    ORDER.forEach(function (id) {
+      var el = cards[id].el;
+      if (m === "switch") { el.setAttribute("role", "button"); el.tabIndex = 0; } else { el.removeAttribute("role"); el.tabIndex = -1; }
+    });
+  }
+  function finishAll() {
+    [F, U, HM, G].forEach(function (s) { s.finish(); });
+    ORDER.forEach(function (id) { cards[id].dyS.finish(); cards[id].sh.finish(); });
+  }
+  var toastEl = $("toast"), toastT = 0;
+  function toast(msg) { toastEl.textContent = msg; toastEl.classList.add("on"); announce(msg); clearTimeout(toastT); toastT = setTimeout(function () { toastEl.classList.remove("on"); }, 1700); }
+  function centreIdx() { return clamp(Math.round(F.t), 0, Math.max(0, recents.length - 1)); }
+  function focusCard(i) { if (Demo.on) return; var id = recents[i]; if (id) cards[id].el.focus({ preventScroll: true }); }
+
+  // ---------- Moves between app, switcher and home ----------
+  function toApp() { setMode("app"); U.to(0); G.to(0); }
+  function toSwitcher(byKey) {
+    if (!recents.length) { toast("No recent apps"); return; }
+    var fromHome = mode === "home";
+    if (recents.indexOf(S.main) < 0) S.main = recents[0];
+    setMode("switch");
+    if (fromHome) { F.set(recents.indexOf(S.main)); U.set(1); HM.to(0); } else U.to(1);
+    G.to(0);
+    buzz(10);
+    announce(recents.length + " recent apps. Drag sideways to browse, flick a card up to close it.");
+    if (byKey) focusCard(centreIdx());
+  }
+  function openCard(i) {
+    var id = recents[i]; if (!id) return;
+    S.main = id; setMode("app");
+    F.to(i); G.to(0);
+    U.to(0, null, function () { var k = recents.indexOf(S.main); if (k > 0) { recents.splice(k, 1); recents.unshift(S.main); } F.set(0); });
+    buzz(8);
+    announce(APPS[id].n + " opened");
+  }
+  function goHome() {
+    if (gest) return;
+    if (mode === "home") { var ic = $("icons"); ic.classList.remove("wig"); void ic.offsetWidth; ic.classList.add("wig"); return; }
+    var from = mode;
+    if (from === "switch" && recents.length) S.main = recents[centreIdx()];
+    setMode("home");
+    var landed = S.main;
+    HM.to(1, null, function () {
+      U.set(0); G.set(0);
+      var b = landed && iconEls[landed];
+      if (b) { b.classList.remove("hit"); void b.offsetWidth; b.classList.add("hit"); }
+    });
+    if (from === "app") U.to(0);
+    G.to(0);
+    announce("Home screen");
+  }
+  function openFromHome(id) {
+    if (gest) return;
+    finishAll();
+    var k = recents.indexOf(id); if (k >= 0) recents.splice(k, 1);
+    recents.unshift(id);
+    cards[id].dyS.set(0); cards[id].sh.set(0);
+    S.main = id; F.set(0); U.set(0); G.set(0); HM.set(1);
+    setMode("app");
+    HM.to(0);
+    buzz(8);
+    announce(APPS[id].n + " opened");
+  }
+  function dropFlying(c) { var k = flying.indexOf(c); if (k >= 0) flying.splice(k, 1); c.frozen = null; c.dyS.set(0); }
+  function closeCard(c, vy) {
+    var i = recents.indexOf(c.id); if (i < 0) return;
+    c.frozen = layoutT(c, i); c.spin = Math.random() < 0.5 ? -1 : 1;
+    var rightOfCentre = i < F.x - 0.001;
+    recents.splice(i, 1); flying.push(c);
+    // keep everyone where they are for a moment, then close the gap with a stagger
+    if (rightOfCentre) { F.x -= 1; F.t -= 1; }
+    recents.forEach(function (id, j) {
+      var o = cards[id], need = rightOfCentre ? (j < i ? 1 : 0) : (j >= i ? -1 : 0);
+      if (!need) return;
+      o.sh.set(o.sh.x + need);
+      setTimeout(function () { o.sh.to(0); }, reduce ? 0 : 60 + Math.abs(j - i) * 50);
+    });
+    var n = recents.length;
+    if (F.t > n - 1) F.to(Math.max(0, n - 1));
+    c.dyS.to(-H * 1.15, Math.min(-900, (vy || 0) * 1000), function () { dropFlying(c); });
+    if (S.main === c.id) S.main = recents[centreIdx()] || null;
+    buzz(12);
+    announce(APPS[c.id].n + " closed");
+    if (!n) { setMode("home"); U.to(0); HM.to(1); }
+  }
+  function clearAll() {
+    if (mode !== "switch" || !recents.length) return;
+    F.finish();
+    var list = recents.slice();
+    list.forEach(function (id, i) { var c = cards[id]; c.frozen = layoutT(c, i); c.spin = i % 2 ? 1 : -1; flying.push(c); });
+    recents = []; S.main = null;
+    list.slice().reverse().forEach(function (id, n) {
+      var c = cards[id];
+      setTimeout(function () { c.dyS.to(-H * 1.15, -1700, function () { dropFlying(c); }); }, reduce ? 0 : n * 65);
+    });
+    setMode("home"); U.to(0); HM.to(1);
+    buzz(16);
+    announce("All apps closed");
+  }
+
+  // ---------- Swipe up from the home bar ----------
+  function local(e) { var r = phone.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  function velocity(sm) {
+    var now = performance.now(), a = null, b = sm[sm.length - 1];
+    for (var i = 0; i < sm.length; i++) if (now - sm[i].t < 100) { a = sm[i]; break; }
+    if (!a || a === b || b.t - a.t < 8 || now - b.t > 100) return { x: 0, y: 0 };
+    return { x: (b.x - a.x) / (b.t - a.t), y: (b.y - a.y) / (b.t - a.t) };
+  }
+  function arm(v) { if (!gest || gest.armed === v) return; gest.armed = v; U.to(v ? 1 : 0); if (v) buzz(10); }
+  function hStart(x, y, demo, id) {
+    finishAll(); measure();
+    gest = { x0: x, y0: y, dx: 0, dy: 0, demo: demo, id: id, sm: [{ x: x, y: y, t: performance.now() }], armed: false, holdT: 0, from: mode };
+    if (mode === "app" && S.main) { S.gx = 0; S.gy = 0; S.gs = 1; S.grz = 0; S.gp = 0; G.set(1); }
+    phone.classList.add("dragging");
+  }
+  function hMove(x, y) {
+    var g = gest; g.dx = x - g.x0; g.dy = Math.max(0, g.y0 - y);
+    g.sm.push({ x: x, y: y, t: performance.now() }); if (g.sm.length > 12) g.sm.shift();
+    if (g.from !== "app" || !S.main) return;
+    var p = Math.min(1, g.dy / (H * 0.55)), s = 1 - 0.5 * p;
+    S.gp = p; S.gs = s; S.gx = g.dx * 0.85; S.gy = (H / 2) * (1 - s) - g.dy * 0.92; S.grz = g.dx * 0.015;
+    // holding still for a moment (or pulling far) brings in the other cards
+    clearTimeout(g.holdT);
+    if (!g.armed && g.dy > H * 0.1) g.holdT = setTimeout(function () { if (gest === g) arm(true); }, 150);
+    if (g.dy > H * 0.42) arm(true);
+    if (g.armed && g.dy < H * 0.06) arm(false);
+    render();
+  }
+  function hEnd(cancel) {
+    var g = gest; if (!g) return;
+    gest = null; clearTimeout(g.holdT); phone.classList.remove("dragging");
+    var vy = -velocity(g.sm).y; // up is positive
+    if (g.from === "app" && S.main) {
+      if (cancel || (g.dy < 36 && !g.armed)) toApp();
+      else if (g.armed && vy < 0.9) toSwitcher();
+      else if (vy > 0.3 || g.dy > H * 0.22) goHome();
+      else toSwitcher();
+    } else if (g.from === "home" && g.dy > 40) toSwitcher();
+    else if (g.from === "switch" && g.dy > 40) goHome();
+    else if (g.from === "app") toApp();
+  }
+  hbz.addEventListener("pointerdown", function (e) {
+    if (gest || cg || (e.pointerType === "mouse" && e.button !== 0)) return;
+    e.preventDefault();
+    try { hbz.setPointerCapture(e.pointerId); } catch (x) {}
+    var p = local(e); hStart(p.x, p.y, false, e.pointerId);
+  });
+  hbz.addEventListener("pointermove", function (e) { if (gest && !gest.demo && gest.id === e.pointerId) { var p = local(e); hMove(p.x, p.y); } });
+  hbz.addEventListener("pointerup", function (e) { if (gest && !gest.demo && gest.id === e.pointerId) hEnd(false); });
+  hbz.addEventListener("pointercancel", function (e) { if (gest && !gest.demo && gest.id === e.pointerId) hEnd(true); });
+
+  // ---------- Cards in the switcher: drag sideways, flick up, tap ----------
+  function cStart(cid, x, y, demo, pid) {
+    F.set(F.x); cards[cid].dyS.set(cards[cid].dyS.x);
+    cg = { cid: cid, x0: x, y0: y, axis: null, F0: F.x, sm: [{ x: x, y: y, t: performance.now() }], t0: performance.now(), demo: demo, id: pid };
+  }
+  function cMove(x, y) {
+    var g = cg, dx = x - g.x0, dy = y - g.y0;
+    g.sm.push({ x: x, y: y, t: performance.now() }); if (g.sm.length > 12) g.sm.shift();
+    if (!g.axis && Math.sqrt(dx * dx + dy * dy) > 8) g.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    if (g.axis === "x") {
+      var f = g.F0 + dx / (W * 0.4), n = recents.length - 1;
+      if (f < 0) f *= 0.3; else if (f > n) f = n + (f - n) * 0.3;
+      F.set(f);
+    } else if (g.axis === "y") cards[g.cid].dyS.set(dy < 0 ? dy : dy * 0.25);
+  }
+  function cEnd(cancel) {
+    var g = cg; if (!g) return;
+    cg = null;
+    var v = velocity(g.sm), c = cards[g.cid], n = recents.length - 1;
+    if (recents.indexOf(g.cid) < 0) return;
+    if (!g.axis) { if (!cancel && performance.now() - g.t0 < 600) openCard(recents.indexOf(g.cid)); return; }
+    if (g.axis === "x") F.to(clamp(Math.round(F.x + (v.x * 170) / (W * 0.4)), 0, n), (v.x * 1000) / (W * 0.4));
+    else if (!cancel && (c.dyS.x < -H * 0.16 || (v.y < -0.5 && c.dyS.x < -30))) closeCard(c, v.y);
+    else c.dyS.to(0);
+  }
+  deck.addEventListener("pointerdown", function (e) {
+    if (mode !== "switch" || gest || cg || (e.pointerType === "mouse" && e.button !== 0)) return;
+    var el = e.target.closest(".card"); if (!el || recents.indexOf(el.dataset.id) < 0) return;
+    try { deck.setPointerCapture(e.pointerId); } catch (x) {}
+    var p = local(e); cStart(el.dataset.id, p.x, p.y, false, e.pointerId);
+  });
+  deck.addEventListener("pointermove", function (e) { if (cg && !cg.demo && cg.id === e.pointerId) { var p = local(e); cMove(p.x, p.y); } });
+  deck.addEventListener("pointerup", function (e) { if (cg && !cg.demo && cg.id === e.pointerId) cEnd(false); });
+  deck.addEventListener("pointercancel", function (e) { if (cg && !cg.demo && cg.id === e.pointerId) cEnd(true); });
+  deck.addEventListener("keydown", function (e) {
+    if (mode !== "switch") return;
+    var el = e.target.closest(".card"); if (!el) return;
+    var i = recents.indexOf(el.dataset.id); if (i < 0) return;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      var j = clamp(i + (e.key === "ArrowLeft" ? 1 : -1), 0, recents.length - 1);
+      F.to(j); cards[recents[j]].el.focus({ preventScroll: true });
+    } else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openCard(i); $("recBtn").focus({ preventScroll: true }); }
+    else if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault(); closeCard(cards[recents[i]], -1);
+      if (recents.length) focusCard(clamp(i, 0, recents.length - 1)); else $("homeBtn").focus({ preventScroll: true });
+    } else if (e.key === "Escape") { e.preventDefault(); openCard(centreIdx()); $("recBtn").focus({ preventScroll: true }); }
+  });
+  scrim.addEventListener("click", function () { if (mode === "switch") goHome(); });
+
+  // ---------- Buttons ----------
+  $("homeBtn").addEventListener("click", function () { if (!gest && !cg) goHome(); });
+  $("recBtn").addEventListener("click", function () {
+    if (gest || cg) return;
+    if (mode === "switch") openCard(centreIdx()); else toSwitcher(true);
+  });
+  $("clearAll").addEventListener("click", function () { clearAll(); });
+  $("icons").addEventListener("click", function (e) {
+    var b = e.target.closest(".icon"); if (!b || mode !== "home") return;
+    openFromHome(b.dataset.app);
+  });
+  // an overflow-hidden phone can still be scrolled by focus; keep it pinned
+  phone.addEventListener("scroll", function () { phone.scrollTop = 0; phone.scrollLeft = 0; });
+  addEventListener("resize", function () { measure(); render(); });
+
+  // ---------- Start: Notes is open ----------
+  measure(); setMode("app"); render();
+
+  // ---------- Auto demo ----------
+  Demo.onStop(function () { if (gest && gest.demo) hEnd(false); if (cg && cg.demo) cEnd(false); });
+  function dSwipe(at, dist, ms, hold) {
+    Demo.later(at, function () {
+      measure();
+      var x = W * 0.5, y0 = H - 14;
+      Demo.glide(x, y0, 360, null, function () {
+        Demo.press(true); hStart(x, y0, true, -1);
+        Demo.glide(x + 8, y0 - dist, ms, function (e, gx, gy) { if (gest && gest.demo) hMove(gx, gy); }, function () {
+          Demo.later(hold, function () { Demo.press(false); if (gest && gest.demo) hEnd(false); });
+        });
+      });
+    });
+    return at + 360 + ms + hold + 60;
+  }
+  function dCard(at, fx, fy, dx, dy, ms) {
+    Demo.later(at, function () {
+      if (mode !== "switch" || !recents.length) return;
+      var id = recents[centreIdx()], p = Demo.pt(cards[id].win, fx, fy);
+      Demo.glide(p.x, p.y, 380, null, function () {
+        Demo.press(true); cStart(id, p.x, p.y, true, -1);
+        Demo.glide(p.x + dx, p.y + dy, ms, function (e, gx, gy) { if (cg && cg.demo) cMove(gx, gy); }, function () {
+          Demo.press(false); if (cg && cg.demo) cEnd(false);
+        });
+      });
+    });
+    return at + 380 + ms + 60;
+  }
+  function dTap(at, get, fn) {
+    Demo.later(at, function () {
+      var el = get(); if (!el) return;
+      var p = Demo.pt(el, 0.5, 0.5);
+      Demo.glide(p.x, p.y, 420, null, function () {
+        Demo.press(true);
+        Demo.later(130, function () { Demo.press(false); fn(el); });
+      });
+    });
+    return at + 570;
+  }
+  var round = 0;
+  function demoLoop() {
+    if (!Demo.on) return;
+    measure();
+    if (mode !== "app" || S.main !== "notes" || recents.length < ORDER.length) { // quietly start from Notes with every app in recents
+      finishAll(); flying.slice().forEach(dropFlying);
+      recents = ORDER.slice(); S.main = "notes"; F.set(0); U.set(0); HM.set(0); G.set(0);
+      ORDER.forEach(function (id) { cards[id].sh.set(0); cards[id].dyS.set(0); });
+      setMode("app"); render();
+    }
+    var t = 30, clear = round++ % 3 === 2;
+    Demo.at(W * 0.62, H * 0.8);
+    t = dSwipe(t, H * 0.34, 620, 280);                       // pull up and hold: the switcher opens
+    t = dCard(t + 420, 0.3, 0.55, W * 0.68, 10, 700);       // fan through to older apps
+    if (clear) {
+      t = dTap(t + 500, function () { return $("clearAll"); }, function () { clearAll(); });
+    } else {
+      t = dCard(t + 420, 0.5, 0.62, 12, -H * 0.36, 300);    // flick one card away
+      t = dTap(t + 700, function () { var id = recents[centreIdx()]; return id && cards[id].win; }, function () { openCard(centreIdx()); });
+      t = dSwipe(t + 1100, H * 0.3, 230, 0);                // quick flick up: home
+    }
+    t = dTap(t + 900, function () { return iconEls.notes; }, function (el) { el.click(); });
+    Demo.later(t + 500, Demo.hide);
+    Demo.later(t + 2400, demoLoop);
+  }
+  Demo.later(150, demoLoop);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,857 @@
+<!doctype html>
+<!-- Chill & Craft · Shake Slate · free to use (asaandesk.com/craft) -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shake Slate · a step counter you shake to clear</title>
+<script>
+  // Theme: ?theme=light|dark in the URL wins, otherwise follow the system setting.
+  (function () {
+    var pick = new URLSearchParams(location.search).get("theme");
+    var mq = matchMedia("(prefers-color-scheme: dark)");
+    function apply() {
+      document.documentElement.dataset.theme = pick === "light" || pick === "dark" ? pick : mq.matches ? "dark" : "light";
+    }
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+  })();
+</script>
+<style>
+  /* ---------- Colours: toy red, silver and gold in light; charcoal with red edges and a glowing line in dark ---------- */
+  :root {
+    --bg-a: #fff1ea; --bg-b: #f5e1d3; --glow: rgba(225, 53, 43, 0.2); --dot: rgba(90, 25, 10, 0.07);
+    --screen: #fbf6f1; --card: #ffffff; --edge: #f0e1d7; --ink: #2a1512; --muted: #8a6c64;
+    --accent: #e1352b; --accent-ink: #ffffff; --focus: #b8211a; --bezel: #1c1110; --bezel-edge: #3d2522; --shadow: rgba(90, 25, 15, 0.32);
+    --frame-a: #f24b3e; --frame-b: #c3241b; --frame-edge: #9b1a12; --frame-shadow: rgba(160, 30, 20, 0.45);
+    --slate-a: #e2e4df; --slate-b: #c3c6c0; --ink-line: #3e4144; --powder: #7b7e80; --map: rgba(60, 64, 68, 0.2);
+    --gold-a: #fff0b8; --gold-b: #e9b434; --gold-c: #a5700c;
+    --hint-bg: rgba(255, 255, 255, 0.5); --hint-ink: rgba(40, 42, 44, 0.62);
+    --ghost-b: rgba(255, 255, 255, 0.95); --ghost-f: rgba(255, 255, 255, 0.3);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-a: #0c0a0a; --bg-b: #1f1210; --glow: rgba(225, 53, 43, 0.17); --dot: rgba(255, 200, 190, 0.05);
+    --screen: #121011; --card: #1d191a; --edge: #2e2627; --ink: #f7eeeb; --muted: #a8928d;
+    --accent: #ff4f42; --accent-ink: #1a0705; --focus: #ff8f85; --bezel: #050303; --bezel-edge: #2e2120; --shadow: rgba(0, 0, 0, 0.7);
+    --frame-a: #302d30; --frame-b: #19181a; --frame-edge: #e1352b; --frame-shadow: rgba(225, 53, 43, 0.28);
+    --slate-a: #222528; --slate-b: #141618; --ink-line: #ffe7e0; --powder: #ff8f7f; --map: rgba(255, 220, 210, 0.13);
+    --gold-a: #ffe9a6; --gold-b: #d9a32c; --gold-c: #8a5c08;
+    --hint-bg: rgba(0, 0, 0, 0.4); --hint-ink: rgba(255, 226, 218, 0.7);
+    --ghost-b: rgba(255, 255, 255, 0.9); --ghost-f: rgba(255, 255, 255, 0.2);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg-a); -webkit-font-smoothing: antialiased; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+
+  /* ---------- Stage ---------- */
+  .stage { position: relative; min-height: 100vh; min-height: 100dvh; overflow: hidden; overflow: clip; display: flex; align-items: center; justify-content: center; gap: 72px; padding: 22px 16px; background: radial-gradient(var(--dot) 1px, transparent 1.4px) 0 0 / 20px 20px, linear-gradient(150deg, var(--bg-a), var(--bg-b)); }
+  .glow { position: absolute; width: 64vmax; height: 64vmax; left: 50%; top: 50%; margin: -32vmax 0 0 -32vmax; border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 62%); pointer-events: none; animation: wander 17s ease-in-out infinite alternate; }
+  @keyframes wander { to { transform: translate(7vmax, -6vmax) scale(1.12); } }
+  .caption { display: none; position: relative; z-index: 1; max-width: 300px; }
+  .eyebrow { margin: 0 0 12px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow i { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 3px; background: linear-gradient(135deg, var(--accent), var(--gold-b)); }
+  .caption h2 { margin: 0 0 14px; font-size: 48px; line-height: 1; letter-spacing: -0.035em; }
+  .caption p { margin: 0 0 22px; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .caption ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .caption li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .caption kbd { font: inherit; font-size: 12px; font-weight: 750; min-width: 70px; text-align: center; padding: 4px 10px; border-radius: 9px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 2px 0 var(--edge); }
+  @media (min-width: 900px) { .caption { display: block; } }
+
+  /* ---------- Phone ---------- */
+  .phone {
+    position: relative; z-index: 1; width: min(390px, 100%);
+    height: clamp(540px, calc(100vh - 44px), 760px); height: clamp(540px, calc(100dvh - 44px), 760px);
+    background: var(--screen); border-radius: 46px; overflow: hidden; isolation: isolate;
+    box-shadow: 0 0 0 10px var(--bezel), 0 0 0 11px var(--bezel-edge), 0 50px 90px -30px var(--shadow);
+  }
+  .status { position: absolute; left: 0; right: 0; top: 0; z-index: 30; height: 46px; padding: 8px 30px 0 34px; display: flex; align-items: center; justify-content: space-between; font-size: 14.5px; font-weight: 700; color: var(--ink); pointer-events: none; }
+  .status svg { width: 62px; height: 13px; fill: currentColor; }
+  .home-bar { position: absolute; left: 50%; bottom: 6px; z-index: 31; width: 130px; height: 5px; margin-left: -65px; border-radius: 3px; background: var(--ink); opacity: 0.35; pointer-events: none; }
+  @media (max-width: 480px) {
+    .stage { padding: 0; }
+    .phone { width: 100%; height: 100vh; height: 100dvh; border-radius: 0; box-shadow: none; }
+    .status { padding: 6px 20px 0 22px; }
+  }
+
+  /* ---------- App layout ---------- */
+  .app { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; padding: 52px 18px 24px; }
+  .top { flex: none; }
+  .top small { display: block; font-size: 12.5px; font-weight: 650; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
+  .top h1 { margin: 0; font-size: 25px; font-weight: 850; letter-spacing: -0.035em; white-space: nowrap; }
+  .chip { flex: none; font-size: 12px; font-weight: 760; padding: 6px 11px; border-radius: 99px; background: var(--card); border: 1px solid var(--edge); color: var(--muted); }
+  .chip b { color: var(--ink); }
+
+  /* Stats card with a rolling odometer and a goal ring */
+  .stats { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 16px; border-radius: 22px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 14px 26px -22px var(--shadow); }
+  .count { flex: 1; min-width: 0; }
+  .count .lbl { margin: 0 0 4px; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .odo { display: flex; font-size: 38px; line-height: 1; height: 1em; font-weight: 860; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  /* each digit sits in a drum window: taller than the digit, clipped, with soft top and bottom fades */
+  .dg { position: relative; display: block; width: 0.6em; height: 1.4em; margin: -0.2em 0; overflow: hidden; transition: opacity 0.4s; -webkit-mask-image: linear-gradient(transparent, #000 24%, #000 76%, transparent); mask-image: linear-gradient(transparent, #000 24%, #000 76%, transparent); }
+  .dg.lead { opacity: 0.2; }
+  .col { display: block; transition: transform 0.62s cubic-bezier(0.3, 1.45, 0.5, 1); }
+  .col i { display: block; height: 1.4em; line-height: 1.4em; font-style: normal; text-align: center; }
+  .comma { display: block; width: 0.26em; height: 1em; text-align: center; }
+  .sub { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sub b { color: var(--ink); font-weight: 750; }
+  .ring { position: relative; flex: none; width: 62px; height: 62px; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+  .ring circle { fill: none; stroke-width: 6.5; stroke-linecap: round; }
+  .ring .trk { stroke: var(--edge); }
+  .ring .bar { stroke: var(--accent); transition: stroke-dashoffset 0.45s cubic-bezier(0.3, 1.3, 0.5, 1), stroke 0.4s; }
+  .ring.done .bar { stroke: var(--gold-b); }
+  .ring span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12.5px; font-weight: 820; font-variant-numeric: tabular-nums; }
+  .ring i { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: var(--gold-b); opacity: 0; pointer-events: none; }
+  .ring i:nth-of-type(2n) { background: var(--accent); width: 5px; height: 5px; }
+  .ring.party i { animation: spark 0.95s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+  .ring i:nth-of-type(1) { --a: 0deg; } .ring i:nth-of-type(2) { --a: 45deg; animation-delay: 0.03s; }
+  .ring i:nth-of-type(3) { --a: 90deg; } .ring i:nth-of-type(4) { --a: 135deg; animation-delay: 0.05s; }
+  .ring i:nth-of-type(5) { --a: 180deg; } .ring i:nth-of-type(6) { --a: 225deg; animation-delay: 0.04s; }
+  .ring i:nth-of-type(7) { --a: 270deg; } .ring i:nth-of-type(8) { --a: 315deg; animation-delay: 0.06s; }
+  @keyframes spark { from { opacity: 1; transform: rotate(var(--a)) translateY(-18px) scale(0.4); } to { opacity: 0; transform: rotate(var(--a)) translateY(-44px) scale(1.1); } }
+  .ring.party { animation: ringPop 0.7s cubic-bezier(0.3, 1.8, 0.5, 1); }
+  @keyframes ringPop { 40% { transform: scale(1.16); } }
+
+  /* ---------- The sketch toy ---------- */
+  .toy { flex: 1; min-height: 150px; display: flex; align-items: center; justify-content: center; }
+  .frame {
+    position: relative; width: 100%; height: 100%; max-height: 440px; padding: 15px 15px 60px; border-radius: 30px;
+    background: linear-gradient(160deg, var(--frame-a), var(--frame-b));
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.32), inset 0 -5px 0 rgba(0, 0, 0, 0.2), 0 0 0 2px var(--frame-edge), 0 20px 34px -16px var(--frame-shadow);
+    touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; will-change: transform;
+  }
+  .frame.grab { cursor: grabbing; }
+  .frame::before { content: ""; position: absolute; left: 26px; right: 26px; top: 5px; height: 5px; border-radius: 4px; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: gleam 6s ease-in-out infinite; pointer-events: none; }
+  @keyframes gleam { 0%, 100% { background-position: -60% 0; } 50% { background-position: 160% 0; } }
+  .screen { position: relative; height: 100%; border-radius: 12px; overflow: hidden; background: radial-gradient(120% 90% at 30% 20%, rgba(255, 255, 255, 0.35), transparent 60%), linear-gradient(170deg, var(--slate-a), var(--slate-b)); box-shadow: inset 0 3px 9px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(0, 0, 0, 0.14); }
+  .screen::after { content: ""; position: absolute; inset: 0; background: radial-gradient(rgba(255, 255, 255, 0.3) 0.6px, transparent 0.9px) 0 0 / 3px 3px; opacity: 0.4; pointer-events: none; }
+  .screen canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .pen { position: absolute; left: 0; top: 0; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: var(--ink-line); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-line) 18%, transparent); pointer-events: none; animation: penPulse 1.6s ease-in-out infinite; z-index: 2; }
+  @keyframes penPulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--ink-line) 6%, transparent); } }
+  .hint { position: absolute; left: 50%; top: 8px; z-index: 3; transform: translateX(-50%); max-width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; font-weight: 780; letter-spacing: 0.07em; text-transform: uppercase; padding: 4px 10px; border-radius: 99px; background: var(--hint-bg); color: var(--hint-ink); white-space: nowrap; pointer-events: none; transition: opacity 0.3s; }
+  .sheen { position: absolute; inset: 0; z-index: 2; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.5) 50%, transparent 70%); transform: translateX(-120%); pointer-events: none; }
+  .sheen.go { animation: sweep 0.55s ease-out; }
+  .sheen.go.rev { animation-name: sweepR; }
+  @keyframes sweep { from { transform: translateX(-120%); } to { transform: translateX(120%); } }
+  @keyframes sweepR { from { transform: translateX(120%); } to { transform: translateX(-120%); } }
+  .plate { position: absolute; left: 72px; right: 72px; bottom: 18px; text-align: center; font-size: 18px; font-style: italic; font-weight: 880; letter-spacing: 0.01em; white-space: nowrap; background: linear-gradient(90deg, var(--gold-c), var(--gold-a) 45%, var(--gold-b) 60%, var(--gold-c)); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shine 5s linear infinite; pointer-events: none; }
+  @keyframes shine { to { background-position: -220% 0; } }
+  .knob { position: absolute; bottom: 9px; width: 46px; height: 46px; padding: 0; border: 0; border-radius: 50%; background: none; touch-action: none; cursor: grab; }
+  .knob.l { left: 14px; } .knob.r { right: 14px; }
+  .knob .face { position: absolute; inset: 0; border-radius: 50%; background: repeating-conic-gradient(rgba(0, 0, 0, 0.16) 0 5deg, transparent 5deg 14deg), radial-gradient(circle at 36% 30%, var(--gold-a), var(--gold-b) 56%, var(--gold-c)); box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28), 0 7px 12px -4px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.6); transition: box-shadow 0.2s; }
+  .knob .face::after { content: ""; position: absolute; left: 50%; top: 5px; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: rgba(255, 255, 255, 0.9); box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.18); }
+  .knob .cap { position: absolute; inset: 13px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0) 70%); pointer-events: none; }
+  .knob.held { cursor: grabbing; }
+  .knob.held .face { box-shadow: 0 1px 0 rgba(0, 0, 0, 0.28), 0 3px 8px -2px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.6), 0 0 0 4px rgba(255, 233, 160, 0.45); }
+  .knob:focus-visible { outline: 3px solid var(--gold-a); outline-offset: 3px; }
+
+  /* ---------- Buttons ---------- */
+  .ctrls { flex: none; display: flex; gap: 10px; }
+  .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 46px; padding: 0 14px; border-radius: 15px; border: 1px solid var(--edge); background: var(--card); font-size: 14.5px; font-weight: 780; letter-spacing: -0.01em; transition: transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1), background 0.25s, box-shadow 0.25s; }
+  .btn:active { transform: scale(0.95); }
+  .btn svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .btn.pri { flex: 1.35; border-color: transparent; background: var(--accent); color: var(--accent-ink); box-shadow: 0 10px 18px -10px var(--frame-shadow); }
+  .btn.pri.on { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent), 0 10px 18px -10px var(--frame-shadow); }
+  .btn.pri.on .legs { animation: stride 0.42s ease-in-out infinite alternate; transform-origin: 12px 13px; }
+  @keyframes stride { from { transform: skewX(-14deg); } to { transform: skewX(14deg); } }
+  .btn[hidden] { display: none; }
+
+  /* ---------- Saved days ---------- */
+  .hist { flex: none; }
+  .hist h2 { display: flex; justify-content: space-between; margin: 0 0 7px; font-size: 11px; font-weight: 820; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .cards { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -18px; padding: 0 18px 2px; -webkit-mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 56px), transparent); }
+  .cards::-webkit-scrollbar { display: none; }
+  .day { flex: none; display: grid; grid-template-columns: 44px auto; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 14px; background: var(--card); border: 1px solid var(--edge); }
+  .day svg { display: block; width: 44px; height: 30px; border-radius: 7px; background: linear-gradient(170deg, var(--slate-a), var(--slate-b)); }
+  .day path { fill: none; stroke: var(--ink-line); stroke-width: 1.4; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+  .day b { display: block; font-size: 13.5px; font-weight: 820; font-variant-numeric: tabular-nums; }
+  .day small { display: block; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .day.pop { animation: pop 0.75s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+  .day.pop svg { animation: flash 1s ease-out; }
+  @keyframes pop { from { opacity: 0; transform: translateY(18px) scale(0.4); } }
+  @keyframes flash { from { box-shadow: 0 0 0 4px var(--gold-b); } to { box-shadow: 0 0 0 0 transparent; } }
+
+  /* Short screens (gallery cards): tighten the rhythm */
+  @media (max-height: 720px) {
+    .app { gap: 9px; padding-top: 48px; }
+    .top h1 { font-size: 22px; }
+    .stats { padding: 9px 12px 9px 14px; }
+    .odo { font-size: 32px; }
+    .ring { width: 54px; height: 54px; }
+    .sub { margin-top: 4px; }
+    .btn { height: 42px; }
+  }
+
+  /* ---------- Ghost finger (auto demo) ---------- */
+  .ghost { position: absolute; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; z-index: 40; pointer-events: none; background: var(--ghost-f); border: 2px solid var(--ghost-b); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); opacity: 0; transition: opacity 0.3s; }
+  .ghost::after { content: ""; position: absolute; inset: 11px; border-radius: 50%; background: var(--ghost-b); opacity: 0.5; transform: scale(0.45); transition: transform 0.18s; }
+  .ghost.on { opacity: 1; }
+  .ghost.press::after { transform: scale(1); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glow, .frame::before, .plate, .pen { animation: none !important; }
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="glow" aria-hidden="true"></div>
+  <section class="caption" aria-hidden="true">
+    <p class="eyebrow"><i></i>Mobile interactions</p>
+    <h2>Shake Slate</h2>
+    <p>Your walk draws itself on a sketch toy as the steps come in. When the day is done, grab the slate and shake it: the line crumbles into powder and the day is saved.</p>
+    <ul>
+      <li><kbd>Walk</kbd> counts steps and draws the route</li>
+      <li><kbd>Wiggle</kbd> drag the slate side to side to shake</li>
+      <li><kbd>Knobs</kbd> turn them to doodle</li>
+      <li><kbd>S</kbd> shakes, arrows turn a knob</li>
+    </ul>
+  </section>
+
+  <div class="phone" id="phone">
+    <div class="status" aria-hidden="true">
+      <span id="clock">9:41</span>
+      <svg viewBox="0 0 62 13"><rect x="0" y="8" width="3" height="5" rx="1"/><rect x="5" y="5.5" width="3" height="7.5" rx="1"/><rect x="10" y="3" width="3" height="10" rx="1"/><rect x="15" y="0.5" width="3" height="12.5" rx="1"/><rect x="36" y="1" width="22" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="38" y="3" width="16" height="7" rx="1.5"/><rect x="59" y="4.5" width="2" height="4" rx="1"/></svg>
+    </div>
+
+    <div class="app">
+      <header class="top">
+        <small id="dateLine">Today · Model Town Park</small>
+        <div class="row"><h1>Today's walk</h1><span class="chip">Goal <b>8,000</b></span></div>
+      </header>
+
+      <section class="stats" aria-label="Today's steps">
+        <div class="count">
+          <p class="lbl">Steps today</p>
+          <div class="odo" id="odo" aria-hidden="true"></div>
+          <p class="sr-only" id="stepsSr">0 steps</p>
+          <p class="sub"><b id="km">0.0</b> km · <b id="kcal">0</b> kcal</p>
+        </div>
+        <div class="ring" id="ring" aria-hidden="true">
+          <svg viewBox="0 0 64 64"><circle class="trk" cx="32" cy="32" r="26"/><circle class="bar" id="ringBar" cx="32" cy="32" r="26" stroke-dasharray="163.4" stroke-dashoffset="163.4"/></svg>
+          <span id="pct">0%</span>
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+      </section>
+
+      <section class="toy" aria-label="Sketch slate">
+        <div class="frame" id="frame">
+          <div class="screen" id="screen">
+            <canvas id="cv" aria-hidden="true"></canvas>
+            <span class="pen" id="pen" aria-hidden="true"></span>
+            <span class="sheen" id="sheen" aria-hidden="true"></span>
+            <span class="hint" id="hint" aria-hidden="true">Grab and wiggle to shake</span>
+          </div>
+          <span class="plate" aria-hidden="true">Shake Slate</span>
+          <button class="knob l" id="knobL" type="button" aria-label="Left knob: draws left and right. Use the left and right arrow keys."><span class="face" id="faceL"></span><span class="cap"></span></button>
+          <button class="knob r" id="knobR" type="button" aria-label="Right knob: draws up and down. Use the up and down arrow keys."><span class="face" id="faceR"></span><span class="cap"></span></button>
+        </div>
+      </section>
+
+      <div class="ctrls">
+        <button class="btn pri" id="walkBtn" type="button" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13" cy="4" r="2"/><path d="M11 21l2-6 3 2v4M9.5 12l1.5-4.5 4 2 2.5 2.5M11 7.5L7.5 9 6 12.5"/><path class="legs" d="M13 15l-1.5-4.5"/></svg>
+          <span id="walkLbl">Walk</span>
+        </button>
+        <button class="btn" id="shakeBtn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="18" rx="2"/><path d="M4.5 8.5c-1 2-1 5 0 7M19.5 8.5c1 2 1 5 0 7M2 6.5c-1.5 3.3-1.5 7.7 0 11M22 6.5c1.5 3.3 1.5 7.7 0 11"/></svg>
+          Shake
+        </button>
+        <button class="btn" id="undoBtn" type="button" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+          Undo
+        </button>
+      </div>
+
+      <section class="hist" aria-label="Saved days">
+        <h2><span>Saved days</span><span id="histCount">3</span></h2>
+        <div class="cards" id="cards"></div>
+      </section>
+    </div>
+
+    <div class="home-bar" aria-hidden="true"></div>
+    <div class="ghost" id="ghost" aria-hidden="true"></div>
+    <p class="sr-only" id="live" aria-live="polite"></p>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var phone = $("phone"), live = $("live");
+
+  // Screen-reader status line (quiet while the demo plays)
+  function announce(msg) { if (Demo.on) return; live.textContent = ""; setTimeout(function () { live.textContent = msg; }, 30); }
+
+  // Gentle buzz on phones, only after a real tap (never during the demo, so no browser warnings)
+  function buzz(ms) {
+    try { if (!Demo.on && navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(ms); } catch (e) {}
+  }
+
+  // A small spring: s.to(target[, velocity]); frame(x, v) paints. Reduced motion jumps straight to the target.
+  function Spring(x, k, c, frame) {
+    var s = { x: x, v: 0, t: x, k: k || 170, c: c || 18, raf: 0, frame: frame }, last = 0;
+    function tick(now) {
+      var dt = Math.min(0.05, (now - last) / 1000); last = now;
+      for (var i = 0; i < 4; i++) { var h = dt / 4, a = -s.k * (s.x - s.t) - s.c * s.v; s.v += a * h; s.x += s.v * h; }
+      if (Math.abs(s.v) < 0.01 && Math.abs(s.x - s.t) < 0.01) { s.x = s.t; s.v = 0; s.raf = 0; s.frame(s.x, 0); return; }
+      s.frame(s.x, s.v); s.raf = requestAnimationFrame(tick);
+    }
+    s.to = function (t, v) {
+      s.t = t; if (v !== undefined) s.v = v;
+      if (reduce) { cancelAnimationFrame(s.raf); s.raf = 0; s.x = t; s.v = 0; s.frame(t, 0); return; }
+      if (!s.raf) { last = performance.now(); s.raf = requestAnimationFrame(tick); }
+    };
+    s.set = function (x) { cancelAnimationFrame(s.raf); s.raf = 0; s.x = s.t = x; s.v = 0; s.frame(x, 0); };
+    return s;
+  }
+
+  // ---------- Auto demo: a ghost finger drives the same functions a real finger does ----------
+  var Demo = (function () {
+    var d = { on: !reduce, timers: [], raf: 0, stops: [] }, ghost = $("ghost"), gx = 0, gy = 0;
+    d.pt = function (el, fx, fy) {
+      var r = el.getBoundingClientRect(), p = phone.getBoundingClientRect();
+      return { x: r.left - p.left + r.width * (fx == null ? 0.5 : fx), y: r.top - p.top + r.height * (fy == null ? 0.5 : fy) };
+    };
+    d.later = function (ms, fn) { d.timers.push(setTimeout(function () { if (d.on) fn(); }, ms)); };
+    d.at = function (x, y) { gx = x; gy = y; ghost.style.transform = "translate(" + x + "px," + y + "px)"; ghost.classList.add("on"); };
+    d.press = function (v) { ghost.classList.toggle("press", !!v); };
+    d.hide = function () { ghost.classList.remove("on", "press"); };
+    d.visible = function () { return ghost.classList.contains("on"); };
+    d.glide = function (x, y, ms, step, done) {
+      var x0 = gx, y0 = gy, t0 = performance.now();
+      cancelAnimationFrame(d.raf);
+      d.raf = requestAnimationFrame(function f(now) {
+        if (!d.on) return;
+        var k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        d.at(x0 + (x - x0) * e, y0 + (y - y0) * e);
+        if (step) step(e, gx, gy);
+        if (k < 1) d.raf = requestAnimationFrame(f); else if (done) done();
+      });
+    };
+    d.onStop = function (fn) { d.stops.push(fn); };
+    d.stop = function () {
+      if (!d.on) return;
+      d.on = false; d.timers.forEach(clearTimeout); d.timers = []; cancelAnimationFrame(d.raf); d.hide();
+      d.stops.forEach(function (fn) { fn(); });
+    };
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (ty) {
+      addEventListener(ty, function (e) { if (e.isTrusted) d.stop(); }, { capture: true, passive: true });
+    });
+    return d;
+  })();
+
+  // =====================================================================
+  //  Shake Slate
+  // =====================================================================
+  var GOAL = 8000, PIECE = 0.012, TURN = (Math.PI * 2) / 0.25; // one knob turn = a quarter of the screen
+  var RATE_MIN = 320, RATE_MAX = 1100;                          // simulated brisk walk, steps per second
+  var cv = $("cv"), ctx = cv.getContext("2d"), scr = $("screen"), frame = $("frame");
+  var knobL = $("knobL"), knobR = $("knobR"), faceL = $("faceL"), faceR = $("faceR"), penEl = $("pen");
+  var walkBtn = $("walkBtn"), walkLbl = $("walkLbl"), shakeBtn = $("shakeBtn"), undoBtn = $("undoBtn"), hint = $("hint"), sheenEl = $("sheen");
+  var ringEl = $("ring"), ringBar = $("ringBar"), RING_C = 2 * Math.PI * 26;
+  var W = 1, H = 1, DPR = 1, colors = {};
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function fmt(n) { return Math.round(n).toLocaleString("en-US"); }
+
+  function readColors() {
+    var cs = getComputedStyle(document.documentElement);
+    colors.line = cs.getPropertyValue("--ink-line").trim() || "#3e4144";
+    colors.powder = cs.getPropertyValue("--powder").trim() || "#7b7e80";
+    colors.map = cs.getPropertyValue("--map").trim() || "rgba(0,0,0,.2)";
+    colors.dark = document.documentElement.dataset.theme === "dark";
+  }
+
+  // ---------- The park loop: straight runs and staircases, the way a two-knob toy draws ----------
+  var R = [[0.12, 0.86], [0.12, 0.34]];
+  function stairs(x1, y1, n) {
+    var p = R[R.length - 1], dx = (x1 - p[0]) / n, dy = (y1 - p[1]) / n, x = p[0], y = p[1];
+    for (var i = 0; i < n; i++) { x += dx; R.push([x, y]); y += dy; R.push([x, y]); }
+  }
+  stairs(0.27, 0.16, 4);
+  R.push([0.6, 0.16], [0.6, 0.27], [0.88, 0.27], [0.88, 0.56]);
+  stairs(0.74, 0.72, 4);
+  R.push([0.74, 0.86], [0.48, 0.86], [0.48, 0.71], [0.31, 0.71], [0.31, 0.86], [0.12, 0.86]);
+  var RL = [0];
+  for (var ri = 1; ri < R.length; ri++) RL.push(RL[ri - 1] + Math.hypot(R[ri][0] - R[ri - 1][0], R[ri][1] - R[ri - 1][1]));
+  var LAP = RL[RL.length - 1];
+  function seg(u) { for (var i = 0; i < RL.length - 2; i++) if (u < RL[i + 1]) return i; return RL.length - 2; }
+  // point at distance s along the route; every extra lap runs a little further inside
+  function routeAt(s) {
+    var lap = Math.floor(s / LAP), u = s - lap * LAP, i = seg(u), t = (u - RL[i]) / (RL[i + 1] - RL[i] || 1);
+    var x = R[i][0] + (R[i + 1][0] - R[i][0]) * t, y = R[i][1] + (R[i + 1][1] - R[i][1]) * t, k = 1 - Math.min(lap, 5) * 0.06;
+    return [0.5 + (x - 0.5) * k, 0.52 + (y - 0.52) * k];
+  }
+  function vertexAfter(s) { var lap = Math.floor(s / LAP), u = s - lap * LAP; return lap * LAP + RL[seg(u) + 1]; }
+
+  // ---------- Ink: short pieces of line; each has a threshold r and stays while r < f (f = how much is left) ----------
+  var ink = [], pen = routeAt(0), drawn = 0, onRoute = true, angL = 0, angR = 0;
+  var total = 0, f = 1, fGoal = 1, snap = null, saving = false, goalHit = false, shakeDir = 1, particles = [], fadeUntil = 0;
+  // patchy, clumpy erasing like real powder
+  function clumpR(x, y) { var n = 0.5 + 0.32 * Math.sin(x * 14 + y * 6) * Math.cos(y * 12 - x * 4) + (Math.random() - 0.5) * 0.3; return clamp(n, 0.03, 0.98); }
+  function inkTo(x, y) {
+    x = clamp(x, 0.02, 0.98); y = clamp(y, 0.03, 0.97);
+    var a = pen, d = Math.hypot(x - a[0], y - a[1]);
+    if (d < 1e-6) return;
+    var n = Math.ceil(d / PIECE), px = a[0], py = a[1], now = performance.now();
+    for (var i = 1; i <= n; i++) {
+      var bx = a[0] + (x - a[0]) * i / n, by = a[1] + (y - a[1]) * i / n;
+      ink.push({ ax: px, ay: py, bx: bx, by: by, r: clumpR(bx, by) * Math.min(1, f), alive: true, rev: false, t: now });
+      px = bx; py = by;
+    }
+    angL += (x - a[0]) * TURN; angR += (y - a[1]) * TURN; paintKnobs();
+    pen = [x, y];
+  }
+  function paintKnobs() { faceL.style.transform = "rotate(" + angL.toFixed(3) + "rad)"; faceR.style.transform = "rotate(" + angR.toFixed(3) + "rad)"; }
+  // draw the route up to this many steps (one lap = the daily goal)
+  function growTo(steps) {
+    var target = steps / GOAL * LAP;
+    if (target <= drawn + 1e-9) return;
+    if (!onRoute) { var q = routeAt(drawn); inkTo(q[0], pen[1]); inkTo(q[0], q[1]); onRoute = true; }
+    var guard = 0;
+    while (drawn < target - 1e-9 && guard++ < 5000) {
+      var v = vertexAfter(drawn), nx = Math.min(target, v, drawn + PIECE * 3);
+      drawn = nx;
+      var p = routeAt(nx === v ? nx - 1e-7 : nx);
+      inkTo(p[0], p[1]);
+    }
+  }
+
+  // ---------- Numbers: odometer, ring, km and kcal ----------
+  var odo = $("odo"), cols = [], shown = -1, colDigit = [0, 0, 0, 0, 0], colAt = [0, 0, 0, 0, 0];
+  (function buildOdo() {
+    var html = "";
+    for (var i = 0; i < 5; i++) {
+      if (i === 2) html += '<span class="comma">,</span>';
+      var col = "";
+      for (var n = 0; n < 10; n++) col += "<i>" + n + "</i>";
+      html += '<span class="dg"><span class="col">' + col + "</span></span>";
+    }
+    odo.innerHTML = html;
+    cols = [].slice.call(odo.querySelectorAll(".col"));
+  })();
+  function numbers() {
+    var s = Math.round(total * f);
+    if (s === shown) return;
+    shown = s;
+    var str = String(Math.min(99999, s)), pad = ("00000" + str).slice(-5), lead = true, now = performance.now();
+    for (var i = 0; i < 5; i++) {
+      var dgt = +pad[i];
+      if (dgt !== 0 || i === 4) lead = false;
+      if (dgt !== colDigit[i]) {
+        // a drum that changes faster than it can roll just snaps, so fast counting stays crisp
+        cols[i].style.transition = now - colAt[i] < 170 ? "none" : "";
+        colDigit[i] = dgt; colAt[i] = now;
+      }
+      cols[i].style.transform = "translateY(" + (-dgt * 1.4).toFixed(1) + "em)";
+      cols[i].parentNode.classList.toggle("lead", lead);
+    }
+    var p = Math.min(1, s / GOAL);
+    ringBar.style.strokeDashoffset = (RING_C * (1 - p)).toFixed(2);
+    ringEl.classList.toggle("done", s >= GOAL);
+    $("pct").textContent = Math.round((s / GOAL) * 100) + "%";
+    $("km").textContent = (s * 0.00072).toFixed(1);
+    $("kcal").textContent = fmt(s * 0.042);
+    $("stepsSr").textContent = fmt(s) + " steps, " + Math.round((s / GOAL) * 100) + " percent of the goal";
+  }
+  function celebrate() {
+    ringEl.classList.remove("party"); void ringEl.offsetWidth; ringEl.classList.add("party");
+    setTimeout(function () { ringEl.classList.remove("party"); }, 1200);
+    buzz([20, 40, 20]);
+    announce("Goal reached: 8,000 steps today.");
+  }
+
+  // ---------- Canvas ----------
+  function measure() {
+    W = Math.max(1, scr.clientWidth); H = Math.max(1, scr.clientHeight); DPR = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    kick(true);
+  }
+  var TREES = [[0.2, 0.6], [0.23, 0.74], [0.7, 0.42], [0.79, 0.46], [0.36, 0.27], [0.46, 0.25], [0.82, 0.12], [0.06, 0.2], [0.94, 0.8], [0.4, 0.8], [0.06, 0.62], [0.95, 0.42]];
+  function drawMap() {
+    ctx.strokeStyle = colors.map; ctx.fillStyle = colors.map; ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.ellipse(0.52 * W, 0.47 * H, 0.13 * W, 0.14 * H, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0.52 * W, 0.47 * H, 0.08 * W, 0.08 * H, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    for (var i = 0; i < TREES.length; i++) { ctx.beginPath(); ctx.arc(TREES[i][0] * W, TREES[i][1] * H, 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.arc(TREES[i][0] * W, TREES[i][1] * H, 1.2, 0, Math.PI * 2); ctx.fill(); }
+    ctx.font = "700 9px system-ui, sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("POND", 0.52 * W, 0.47 * H + 3);
+    ctx.fillText("GATE", 0.12 * W, Math.min(H - 4, 0.86 * H + 14));
+  }
+  function draw(now) {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    drawMap();
+    ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = 1.8; ctx.strokeStyle = colors.line;
+    if (colors.dark) { ctx.shadowColor = "rgba(255, 80, 60, 0.85)"; ctx.shadowBlur = 7; }
+    ctx.beginPath();
+    var fading = [];
+    for (var i = 0; i < ink.length; i++) {
+      var p = ink[i];
+      if (!p.alive) continue;
+      if (p.rev && now - p.t < 320) { fading.push(p); continue; }
+      ctx.moveTo(p.ax * W, p.ay * H); ctx.lineTo(p.bx * W, p.by * H);
+    }
+    ctx.stroke();
+    for (var j = 0; j < fading.length; j++) {
+      var q = fading[j];
+      ctx.globalAlpha = clamp((now - q.t) / 320, 0, 1);
+      ctx.beginPath(); ctx.moveTo(q.ax * W, q.ay * H); ctx.lineTo(q.bx * W, q.by * H); ctx.stroke();
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    ctx.fillStyle = colors.powder;
+    for (var k = 0; k < particles.length; k++) {
+      var d = particles[k];
+      ctx.globalAlpha = clamp(1 - d.a / d.life, 0, 1) * 0.9;
+      ctx.fillRect(d.x, d.y, d.s, d.s);
+    }
+    ctx.globalAlpha = 1;
+    penEl.style.transform = "translate(" + (pen[0] * W).toFixed(1) + "px," + (pen[1] * H).toFixed(1) + "px)";
+  }
+
+  // ---------- Erasing ----------
+  function burst(p) {
+    if (reduce || particles.length > 1100) return;
+    var mx = (p.ax + p.bx) / 2 * W, my = (p.ay + p.by) / 2 * H;
+    for (var i = 0; i < 2; i++) {
+      particles.push({ x: mx + (Math.random() - 0.5) * 3, y: my + (Math.random() - 0.5) * 2, vx: (Math.random() - 0.5) * 0.05 + shakeDir * Math.random() * 0.07, vy: -Math.random() * 0.07, a: 0, life: 650 + Math.random() * 600, s: 1 + Math.random() * 1.5 });
+    }
+  }
+  function stepParticles(dt) {
+    for (var i = particles.length - 1; i >= 0; i--) {
+      var q = particles[i];
+      q.a += dt; q.vy += 0.0011 * dt; q.vx *= 0.985; q.x += q.vx * dt; q.y += q.vy * dt;
+      if (q.a > q.life || q.y > H + 4) particles.splice(i, 1);
+    }
+  }
+  function updateLife(now) {
+    for (var i = 0; i < ink.length; i++) {
+      var p = ink[i], vis = p.r < f;
+      if (p.alive && !vis) { p.alive = false; burst(p); }
+      else if (!p.alive && vis) { p.alive = true; p.rev = true; p.t = now; fadeUntil = now + 340; }
+    }
+  }
+  function erasing() { return fGoal < 1 || f < 1; }
+  // one shake: energy 0..1, dir = which way the slate moved
+  function shakeHit(energy, dir) {
+    shakeDir = dir || 1;
+    if (saving) return;
+    if (!ink.length) { if (!Demo.on) say("Nothing to clear yet"); return; }
+    if (walking) walkSet(false);
+    if (fGoal >= 1) snap = { steps: Math.round(total), path: thumbOfInk() };
+    fGoal = Math.max(0, fGoal - (0.16 + 0.28 * clamp(energy, 0, 1)));
+    if (fGoal < 0.07) fGoal = 0;
+    sheenEl.classList.remove("go", "rev"); void sheenEl.offsetWidth; sheenEl.classList.add("go"); if (shakeDir < 0) sheenEl.classList.add("rev");
+    buzz(25);
+    kick(); eraseUi();
+  }
+  function finishClear() {
+    saving = true; eraseUi();
+    setTimeout(function () {
+      var s = snap; snap = null;
+      ink = []; drawn = 0; total = 0; f = fGoal = 1; pen = routeAt(0); onRoute = true; saving = false; goalHit = false;
+      if (s && s.steps > 0) addCard(s.steps, s.path, "Today, " + timeNow(), true);
+      numbers(); eraseUi(); kick(true);
+      announce(s && s.steps ? "Slate cleared. " + fmt(s.steps) + " steps saved to your days." : "Slate cleared.");
+    }, reduce ? 0 : 420);
+  }
+  function undo() {
+    if (!erasing() || saving) return;
+    fGoal = 1; snap = null; kick(); eraseUi();
+    announce("Put back. Your line and steps are safe.");
+  }
+  var sayT = 0, sayMsg = "";
+  function say(msg) { sayMsg = msg; clearTimeout(sayT); sayT = setTimeout(function () { sayMsg = ""; eraseUi(); }, 1600); eraseUi(); }
+  function eraseUi() {
+    var e = erasing();
+    undoBtn.hidden = !e || saving;
+    hint.textContent = sayMsg || (saving ? "Saving your day" : e ? "Keep shaking · " + Math.round(f * 100) + "% left" : walking ? "Walking · drawing your route" : "Grab and wiggle to shake");
+  }
+
+  // ---------- Main loop ----------
+  var raf = 0, last = 0, dirty = true, intro = null, walking = false, walkT = 0, walkByDemo = false;
+  function kick(redraw) { if (redraw) dirty = true; if (!raf) { last = performance.now(); raf = requestAnimationFrame(tick); } }
+  function tick(now) {
+    var dt = Math.min(50, now - last); last = now; raf = 0;
+    var busy = false;
+    if (intro) {
+      var k = Math.min(1, (now - intro.t0) / intro.ms), e = 1 - Math.pow(1 - k, 3);
+      total = intro.to * e; growTo(total); numbers();
+      if (k >= 1) intro = null;
+      busy = true;
+    }
+    if (walking) {
+      walkT += dt;
+      total += (RATE_MIN + (RATE_MAX - RATE_MIN) * Math.min(1, walkT / 1500)) * dt / 1000 * (0.9 + Math.random() * 0.2);
+      if (!goalHit && total >= GOAL) { goalHit = true; celebrate(); }
+      if (!kd) growTo(total);
+      numbers(); busy = true;
+    }
+    if (f !== fGoal) {
+      var sp = dt * 0.0019;
+      f = f > fGoal ? Math.max(fGoal, f - sp) : Math.min(fGoal, f + sp);
+      if (reduce) f = fGoal;
+      updateLife(now); numbers(); eraseUi();
+      if (f === 0 && fGoal === 0 && !saving) finishClear();
+      busy = true;
+    }
+    if (particles.length) { stepParticles(dt); busy = true; }
+    if (busy || dirty || fadeUntil > now) { draw(now); dirty = false; }
+    if (busy || fadeUntil > now) raf = requestAnimationFrame(tick);
+  }
+
+  // ---------- Walking ----------
+  function walkSet(on, byDemo) {
+    if (on && saving) return;
+    if (on && erasing()) { fGoal = f = 1; snap = null; updateLife(performance.now()); }
+    walking = on; walkT = 0; walkByDemo = !!(on && byDemo);
+    walkBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    walkBtn.classList.toggle("on", on);
+    walkLbl.textContent = on ? "Pause" : "Walk";
+    eraseUi();
+    if (on) { kick(); announce("Walking. Steps are counting."); }
+    else announce(fmt(total) + " steps today.");
+  }
+  walkBtn.addEventListener("click", function () { walkSet(!walking); buzz(12); });
+
+  // ---------- Shake by dragging the slate side to side ----------
+  var frameS = Spring(0, 300, 11, function (x) { frame.style.transform = Math.abs(x) > 0.05 ? "translateX(" + x.toFixed(2) + "px) rotate(" + (x * 0.07).toFixed(3) + "deg)" : ""; });
+  var sh = null;
+  function shStart(x, isDemo, id) {
+    sh = { x0: x, last: x, base: frameS.x, dir: 0, turnX: x, turnT: performance.now(), demo: !!isDemo, id: id };
+    frameS.set(frameS.x); frame.classList.add("grab");
+  }
+  function shMove(x) {
+    var now = performance.now(), dx = x - sh.last;
+    sh.last = x;
+    frameS.set(clamp(sh.base, -50, 50) + 46 * Math.tanh((x - sh.x0) / 90));
+    if (Math.abs(dx) < 0.4) return;
+    var dir = dx > 0 ? 1 : -1;
+    if (!sh.dir) { sh.turnX = x - dx; sh.turnT = now; }
+    else if (dir !== sh.dir) {
+      // a turn: how far and how fast did the last swing go?
+      var amp = Math.abs(x - dx - sh.turnX), span = Math.max(16, now - sh.turnT), speed = amp / span;
+      if (amp > 22 && speed > 0.22) shakeHit(Math.min(1, (amp / 110) * Math.min(1.4, speed + 0.3)), sh.dir);
+      sh.turnX = x - dx; sh.turnT = now;
+    }
+    sh.dir = dir;
+  }
+  function shEnd() { if (!sh) return; sh = null; frame.classList.remove("grab"); frameS.to(0); }
+  frame.addEventListener("pointerdown", function (e) {
+    if (e.button > 0 || e.target.closest(".knob")) return;
+    try { frame.setPointerCapture(e.pointerId); } catch (err) {}
+    shStart(e.clientX, false, e.pointerId);
+  });
+  frame.addEventListener("pointermove", function (e) { if (sh && !sh.demo && sh.id === e.pointerId) shMove(e.clientX); });
+  frame.addEventListener("pointerup", function (e) { if (sh && !sh.demo && sh.id === e.pointerId) shEnd(); });
+  frame.addEventListener("pointercancel", function (e) { if (sh && !sh.demo && sh.id === e.pointerId) shEnd(); });
+
+  // Shake button and the S key: one good jiggle
+  var asked = false;
+  function askMotion() {
+    // iOS asks for motion access; only ever from a real tap
+    if (asked || typeof DeviceMotionEvent === "undefined" || typeof DeviceMotionEvent.requestPermission !== "function") return;
+    asked = true;
+    try { DeviceMotionEvent.requestPermission().catch(function () {}); } catch (e) {}
+  }
+  function jiggle(energy) {
+    var dir = Math.random() < 0.5 ? -1 : 1;
+    if (!reduce) frameS.to(0, 760 * dir);
+    shakeHit(energy, dir);
+  }
+  shakeBtn.addEventListener("click", function () { askMotion(); jiggle(0.82); });
+  undoBtn.addEventListener("click", undo);
+  addEventListener("keydown", function (e) {
+    if ((e.key === "s" || e.key === "S") && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); jiggle(0.82); }
+  });
+
+  // Real phones: shaking the device works too
+  var mSign = 0, mT = 0;
+  addEventListener("devicemotion", function (e) {
+    var a = e.acceleration && e.acceleration.x != null ? e.acceleration.x : null;
+    if (a == null) return;
+    var s = a > 8 ? 1 : a < -8 ? -1 : 0;
+    if (!s || s === mSign) return;
+    var now = performance.now();
+    if (mSign && now - mT < 450) { Demo.stop(); if (!reduce) frameS.to(0, 700 * s); shakeHit(Math.min(1, Math.abs(a) / 24), s); }
+    mSign = s; mT = now;
+  });
+
+  // ---------- Knobs: turn to doodle (left = across, right = up and down) ----------
+  var kd = null, skipClick = false;
+  function doodle(axis, da) {
+    var amt = da / TURN;
+    if (axis === 0) inkTo(pen[0] + amt, pen[1]); else inkTo(pen[0], pen[1] + amt);
+    onRoute = false; kick(true);
+  }
+  function knobStart(el, x, y, isDemo, id) {
+    var r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    kd = { el: el, axis: el === knobL ? 0 : 1, cx: cx, cy: cy, a: Math.atan2(y - cy, x - cx), x: x, y: y, moved: 0, demo: !!isDemo, id: id };
+    el.classList.add("held");
+  }
+  function knobMove(x, y) {
+    var dx = x - kd.cx, dy = y - kd.cy, da;
+    if (Math.hypot(dx, dy) > 9) {
+      var a = Math.atan2(dy, dx); da = a - kd.a;
+      if (da > Math.PI) da -= 2 * Math.PI; else if (da < -Math.PI) da += 2 * Math.PI;
+      kd.a = a;
+    } else { da = ((x - kd.x) - (y - kd.y)) * 0.03; kd.a = Math.atan2(dy, dx); }
+    kd.moved += Math.abs(x - kd.x) + Math.abs(y - kd.y); kd.x = x; kd.y = y;
+    if (da) doodle(kd.axis, da);
+  }
+  function knobEnd() { if (!kd) return; kd.el.classList.remove("held"); kd = null; if (walking) kick(); }
+  function nudge(el, sign) {
+    var axis = el === knobL ? 0 : 1, v = axis === 0 ? pen[0] : pen[1];
+    if (!sign) sign = v > 0.9 ? -1 : 1;
+    doodle(axis, sign * 0.03 * TURN);
+    buzz(6);
+  }
+  [knobL, knobR].forEach(function (el) {
+    el.addEventListener("pointerdown", function (e) {
+      if (e.button > 0) return;
+      e.stopPropagation();
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+      knobStart(el, e.clientX, e.clientY, false, e.pointerId);
+    });
+    function end(e) { if (kd && !kd.demo && kd.id === e.pointerId) { skipClick = kd.moved > 4; knobEnd(); } }
+    el.addEventListener("pointermove", function (e) { if (kd && !kd.demo && kd.id === e.pointerId) knobMove(e.clientX, e.clientY); });
+    el.addEventListener("pointerup", end);
+    el.addEventListener("pointercancel", end);
+    el.addEventListener("click", function () { if (skipClick) { skipClick = false; return; } nudge(el); });
+    el.addEventListener("keydown", function (e) {
+      var k = e.key, s = 0;
+      if (el === knobL) s = k === "ArrowRight" || k === "ArrowUp" ? 1 : k === "ArrowLeft" || k === "ArrowDown" ? -1 : 0;
+      else s = k === "ArrowDown" || k === "ArrowRight" ? 1 : k === "ArrowUp" || k === "ArrowLeft" ? -1 : 0;
+      if (!s) return;
+      e.preventDefault(); nudge(el, s);
+    });
+  });
+
+  // ---------- Saved days ----------
+  var cards = $("cards"), cardCount = 0;
+  // the current line as a small SVG path: one point per corner, straight runs collapse
+  function P(x, y) { return (x * 100).toFixed(1) + " " + (y * 64).toFixed(1); }
+  function thumbOfInk() {
+    var d = "", px = NaN, py = NaN, ldx = 9, ldy = 9, pend = "";
+    for (var i = 0; i < ink.length; i++) {
+      var p = ink[i];
+      if (!(Math.abs(p.ax - px) < 1e-6 && Math.abs(p.ay - py) < 1e-6)) { d += pend + "M" + P(p.ax, p.ay); pend = ""; ldx = ldy = 9; }
+      var dx = Math.sign(Math.round((p.bx - p.ax) * 1e4)), dy = Math.sign(Math.round((p.by - p.ay) * 1e4));
+      if (dx !== ldx || dy !== ldy) d += pend;
+      pend = "L" + P(p.bx, p.by); ldx = dx; ldy = dy; px = p.bx; py = p.by;
+    }
+    return d + pend;
+  }
+  function thumbOfSteps(steps) {
+    var end = steps / GOAL * LAP, d = "", s = 0, p = routeAt(0);
+    d += "M" + (p[0] * 100).toFixed(1) + " " + (p[1] * 64).toFixed(1);
+    while (s < end) { var v = vertexAfter(s); s = Math.min(end, v); p = routeAt(s === v ? s - 1e-7 : s); d += "L" + (p[0] * 100).toFixed(1) + " " + (p[1] * 64).toFixed(1); }
+    return d;
+  }
+  function addCard(steps, path, label, fresh) {
+    var el = document.createElement("div");
+    el.className = "day" + (fresh ? " pop" : "");
+    el.innerHTML = '<svg viewBox="0 0 100 64" preserveAspectRatio="none" aria-hidden="true"><path d="' + path + '"/></svg><span><b>' + fmt(steps) + "</b><small>" + label + "</small></span>";
+    cards.insertBefore(el, cards.firstChild);
+    while (cards.children.length > 7) cards.removeChild(cards.lastChild);
+    cardCount++;
+    $("histCount").textContent = cardCount;
+    if (fresh) cards.scrollTo ? cards.scrollTo({ left: 0, behavior: reduce ? "auto" : "smooth" }) : (cards.scrollLeft = 0);
+  }
+  function timeNow() { return new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase(); }
+  function dayName(back) { var d = new Date(); d.setDate(d.getDate() - back); return d.toLocaleDateString("en-GB", { weekday: "long" }); }
+  [[3, 5230], [2, 9412], [1, 6870]].forEach(function (x) { addCard(x[1], thumbOfSteps(x[1]), dayName(x[0]), false); });
+  $("dateLine").textContent = new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) + " · Model Town Park, Lahore";
+  (function clock() { $("clock").textContent = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(/\s?[AP]M$/i, ""); setTimeout(clock, 20000); })();
+
+  // ---------- Theme and size ----------
+  readColors();
+  new MutationObserver(function () { readColors(); kick(true); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  if (window.ResizeObserver) new ResizeObserver(measure).observe(scr); else addEventListener("resize", measure);
+  measure();
+
+  // ---------- Demo choreography ----------
+  var ghostEl = $("ghost");
+  function client(q) { var r = phone.getBoundingClientRect(); return { x: r.left + q.x, y: r.top + q.y }; }
+  function ghostTo(q, ms, done) {
+    if (!Demo.visible()) { Demo.at(q.x + 40, q.y + 70); ghostEl.getBoundingClientRect(); }
+    Demo.glide(q.x, q.y, ms, null, done);
+  }
+  function tap(el, at, fn) {
+    Demo.later(at, function () {
+      ghostTo(Demo.pt(el), 520, function () { Demo.press(true); Demo.later(150, function () { Demo.press(false); fn(); }); });
+    });
+    return at + 720;
+  }
+  function turnKnob(el, turns, at, ms) {
+    Demo.later(at, function () {
+      var c = Demo.pt(el), rad = 13, a0 = -Math.PI / 2, start = { x: c.x + rad * Math.cos(a0), y: c.y + rad * Math.sin(a0) };
+      ghostTo(start, 480, function () {
+        Demo.press(true);
+        var s = client(start); knobStart(el, s.x, s.y, true);
+        var t0 = performance.now();
+        Demo.raf = requestAnimationFrame(function f(now) {
+          if (!Demo.on || !kd) return;
+          var k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+          var a = a0 + turns * Math.PI * 2 * e, q = { x: c.x + rad * Math.cos(a), y: c.y + rad * Math.sin(a) };
+          Demo.at(q.x, q.y); var cq = client(q); knobMove(cq.x, cq.y);
+          if (k < 1) Demo.raf = requestAnimationFrame(f); else { Demo.press(false); knobEnd(); }
+        });
+      });
+    });
+    return at + 480 + ms + 120;
+  }
+  function wiggle(at, ms) {
+    Demo.later(at, function () {
+      var c = Demo.pt(frame, 0.5, 0.42);
+      ghostTo(c, 520, function () {
+        Demo.press(true);
+        var s = client(c); shStart(s.x, true);
+        var t0 = performance.now();
+        Demo.raf = requestAnimationFrame(function f(now) {
+          if (!Demo.on || !sh) return;
+          var k = Math.min(1, (now - t0) / ms), amp = 62 * Math.sin(Math.PI * Math.min(1, k * 1.15)), x = c.x + amp * Math.sin(k * Math.PI * 2 * 3.5);
+          Demo.at(x, c.y); shMove(client({ x: x, y: c.y }).x);
+          if (k < 1) Demo.raf = requestAnimationFrame(f); else { Demo.press(false); shEnd(); }
+        });
+      });
+    });
+    return at + 520 + ms + 100;
+  }
+  Demo.onStop(function () {
+    if (sh && sh.demo) shEnd();
+    if (kd && kd.demo) knobEnd();
+    if (walking && walkByDemo) walkSet(false);
+  });
+  function demoLoop() {
+    if (!Demo.on) return;
+    var t = 0;
+    t = tap(walkBtn, t, function () { walkSet(true, true); });
+    t = tap(walkBtn, t + 1900, function () { walkSet(false); });
+    t = turnKnob(knobL, 0.6, t + 250, 760);
+    t = turnKnob(knobR, -0.45, t + 120, 620);
+    t = wiggle(t + 300, 1500);
+    Demo.later(t + 250, Demo.hide);
+    Demo.later(t + 2300, demoLoop);
+  }
+
+  // Intro: today's walk so far draws itself while the counter rolls up
+  numbers(); eraseUi();
+  if (reduce) { total = 6120; growTo(total); numbers(); kick(true); }
+  else { intro = { t0: performance.now(), ms: 1350, to: 6120 }; kick(true); }
+  Demo.later(1250, demoLoop);
+})();
+</script>
+</body>
+</html>
