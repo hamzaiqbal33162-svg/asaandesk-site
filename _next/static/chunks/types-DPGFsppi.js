@@ -1,0 +1,1 @@
+function e(e){if(e.aborted)throw new DOMException(`Cancelled`,`AbortError`)}var t=e=>Object.fromEntries((e||[]).map(e=>[e.key,e.def??``])),n=e=>(e.replace(/\.[^.]+$/,``)||`file`).replace(/[\\/:*?"<>|]+/g,`-`);export{e as n,t as r,n as t};

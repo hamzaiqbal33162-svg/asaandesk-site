@@ -1,0 +1,1 @@
+import{r as e}from"./framework-DGW0pQoC.js";import{c as t,o as n,u as r}from"./meta-ClxKweq1.js";var i=e(),a=()=>(0,i.jsxs)(`aside`,{className:`mp-honest wm-scope`,"aria-label":`What this tool does not do`,children:[(0,i.jsx)(`b`,{children:`Visible mark only.`}),` `,t,` `,r,` `,(0,i.jsx)(`a`,{href:n+`/responsible-use`,children:`Responsible use`})]});export{a as t};
