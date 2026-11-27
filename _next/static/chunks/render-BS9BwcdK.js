@@ -1,0 +1,1 @@
+import{i as e,l as t,p as n}from"./badge-maker-B71JL7Z8.js";export{e as buildPdf,t as linkFonts,n as thumbnail};
